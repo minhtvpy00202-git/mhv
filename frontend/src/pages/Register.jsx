@@ -41,8 +41,12 @@ function Register() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!form.username || !form.password || !form.fullName) {
-      toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
+    if (!form.username || !form.password || !form.confirmPassword || !form.fullName || !form.birthday || !form.phone) {
+      toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
+      return
+    }
+    if (!/^[a-zA-Z0-9_]{4,50}$/.test(form.username.trim())) {
+      toast.error('Tên đăng nhập chỉ gồm chữ, số, dấu gạch dưới và dài 4-50 ký tự.')
       return
     }
     if (form.password.length < 6) {
@@ -53,14 +57,22 @@ function Register() {
       toast.error('Mật khẩu xác nhận không khớp.')
       return
     }
+    if (!/^0\d{9}$/.test(form.phone.trim())) {
+      toast.error('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.')
+      return
+    }
+    if (new Date(form.birthday) >= new Date()) {
+      toast.error('Ngày sinh phải là ngày trong quá khứ.')
+      return
+    }
     setLoading(true)
     try {
       await axiosClient.post('/api/auth/register', {
         username: form.username.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
-        birthday: form.birthday || null,
-        phone: form.phone.trim() || null,
+        birthday: form.birthday,
+        phone: form.phone.trim(),
       })
       toast.success('Đăng ký thành công. Vui lòng đăng nhập.')
       navigate('/login', { replace: true })
@@ -87,6 +99,7 @@ function Register() {
                 onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
                 placeholder="Nhập tên đăng nhập"
+                required
               />
               <button
                 type="button"
@@ -107,6 +120,7 @@ function Register() {
               onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
               placeholder="Nhập mật khẩu"
+              required
             />
           </div>
           <div>
@@ -117,6 +131,7 @@ function Register() {
               onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
               placeholder="Nhập lại mật khẩu"
+              required
             />
           </div>
 
@@ -127,6 +142,7 @@ function Register() {
               onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
               placeholder="Nhập họ và tên"
+              required
             />
           </div>
           <div>
@@ -136,6 +152,7 @@ function Register() {
               value={form.birthday}
               onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
+              required
             />
           </div>
 
@@ -146,6 +163,7 @@ function Register() {
               onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
               placeholder="Nhập số điện thoại"
+              required
             />
           </div>
         </div>

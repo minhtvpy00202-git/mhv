@@ -92,16 +92,16 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public List<AssetResponse> getAllAssets() {
-        return assetRepository.searchForAdmin(null, null, null).stream()
+        return assetRepository.searchForAdmin(null, null, null, null).stream()
                 .map(asset -> mapToAssetResponse(asset, false))
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<AssetResponse> searchAssets(String name, String status, Integer categoryId) {
+    public List<AssetResponse> searchAssets(String name, String status, Integer categoryId, Integer locationId) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
-        return assetRepository.searchForAdmin(normalizedName, normalizedStatus, categoryId).stream()
+        return assetRepository.searchForAdmin(normalizedName, normalizedStatus, categoryId, locationId).stream()
                 .map(asset -> mapToAssetResponse(asset, false))
                 .toList();
     }

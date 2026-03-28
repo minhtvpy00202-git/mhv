@@ -5,6 +5,7 @@ import com.poly.mhv.dto.auth.LoginRequest;
 import com.poly.mhv.dto.auth.RegisterRequest;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.UserService;
+import jakarta.validation.Valid;
 import com.poly.mhv.security.jwt.JwtUtils;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -58,7 +59,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public JwtResponse register(@RequestBody RegisterRequest request) {
+    public JwtResponse register(@Valid @RequestBody RegisterRequest request) {
         var created = userService.register(request);
         return JwtResponse.builder()
                 .id(created.getId())

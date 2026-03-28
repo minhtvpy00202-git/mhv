@@ -64,9 +64,9 @@ public class UserService {
                 .username(username)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role("NhanVien")
-                .fullName(StringUtils.hasText(request.getFullName()) ? request.getFullName().trim() : username)
+                .fullName(request.getFullName().trim())
                 .birthday(request.getBirthday())
-                .phone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null)
+                .phone(request.getPhone().trim())
                 .status("Hoạt động")
                 .build();
         AppUser saved = appUserRepository.save(appUser);

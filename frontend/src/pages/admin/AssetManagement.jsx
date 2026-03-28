@@ -21,6 +21,7 @@ function AssetManagement() {
     name: '',
     status: '',
     categoryId: '',
+    locationId: '',
     categoryKeyword: '',
   })
   const [form, setForm] = useState({
@@ -85,6 +86,7 @@ function AssetManagement() {
       if (nextFilters.name.trim()) params.name = nextFilters.name.trim()
       if (nextFilters.status) params.status = nextFilters.status
       if (nextFilters.categoryId) params.categoryId = Number(nextFilters.categoryId)
+      if (nextFilters.locationId) params.locationId = Number(nextFilters.locationId)
       const response = await axiosClient.get('/api/assets', { params })
       setAssets(response.data || [])
       setCurrentPage(1)
@@ -220,7 +222,7 @@ function AssetManagement() {
   }
 
   const handleResetFilters = async () => {
-    const reset = { name: '', status: '', categoryId: '', categoryKeyword: '' }
+    const reset = { name: '', status: '', categoryId: '', locationId: '', categoryKeyword: '' }
     setFilters(reset)
     await loadAssets(reset)
   }
@@ -358,7 +360,7 @@ function AssetManagement() {
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h3 className="mb-3 text-base font-semibold text-slate-800">Lọc và tìm thiết bị</h3>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <input
             value={filters.name}
             onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
@@ -420,6 +422,18 @@ function AssetManagement() {
             {statusOptions.map((status) => (
               <option key={status} value={status}>
                 {status}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filters.locationId}
+            onChange={(e) => setFilters((prev) => ({ ...prev, locationId: e.target.value }))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+          >
+            <option value="">Tất cả phòng</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.roomName}
               </option>
             ))}
           </select>

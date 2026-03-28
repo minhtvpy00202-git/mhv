@@ -52,12 +52,13 @@ public class AssetController {
     public ResponseEntity<List<AssetResponse>> getAllAssets(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) Integer categoryId
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer locationId
     ) {
-        if (name == null && status == null && categoryId == null) {
+        if (name == null && status == null && categoryId == null && locationId == null) {
             return ResponseEntity.ok(assetService.getAllAssets());
         }
-        return ResponseEntity.ok(assetService.searchAssets(name, status, categoryId));
+        return ResponseEntity.ok(assetService.searchAssets(name, status, categoryId, locationId));
     }
 
     @GetMapping("/{qaCode}")

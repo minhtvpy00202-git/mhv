@@ -19,12 +19,14 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             where (:name is null or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)
               and (:categoryId is null or c.id = :categoryId)
+              and (:locationId is null or l.id = :locationId)
             order by a.qaCode asc
             """)
     List<Asset> searchForAdmin(
             @Param("name") String name,
             @Param("status") String status,
-            @Param("categoryId") Integer categoryId
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
     );
     @Query("select count(a) from Asset a")
     long countAllAssets();
