@@ -12,6 +12,7 @@ function QRScanner() {
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
   const [scannedLocationId, setScannedLocationId] = useState(null)
+  const [scannedHomeLocationId, setScannedHomeLocationId] = useState(null)
   const [scannedLocationName, setScannedLocationName] = useState('')
   const [scannedHomeLocationName, setScannedHomeLocationName] = useState('')
   const [showActionModal, setShowActionModal] = useState(false)
@@ -52,12 +53,14 @@ function QRScanner() {
       const response = await axiosClient.get(`/api/assets/${qaCode}`)
       setScannedAssetName(response.data?.name || '')
       setScannedLocationId(response.data?.locationId || null)
+      setScannedHomeLocationId(response.data?.homeLocationId || null)
       setScannedLocationName(response.data?.locationName || '')
       setScannedHomeLocationName(response.data?.homeLocationName || '')
       return true
     } catch {
       setScannedAssetName('')
       setScannedLocationId(null)
+      setScannedHomeLocationId(null)
       setScannedLocationName('')
       setScannedHomeLocationName('')
       toast.error('Mã tài sản không tồn tại')
@@ -127,6 +130,7 @@ function QRScanner() {
     setScannedQaCode('')
     setScannedAssetName('')
     setScannedLocationId(null)
+    setScannedHomeLocationId(null)
     setScannedLocationName('')
     setScannedHomeLocationName('')
     setToLocationId('')
@@ -181,6 +185,13 @@ function QRScanner() {
     }
   }
 
+  const canCheckout = scannedLocationId !== null && scannedHomeLocationId !== null
+    ? Number(scannedLocationId) === Number(scannedHomeLocationId)
+    : true
+  const canCheckin = scannedLocationId !== null && scannedHomeLocationId !== null
+    ? Number(scannedLocationId) !== Number(scannedHomeLocationId)
+    : true
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -197,64 +208,70 @@ function QRScanner() {
             <p className="text-sm text-slate-600">Phòng hiện tại: {scannedLocationName || 'Không xác định'}</p>
             <p className="text-sm text-slate-600">Phòng gốc: {scannedHomeLocationName || 'Không xác định'}</p>
 
-            <div className="mt-3 space-y-2">
-              <label className="text-sm font-medium text-slate-700">Phòng đích</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={locationQuery}
-                  onFocus={() => setShowLocationOptions(true)}
-                  onChange={(e) => {
-                    setLocationQuery(e.target.value)
-                    setToLocationId('')
-                    setShowLocationOptions(true)
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Gõ để tìm phòng, ví dụ: 2"
-                />
-                {showLocationOptions && (
-                  <div className="absolute z-10 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    {filteredLocations.length > 0 ? (
-                      filteredLocations.map((location) => (
-                        <button
-                          key={location.id}
-                          type="button"
-                          onClick={() => {
-                            setToLocationId(String(location.id))
-                            setLocationQuery(location.roomName)
-                            setShowLocationOptions(false)
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                        >
-                          {location.roomName}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
-                    )}
-                  </div>
-                )}
+            {canCheckout && (
+              <div className="mt-3 space-y-2">
+                <label className="text-sm font-medium text-slate-700">Phòng đích</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={locationQuery}
+                    onFocus={() => setShowLocationOptions(true)}
+                    onChange={(e) => {
+                      setLocationQuery(e.target.value)
+                      setToLocationId('')
+                      setShowLocationOptions(true)
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
+                    placeholder="Gõ để tìm phòng, ví dụ: 2"
+                  />
+                  {showLocationOptions && (
+                    <div className="absolute z-10 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                      {filteredLocations.length > 0 ? (
+                        filteredLocations.map((location) => (
+                          <button
+                            key={location.id}
+                            type="button"
+                            onClick={() => {
+                              setToLocationId(String(location.id))
+                              setLocationQuery(location.roomName)
+                              setShowLocationOptions(false)
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
+                          >
+                            {location.roomName}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">Phòng sẽ lọc theo tiền tố A-Z hoặc số bạn nhập.</p>
               </div>
-              <p className="text-xs text-slate-500">Phòng sẽ lọc theo tiền tố A-Z hoặc số bạn nhập.</p>
-            </div>
+            )}
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={loadingAction}
-                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-              >
-                Mượn thiết bị
-              </button>
-              <button
-                type="button"
-                onClick={handleCheckin}
-                disabled={loadingAction}
-                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                Trả thiết bị
-              </button>
+            <div className={`mt-4 grid gap-2 ${canCheckout && canCheckin ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {canCheckout && (
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  disabled={loadingAction}
+                  className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                >
+                  Mượn thiết bị
+                </button>
+              )}
+              {canCheckin && (
+                <button
+                  type="button"
+                  onClick={handleCheckin}
+                  disabled={loadingAction}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  Trả thiết bị
+                </button>
+              )}
             </div>
 
             <button
