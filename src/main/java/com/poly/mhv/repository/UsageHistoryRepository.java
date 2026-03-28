@@ -19,6 +19,16 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
             join fetch a.homeLocation hl
             join fetch uh.toLocation tl
             join fetch uh.user u
+            where u.id = :userId
+            order by uh.startTime desc, uh.id desc
+            """)
+    List<UsageHistory> findByUserIdForHistory(@Param("userId") Integer userId);
+    @Query("""
+            select uh from UsageHistory uh
+            join fetch uh.asset a
+            join fetch a.homeLocation hl
+            join fetch uh.toLocation tl
+            join fetch uh.user u
             order by uh.startTime desc, uh.id desc
             """)
     List<UsageHistory> findAllForAdminOrderByStartTimeDesc();

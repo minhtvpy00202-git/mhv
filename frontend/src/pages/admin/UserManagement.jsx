@@ -213,7 +213,7 @@ function UserManagement() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh *</label>
             <input
               type="date"
               value={form.birthday || ''}
@@ -222,7 +222,7 @@ function UserManagement() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại *</label>
             <input
               value={form.phone}
               onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}

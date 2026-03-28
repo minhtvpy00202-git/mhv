@@ -1,5 +1,7 @@
 package com.poly.mhv.service;
 
+import com.poly.mhv.dto.maintenance.MaintenanceAssetStatusUpdateRequest;
+import com.poly.mhv.dto.maintenance.MaintenanceHistoryResponse;
 import com.poly.mhv.dto.maintenance.MaintenanceReportRequest;
 import com.poly.mhv.dto.maintenance.MaintenanceReportResponse;
 import com.poly.mhv.entity.AppUser;
@@ -11,6 +13,7 @@ import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.MaintenanceRequestRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -85,6 +88,64 @@ public class MaintenanceService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public List<MaintenanceHistoryResponse> getMyHistory() {
+        AppUser actor = getCurrentUser();
+        return maintenanceRequestRepository.findHistoryByReportedById(actor.getId()).stream()
+                .map(this::mapToHistoryResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MaintenanceHistoryResponse> getAllForAdminHistory() {
+        return maintenanceRequestRepository.findAllForAdminHistory().stream()
+                .map(this::mapToHistoryResponse)
+                .toList();
+    }
+
+    @Transactional
+    public MaintenanceHistoryResponse updateAssetStatus(Integer maintenanceId, MaintenanceAssetStatusUpdateRequest request) {
+        if (maintenanceId == null) {
+            throw new CustomException("maintenanceId là bắt buộc.");
+        }
+        if (request == null || !StringUtils.hasText(request.getAssetStatus())) {
+            throw new CustomException("assetStatus là bắt buộc.");
+        }
+        String status = request.getAssetStatus().trim();
+        if (!List.of("Đang sử dụng", "Hỏng", "Sẵn sàng", "Bảo trì").contains(status)) {
+            throw new CustomException("Trạng thái tài sản không hợp lệ.");
+        }
+        MaintenanceRequest maintenanceRequest = maintenanceRequestRepository.findById(maintenanceId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy bản ghi báo hỏng."));
+        Asset asset = maintenanceRequest.getAsset();
+        asset.setStatus(status);
+        assetRepository.save(asset);
+        if ("Hỏng".equals(status)) {
+            maintenanceRequest.setStatus("Đang xử lý");
+            maintenanceRequest.setResolvedTime(null);
+        } else {
+            maintenanceRequest.setStatus("Hoàn tất");
+            maintenanceRequest.setResolvedTime(LocalDateTime.now());
+        }
+        maintenanceRequestRepository.save(maintenanceRequest);
+
+        AppUser actor = getCurrentUser();
+        notificationService.createNotification(
+                "MAINTENANCE_STATUS_UPDATE",
+                "Cập nhật trạng thái thiết bị báo hỏng",
+                actor.getUsername() + " đã cập nhật trạng thái " + asset.getQaCode() + " thành " + status + ".",
+                actor.getUsername(),
+                asset.getQaCode(),
+                asset.getName(),
+                Map.of(
+                        "Thiết bị", asset.getQaCode() + " - " + asset.getName(),
+                        "Trạng thái mới", status,
+                        "Người thực hiện", actor.getUsername()
+                )
+        );
+        return mapToHistoryResponse(maintenanceRequest);
+    }
+
     private void validateRequest(MaintenanceReportRequest request) {
         if (request == null) {
             throw new CustomException("Dữ liệu báo hỏng không được để trống.");
@@ -95,6 +156,24 @@ public class MaintenanceService {
         if (!StringUtils.hasText(request.getDescription())) {
             throw new CustomException("description là bắt buộc.");
         }
+    }
+
+    private MaintenanceHistoryResponse mapToHistoryResponse(MaintenanceRequest request) {
+        String reporterFullName = request.getReportedBy().getFullName();
+        if (!StringUtils.hasText(reporterFullName)) {
+            reporterFullName = request.getReportedBy().getUsername();
+        }
+        return MaintenanceHistoryResponse.builder()
+                .id(request.getId())
+                .assetQaCode(request.getAsset().getQaCode())
+                .assetName(request.getAsset().getName())
+                .homeLocationName(request.getAsset().getHomeLocation().getRoomName())
+                .currentLocationName(request.getAsset().getLocation().getRoomName())
+                .reporterFullName(reporterFullName)
+                .description(request.getDescription())
+                .reportTime(request.getReportTime())
+                .assetStatus(request.getAsset().getStatus())
+                .build();
     }
 
     private AppUser getCurrentUser() {

@@ -46,4 +46,9 @@ public class UsageHistoryController {
     ) {
         return ResponseEntity.ok(usageHistoryService.searchForAdmin(assetName, borrowedLocationId, userId, startDate, endDate));
     }
+
+    @GetMapping("/history/me")
+    public ResponseEntity<List<UsageHistoryAdminResponse>> getMyHistory() {
+        return ResponseEntity.ok(usageHistoryService.getMyHistory());
+    }
 }

@@ -1,4 +1,4 @@
-import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, Users } from 'lucide-react'
+import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, TriangleAlert, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -11,6 +11,7 @@ const menuItems = [
   { to: '/admin/assets', label: 'Thiết bị hiện có', icon: Boxes },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
+  { to: '/admin/maintenance-history', label: 'Lịch sử báo hỏng', icon: TriangleAlert },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
 ]
 

@@ -30,6 +30,8 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/inventory/InventoryAuditScanResultResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/inventory/InventoryAuditSummaryResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/location/LocationResponse.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/maintenance/MaintenanceAssetStatusUpdateRequest.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/maintenance/MaintenanceHistoryResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/maintenance/MaintenanceReportRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/maintenance/MaintenanceReportResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/notification/NotificationDetailResponse.java

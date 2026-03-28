@@ -97,6 +97,14 @@ public class InventoryAuditService {
     }
 
     @Transactional(readOnly = true)
+    public List<InventoryAuditSummaryResponse> getMyAudits() {
+        AppUser actor = getCurrentUser();
+        return inventoryAuditRepository.findByCreatedByIdForHistory(actor.getId()).stream()
+                .map(this::mapSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public InventoryAuditDetailResponse getDetail(Integer auditId) {
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));

@@ -42,6 +42,11 @@ public class InventoryAuditController {
         return ResponseEntity.ok(inventoryAuditService.getActiveAudits());
     }
 
+    @GetMapping("/history/me")
+    public ResponseEntity<List<InventoryAuditSummaryResponse>> getMyAudits() {
+        return ResponseEntity.ok(inventoryAuditService.getMyAudits());
+    }
+
     @GetMapping("/{auditId}")
     public ResponseEntity<InventoryAuditDetailResponse> getDetail(@PathVariable Integer auditId) {
         return ResponseEntity.ok(inventoryAuditService.getDetail(auditId));

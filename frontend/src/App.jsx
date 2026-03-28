@@ -12,6 +12,7 @@ import Unauthorized from './pages/Unauthorized'
 import AssetManagement from './pages/admin/AssetManagement'
 import Dashboard from './pages/admin/Dashboard'
 import InventoryAuditManagement from './pages/admin/InventoryAuditManagement'
+import MaintenanceHistoryManagement from './pages/admin/MaintenanceHistoryManagement'
 import NotificationDetail from './pages/admin/NotificationDetail'
 import UserManagement from './pages/admin/UserManagement'
 import UsageHistoryManagement from './pages/admin/UsageHistoryManagement'
@@ -78,6 +79,7 @@ function App() {
         <Route path="/admin/dashboard" element={<Dashboard />} />
         <Route path="/admin/assets" element={<AssetManagement />} />
         <Route path="/admin/usage-history" element={<UsageHistoryManagement />} />
+        <Route path="/admin/maintenance-history" element={<MaintenanceHistoryManagement />} />
         <Route path="/admin/inventory-audits" element={<InventoryAuditManagement />} />
         <Route path="/admin/users" element={<UserManagement />} />
         <Route path="/admin/notifications/:id" element={<NotificationDetail />} />

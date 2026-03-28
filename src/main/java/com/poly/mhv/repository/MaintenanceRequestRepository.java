@@ -11,6 +11,26 @@ public interface MaintenanceRequestRepository extends JpaRepository<MaintenanceR
     List<MaintenanceRequest> findByAssetQaCode(String assetQaCode);
     List<MaintenanceRequest> findByStatus(String status);
     List<MaintenanceRequest> findByReportedById(Integer reportedById);
+    @Query("""
+            select mr from MaintenanceRequest mr
+            join fetch mr.asset a
+            join fetch a.location l
+            join fetch a.homeLocation hl
+            join fetch mr.reportedBy rb
+            where rb.id = :reportedById
+            order by mr.reportTime desc, mr.id desc
+            """)
+    List<MaintenanceRequest> findHistoryByReportedById(@Param("reportedById") Integer reportedById);
+
+    @Query("""
+            select mr from MaintenanceRequest mr
+            join fetch mr.asset a
+            join fetch a.location l
+            join fetch a.homeLocation hl
+            join fetch mr.reportedBy rb
+            order by mr.reportTime desc, mr.id desc
+            """)
+    List<MaintenanceRequest> findAllForAdminHistory();
 
     @Query("""
             select mr.asset.qaCode, mr.asset.name, mr.asset.homeLocation.roomName, count(mr)

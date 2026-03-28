@@ -148,6 +148,14 @@ public class UsageHistoryService {
     }
 
     @Transactional(readOnly = true)
+    public List<UsageHistoryAdminResponse> getMyHistory() {
+        AppUser actor = getCurrentUser();
+        return usageHistoryRepository.findByUserIdForHistory(actor.getId()).stream()
+                .map(this::mapToAdminResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<UsageHistoryAdminResponse> searchForAdmin(
             String assetName,
             Integer borrowedLocationId,
