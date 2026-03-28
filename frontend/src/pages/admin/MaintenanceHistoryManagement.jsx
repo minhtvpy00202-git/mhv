@@ -5,6 +5,10 @@ import axiosClient from '../../api/axiosClient'
 const PAGE_SIZE = 10
 const assetStatusOptions = ['Đang sử dụng', 'Hỏng', 'Sẵn sàng', 'Bảo trì']
 
+function getRowKey(item) {
+  return `${item.id}-${item.assetQaCode}-${item.reportTime}`
+}
+
 function formatDateTime(value) {
   if (!value) return '-'
   const date = new Date(value)
@@ -26,7 +30,7 @@ function MaintenanceHistoryManagement() {
       const data = response.data || []
       setRows(data)
       setDraftStatus(
-        data.reduce((acc, item) => ({ ...acc, [item.id]: item.assetStatus || 'Hỏng' }), {}),
+        data.reduce((acc, item) => ({ ...acc, [getRowKey(item)]: item.assetStatus || 'Hỏng' }), {}),
       )
       setCurrentPage(1)
     } catch (error) {
@@ -48,7 +52,8 @@ function MaintenanceHistoryManagement() {
   }, [rows, currentPage])
 
   const handleUpdate = async (item) => {
-    const status = draftStatus[item.id]
+    const rowKey = getRowKey(item)
+    const status = draftStatus[rowKey]
     if (!status) return
     setSubmittingId(item.id)
     try {
@@ -66,7 +71,7 @@ function MaintenanceHistoryManagement() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Lịch sử báo hỏng</h2>
         <p className="mt-1 text-sm text-slate-500">
@@ -74,9 +79,9 @@ function MaintenanceHistoryManagement() {
         </p>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="overflow-auto rounded border border-slate-200">
-          <table className="min-w-[1300px] text-sm">
+      <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="w-full max-w-full overflow-x-auto overflow-y-hidden rounded border border-slate-200">
+          <table className="w-max min-w-[1300px] text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left">Mã thiết bị</th>
@@ -92,8 +97,10 @@ function MaintenanceHistoryManagement() {
             </thead>
             <tbody>
               {!loading &&
-                paginatedRows.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100 align-top">
+                paginatedRows.map((item) => {
+                  const rowKey = getRowKey(item)
+                  return (
+                  <tr key={rowKey} className="border-t border-slate-100 align-top">
                     <td className="px-3 py-2">{item.assetQaCode}</td>
                     <td className="px-3 py-2">{item.assetName}</td>
                     <td className="px-3 py-2">{item.homeLocationName}</td>
@@ -103,11 +110,11 @@ function MaintenanceHistoryManagement() {
                     <td className="px-3 py-2">{formatDateTime(item.reportTime)}</td>
                     <td className="px-3 py-2">
                       <select
-                        value={draftStatus[item.id] || item.assetStatus}
+                        value={draftStatus[rowKey] || item.assetStatus}
                         onChange={(e) =>
                           setDraftStatus((prev) => ({
                             ...prev,
-                            [item.id]: e.target.value,
+                            [rowKey]: e.target.value,
                           }))
                         }
                         className="rounded border border-slate-300 px-2 py-1 text-sm"
@@ -130,7 +137,7 @@ function MaintenanceHistoryManagement() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                )})}
               {!loading && paginatedRows.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-3 py-3 text-center text-slate-500">

@@ -114,7 +114,7 @@ function AdminLayout() {
         </nav>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between bg-white px-4 py-3 shadow-sm md:px-6">
           <div>
             <p className="text-sm text-slate-500">Trang quản trị</p>
@@ -171,7 +171,7 @@ function AdminLayout() {
             </button>
           </div>
         </header>
-        <main className="p-4 md:p-6">
+        <main className="min-w-0 p-4 md:p-6">
           <Outlet />
         </main>
       </div>
