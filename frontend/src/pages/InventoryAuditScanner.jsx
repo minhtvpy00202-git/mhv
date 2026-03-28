@@ -101,6 +101,8 @@ function InventoryAuditScanner() {
               {
                 assetQaCode: data.assetQaCode,
                 assetName: data.assetName,
+                currentLocationName: data.currentLocationName,
+                homeLocationName: data.homeLocationName,
                 scannedByUsername: 'Bạn',
                 scannedAt: new Date().toISOString(),
               },
@@ -194,6 +196,9 @@ function InventoryAuditScanner() {
             <div key={`${item.assetQaCode}-${index}`} className="border-b border-slate-100 px-3 py-2 text-sm">
               <p className="font-medium text-slate-700">
                 {item.assetQaCode} - {item.assetName}
+              </p>
+              <p className="text-xs text-slate-500">
+                Phòng hiện tại: {item.currentLocationName || 'Không xác định'} | Phòng gốc: {item.homeLocationName || 'Không xác định'}
               </p>
             </div>
           ))}

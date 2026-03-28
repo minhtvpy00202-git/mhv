@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
@@ -76,12 +76,20 @@ function Login() {
           </div>
         </div>
 
-        <button
-          disabled={loading}
-          className="mt-5 w-full rounded-lg bg-fptOrange px-4 py-2 font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-        >
-          Đăng nhập
-        </button>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <Link
+            to="/register"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-center font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Đăng ký
+          </Link>
+          <button
+            disabled={loading}
+            className="rounded-lg bg-fptOrange px-4 py-2 font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+          >
+            Đăng nhập
+          </button>
+        </div>
       </form>
     </div>
   )

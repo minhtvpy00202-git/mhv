@@ -22,19 +22,36 @@ public class AdminAlertSseService {
         return emitter;
     }
 
-    public void notifyMaintenanceAlert(String message) {
-        Map<String, Object> payload = Map.of(
-                "type", "maintenance_alert",
-                "message", message,
-                "timestamp", LocalDateTime.now().toString()
-        );
+    public void notifyAlert(String eventName, Map<String, Object> payload) {
         for (SseEmitter emitter : emitters) {
             try {
-                emitter.send(SseEmitter.event().name("maintenance_alert").data(payload));
+                emitter.send(SseEmitter.event().name(eventName).data(payload));
             } catch (IOException ex) {
                 emitter.completeWithError(ex);
                 emitters.remove(emitter);
             }
         }
+    }
+
+    public void notifyNotificationAlert(String eventType, String title, String message) {
+        Map<String, Object> payload = Map.of(
+                "type", "notification_alert",
+                "eventType", eventType,
+                "title", title,
+                "message", message,
+                "timestamp", LocalDateTime.now().toString()
+        );
+        notifyAlert("notification_alert", payload);
+    }
+
+    public void notifyMaintenanceAlert(String message) {
+        Map<String, Object> payload = Map.of(
+                "type", "maintenance_alert",
+                "eventType", "MAINTENANCE_REPORT",
+                "title", "Báo hỏng thiết bị",
+                "message", message,
+                "timestamp", LocalDateTime.now().toString()
+        );
+        notifyAlert("maintenance_alert", payload);
     }
 }

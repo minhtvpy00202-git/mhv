@@ -32,6 +32,10 @@ public class DatabaseSeeder implements CommandLineRunner {
             appUser.setPassword(passwordEncoder.encode(rawPassword));
         }
         appUser.setRole(role);
+        appUser.setStatus("Hoạt động");
+        if (appUser.getFullName() == null || appUser.getFullName().isBlank()) {
+            appUser.setFullName(username);
+        }
         appUserRepository.save(appUser);
     }
 }

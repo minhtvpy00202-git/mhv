@@ -101,12 +101,17 @@ public class InventoryAuditService {
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));
         List<InventoryAuditItemResponse> scannedItems = inventoryAuditItemRepository.findByAuditIdOrderByScannedAtDesc(auditId).stream()
-                .map(item -> InventoryAuditItemResponse.builder()
-                        .assetQaCode(item.getAssetQaCode())
-                        .assetName(item.getAssetName())
-                        .scannedByUsername(item.getScannedByUsername())
-                        .scannedAt(item.getScannedAt())
-                        .build())
+                .map(item -> {
+                    Asset scannedAsset = assetRepository.findById(item.getAssetQaCode()).orElse(null);
+                    return InventoryAuditItemResponse.builder()
+                            .assetQaCode(item.getAssetQaCode())
+                            .assetName(item.getAssetName())
+                            .currentLocationName(scannedAsset != null ? scannedAsset.getLocation().getRoomName() : null)
+                            .homeLocationName(scannedAsset != null ? scannedAsset.getHomeLocation().getRoomName() : null)
+                            .scannedByUsername(item.getScannedByUsername())
+                            .scannedAt(item.getScannedAt())
+                            .build();
+                })
                 .toList();
         List<InventoryAuditMissingResponse> missingItems = inventoryAuditMissingRepository.findByAuditIdOrderByAssetQaCodeAsc(auditId).stream()
                 .map(missing -> InventoryAuditMissingResponse.builder()
@@ -137,9 +142,9 @@ public class InventoryAuditService {
         }
         String qaCode = request.getAssetQaCode().trim();
         Asset asset = assetRepository.findById(qaCode)
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
+                .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
         if (!asset.getHomeLocation().getId().equals(audit.getLocation().getId())) {
-            throw new CustomException("Thiết bị " + qaCode + " không thuộc phòng kiểm kê " + audit.getLocation().getRoomName() + ".");
+            throw new CustomException("Tài sản này thuộc " + asset.getHomeLocation().getRoomName());
         }
         if (inventoryAuditItemRepository.existsByAuditIdAndAssetQaCode(auditId, qaCode)) {
             throw new CustomException("Thiết bị " + qaCode + " đã được quét trong phiên này.");
@@ -165,6 +170,8 @@ public class InventoryAuditService {
                 .auditId(auditId)
                 .assetQaCode(asset.getQaCode())
                 .assetName(asset.getName())
+                .currentLocationName(asset.getLocation().getRoomName())
+                .homeLocationName(asset.getHomeLocation().getRoomName())
                 .scannedCount(scannedCount)
                 .expectedCount(expectedCount)
                 .build();

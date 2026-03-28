@@ -16,7 +16,12 @@ CREATE TABLE users (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL,
-    CONSTRAINT CK_users_role CHECK (role IN ('Admin', 'NhanVien'))
+    full_name NVARCHAR(100) NULL,
+    birthday DATE NULL,
+    phone VARCHAR(20) NULL,
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT N'Hoạt động',
+    CONSTRAINT CK_users_role CHECK (role IN ('Admin', 'NhanVien')),
+    CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa'))
 );
 GO
 
@@ -107,12 +112,12 @@ INSERT INTO locations (room_name) VALUES
 (N'Phòng Nghiên cứu');
 GO
 
-INSERT INTO users (username, password, role) VALUES
-('admin', 'hashed_password_1', 'Admin'),
-('john_doe', 'hashed_password_2', 'NhanVien'),
-('jane_smith', 'hashed_password_3', 'NhanVien'),
-('bob_wilson', 'hashed_password_4', 'NhanVien'),
-('alice_brown', 'hashed_password_5', 'NhanVien');
+INSERT INTO users (username, password, role, full_name, birthday, phone, status) VALUES
+('admin', 'hashed_password_1', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động'),
+('john_doe', 'hashed_password_2', 'NhanVien', N'John Doe', '1998-05-20', '0900000002', N'Hoạt động'),
+('jane_smith', 'hashed_password_3', 'NhanVien', N'Jane Smith', '1999-08-12', '0900000003', N'Hoạt động'),
+('bob_wilson', 'hashed_password_4', 'NhanVien', N'Bob Wilson', '1997-03-14', '0900000004', N'Hoạt động'),
+('alice_brown', 'hashed_password_5', 'NhanVien', N'Alice Brown', '1996-11-30', '0900000005', N'Hoạt động');
 GO
 
 
@@ -141,6 +146,63 @@ GO
 IF COL_LENGTH('assets', 'home_location_id') IS NULL
 BEGIN
     ALTER TABLE assets ADD home_location_id INT NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'full_name') IS NULL
+BEGIN
+    ALTER TABLE users ADD full_name NVARCHAR(100) NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'birthday') IS NULL
+BEGIN
+    ALTER TABLE users ADD birthday DATE NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'phone') IS NULL
+BEGIN
+    ALTER TABLE users ADD phone VARCHAR(20) NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'status') IS NULL
+BEGIN
+    ALTER TABLE users ADD status NVARCHAR(20) NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'status') IS NOT NULL
+BEGIN
+    UPDATE users
+    SET status = N'Hoạt động'
+    WHERE status IS NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'status') IS NOT NULL
+AND EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('users')
+      AND name = 'status'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE users ALTER COLUMN status NVARCHAR(20) NOT NULL;
+END;
+GO
+
+IF OBJECT_ID('DF_users_status', 'D') IS NULL
+BEGIN
+    ALTER TABLE users ADD CONSTRAINT DF_users_status DEFAULT N'Hoạt động' FOR status;
+END;
+GO
+
+IF OBJECT_ID('CK_users_status', 'C') IS NULL
+BEGIN
+    ALTER TABLE users ADD CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa'));
 END;
 GO
 
@@ -593,5 +655,65 @@ GO
 IF OBJECT_ID('asset_location_stocks', 'U') IS NOT NULL
 BEGIN
     DROP TABLE asset_location_stocks;
+END;
+GO
+
+---update
+IF COL_LENGTH('users', 'full_name') IS NULL
+BEGIN
+    ALTER TABLE users ADD full_name NVARCHAR(100) NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'birthday') IS NULL
+BEGIN
+    ALTER TABLE users ADD birthday DATE NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'phone') IS NULL
+BEGIN
+    ALTER TABLE users ADD phone VARCHAR(20) NULL;
+END;
+GO
+
+IF COL_LENGTH('users', 'status') IS NULL
+BEGIN
+    ALTER TABLE users ADD status NVARCHAR(20) NULL;
+END;
+GO
+
+UPDATE users
+SET full_name = username
+WHERE full_name IS NULL OR LTRIM(RTRIM(full_name)) = '';
+GO
+
+UPDATE users
+SET status = N'Hoạt động'
+WHERE status IS NULL OR LTRIM(RTRIM(status)) = '';
+GO
+
+IF COL_LENGTH('users', 'status') IS NOT NULL
+AND EXISTS (
+    SELECT 1
+    FROM sys.columns
+    WHERE object_id = OBJECT_ID('users')
+      AND name = 'status'
+      AND is_nullable = 1
+)
+BEGIN
+    ALTER TABLE users ALTER COLUMN status NVARCHAR(20) NOT NULL;
+END;
+GO
+
+IF OBJECT_ID('DF_users_status', 'D') IS NULL
+BEGIN
+    ALTER TABLE users ADD CONSTRAINT DF_users_status DEFAULT N'Hoạt động' FOR status;
+END;
+GO
+
+IF OBJECT_ID('CK_users_status', 'C') IS NULL
+BEGIN
+    ALTER TABLE users ADD CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa'));
 END;
 GO

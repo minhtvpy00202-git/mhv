@@ -17,6 +17,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/asset/AssetUpdateRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/auth/JwtResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/auth/LoginRequest.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/auth/RegisterRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/category/CategoryResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/common/ErrorResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/dashboard/DashboardSummaryResponse.java
@@ -38,7 +39,10 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/CheckoutRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/UsageHistoryAdminResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/UsageHistoryResponse.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/user/UserAdminRequest.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/user/UserAdminResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/user/UserOptionResponse.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/user/UserPageResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/AppUser.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Asset.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Category.java
@@ -77,4 +81,5 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/NotificationService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/ReportService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/UsageHistoryService.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/UserService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/util/QRCodeGenerator.java

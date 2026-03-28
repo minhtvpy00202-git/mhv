@@ -13,6 +13,8 @@ public class InventoryAuditScanResultResponse {
     private Integer auditId;
     private String assetQaCode;
     private String assetName;
+    private String currentLocationName;
+    private String homeLocationName;
     private Integer scannedCount;
     private Integer expectedCount;
 }

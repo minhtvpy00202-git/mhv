@@ -10,6 +10,8 @@ function MaintenanceReport() {
   const isScanningRef = useRef(false)
   const [assetQaCode, setAssetQaCode] = useState('')
   const [assetName, setAssetName] = useState('')
+  const [assetLocationName, setAssetLocationName] = useState('')
+  const [assetHomeLocationName, setAssetHomeLocationName] = useState('')
   const [description, setDescription] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -45,14 +47,21 @@ function MaintenanceReport() {
           const qaCode = extractQaCode(decodedText)
           if (!qaCode) return
           await stopScanner()
-          setAssetQaCode(qaCode)
           try {
             const response = await axiosClient.get(`/api/assets/${qaCode}`)
+            setAssetQaCode(qaCode)
             setAssetName(response.data?.name || '')
+            setAssetLocationName(response.data?.locationName || '')
+            setAssetHomeLocationName(response.data?.homeLocationName || '')
+            setShowModal(true)
           } catch {
+            setAssetQaCode('')
             setAssetName('')
+            setAssetLocationName('')
+            setAssetHomeLocationName('')
+            toast.error('Mã tài sản không tồn tại')
+            startScanner()
           }
-          setShowModal(true)
         },
         () => {},
       )
@@ -83,6 +92,8 @@ function MaintenanceReport() {
     setShowModal(false)
     setAssetQaCode('')
     setAssetName('')
+    setAssetLocationName('')
+    setAssetHomeLocationName('')
     setDescription('')
     startScanner()
   }
@@ -119,6 +130,8 @@ function MaintenanceReport() {
             <h3 className="text-base font-semibold text-slate-800">Nhập mô tả lỗi thiết bị</h3>
             <p className="mt-1 text-sm text-slate-600">Mã QA: {assetQaCode}</p>
             <p className="text-sm text-slate-600">Tên thiết bị: {assetName || 'Đang tải...'}</p>
+            <p className="text-sm text-slate-600">Phòng hiện tại: {assetLocationName || 'Không xác định'}</p>
+            <p className="text-sm text-slate-600">Phòng gốc: {assetHomeLocationName || 'Không xác định'}</p>
             <div className="mt-3">
               <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả lỗi</label>
               <textarea

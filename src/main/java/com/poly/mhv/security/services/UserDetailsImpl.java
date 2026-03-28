@@ -17,6 +17,7 @@ public class UserDetailsImpl implements UserDetails {
     private String username;
     private String password;
     private String role;
+    private String status;
     private Collection<? extends GrantedAuthority> authorities;
 
     public static UserDetailsImpl build(AppUser appUser) {
@@ -28,6 +29,7 @@ public class UserDetailsImpl implements UserDetails {
                 appUser.getUsername(),
                 appUser.getPassword(),
                 appUser.getRole(),
+                appUser.getStatus(),
                 List.of(new SimpleGrantedAuthority(authorityRole))
         );
     }
@@ -54,7 +56,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return !"Khóa".equals(status);
     }
 
     @Override
@@ -64,6 +66,6 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return "Hoạt động".equals(status);
     }
 }

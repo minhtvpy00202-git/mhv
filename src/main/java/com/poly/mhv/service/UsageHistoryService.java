@@ -52,7 +52,7 @@ public class UsageHistoryService {
         validateCheckoutRequest(request);
 
         Asset asset = assetRepository.findById(request.getAssetQaCode())
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + request.getAssetQaCode()));
+                .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
         validateAssetForCheckout(asset);
 
         usageHistoryRepository.findByAssetQaCodeAndEndTimeIsNull(request.getAssetQaCode())
@@ -108,7 +108,7 @@ public class UsageHistoryService {
         }
 
         Asset asset = assetRepository.findById(request.getAssetQaCode())
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + request.getAssetQaCode()));
+                .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
 
         UsageHistory usageHistory = usageHistoryRepository.findByAssetQaCodeAndEndTimeIsNull(request.getAssetQaCode())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên mượn đang mở của thiết bị: " + request.getAssetQaCode()));

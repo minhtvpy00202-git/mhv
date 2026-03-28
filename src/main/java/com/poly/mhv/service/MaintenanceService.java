@@ -25,20 +25,17 @@ public class MaintenanceService {
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
     private final NotificationService notificationService;
-    private final AdminAlertSseService adminAlertSseService;
 
     public MaintenanceService(
             MaintenanceRequestRepository maintenanceRequestRepository,
             AssetRepository assetRepository,
             AppUserRepository appUserRepository,
-            NotificationService notificationService,
-            AdminAlertSseService adminAlertSseService
+            NotificationService notificationService
     ) {
         this.maintenanceRequestRepository = maintenanceRequestRepository;
         this.assetRepository = assetRepository;
         this.appUserRepository = appUserRepository;
         this.notificationService = notificationService;
-        this.adminAlertSseService = adminAlertSseService;
     }
 
     @Transactional
@@ -46,7 +43,7 @@ public class MaintenanceService {
         validateRequest(request);
 
         Asset asset = assetRepository.findById(request.getAssetQaCode())
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + request.getAssetQaCode()));
+                .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
         if ("Hỏng".equals(asset.getStatus())) {
             throw new CustomException("Thiết bị này đã được báo hỏng! Cảm ơn rất nhiều vì sự đóng góp của bạn!");
         }
@@ -77,10 +74,6 @@ public class MaintenanceService {
                         "Người thực hiện", reportedBy.getUsername(),
                         "Mô tả lỗi", saved.getDescription()
                 )
-        );
-        adminAlertSseService.notifyMaintenanceAlert(
-                "Cảnh báo: Nhân viên " + reportedBy.getUsername() + " vừa báo hỏng "
-                        + asset.getName() + " tại phòng " + asset.getLocation().getRoomName() + "."
         );
         return MaintenanceReportResponse.builder()
                 .id(saved.getId())

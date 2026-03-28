@@ -12,6 +12,8 @@ function QRScanner() {
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
   const [scannedLocationId, setScannedLocationId] = useState(null)
+  const [scannedLocationName, setScannedLocationName] = useState('')
+  const [scannedHomeLocationName, setScannedHomeLocationName] = useState('')
   const [showActionModal, setShowActionModal] = useState(false)
   const [toLocationId, setToLocationId] = useState('')
   const [locations, setLocations] = useState([])
@@ -45,14 +47,21 @@ function QRScanner() {
     }
   }
 
-  const fetchAssetName = async (qaCode) => {
+  const fetchAssetInfo = async (qaCode) => {
     try {
       const response = await axiosClient.get(`/api/assets/${qaCode}`)
       setScannedAssetName(response.data?.name || '')
       setScannedLocationId(response.data?.locationId || null)
+      setScannedLocationName(response.data?.locationName || '')
+      setScannedHomeLocationName(response.data?.homeLocationName || '')
+      return true
     } catch {
       setScannedAssetName('')
       setScannedLocationId(null)
+      setScannedLocationName('')
+      setScannedHomeLocationName('')
+      toast.error('Mã tài sản không tồn tại')
+      return false
     }
   }
 
@@ -81,7 +90,12 @@ function QRScanner() {
           if (!qaCode) return
           await stopScanner()
           setScannedQaCode(qaCode)
-          await fetchAssetName(qaCode)
+          const exists = await fetchAssetInfo(qaCode)
+          if (!exists) {
+            setScannedQaCode('')
+            startScanner()
+            return
+          }
           setShowActionModal(true)
         },
         () => {},
@@ -113,6 +127,8 @@ function QRScanner() {
     setScannedQaCode('')
     setScannedAssetName('')
     setScannedLocationId(null)
+    setScannedLocationName('')
+    setScannedHomeLocationName('')
     setToLocationId('')
     setLocationQuery('')
     setShowLocationOptions(false)
@@ -178,6 +194,8 @@ function QRScanner() {
             <h3 className="text-base font-semibold text-slate-800">Xác nhận thao tác thiết bị</h3>
             <p className="mt-1 text-sm text-slate-600">Mã QA: {scannedQaCode}</p>
             <p className="text-sm text-slate-600">Tên thiết bị: {scannedAssetName || 'Đang tải...'}</p>
+            <p className="text-sm text-slate-600">Phòng hiện tại: {scannedLocationName || 'Không xác định'}</p>
+            <p className="text-sm text-slate-600">Phòng gốc: {scannedHomeLocationName || 'Không xác định'}</p>
 
             <div className="mt-3 space-y-2">
               <label className="text-sm font-medium text-slate-700">Phòng đích</label>

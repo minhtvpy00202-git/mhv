@@ -54,6 +54,7 @@ public class DashboardService {
             usageCountMap.put(qaCode, count);
         }
 
+
         List<String> suggestions = maintenanceRequestRepository.getMaintenanceStatsInPeriod(start, end).stream()
                 .limit(5)
                 .map(row -> {

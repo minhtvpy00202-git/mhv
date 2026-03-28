@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 public class InventoryAuditItemResponse {
     private String assetQaCode;
     private String assetName;
+    private String currentLocationName;
+    private String homeLocationName;
     private String scannedByUsername;
     private LocalDateTime scannedAt;
 }

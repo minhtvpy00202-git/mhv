@@ -1,4 +1,4 @@
-import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut } from 'lucide-react'
+import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -9,6 +9,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
   { to: '/admin/assets', label: 'Thiết bị hiện có', icon: Boxes },
+  { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
 ]
@@ -45,7 +46,8 @@ function AdminLayout() {
       try {
         const payload = JSON.parse(event.data)
         if (payload?.message) {
-          toast.error(payload.message, {
+          const showToast = payload?.eventType === 'MAINTENANCE_REPORT' ? toast.error : toast.info
+          showToast(payload.message, {
             autoClose: 7000,
             position: 'top-right',
           })
@@ -56,6 +58,7 @@ function AdminLayout() {
     }
     const connectSse = () => {
       eventSource = new EventSource(`${API_BASE_URL}/api/alerts/stream?token=${encodeURIComponent(token)}`)
+      eventSource.addEventListener('notification_alert', handleAlertEvent)
       eventSource.addEventListener('maintenance_alert', handleAlertEvent)
       eventSource.onmessage = handleAlertEvent
       eventSource.onerror = () => {

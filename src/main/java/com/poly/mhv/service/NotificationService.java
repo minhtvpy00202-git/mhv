@@ -16,8 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
-    public NotificationService(NotificationRepository notificationRepository) {
+    private final AdminAlertSseService adminAlertSseService;
+
+    public NotificationService(NotificationRepository notificationRepository, AdminAlertSseService adminAlertSseService) {
         this.notificationRepository = notificationRepository;
+        this.adminAlertSseService = adminAlertSseService;
     }
 
     @Transactional
@@ -47,6 +50,7 @@ public class NotificationService {
             Notification saved = notificationRepository.save(notification);
             saved.setLinkPath("/admin/notifications/" + saved.getId());
             notificationRepository.save(saved);
+            adminAlertSseService.notifyNotificationAlert(saved.getEventType(), saved.getTitle(), saved.getMessage());
         } catch (Exception ex) {
             throw new CustomException("Không thể tạo thông báo hệ thống.");
         }
