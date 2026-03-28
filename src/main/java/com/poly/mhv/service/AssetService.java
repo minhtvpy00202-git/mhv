@@ -110,7 +110,7 @@ public class AssetService {
     public AssetResponse getAssetByQaCode(String qaCode) {
         Asset asset = assetRepository.findById(qaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
-        return mapToAssetResponse(asset, false);
+        return mapToAssetResponse(asset, true);
     }
 
     @Transactional

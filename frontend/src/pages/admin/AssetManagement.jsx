@@ -13,6 +13,10 @@ function AssetManagement() {
   const [downloading, setDownloading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [qrImage, setQrImage] = useState('')
+  const [qrModalImage, setQrModalImage] = useState('')
+  const [qrModalQaCode, setQrModalQaCode] = useState('')
+  const [showQrModal, setShowQrModal] = useState(false)
+  const [qrModalLoading, setQrModalLoading] = useState(false)
   const [selectedQaCode, setSelectedQaCode] = useState(null)
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: 'qaCode', direction: 'asc' })
@@ -225,6 +229,32 @@ function AssetManagement() {
     const reset = { name: '', status: '', categoryId: '', locationId: '', categoryKeyword: '' }
     setFilters(reset)
     await loadAssets(reset)
+  }
+
+  const handleOpenQrModal = async (qaCode) => {
+    setQrModalLoading(true)
+    try {
+      const response = await axiosClient.get(`/api/assets/${qaCode}`)
+      const qrCodeBase64 = response.data?.qrCodeBase64
+      if (!qrCodeBase64) {
+        toast.error('Không lấy được mã QR của thiết bị này.')
+        return
+      }
+      setQrModalQaCode(qaCode)
+      setQrModalImage(`data:image/png;base64,${qrCodeBase64}`)
+      setShowQrModal(true)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải mã QR của thiết bị.'
+      toast.error(message)
+    } finally {
+      setQrModalLoading(false)
+    }
+  }
+
+  const handleCloseQrModal = () => {
+    setShowQrModal(false)
+    setQrModalQaCode('')
+    setQrModalImage('')
   }
 
   const isEditing = Boolean(selectedQaCode)
@@ -501,7 +531,7 @@ function AssetManagement() {
                   {getSortLabel('status', 'Trạng thái')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-right font-semibold text-slate-600">Sửa/Xóa</th>
+              <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -538,6 +568,14 @@ function AssetManagement() {
                   <td className="px-3 py-2">{asset.status}</td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenQrModal(asset.qaCode)}
+                        disabled={qrModalLoading}
+                        className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                      >
+                        QR
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleSelectAsset(asset)}
@@ -585,6 +623,25 @@ function AssetManagement() {
         </div>
       )}
     </div>
+    {showQrModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-base font-semibold text-slate-800">Mã QR thiết bị {qrModalQaCode}</h4>
+            <button
+              type="button"
+              onClick={handleCloseQrModal}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Đóng
+            </button>
+          </div>
+          <div className="flex justify-center">
+            <img src={qrModalImage} alt={`QR ${qrModalQaCode}`} className="h-[300px] w-[300px] rounded border border-slate-200" />
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   )
 }
