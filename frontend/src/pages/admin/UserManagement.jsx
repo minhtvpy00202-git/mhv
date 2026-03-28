@@ -92,8 +92,16 @@ function UserManagement() {
   }
 
   const handleCreate = async () => {
-    if (!form.username || !form.password || !form.fullName) {
-      toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
+    if (!form.username || !form.password || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
+      toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
+      return
+    }
+    if (!/^0\d{9}$/.test(form.phone.trim())) {
+      toast.error('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.')
+      return
+    }
+    if (new Date(form.birthday) >= new Date()) {
+      toast.error('Ngày sinh phải là ngày trong quá khứ.')
       return
     }
     setSubmitting(true)
@@ -102,8 +110,8 @@ function UserManagement() {
         username: form.username.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
-        birthday: form.birthday || null,
-        phone: form.phone.trim() || null,
+        birthday: form.birthday,
+        phone: form.phone.trim(),
         role: form.role,
         status: form.status,
       })

@@ -8,6 +8,7 @@ import com.poly.mhv.dto.user.UserPageResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -250,6 +251,19 @@ public class UserService {
         }
         if (!StringUtils.hasText(request.getStatus())) {
             throw new CustomException("Trạng thái là bắt buộc.");
+        }
+        if (request.getBirthday() == null) {
+            throw new CustomException("Ngày sinh là bắt buộc.");
+        }
+        if (!request.getBirthday().isBefore(LocalDate.now())) {
+            throw new CustomException("Ngày sinh phải là ngày trong quá khứ.");
+        }
+        if (!StringUtils.hasText(request.getPhone())) {
+            throw new CustomException("Số điện thoại là bắt buộc.");
+        }
+        String normalizedPhone = request.getPhone().trim();
+        if (!normalizedPhone.matches("^0\\d{9}$")) {
+            throw new CustomException("Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.");
         }
     }
 
