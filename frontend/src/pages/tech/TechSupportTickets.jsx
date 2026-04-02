@@ -1,5 +1,6 @@
+import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { useAuth } from '../../context/AuthContext'
@@ -20,6 +21,7 @@ function TechSupportTickets() {
   const [loading, setLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [chatKeyword, setChatKeyword] = useState('')
 
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
@@ -54,6 +56,17 @@ function TechSupportTickets() {
     ).length,
     pending: tickets.filter((ticket) => ticket.status === 'PENDING').length,
   }), [tickets, user?.userId])
+
+  const contactTickets = useMemo(() => {
+    const normalized = chatKeyword.trim().toLowerCase()
+    return tickets
+      .filter((ticket) => Number(ticket.assigneeId) === Number(user?.userId) || ticket.status === 'PENDING')
+      .filter((ticket) => {
+        if (!normalized) return true
+        const searchable = `${ticket.id} ${ticket.assetName || ''} ${ticket.assetQaCode || ''} ${ticket.reporterName || ''}`.toLowerCase()
+        return searchable.includes(normalized)
+      })
+  }, [chatKeyword, tickets, user?.userId])
 
   const handleTakeTicket = async (ticketId) => {
     setSubmittingId(ticketId)
@@ -97,7 +110,42 @@ function TechSupportTickets() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <section className="grid gap-4 xl:grid-cols-[320px_1fr]">
+        <aside className="rounded-2xl bg-white p-3 shadow-sm">
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1.5">
+            <Search size={16} className="text-slate-500" />
+            <input
+              value={chatKeyword}
+              onChange={(event) => setChatKeyword(event.target.value)}
+              placeholder="Tìm ticket/thiết bị/người báo..."
+              className="w-full text-sm outline-none"
+            />
+          </div>
+          <h3 className="mb-2 px-1 text-sm font-semibold text-slate-700">Danh sách chat nhanh</h3>
+          <div className="max-h-[72vh] space-y-1 overflow-auto">
+            {contactTickets.length === 0 && (
+              <p className="px-2 py-2 text-sm text-slate-500">Không có liên hệ phù hợp.</p>
+            )}
+            {contactTickets.map((ticket) => (
+              <button
+                key={ticket.id}
+                type="button"
+                onClick={() => navigate(`/tech/tickets/${ticket.id}`)}
+                className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-blue-50"
+              >
+                <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                  {(ticket.reporterName || 'U').slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-800">{ticket.reporterName || `User #${ticket.reporterId}`}</p>
+                  <p className="truncate text-xs text-slate-500">#{ticket.id} - {ticket.assetName || ticket.assetQaCode}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 md:grid-cols-3">
           <select
             value={statusFilter}
@@ -211,13 +259,6 @@ function TechSupportTickets() {
           {loading && <p className="px-3 py-3 text-sm text-slate-500">Đang tải ticket...</p>}
         </div>
 
-        <div className="mt-3">
-          <Link
-            to="/tech/chats"
-            className="inline-flex rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Mở nhanh khung chat ticket
-          </Link>
         </div>
       </section>
     </div>

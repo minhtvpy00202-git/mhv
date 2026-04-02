@@ -1,4 +1,4 @@
-import { Send } from 'lucide-react'
+import { ImagePlus, Mic, Phone, Send, Square } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -15,14 +15,36 @@ function formatMessageTime(value) {
   })
 }
 
+const IMG_PREFIX = '[[IMG]]'
+const AUDIO_PREFIX = '[[AUDIO]]'
+const CALL_PREFIX = '[[CALL]]'
+
+function parseMessage(content) {
+  if (!content) return { type: 'text', value: '' }
+  if (content.startsWith(IMG_PREFIX)) {
+    return { type: 'image', value: content.slice(IMG_PREFIX.length) }
+  }
+  if (content.startsWith(AUDIO_PREFIX)) {
+    return { type: 'audio', value: content.slice(AUDIO_PREFIX.length) }
+  }
+  if (content.startsWith(CALL_PREFIX)) {
+    return { type: 'call', value: content.slice(CALL_PREFIX.length) }
+  }
+  return { type: 'text', value: content }
+}
+
 function TicketChatBox({ ticketId }) {
   const { token, user } = useAuth()
   const { connected, subscribe, publish } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [recording, setRecording] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const mediaStreamRef = useRef(null)
 
   const loadMessages = useCallback(async () => {
     if (!ticketId) return
@@ -82,26 +104,96 @@ function TicketChatBox({ ticketId }) {
         ...message,
         isMine: Number(message.senderId) === Number(user?.userId),
         timeText: formatMessageTime(message.createdAt),
+        parsed: parseMessage(message.content),
       })),
     [messages, user?.userId],
   )
 
-  const handleSendMessage = (event) => {
-    event.preventDefault()
-    if (!content.trim() || !ticketId) return
+  const publishMessage = useCallback((messageContent) => {
+    if (!messageContent || !ticketId) return
     if (!connected) {
       toast.error('Kết nối realtime chưa sẵn sàng, vui lòng thử lại sau vài giây.')
       return
     }
     publish(`/app/chat/${ticketId}`, {
       ticketId: Number(ticketId),
-      content: content.trim(),
+      content: messageContent,
     })
-    setContent('')
-    inputRef.current?.focus()
     setTimeout(() => {
       loadMessages()
     }, 600)
+  }, [connected, loadMessages, publish, ticketId])
+
+  const handleSendMessage = (event) => {
+    event.preventDefault()
+    if (!content.trim()) return
+    publishMessage(content.trim())
+    setContent('')
+    inputRef.current?.focus()
+  }
+
+  const handleSelectImage = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Ảnh vượt quá 2MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      if (!dataUrl) return
+      publishMessage(`${IMG_PREFIX}${dataUrl}`)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleToggleRecording = async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop()
+      setRecording(false)
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      const recorder = new MediaRecorder(stream)
+      const chunks = []
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        if (blob.size > 2 * 1024 * 1024) {
+          toast.error('File ghi âm vượt quá 2MB.')
+        } else {
+          const reader = new FileReader()
+          reader.onload = () => {
+            const dataUrl = String(reader.result || '')
+            if (dataUrl) {
+              publishMessage(`${AUDIO_PREFIX}${dataUrl}`)
+            }
+          }
+          reader.readAsDataURL(blob)
+        }
+        stream.getTracks().forEach((track) => track.stop())
+        mediaStreamRef.current = null
+        mediaRecorderRef.current = null
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+    } catch {
+      toast.error('Không thể truy cập microphone.')
+    }
+  }
+
+  const handleVideoCall = () => {
+    if (!ticketId) return
+    const callUrl = `https://meet.jit.si/mhv-ticket-${ticketId}`
+    window.open(callUrl, '_blank', 'noopener,noreferrer')
+    publishMessage(`${CALL_PREFIX}${callUrl}`)
   }
 
   return (
@@ -131,7 +223,29 @@ function TicketChatBox({ ticketId }) {
                 <p className={`mb-1 text-[11px] ${message.isMine ? 'text-orange-100' : 'text-slate-600'}`}>
                   {message.isMine ? 'Bạn' : `User #${message.senderId}`} · {message.timeText}
                 </p>
-                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                {message.parsed.type === 'image' && (
+                  <img src={message.parsed.value} alt="chat-img" className="max-h-64 w-full rounded-lg object-contain" />
+                )}
+                {message.parsed.type === 'audio' && (
+                  <audio controls className="w-full">
+                    <source src={message.parsed.value} />
+                  </audio>
+                )}
+                {message.parsed.type === 'call' && (
+                  <a
+                    href={message.parsed.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${
+                      message.isMine ? 'bg-white/20 text-white' : 'bg-blue-600 text-white'
+                    }`}
+                  >
+                    Tham gia cuộc gọi video
+                  </a>
+                )}
+                {message.parsed.type === 'text' && (
+                  <p className="whitespace-pre-wrap break-words">{message.parsed.value}</p>
+                )}
               </div>
             </div>
           ))}
@@ -140,6 +254,43 @@ function TicketChatBox({ ticketId }) {
       </div>
 
       <form onSubmit={handleSendMessage} className="border-t border-slate-200 p-3 md:p-4">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleSelectImage}
+          className="hidden"
+        />
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <ImagePlus size={14} />
+            Ảnh
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleRecording}
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold ${
+              recording
+                ? 'border-red-500 bg-red-50 text-red-700'
+                : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {recording ? <Square size={14} /> : <Mic size={14} />}
+            {recording ? 'Dừng ghi âm' : 'Ghi âm'}
+          </button>
+          <button
+            type="button"
+            onClick={handleVideoCall}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Phone size={14} />
+            Gọi video
+          </button>
+        </div>
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
