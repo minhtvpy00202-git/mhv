@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 import { useAuth } from '../../context/AuthContext'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
@@ -34,6 +35,8 @@ function TechSupportTickets() {
   const [submittingId, setSubmittingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  const [showTimelineModal, setShowTimelineModal] = useState(false)
+  const [timelineAsset, setTimelineAsset] = useState(null)
 
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
@@ -224,6 +227,19 @@ function TechSupportTickets() {
                         >
                           Mở chat
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTimelineAsset({
+                              qaCode: ticket.assetQaCode,
+                              name: ticket.assetName,
+                            })
+                            setShowTimelineModal(true)
+                          }}
+                          className="rounded border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+                        >
+                          Timeline
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -256,6 +272,15 @@ function TechSupportTickets() {
           </div>
         </div>
       )}
+      <AssetRepairTimelineModal
+        open={showTimelineModal}
+        onClose={() => {
+          setShowTimelineModal(false)
+          setTimelineAsset(null)
+        }}
+        assetQaCode={timelineAsset?.qaCode}
+        assetName={timelineAsset?.name}
+      />
     </div>
   )
 }

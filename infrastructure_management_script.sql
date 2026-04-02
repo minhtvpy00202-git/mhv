@@ -746,6 +746,7 @@ BEGIN
         status VARCHAR(20) NOT NULL CONSTRAINT DF_tickets_status DEFAULT 'PENDING',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_tickets_created_at DEFAULT SYSDATETIME(),
         due_date DATETIME2 NULL,
+        resolved_at DATETIME2 NULL,
         CONSTRAINT FK_tickets_asset FOREIGN KEY (asset_qa_code) REFERENCES assets(qa_code),
         CONSTRAINT FK_tickets_reporter FOREIGN KEY (reporter_id) REFERENCES users(id),
         CONSTRAINT FK_tickets_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
@@ -760,6 +761,14 @@ AND COL_LENGTH('tickets', 'image_url') <> -1
 BEGIN
     ALTER TABLE tickets
     ALTER COLUMN image_url NVARCHAR(MAX) NULL;
+END;
+GO
+
+IF OBJECT_ID('tickets', 'U') IS NOT NULL
+AND COL_LENGTH('tickets', 'resolved_at') IS NULL
+BEGIN
+    ALTER TABLE tickets
+    ADD resolved_at DATETIME2 NULL;
 END;
 GO
 
@@ -823,4 +832,3 @@ BEGIN
     DROP TABLE maintenance_requests;
 END;
 GO
-

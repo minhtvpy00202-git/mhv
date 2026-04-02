@@ -12,6 +12,7 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +71,7 @@ public class TicketService {
                 .status("PENDING")
                 .createdAt(createdAt)
                 .dueDate(calculateDueDate(priority, createdAt))
+                .resolvedAt(null)
                 .build();
 
         asset.setStatus("Hỏng");
@@ -124,6 +126,7 @@ public class TicketService {
 
         ticket.setAssignee(assignee);
         ticket.setStatus("IN_PROGRESS");
+        ticket.setResolvedAt(null);
         ticket.getAsset().setStatus("Bảo trì");
         assetRepository.save(ticket.getAsset());
         Ticket saved = ticketRepository.save(ticket);
@@ -171,6 +174,7 @@ public class TicketService {
         }
 
         ticket.setStatus("RESOLVED");
+        ticket.setResolvedAt(LocalDateTime.now());
         Asset asset = ticket.getAsset();
         asset.setStatus("Sẵn sàng");
         assetRepository.save(asset);
@@ -198,7 +202,7 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<TicketResponse> getTickets(String status, Integer assigneeId) {
+    public List<TicketResponse> getTickets(String status, Integer assigneeId, String assetQaCode) {
         String normalizedStatus = null;
         if (StringUtils.hasText(status)) {
             normalizedStatus = status.trim().toUpperCase();
@@ -206,9 +210,12 @@ public class TicketService {
                 throw new CustomException("status filter không hợp lệ.");
             }
         }
+        String normalizedAssetQaCode = StringUtils.hasText(assetQaCode) ? assetQaCode.trim() : null;
 
         List<Ticket> tickets;
-        if (normalizedStatus != null && assigneeId != null) {
+        if (normalizedAssetQaCode != null) {
+            tickets = ticketRepository.findByAssetQaCodeOrderByCreatedAtDesc(normalizedAssetQaCode);
+        } else if (normalizedStatus != null && assigneeId != null) {
             tickets = ticketRepository.findByStatusAndAssigneeId(normalizedStatus, assigneeId);
         } else if (normalizedStatus != null) {
             tickets = ticketRepository.findByStatus(normalizedStatus);
@@ -218,6 +225,8 @@ public class TicketService {
             tickets = ticketRepository.findAll();
         }
         return tickets.stream()
+                .filter(ticket -> normalizedAssetQaCode == null || normalizedAssetQaCode.equals(ticket.getAsset().getQaCode()))
+                .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
                 .map(this::mapToResponse)
                 .toList();
     }
@@ -256,6 +265,7 @@ public class TicketService {
                 .status(ticket.getStatus())
                 .createdAt(ticket.getCreatedAt())
                 .dueDate(ticket.getDueDate())
+                .resolvedAt(ticket.getResolvedAt())
                 .build();
     }
 

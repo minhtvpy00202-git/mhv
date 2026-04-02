@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     List<Ticket> findByAssetQaCode(String assetQaCode);
+    List<Ticket> findByAssetQaCodeOrderByCreatedAtDesc(String assetQaCode);
     List<Ticket> findByStatus(String status);
     List<Ticket> findByAssigneeId(Integer assigneeId);
     List<Ticket> findByStatusAndAssigneeId(String status, Integer assigneeId);

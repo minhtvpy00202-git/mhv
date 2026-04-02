@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 
 const statusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
 const PAGE_SIZE = 10
@@ -17,6 +18,8 @@ function AssetManagement() {
   const [qrModalQaCode, setQrModalQaCode] = useState('')
   const [showQrModal, setShowQrModal] = useState(false)
   const [qrModalLoading, setQrModalLoading] = useState(false)
+  const [showTimelineModal, setShowTimelineModal] = useState(false)
+  const [timelineAsset, setTimelineAsset] = useState(null)
   const [selectedQaCode, setSelectedQaCode] = useState(null)
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: 'qaCode', direction: 'asc' })
@@ -578,6 +581,16 @@ function AssetManagement() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setTimelineAsset(asset)
+                          setShowTimelineModal(true)
+                        }}
+                        className="rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+                      >
+                        Timeline
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleSelectAsset(asset)}
                         className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                       >
@@ -642,6 +655,15 @@ function AssetManagement() {
         </div>
       </div>
     )}
+    <AssetRepairTimelineModal
+      open={showTimelineModal}
+      onClose={() => {
+        setShowTimelineModal(false)
+        setTimelineAsset(null)
+      }}
+      assetQaCode={timelineAsset?.qaCode}
+      assetName={timelineAsset?.name}
+    />
     </div>
   )
 }

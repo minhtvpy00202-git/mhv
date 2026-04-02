@@ -25,4 +25,5 @@ public class TicketResponse {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime dueDate;
+    private LocalDateTime resolvedAt;
 }

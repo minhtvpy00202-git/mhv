@@ -68,6 +68,9 @@ public class Ticket {
     @Column(name = "due_date")
     private LocalDateTime dueDate;
 
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
     @JsonIgnore
     @OneToMany(mappedBy = "ticket")
     @Builder.Default

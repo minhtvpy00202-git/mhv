@@ -50,8 +50,9 @@ public class TicketController {
     @PreAuthorize("hasAnyRole('Admin','NhanVien','TechSupport')")
     public ResponseEntity<List<TicketResponse>> getTickets(
             @RequestParam(required = false) String status,
-            @RequestParam(name = "assignee_id", required = false) Integer assigneeId
+            @RequestParam(name = "assignee_id", required = false) Integer assigneeId,
+            @RequestParam(name = "asset_qa_code", required = false) String assetQaCode
     ) {
-        return ResponseEntity.ok(ticketService.getTickets(status, assigneeId));
+        return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode));
     }
 }
