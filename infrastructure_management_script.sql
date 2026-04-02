@@ -275,11 +275,11 @@ GO
 
 -- Seed Users
 INSERT INTO users (username, password, role, full_name, birthday, phone, status, tech_type_id) VALUES
-('admin', 'hashed_password_1', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động', 0),
-('nhanvien', 'hashed_password_2', 'NhanVien', N'John Doe', '1998-05-20', '0900000002', N'Hoạt động', 0),
-('techsup', 'hashed_password_3', 'TechSupport', N'Jane Smith', '1999-08-12', '0900000003', N'Hoạt động', 1),
-('techsup1', 'hashed_password_4', 'TechSupport', N'Bob Wilson', '1997-03-14', '0900000004', N'Hoạt động', 2),
-('techsup2', 'hashed_password_5', 'TechSupport', N'Alice Brown', '1996-11-30', '0900000005', N'Hoạt động', 3);
+('admin', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động', 0),
+('nhanvien', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'NhanVien', N'Lê Trần', '1998-05-20', '0900000002', N'Hoạt động', 0),
+('techsup', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'An', '1999-08-12', '0900000003', N'Hoạt động', 1),
+('techsup1', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Vương', '1997-03-14', '0900000004', N'Hoạt động', 2),
+('techsup2', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Nghĩa', '1996-11-30', '0900000005', N'Hoạt động', 3);
 GO
 
 -- Seed Assets

@@ -22,8 +22,8 @@ public class DatabaseSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        upsertDemoUser("admin", "password123", "Admin");
-        upsertDemoUser("nhanvien", "password123", "NhanVien");
+        upsertDemoUser("admin", "123456", "Admin");
+        upsertDemoUser("nhanvien", "123456", "NhanVien");
     }
 
     private void upsertDemoUser(String username, String rawPassword, String role) {
