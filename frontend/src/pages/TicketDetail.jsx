@@ -17,6 +17,12 @@ const statusStyles = {
   RESOLVED: 'bg-emerald-100 text-emerald-800',
 }
 
+function toVietnameseRole(role) {
+  if (role === 'Admin') return 'Quản trị viên'
+  if (role === 'TechSupport') return 'Kỹ thuật viên hỗ trợ'
+  return 'Nhân viên'
+}
+
 function TicketDetail() {
   const { ticketId } = useParams()
   const location = useLocation()
@@ -95,10 +101,10 @@ function TicketDetail() {
             <span className="font-semibold">Mức độ ưu tiên:</span> {ticket.priority}
           </p>
           <p className="text-sm text-slate-700">
-            <span className="font-semibold">Người báo:</span> #{ticket.reporterId}
+            <span className="font-semibold">Người báo:</span> {ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}
           </p>
           <p className="text-sm text-slate-700">
-            <span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeId ? `#${ticket.assigneeId}` : 'Chưa gán'}
+            <span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}
           </p>
           <p className="text-sm text-slate-700 md:col-span-2">
             <span className="font-semibold">Mô tả:</span> {ticket.description}

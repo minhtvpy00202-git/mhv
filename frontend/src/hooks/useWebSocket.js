@@ -3,7 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SockJS from 'sockjs-client/dist/sockjs'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const WS_URL = (import.meta.env.VITE_WS_URL || `${API_BASE_URL}/ws` || `${window.location.origin}/ws`).replace(/\/$/, '')
+const WS_URL = (
+  import.meta.env.VITE_WS_URL
+  || (API_BASE_URL ? `${API_BASE_URL}/ws` : 'http://localhost:8080/ws')
+).replace(/\/$/, '')
 
 export default function useWebSocket(token) {
   const clientRef = useRef(null)

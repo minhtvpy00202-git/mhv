@@ -78,6 +78,10 @@ function TicketChatBox({ ticketId }) {
   const handleSendMessage = (event) => {
     event.preventDefault()
     if (!content.trim() || !ticketId) return
+    if (!connected) {
+      toast.error('Kết nối realtime chưa sẵn sàng, vui lòng thử lại sau vài giây.')
+      return
+    }
     publish(`/app/chat/${ticketId}`, {
       ticketId: Number(ticketId),
       content: content.trim(),
@@ -91,6 +95,9 @@ function TicketChatBox({ ticketId }) {
       <header className="border-b border-slate-200 px-4 py-3">
         <h3 className="text-sm font-semibold text-slate-800 md:text-base">Trao đổi xử lý sự cố</h3>
         <p className="mt-1 text-xs text-slate-500">Ticket #{ticketId}</p>
+        <p className={`mt-1 text-xs ${connected ? 'text-emerald-600' : 'text-amber-600'}`}>
+          {connected ? 'Realtime: đã kết nối' : 'Realtime: đang kết nối...'}
+        </p>
       </header>
 
       <div className="h-[55vh] min-h-[360px] overflow-y-auto bg-slate-50 px-3 py-3 md:h-[60vh] md:px-4">
@@ -130,7 +137,7 @@ function TicketChatBox({ ticketId }) {
           />
           <button
             type="submit"
-            disabled={!content.trim()}
+            disabled={!content.trim() || !connected}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-fptOrange text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send size={18} />

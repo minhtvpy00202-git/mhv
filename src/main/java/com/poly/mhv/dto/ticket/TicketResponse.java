@@ -14,7 +14,10 @@ public class TicketResponse {
     private Integer id;
     private String assetQaCode;
     private Integer reporterId;
+    private String reporterName;
+    private String reporterRole;
     private Integer assigneeId;
+    private String assigneeName;
     private String description;
     private String imageUrl;
     private String priority;

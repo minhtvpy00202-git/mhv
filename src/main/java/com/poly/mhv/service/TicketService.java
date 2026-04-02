@@ -232,11 +232,23 @@ public class TicketService {
     }
 
     private TicketResponse mapToResponse(Ticket ticket) {
+        String reporterName = StringUtils.hasText(ticket.getReporter().getFullName())
+                ? ticket.getReporter().getFullName()
+                : ticket.getReporter().getUsername();
+        String assigneeName = null;
+        if (ticket.getAssignee() != null) {
+            assigneeName = StringUtils.hasText(ticket.getAssignee().getFullName())
+                    ? ticket.getAssignee().getFullName()
+                    : ticket.getAssignee().getUsername();
+        }
         return TicketResponse.builder()
                 .id(ticket.getId())
                 .assetQaCode(ticket.getAsset().getQaCode())
                 .reporterId(ticket.getReporter().getId())
+                .reporterName(reporterName)
+                .reporterRole(ticket.getReporter().getRole())
                 .assigneeId(ticket.getAssignee() != null ? ticket.getAssignee().getId() : null)
+                .assigneeName(assigneeName)
                 .description(ticket.getDescription())
                 .imageUrl(ticket.getImageUrl())
                 .priority(ticket.getPriority())
