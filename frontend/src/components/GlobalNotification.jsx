@@ -9,6 +9,40 @@ function GlobalNotification() {
   const { connected, subscribe } = useWebSocket(token)
   const initializedRef = useRef(false)
   const seenNotificationIdsRef = useRef(new Set())
+  const audioContextRef = useRef(null)
+
+  const playSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) return
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContextClass()
+      }
+      const ctx = audioContextRef.current
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime)
+      gainNode.gain.setValueAtTime(0.0001, ctx.currentTime)
+      gainNode.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01)
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2)
+      oscillator.connect(gainNode)
+      gainNode.connect(ctx.destination)
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.2)
+    } catch {}
+  }
+
+  const showBrowserNotification = (title, body) => {
+    if (!('Notification' in window)) return
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body })
+      return
+    }
+    if (Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }
 
   const showToastByType = (type, message) => {
     if (user?.role === 'TechSupport' && type !== 'TICKET_CREATED') {
@@ -40,6 +74,32 @@ function GlobalNotification() {
     })
     return () => unsubscribe()
   }, [connected, isAuthenticated, subscribe, user?.role])
+
+  useEffect(() => {
+    if (!isAuthenticated || !connected || !user?.userId) return undefined
+    const unsubscribe = subscribe(`/topic/users/${user.userId}/chat-notifications`, (payload) => {
+      const senderName = payload?.senderName || 'Người dùng'
+      const messagePreview = payload?.messagePreview || 'Bạn có tin nhắn mới.'
+      const ticketId = payload?.ticketId
+      toast.info(`Tin nhắn mới từ ${senderName}`, {
+        icon: '💬',
+        autoClose: 5000,
+      })
+      playSound()
+      showBrowserNotification(`Tin nhắn mới từ ${senderName}`, messagePreview)
+      window.dispatchEvent(new CustomEvent('mhv-chat-notification', {
+        detail: {
+          ...payload,
+          ticketPath: user.role === 'TechSupport'
+            ? `/tech/tickets/${ticketId}`
+            : user.role === 'Admin'
+              ? `/admin/tickets/${ticketId}`
+              : `/mobile/tickets/${ticketId}`,
+        },
+      }))
+    })
+    return () => unsubscribe()
+  }, [connected, isAuthenticated, subscribe, user?.role, user?.userId])
 
   useEffect(() => {
     if (!isAuthenticated) return undefined

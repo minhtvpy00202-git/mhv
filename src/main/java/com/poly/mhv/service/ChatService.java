@@ -5,6 +5,7 @@ import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.ChatMessage;
 import com.poly.mhv.entity.Ticket;
 import com.poly.mhv.exception.CustomException;
+import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.ChatMessageRepository;
 import com.poly.mhv.repository.TicketRepository;
 import java.time.LocalDateTime;
@@ -20,19 +21,23 @@ public class ChatService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final TicketRepository ticketRepository;
-    private final CurrentUserProvider currentUserProvider;
+    private final AppUserRepository appUserRepository;
 
     @Transactional
-    public ChatMessageResponse saveTicketMessage(Integer ticketId, String content) {
+    public ChatMessageResponse saveTicketMessage(Integer ticketId, String content, String senderUsername) {
         if (ticketId == null) {
             throw new CustomException("ticketId là bắt buộc.");
         }
         if (!StringUtils.hasText(content)) {
             throw new CustomException("content là bắt buộc.");
         }
+        if (!StringUtils.hasText(senderUsername)) {
+            throw new CustomException("Không xác định được người gửi.");
+        }
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
-        AppUser sender = currentUserProvider.getCurrentUser();
+        AppUser sender = appUserRepository.findByUsername(senderUsername)
+                .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
         ChatMessage chatMessage = ChatMessage.builder()
                 .ticket(ticket)
                 .sender(sender)

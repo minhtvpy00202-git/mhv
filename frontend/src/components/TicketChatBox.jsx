@@ -1,5 +1,5 @@
 import { Send } from 'lucide-react'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
@@ -24,10 +24,21 @@ function TicketChatBox({ ticketId }) {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
+  const loadMessages = useCallback(async () => {
+    if (!ticketId) return
+    try {
+      const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`)
+      setMessages(response.data || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không tải được lịch sử chat.'
+      toast.error(message)
+    }
+  }, [ticketId])
+
   useEffect(() => {
     if (!ticketId) return
     let mounted = true
-    const loadMessages = async () => {
+    const loadInitialMessages = async () => {
       setLoading(true)
       try {
         const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`)
@@ -43,7 +54,7 @@ function TicketChatBox({ ticketId }) {
         }
       }
     }
-    loadMessages()
+    loadInitialMessages()
     return () => {
       mounted = false
     }
@@ -88,6 +99,9 @@ function TicketChatBox({ ticketId }) {
     })
     setContent('')
     inputRef.current?.focus()
+    setTimeout(() => {
+      loadMessages()
+    }, 600)
   }
 
   return (

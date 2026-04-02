@@ -15,6 +15,8 @@ function TechSupportLayout() {
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [chatNotifications, setChatNotifications] = useState([])
+  const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
 
   useEffect(() => {
@@ -33,6 +35,30 @@ function TechSupportLayout() {
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    const handleChatNotification = (event) => {
+      const payload = event.detail
+      if (!payload?.ticketId) return
+      setChatNotifications((prev) => {
+        const next = [
+          {
+            id: `${payload.ticketId}-${payload.createdAt || Date.now()}`,
+            senderName: payload.senderName || 'Người dùng',
+            messagePreview: payload.messagePreview || 'Bạn có tin nhắn mới.',
+            ticketPath: payload.ticketPath || `/tech/tickets/${payload.ticketId}`,
+            ticketId: payload.ticketId,
+            isRead: false,
+          },
+          ...prev,
+        ]
+        return next.slice(0, 20)
+      })
+      setUnreadChatCount((prev) => prev + 1)
+    }
+    window.addEventListener('mhv-chat-notification', handleChatNotification)
+    return () => window.removeEventListener('mhv-chat-notification', handleChatNotification)
+  }, [])
+
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -48,6 +74,15 @@ function TechSupportLayout() {
     } catch {}
     setShowNotificationDropdown(false)
     navigate(notification.linkPath)
+  }
+
+  const handleOpenChatNotification = (notification) => {
+    setChatNotifications((prev) =>
+      prev.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item)),
+    )
+    setUnreadChatCount((prev) => (prev > 0 ? prev - 1 : 0))
+    setShowNotificationDropdown(false)
+    navigate(notification.ticketPath)
   }
 
   return (
@@ -88,9 +123,9 @@ function TechSupportLayout() {
                 className="relative inline-flex items-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50"
               >
                 <Bell size={18} />
-                {unreadCount > 0 && (
+                {unreadCount + unreadChatCount > 0 && (
                   <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-xs font-semibold text-white">
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                    {unreadCount + unreadChatCount > 99 ? '99+' : unreadCount + unreadChatCount}
                   </span>
                 )}
               </button>
@@ -100,7 +135,20 @@ function TechSupportLayout() {
                     Thông báo
                   </div>
                   <div className="max-h-96 overflow-auto">
-                    {notifications.length === 0 && (
+                    {chatNotifications.map((notification) => (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        onClick={() => handleOpenChatNotification(notification)}
+                        className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-emerald-50 ${
+                          notification.isRead ? 'text-slate-600' : 'font-semibold text-slate-800'
+                        }`}
+                      >
+                        <p>💬 Tin nhắn mới từ {notification.senderName}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{notification.messagePreview}</p>
+                      </button>
+                    ))}
+                    {notifications.length === 0 && chatNotifications.length === 0 && (
                       <p className="px-3 py-2 text-sm text-slate-500">Chưa có thông báo.</p>
                     )}
                     {notifications.map((notification) => (

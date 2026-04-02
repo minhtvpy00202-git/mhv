@@ -23,6 +23,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/auth/LoginRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/auth/RegisterRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/category/CategoryResponse.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/chat/ChatIncomingNotificationResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/chat/ChatMessageResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/chat/ChatMessageSendRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/common/ErrorResponse.java
