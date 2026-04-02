@@ -39,7 +39,8 @@ public class MaintenanceService {
         TicketResponse saved = ticketService.createTicket(TicketCreateRequest.builder()
                 .assetQaCode(request.getAssetQaCode())
                 .description(request.getDescription())
-                .priority("MEDIUM")
+                .priority(StringUtils.hasText(request.getPriority()) ? request.getPriority().trim().toUpperCase() : "MEDIUM")
+                .imageUrl(request.getImageUrl())
                 .build());
         return MaintenanceReportResponse.builder()
                 .id(saved.getId())
@@ -92,6 +93,7 @@ public class MaintenanceService {
                 .currentLocationName(asset.getLocation().getRoomName())
                 .reporterFullName(reporterFullName)
                 .description(ticket.getDescription())
+                .imageUrl(ticket.getImageUrl())
                 .reportTime(ticket.getCreatedAt())
                 .assetStatus(asset.getStatus())
                 .build();

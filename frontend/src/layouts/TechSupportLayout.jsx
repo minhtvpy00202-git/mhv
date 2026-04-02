@@ -1,4 +1,4 @@
-import { Bell, ClipboardList, LogOut } from 'lucide-react'
+import { Bell, ClipboardList, LogOut, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -16,6 +16,8 @@ function TechSupportLayout() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [chatNotifications, setChatNotifications] = useState([])
   const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const [contactTickets, setContactTickets] = useState([])
+  const [chatKeyword, setChatKeyword] = useState('')
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
 
   useEffect(() => {
@@ -33,6 +35,21 @@ function TechSupportLayout() {
     const timer = setInterval(loadFeed, 20000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    const loadContactTickets = async () => {
+      try {
+        const response = await axiosClient.get('/api/tickets')
+        const items = (response.data || []).filter(
+          (item) => Number(item.assigneeId) === Number(user?.userId) || item.status === 'PENDING',
+        )
+        setContactTickets(items)
+      } catch {}
+    }
+    loadContactTickets()
+    const timer = setInterval(loadContactTickets, 15000)
+    return () => clearInterval(timer)
+  }, [user?.userId])
 
   useEffect(() => {
     const handleChatNotification = (event) => {
@@ -106,6 +123,43 @@ function TechSupportLayout() {
             </NavLink>
           ))}
         </nav>
+        <div className="mt-5 min-h-0 flex-1">
+          <h3 className="mb-2 px-1 text-sm font-semibold text-slate-700">Danh sách chat</h3>
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1.5">
+            <Search size={14} className="text-slate-500" />
+            <input
+              value={chatKeyword}
+              onChange={(event) => setChatKeyword(event.target.value)}
+              placeholder="Tìm ticket/thiết bị..."
+              className="w-full text-xs outline-none"
+            />
+          </div>
+          <div className="max-h-[calc(100vh-280px)] space-y-1 overflow-auto">
+            {contactTickets
+              .filter((ticket) => {
+                const keyword = chatKeyword.trim().toLowerCase()
+                if (!keyword) return true
+                const searchable = `${ticket.id} ${ticket.assetName || ''} ${ticket.assetQaCode || ''} ${ticket.reporterName || ''}`.toLowerCase()
+                return searchable.includes(keyword)
+              })
+              .map((ticket) => (
+                <button
+                  key={ticket.id}
+                  type="button"
+                  onClick={() => navigate(`/tech/tickets/${ticket.id}`)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-blue-50"
+                >
+                  <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                    {(ticket.reporterName || 'U').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-slate-800">{ticket.reporterName || `User #${ticket.reporterId}`}</p>
+                    <p className="truncate text-[11px] text-slate-500">#{ticket.id} - {ticket.assetName || ticket.assetQaCode}</p>
+                  </div>
+                </button>
+              ))}
+          </div>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">

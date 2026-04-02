@@ -1,4 +1,4 @@
-import { ImagePlus, Mic, Phone, Send, Square } from 'lucide-react'
+import { ImagePlus, Mic, Send, Square } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -17,7 +17,6 @@ function formatMessageTime(value) {
 
 const IMG_PREFIX = '[[IMG]]'
 const AUDIO_PREFIX = '[[AUDIO]]'
-const CALL_PREFIX = '[[CALL]]'
 
 function parseMessage(content) {
   if (!content) return { type: 'text', value: '' }
@@ -27,15 +26,12 @@ function parseMessage(content) {
   if (content.startsWith(AUDIO_PREFIX)) {
     return { type: 'audio', value: content.slice(AUDIO_PREFIX.length) }
   }
-  if (content.startsWith(CALL_PREFIX)) {
-    return { type: 'call', value: content.slice(CALL_PREFIX.length) }
-  }
   return { type: 'text', value: content }
 }
 
 function TicketChatBox({ ticketId }) {
   const { token, user } = useAuth()
-  const { connected, subscribe, publish } = useWebSocket(token)
+  const { connected, subscribe } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
@@ -43,6 +39,7 @@ function TicketChatBox({ ticketId }) {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
 
@@ -109,25 +106,26 @@ function TicketChatBox({ ticketId }) {
     [messages, user?.userId],
   )
 
-  const publishMessage = useCallback((messageContent) => {
+  const publishMessage = useCallback(async (messageContent) => {
     if (!messageContent || !ticketId) return
-    if (!connected) {
-      toast.error('Kết nối realtime chưa sẵn sàng, vui lòng thử lại sau vài giây.')
-      return
+    try {
+      await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
+        ticketId: Number(ticketId),
+        content: messageContent,
+      })
+      setTimeout(() => {
+        loadMessages()
+      }, 400)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Gửi tin nhắn thất bại.'
+      toast.error(message)
     }
-    publish(`/app/chat/${ticketId}`, {
-      ticketId: Number(ticketId),
-      content: messageContent,
-    })
-    setTimeout(() => {
-      loadMessages()
-    }, 600)
-  }, [connected, loadMessages, publish, ticketId])
+  }, [loadMessages, ticketId])
 
   const handleSendMessage = (event) => {
     event.preventDefault()
     if (!content.trim()) return
-    publishMessage(content.trim())
+    void publishMessage(content.trim())
     setContent('')
     inputRef.current?.focus()
   }
@@ -144,7 +142,7 @@ function TicketChatBox({ ticketId }) {
     reader.onload = () => {
       const dataUrl = String(reader.result || '')
       if (!dataUrl) return
-      publishMessage(`${IMG_PREFIX}${dataUrl}`)
+      void publishMessage(`${IMG_PREFIX}${dataUrl}`)
     }
     reader.readAsDataURL(file)
   }
@@ -172,7 +170,7 @@ function TicketChatBox({ ticketId }) {
           reader.onload = () => {
             const dataUrl = String(reader.result || '')
             if (dataUrl) {
-              publishMessage(`${AUDIO_PREFIX}${dataUrl}`)
+              void publishMessage(`${AUDIO_PREFIX}${dataUrl}`)
             }
           }
           reader.readAsDataURL(blob)
@@ -187,13 +185,6 @@ function TicketChatBox({ ticketId }) {
     } catch {
       toast.error('Không thể truy cập microphone.')
     }
-  }
-
-  const handleVideoCall = () => {
-    if (!ticketId) return
-    const callUrl = `https://meet.jit.si/mhv-ticket-${ticketId}`
-    window.open(callUrl, '_blank', 'noopener,noreferrer')
-    publishMessage(`${CALL_PREFIX}${callUrl}`)
   }
 
   return (
@@ -231,18 +222,6 @@ function TicketChatBox({ ticketId }) {
                     <source src={message.parsed.value} />
                   </audio>
                 )}
-                {message.parsed.type === 'call' && (
-                  <a
-                    href={message.parsed.value}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${
-                      message.isMine ? 'bg-white/20 text-white' : 'bg-blue-600 text-white'
-                    }`}
-                  >
-                    Tham gia cuộc gọi video
-                  </a>
-                )}
                 {message.parsed.type === 'text' && (
                   <p className="whitespace-pre-wrap break-words">{message.parsed.value}</p>
                 )}
@@ -261,6 +240,14 @@ function TicketChatBox({ ticketId }) {
           onChange={handleSelectImage}
           className="hidden"
         />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleSelectImage}
+          className="hidden"
+        />
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -269,6 +256,14 @@ function TicketChatBox({ ticketId }) {
           >
             <ImagePlus size={14} />
             Ảnh
+          </button>
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <ImagePlus size={14} />
+            Chụp ảnh
           </button>
           <button
             type="button"
@@ -281,14 +276,6 @@ function TicketChatBox({ ticketId }) {
           >
             {recording ? <Square size={14} /> : <Mic size={14} />}
             {recording ? 'Dừng ghi âm' : 'Ghi âm'}
-          </button>
-          <button
-            type="button"
-            onClick={handleVideoCall}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <Phone size={14} />
-            Gọi video
           </button>
         </div>
         <div className="flex items-end gap-2">

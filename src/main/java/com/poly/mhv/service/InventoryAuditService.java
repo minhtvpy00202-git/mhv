@@ -99,7 +99,7 @@ public class InventoryAuditService {
     @Transactional(readOnly = true)
     public List<InventoryAuditSummaryResponse> getMyAudits() {
         AppUser actor = getCurrentUser();
-        return inventoryAuditRepository.findByCreatedByIdForHistory(actor.getId()).stream()
+        return inventoryAuditRepository.findByUserParticipationForHistory(actor.getId(), actor.getUsername()).stream()
                 .map(this::mapSummary)
                 .toList();
     }

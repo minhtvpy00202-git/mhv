@@ -42,6 +42,7 @@ function Home() {
   const [maintenanceHistory, setMaintenanceHistory] = useState([])
   const [auditHistory, setAuditHistory] = useState([])
   const [ticketId, setTicketId] = useState('')
+  const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [usagePage, setUsagePage] = useState(1)
   const [maintenancePage, setMaintenancePage] = useState(1)
   const [auditPage, setAuditPage] = useState(1)
@@ -172,6 +173,7 @@ function Home() {
                 <th className="px-3 py-2 text-left">Phòng hiện tại</th>
                 <th className="px-3 py-2 text-left">Ngày giờ báo hỏng</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
+                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
               </tr>
             </thead>
             <tbody>
@@ -183,11 +185,26 @@ function Home() {
                   <td className="px-3 py-2">{item.currentLocationName}</td>
                   <td className="px-3 py-2">{formatDateTime(item.reportTime)}</td>
                   <td className="px-3 py-2">{item.assetStatus}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!item.imageUrl) {
+                          toast.info('Bản ghi này chưa có ảnh lỗi.')
+                          return
+                        }
+                        setPreviewImageUrl(item.imageUrl)
+                      }}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Lỗi
+                    </button>
+                  </td>
                 </tr>
               ))}
               {maintenanceRows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-3 text-center text-slate-500">
                     Chưa có dữ liệu báo hỏng.
                   </td>
                 </tr>
@@ -253,6 +270,20 @@ function Home() {
           onLast={() => setAuditPage(auditTotalPages)}
         />
       </section>
+      {previewImageUrl && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+          <div className="rounded-2xl bg-white p-4 shadow-xl">
+            <img src={previewImageUrl} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl('')}
+              className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

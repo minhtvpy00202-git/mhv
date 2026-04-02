@@ -21,6 +21,7 @@ function MaintenanceHistoryManagement() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
+  const [previewImageUrl, setPreviewImageUrl] = useState('')
 
   const loadData = async () => {
     setLoading(true)
@@ -90,6 +91,7 @@ function MaintenanceHistoryManagement() {
                 <th className="px-3 py-2 text-left">Chi tiết hỏng</th>
                 <th className="px-3 py-2 text-left">Ngày giờ báo hỏng</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
+                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
@@ -121,6 +123,21 @@ function MaintenanceHistoryManagement() {
                     <td className="px-3 py-2">
                       <button
                         type="button"
+                        onClick={() => {
+                          if (!item.imageUrl) {
+                            toast.info('Bản ghi này chưa có ảnh lỗi.')
+                            return
+                          }
+                          setPreviewImageUrl(item.imageUrl)
+                        }}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Lỗi
+                      </button>
+                    </td>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
                         onClick={() => handleOpenTicketChat(item)}
                         className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
@@ -131,7 +148,7 @@ function MaintenanceHistoryManagement() {
                 )})}
               {!loading && paginatedRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={10} className="px-3 py-3 text-center text-slate-500">
                     Chưa có dữ liệu báo hỏng.
                   </td>
                 </tr>
@@ -181,6 +198,20 @@ function MaintenanceHistoryManagement() {
           </div>
         </div>
       </section>
+      {previewImageUrl && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+          <div className="rounded-2xl bg-white p-4 shadow-xl">
+            <img src={previewImageUrl} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl('')}
+              className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

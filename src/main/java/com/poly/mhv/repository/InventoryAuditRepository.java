@@ -34,5 +34,18 @@ public interface InventoryAuditRepository extends JpaRepository<InventoryAudit, 
             """)
     List<InventoryAudit> findByCreatedByIdForHistory(@Param("createdById") Integer createdById);
 
+    @Query("""
+            select distinct ia from InventoryAudit ia
+            join fetch ia.location l
+            join fetch ia.createdBy u
+            left join InventoryAuditItem i on i.audit.id = ia.id
+            where u.id = :createdById or i.scannedByUsername = :username
+            order by ia.startedAt desc, ia.id desc
+            """)
+    List<InventoryAudit> findByUserParticipationForHistory(
+            @Param("createdById") Integer createdById,
+            @Param("username") String username
+    );
+
     boolean existsByLocationIdAndStatus(Integer locationId, String status);
 }

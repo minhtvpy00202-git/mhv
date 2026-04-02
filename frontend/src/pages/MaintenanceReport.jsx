@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
+import { Camera, ImagePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -10,12 +11,15 @@ function MaintenanceReport() {
   const navigate = useNavigate()
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
+  const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const [assetQaCode, setAssetQaCode] = useState('')
   const [assetName, setAssetName] = useState('')
   const [assetLocationName, setAssetLocationName] = useState('')
   const [assetHomeLocationName, setAssetHomeLocationName] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('MEDIUM')
+  const [imageUrl, setImageUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -99,7 +103,25 @@ function MaintenanceReport() {
     setAssetHomeLocationName('')
     setDescription('')
     setPriority('MEDIUM')
+    setImageUrl('')
     startScanner()
+  }
+
+  const handleSelectImage = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Ảnh vượt quá 2MB.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      if (!dataUrl) return
+      setImageUrl(dataUrl)
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleSubmit = async (event) => {
@@ -114,6 +136,7 @@ function MaintenanceReport() {
         asset_qa_code: assetQaCode,
         description,
         priority,
+        image_url: imageUrl || null,
       })
       const ticketId = response.data?.id
       toast.success(`Đã tạo ticket báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
@@ -161,11 +184,50 @@ function MaintenanceReport() {
                 onChange={(e) => setPriority(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
               >
-                <option value="LOW">LOW - Thấp</option>
-                <option value="MEDIUM">MEDIUM - Trung bình</option>
-                <option value="HIGH">HIGH - Cao</option>
+                <option value="LOW">Thấp</option>
+                <option value="MEDIUM">Trung bình</option>
+                <option value="HIGH">Cao</option>
               </select>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSelectImage}
+              className="hidden"
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleSelectImage}
+              className="hidden"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <ImagePlus size={16} />
+                Chọn ảnh lỗi
+              </button>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <Camera size={16} />
+                Chụp ảnh lỗi
+              </button>
+            </div>
+            {imageUrl && (
+              <div className="mt-3">
+                <p className="mb-1 text-xs text-slate-500">Ảnh lỗi đính kèm</p>
+                <img src={imageUrl} alt="error-preview" className="h-28 w-28 rounded-md border border-slate-200 object-cover" />
+              </div>
+            )}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="submit"

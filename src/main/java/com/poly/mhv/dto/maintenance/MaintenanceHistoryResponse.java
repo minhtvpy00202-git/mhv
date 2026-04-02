@@ -18,6 +18,7 @@ public class MaintenanceHistoryResponse {
     private String currentLocationName;
     private String reporterFullName;
     private String description;
+    private String imageUrl;
     private LocalDateTime reportTime;
     private String assetStatus;
 }
