@@ -741,7 +741,7 @@ BEGIN
         reporter_id INT NOT NULL,
         assignee_id INT NULL,
         description NVARCHAR(500) NOT NULL,
-        image_url VARCHAR(500) NULL,
+        image_url NVARCHAR(MAX) NULL,
         priority VARCHAR(20) NOT NULL,
         status VARCHAR(20) NOT NULL CONSTRAINT DF_tickets_status DEFAULT 'PENDING',
         created_at DATETIME2 NOT NULL CONSTRAINT DF_tickets_created_at DEFAULT SYSDATETIME(),
@@ -752,6 +752,14 @@ BEGIN
         CONSTRAINT CK_tickets_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
         CONSTRAINT CK_tickets_status CHECK (status IN ('PENDING', 'IN_PROGRESS', 'RESOLVED'))
     );
+END;
+GO
+
+IF OBJECT_ID('tickets', 'U') IS NOT NULL
+AND COL_LENGTH('tickets', 'image_url') <> -1
+BEGIN
+    ALTER TABLE tickets
+    ALTER COLUMN image_url NVARCHAR(MAX) NULL;
 END;
 GO
 
@@ -815,5 +823,4 @@ BEGIN
     DROP TABLE maintenance_requests;
 END;
 GO
-
 
