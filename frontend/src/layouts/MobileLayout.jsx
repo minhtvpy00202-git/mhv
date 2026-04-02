@@ -98,7 +98,19 @@ function MobileLayout() {
             </button>
             {showNotificationDropdown && (
               <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-orange-100 bg-white text-slate-700 shadow-lg">
-                <div className="border-b border-orange-100 px-3 py-2 text-sm font-semibold">Tin nhắn mới</div>
+                <div className="flex items-center justify-between border-b border-orange-100 px-3 py-2">
+                  <p className="text-sm font-semibold">Tin nhắn mới</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChatNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+                      setUnreadChatCount(0)
+                    }}
+                    className="text-[11px] font-semibold text-blue-600"
+                  >
+                    Đánh dấu tất cả là đã đọc
+                  </button>
+                </div>
                 <div className="max-h-80 overflow-auto">
                   {chatNotifications.length === 0 && (
                     <p className="px-3 py-2 text-sm text-slate-500">Chưa có thông báo chat.</p>

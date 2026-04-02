@@ -1,4 +1,4 @@
-import { ImagePlus, Mic, Send, Square } from 'lucide-react'
+import { ImagePlus, Mic, Minus, Send, Square, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -29,13 +29,14 @@ function parseMessage(content) {
   return { type: 'text', value: content }
 }
 
-function TicketChatBox({ ticketId }) {
+function TicketChatBox({ ticketId, onClose }) {
   const { token, user } = useAuth()
   const { connected, subscribe } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [minimized, setMinimized] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -188,16 +189,40 @@ function TicketChatBox({ ticketId }) {
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="border-b border-slate-200 px-4 py-3">
+    <section
+      className={`fixed bottom-4 right-4 z-40 w-[min(92vw,390px)] rounded-2xl border border-slate-200 bg-white shadow-2xl ${
+        minimized ? 'h-auto' : 'h-[min(80vh,620px)]'
+      }`}
+    >
+      <header className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
+        <div>
         <h3 className="text-sm font-semibold text-slate-800 md:text-base">Trao đổi xử lý sự cố</h3>
         <p className="mt-1 text-xs text-slate-500">Ticket #{ticketId}</p>
         <p className={`mt-1 text-xs ${connected ? 'text-emerald-600' : 'text-amber-600'}`}>
           {connected ? 'Realtime: đã kết nối' : 'Realtime: đang kết nối...'}
         </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setMinimized((prev) => !prev)}
+            className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Minus size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </header>
 
-      <div className="h-[55vh] min-h-[360px] overflow-y-auto bg-slate-50 px-3 py-3 md:h-[60vh] md:px-4">
+      {!minimized && (
+        <>
+      <div className="h-[calc(100%-170px)] min-h-[240px] overflow-y-auto bg-slate-50 px-3 py-3">
         {loading && <p className="text-center text-sm text-slate-500">Đang tải tin nhắn...</p>}
         {!loading && normalizedMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500">Chưa có tin nhắn nào. Hãy bắt đầu cuộc trao đổi.</p>
@@ -296,6 +321,8 @@ function TicketChatBox({ ticketId }) {
           </button>
         </div>
       </form>
+      </>
+      )}
     </section>
   )
 }

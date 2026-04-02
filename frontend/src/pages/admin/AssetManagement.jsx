@@ -6,6 +6,10 @@ import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 const statusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
 const PAGE_SIZE = 10
 
+function getCategoryLabel(category) {
+  return category?.description || category?.name || ''
+}
+
 function AssetManagement() {
   const [assets, setAssets] = useState([])
   const [locations, setLocations] = useState([])
@@ -20,6 +24,8 @@ function AssetManagement() {
   const [qrModalLoading, setQrModalLoading] = useState(false)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineAsset, setTimelineAsset] = useState(null)
+  const [showFormModal, setShowFormModal] = useState(false)
+  const [formMode, setFormMode] = useState('create')
   const [selectedQaCode, setSelectedQaCode] = useState(null)
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [sortConfig, setSortConfig] = useState({ key: 'qaCode', direction: 'asc' })
@@ -36,13 +42,12 @@ function AssetManagement() {
     name: '',
     categoryId: '',
     locationId: '',
-    status: 'Sẵn sàng',
   })
 
   const filteredCategoryOptions = useMemo(() => {
     const keyword = filters.categoryKeyword.trim().toLowerCase()
     if (!keyword) return categories
-    return categories.filter((category) => category.name.toLowerCase().includes(keyword))
+    return categories.filter((category) => getCategoryLabel(category).toLowerCase().includes(keyword))
   }, [categories, filters.categoryKeyword])
 
   const sortedAssets = useMemo(() => {
@@ -112,7 +117,6 @@ function AssetManagement() {
       name: '',
       categoryId: '',
       locationId: '',
-      status: 'Sẵn sàng',
     })
   }
 
@@ -138,7 +142,7 @@ function AssetManagement() {
   }
 
   const handleCreateAsset = async () => {
-    if (!form.qaCode || !form.name || !form.categoryId || !form.locationId || !form.status) {
+    if (!form.qaCode || !form.name || !form.categoryId || !form.locationId) {
       toast.error('Vui lòng nhập đầy đủ thông tin thiết bị.')
       return
     }
@@ -149,7 +153,7 @@ function AssetManagement() {
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(form.locationId),
-        status: form.status,
+        status: 'Sẵn sàng',
       })
       if (response.data?.qrCodeBase64) {
         setQrImage(`data:image/png;base64,${response.data.qrCodeBase64}`)
@@ -157,6 +161,7 @@ function AssetManagement() {
         setQrImage('')
       }
       toast.success('Thêm thiết bị thành công.')
+      setShowFormModal(false)
       resetForm()
       await loadAssets()
     } catch (error) {
@@ -169,7 +174,7 @@ function AssetManagement() {
 
   const handleUpdateAsset = async () => {
     if (!selectedQaCode) return
-    if (!form.name || !form.categoryId || !form.locationId || !form.status) {
+    if (!form.name || !form.categoryId || !form.locationId) {
       toast.error('Vui lòng nhập đầy đủ thông tin để cập nhật.')
       return
     }
@@ -179,9 +184,9 @@ function AssetManagement() {
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(form.locationId),
-        status: form.status,
       })
       toast.success('Cập nhật thiết bị thành công.')
+      setShowFormModal(false)
       resetForm()
       await loadAssets()
     } catch (error) {
@@ -220,8 +225,9 @@ function AssetManagement() {
       name: asset.name,
       categoryId: String(asset.categoryId),
       locationId: String(asset.homeLocationId || asset.locationId),
-      status: asset.status,
     })
+    setFormMode('update')
+    setShowFormModal(true)
   }
 
   const handleSearch = async () => {
@@ -260,7 +266,7 @@ function AssetManagement() {
     setQrModalImage('')
   }
 
-  const isEditing = Boolean(selectedQaCode)
+  const isEditing = formMode === 'update' && Boolean(selectedQaCode)
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -284,103 +290,26 @@ function AssetManagement() {
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-slate-800">Thiết bị hiện có</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Mã QA</label>
-            <input
-              value={form.qaCode}
-              onChange={(e) => setForm((prev) => ({ ...prev, qaCode: e.target.value }))}
-              disabled={isEditing}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:bg-slate-100"
-              placeholder="Ví dụ: QA001"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Tên thiết bị</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              placeholder="Nhập tên thiết bị"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Loại thiết bị</label>
-            <select
-              value={form.categoryId}
-              onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              <option value="">Chọn loại</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Phòng gốc</label>
-            <select
-              value={form.locationId}
-              onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              <option value="">Chọn phòng</option>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.roomName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2">
           <button
             type="button"
-            onClick={handleCreateAsset}
-            disabled={submitting || isEditing}
+            onClick={() => {
+              resetForm()
+              setFormMode('create')
+              setShowFormModal(true)
+            }}
+            disabled={submitting}
             className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
           >
             Thêm mới
           </button>
           <button
             type="button"
-            onClick={handleUpdateAsset}
-            disabled={submitting || !isEditing}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            Cập nhật
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDeleteAsset(selectedQaCode)}
-            disabled={submitting || !isEditing}
-            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-          >
-            Xóa
-          </button>
-          <button
-            type="button"
-            onClick={resetForm}
+            onClick={() => loadAssets()}
             disabled={submitting}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
           >
-            Reset form
+            Tải lại
           </button>
         </div>
         {qrImage && (
@@ -431,13 +360,13 @@ function AssetManagement() {
                       setFilters((prev) => ({
                         ...prev,
                         categoryId: String(category.id),
-                        categoryKeyword: category.name,
+                        categoryKeyword: getCategoryLabel(category),
                       }))
                       setShowCategoryFilterOptions(false)
                     }}
                     className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
                   >
-                    {category.name}
+                    {getCategoryLabel(category)}
                   </button>
                 ))}
                 {filteredCategoryOptions.length === 0 && (
@@ -636,6 +565,97 @@ function AssetManagement() {
         </div>
       )}
     </div>
+    {showFormModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="w-full max-w-2xl rounded-xl bg-white p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-base font-semibold text-slate-800">
+              {isEditing ? `Chỉnh sửa thiết bị ${selectedQaCode}` : 'Thêm mới thiết bị'}
+            </h4>
+            <button
+              type="button"
+              onClick={() => setShowFormModal(false)}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Đóng
+            </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Mã QA</label>
+              <input
+                value={form.qaCode}
+                onChange={(e) => setForm((prev) => ({ ...prev, qaCode: e.target.value }))}
+                disabled={isEditing}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:bg-slate-100"
+                placeholder="Ví dụ: QA001"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Tên thiết bị</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                placeholder="Nhập tên thiết bị"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Loại thiết bị</label>
+              <select
+                value={form.categoryId}
+                onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+              >
+                <option value="">Chọn loại</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {getCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Phòng gốc</label>
+              <select
+                value={form.locationId}
+                onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+              >
+                <option value="">Chọn phòng</option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.roomName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={handleCreateAsset}
+                disabled={submitting}
+                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                Thêm mới
+              </button>
+            )}
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleUpdateAsset}
+                disabled={submitting}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                Lưu chỉnh sửa
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     {showQrModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
         <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">

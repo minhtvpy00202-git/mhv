@@ -37,9 +37,6 @@ public class Asset {
     @JsonIgnoreProperties({"assets"})
     private Category category;
 
-    @Column(name = "category", nullable = false, length = 50)
-    private String legacyCategoryName;
-
     @Column(nullable = false, length = 20)
     private String status;
 

@@ -1,6 +1,7 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.entity.Asset;
+import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.InventoryAudit;
 import com.poly.mhv.entity.InventoryAuditItem;
 import com.poly.mhv.entity.InventoryAuditMissing;
@@ -64,7 +65,7 @@ public class ReportService {
                 Row row = sheet.createRow(rowNum++);
                 createCell(row, 0, asset.getQaCode());
                 createCell(row, 1, asset.getName());
-                createCell(row, 2, asset.getCategory().getName());
+                createCell(row, 2, getCategoryDisplayName(asset.getCategory()));
                 createCell(row, 3, asset.getLocation().getRoomName());
                 createCell(row, 4, asset.getStatus());
             }
@@ -242,5 +243,9 @@ public class ReportService {
             return "Mất hẳn";
         }
         return "Chưa tìm thấy";
+    }
+
+    private String getCategoryDisplayName(Category category) {
+        return category == null ? "" : category.getName();
     }
 }

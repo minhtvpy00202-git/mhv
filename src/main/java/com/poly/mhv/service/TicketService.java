@@ -77,6 +77,7 @@ public class TicketService {
         asset.setStatus("Hỏng");
         assetRepository.save(asset);
         Ticket saved = ticketRepository.save(ticket);
+        List<AppUser> eligibleTechSupports = getEligibleTechSupportsByAsset(asset);
         notificationService.createNotification(
                 "TICKET_CREATED",
                 "Ticket mới cần tiếp nhận",
@@ -94,7 +95,8 @@ public class TicketService {
         pushNotification(
                 "TICKET_CREATED",
                 "Ticket #" + saved.getId() + " đã được tạo.",
-                saved
+                saved,
+                eligibleTechSupports
         );
         return mapToResponse(saved);
     }
@@ -118,6 +120,11 @@ public class TicketService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy kỹ thuật viên được gán."));
         if (!"TechSupport".equals(assignee.getRole())) {
             throw new CustomException("Người được gán phải có vai trò TechSupport.");
+        }
+        Integer requiredTechTypeId = getAssetTechTypeId(ticket.getAsset());
+        Integer assigneeTechTypeId = assignee.getTechSupportType() != null ? assignee.getTechSupportType().getId() : 0;
+        if (requiredTechTypeId > 0 && !requiredTechTypeId.equals(assigneeTechTypeId)) {
+            throw new CustomException("Kỹ thuật viên không đúng chuyên môn với loại thiết bị này.");
         }
         AppUser actor = currentUserProvider.getCurrentUser();
         if ("TechSupport".equals(actor.getRole()) && !actor.getId().equals(assignee.getId())) {
@@ -212,6 +219,7 @@ public class TicketService {
         }
         String normalizedAssetQaCode = StringUtils.hasText(assetQaCode) ? assetQaCode.trim() : null;
 
+        AppUser actor = currentUserProvider.getCurrentUser();
         List<Ticket> tickets;
         if (normalizedAssetQaCode != null) {
             tickets = ticketRepository.findByAssetQaCodeOrderByCreatedAtDesc(normalizedAssetQaCode);
@@ -226,6 +234,17 @@ public class TicketService {
         }
         return tickets.stream()
                 .filter(ticket -> normalizedAssetQaCode == null || normalizedAssetQaCode.equals(ticket.getAsset().getQaCode()))
+                .filter(ticket -> {
+                    if (!"TechSupport".equals(actor.getRole())) {
+                        return true;
+                    }
+                    Integer actorTechTypeId = actor.getTechSupportType() != null ? actor.getTechSupportType().getId() : 0;
+                    Integer ticketTechTypeId = getAssetTechTypeId(ticket.getAsset());
+                    if (ticketTechTypeId <= 0) {
+                        return ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
+                    }
+                    return actorTechTypeId.equals(ticketTechTypeId) || (ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId()));
+                })
                 .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
                 .map(this::mapToResponse)
                 .toList();
@@ -254,6 +273,9 @@ public class TicketService {
                 .id(ticket.getId())
                 .assetQaCode(ticket.getAsset().getQaCode())
                 .assetName(ticket.getAsset().getName())
+                .assetLocationName(ticket.getAsset().getLocation().getRoomName())
+                .assetCategoryName(ticket.getAsset().getCategory().getName())
+                .assetCategoryTechTypeId(getAssetTechTypeId(ticket.getAsset()))
                 .reporterId(ticket.getReporter().getId())
                 .reporterName(reporterName)
                 .reporterRole(ticket.getReporter().getRole())
@@ -269,7 +291,26 @@ public class TicketService {
                 .build();
     }
 
+    private List<AppUser> getEligibleTechSupportsByAsset(Asset asset) {
+        Integer techTypeId = getAssetTechTypeId(asset);
+        if (techTypeId <= 0) {
+            return appUserRepository.findByRole("TechSupport");
+        }
+        return appUserRepository.findByRoleAndTechSupportTypeId("TechSupport", techTypeId);
+    }
+
+    private Integer getAssetTechTypeId(Asset asset) {
+        if (asset.getCategory() == null || asset.getCategory().getTechSupportType() == null || asset.getCategory().getTechSupportType().getId() == null) {
+            return 0;
+        }
+        return asset.getCategory().getTechSupportType().getId();
+    }
+
     private void pushNotification(String type, String message, Ticket ticket) {
+        pushNotification(type, message, ticket, List.of());
+    }
+
+    private void pushNotification(String type, String message, Ticket ticket, List<AppUser> receivers) {
         RealtimeNotificationResponse payload = RealtimeNotificationResponse.builder()
                 .type(type)
                 .message(message)
@@ -278,6 +319,15 @@ public class TicketService {
                 .status(ticket.getStatus())
                 .timestamp(LocalDateTime.now())
                 .build();
+        if ("TICKET_CREATED".equals(type)) {
+            for (AppUser receiver : receivers) {
+                simpMessagingTemplate.convertAndSend("/topic/users/" + receiver.getId() + "/notifications", payload);
+            }
+            for (AppUser admin : appUserRepository.findByRole("Admin")) {
+                simpMessagingTemplate.convertAndSend("/topic/users/" + admin.getId() + "/notifications", payload);
+            }
+            return;
+        }
         simpMessagingTemplate.convertAndSend("/topic/notifications", payload);
     }
 }

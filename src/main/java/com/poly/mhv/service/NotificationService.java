@@ -88,6 +88,11 @@ public class NotificationService {
         }
     }
 
+    @Transactional
+    public void markAllAsRead() {
+        notificationRepository.markAllAsRead();
+    }
+
     private NotificationItemResponse mapToItem(Notification notification) {
         return NotificationItemResponse.builder()
                 .id(notification.getId())

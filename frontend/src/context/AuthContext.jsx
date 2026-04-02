@@ -15,18 +15,20 @@ const getStoredUser = () => ({
   userId: Number(localStorage.getItem('auth_user_id')) || null,
   role: normalizeRole(localStorage.getItem('auth_role')),
   username: localStorage.getItem('auth_username'),
+  techTypeId: Number(localStorage.getItem('auth_tech_type_id')) || 0,
 })
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
   const [user, setUser] = useState(getStoredUser())
 
-  const login = ({ token: nextToken, id, role, username }) => {
+  const login = ({ token: nextToken, id, role, username, techTypeId }) => {
     const normalizedRole = normalizeRole(role)
     const nextUser = {
       userId: id,
       role: normalizedRole,
       username,
+      techTypeId: Number(techTypeId) || 0,
     }
     setToken(nextToken)
     setUser(nextUser)
@@ -34,15 +36,17 @@ export function AuthProvider({ children }) {
     localStorage.setItem('auth_user_id', String(id))
     localStorage.setItem('auth_role', normalizedRole)
     localStorage.setItem('auth_username', username)
+    localStorage.setItem('auth_tech_type_id', String(Number(techTypeId) || 0))
   }
 
   const logout = () => {
     setToken(null)
-    setUser({ userId: null, role: null, username: null })
+    setUser({ userId: null, role: null, username: null, techTypeId: 0 })
     localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_user_id')
     localStorage.removeItem('auth_role')
     localStorage.removeItem('auth_username')
+    localStorage.removeItem('auth_tech_type_id')
   }
 
   const value = useMemo(

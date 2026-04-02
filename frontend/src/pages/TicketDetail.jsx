@@ -28,6 +28,7 @@ function TicketDetail() {
   const location = useLocation()
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [showChat, setShowChat] = useState(true)
 
   useEffect(() => {
     if (!ticketId) return
@@ -70,7 +71,7 @@ function TicketDetail() {
       : '/mobile/home'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -121,7 +122,16 @@ function TicketDetail() {
         </section>
       )}
 
-      <TicketChatBox ticketId={Number(ticketId)} />
+      {showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
+      {!showChat && (
+        <button
+          type="button"
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-4 right-4 z-40 rounded-full bg-fptOrange px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-fptOrangeDark"
+        >
+          Mở chat
+        </button>
+      )}
     </div>
   )
 }

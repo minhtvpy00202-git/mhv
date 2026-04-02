@@ -18,4 +18,5 @@ public class UserAdminRequest {
     private LocalDate birthday;
     private String phone;
     private String status;
+    private Integer techTypeId;
 }

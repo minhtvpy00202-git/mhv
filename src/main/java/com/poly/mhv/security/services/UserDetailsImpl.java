@@ -18,6 +18,8 @@ public class UserDetailsImpl implements UserDetails {
     private String password;
     private String role;
     private String status;
+    private Integer techTypeId;
+    private String techTypeName;
     private Collection<? extends GrantedAuthority> authorities;
 
     public static UserDetailsImpl build(AppUser appUser) {
@@ -30,6 +32,8 @@ public class UserDetailsImpl implements UserDetails {
                 appUser.getPassword(),
                 appUser.getRole(),
                 appUser.getStatus(),
+                appUser.getTechSupportType() != null ? appUser.getTechSupportType().getId() : 0,
+                appUser.getTechSupportType() != null ? appUser.getTechSupportType().getName() : null,
                 List.of(new SimpleGrantedAuthority(authorityRole))
         );
     }

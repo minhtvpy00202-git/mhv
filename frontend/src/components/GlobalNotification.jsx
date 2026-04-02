@@ -77,6 +77,16 @@ function GlobalNotification() {
 
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
+    const unsubscribe = subscribe(`/topic/users/${user.userId}/notifications`, (payload) => {
+      const type = payload?.type || ''
+      const message = payload?.message || 'Có cập nhật sự cố mới.'
+      showToastByType(type, message)
+    })
+    return () => unsubscribe()
+  }, [connected, isAuthenticated, subscribe, user?.role, user?.userId])
+
+  useEffect(() => {
+    if (!isAuthenticated || !connected || !user?.userId) return undefined
     const unsubscribe = subscribe(`/topic/users/${user.userId}/chat-notifications`, (payload) => {
       if (Number(payload?.senderId) === Number(user.userId)) {
         return

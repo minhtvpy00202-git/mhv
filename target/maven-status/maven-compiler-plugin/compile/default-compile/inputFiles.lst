@@ -64,6 +64,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/InventoryAuditMissing.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Location.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Notification.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/TechSupportType.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Ticket.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/UsageHistory.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/exception/CustomException.java
@@ -77,6 +78,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/InventoryAuditRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/LocationRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/NotificationRepository.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/TechSupportTypeRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/TicketRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/UsageHistoryRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/security/SecurityConfig.java

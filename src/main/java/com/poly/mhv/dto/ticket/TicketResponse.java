@@ -14,6 +14,9 @@ public class TicketResponse {
     private Integer id;
     private String assetQaCode;
     private String assetName;
+    private String assetLocationName;
+    private String assetCategoryName;
+    private Integer assetCategoryTechTypeId;
     private Integer reporterId;
     private String reporterName;
     private String reporterRole;

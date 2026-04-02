@@ -36,4 +36,10 @@ public class NotificationController {
         notificationService.markAsRead(id);
         return ResponseEntity.ok(Map.of("message", "Đã đánh dấu đã xem."));
     }
+
+    @PostMapping("/read-all")
+    public ResponseEntity<Map<String, String>> markAllAsRead() {
+        notificationService.markAllAsRead();
+        return ResponseEntity.ok(Map.of("message", "Đã đánh dấu tất cả đã xem."));
+    }
 }

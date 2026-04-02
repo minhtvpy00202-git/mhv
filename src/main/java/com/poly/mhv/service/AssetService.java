@@ -14,7 +14,9 @@ import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
+import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -60,13 +62,11 @@ public class AssetService {
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại thiết bị với id: " + request.getCategoryId()));
 
-        String status = StringUtils.hasText(request.getStatus()) ? request.getStatus() : "Sẵn sàng";
         Asset asset = Asset.builder()
                 .qaCode(request.getQaCode())
                 .name(request.getName())
                 .category(category)
-                .legacyCategoryName(category.getName())
-                .status(status)
+                .status("Sẵn sàng")
                 .location(location)
                 .homeLocation(location)
                 .build();
@@ -81,7 +81,7 @@ public class AssetService {
                 saved.getName(),
                 Map.of(
                         "Thiết bị", saved.getQaCode() + " - " + saved.getName(),
-                        "Loại", saved.getCategory().getName(),
+                        "Loại", getCategoryDisplayName(saved.getCategory()),
                         "Phòng gốc", saved.getHomeLocation().getRoomName(),
                         "Trạng thái", saved.getStatus(),
                         "Người thực hiện", actor.getUsername()
@@ -101,7 +101,14 @@ public class AssetService {
     public List<AssetResponse> searchAssets(String name, String status, Integer categoryId, Integer locationId) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
-        return assetRepository.searchForAdmin(normalizedName, normalizedStatus, categoryId, locationId).stream()
+        String searchKey = normalizeKeyword(normalizedName);
+        return assetRepository.searchForAdmin(null, normalizedStatus, categoryId, locationId).stream()
+                .filter(asset -> {
+                    if (searchKey == null) {
+                        return true;
+                    }
+                    return normalizeKeyword(asset.getName()).contains(searchKey);
+                })
                 .map(asset -> mapToAssetResponse(asset, false))
                 .toList();
     }
@@ -118,7 +125,7 @@ public class AssetService {
         Asset asset = assetRepository.findById(qaCode)
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
         String oldName = asset.getName();
-        String oldCategory = asset.getCategory().getName();
+        String oldCategory = getCategoryDisplayName(asset.getCategory());
         String oldStatus = asset.getStatus();
         String oldHome = asset.getHomeLocation().getRoomName();
 
@@ -129,10 +136,6 @@ public class AssetService {
             Category category = categoryRepository.findById(request.getCategoryId())
                     .orElseThrow(() -> new CustomException("Không tìm thấy loại thiết bị với id: " + request.getCategoryId()));
             asset.setCategory(category);
-            asset.setLegacyCategoryName(category.getName());
-        }
-        if (StringUtils.hasText(request.getStatus())) {
-            asset.setStatus(request.getStatus());
         }
         if (request.getLocationId() != null) {
             Location location = locationRepository.findById(request.getLocationId())
@@ -154,7 +157,7 @@ public class AssetService {
                         Map.entry("Tên cũ", oldName),
                         Map.entry("Tên mới", updated.getName()),
                         Map.entry("Loại cũ", oldCategory),
-                        Map.entry("Loại mới", updated.getCategory().getName()),
+                        Map.entry("Loại mới", getCategoryDisplayName(updated.getCategory())),
                         Map.entry("Trạng thái cũ", oldStatus),
                         Map.entry("Trạng thái mới", updated.getStatus()),
                         Map.entry("Phòng gốc cũ", oldHome),
@@ -170,7 +173,7 @@ public class AssetService {
         Asset asset = assetRepository.findById(qaCode)
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
         String assetName = asset.getName();
-        String categoryName = asset.getCategory().getName();
+        String categoryName = getCategoryDisplayName(asset.getCategory());
         String homeLocationName = asset.getHomeLocation().getRoomName();
         assetRepository.delete(asset);
         AppUser actor = getCurrentUser();
@@ -201,7 +204,7 @@ public class AssetService {
                 .qaCode(asset.getQaCode())
                 .name(asset.getName())
                 .categoryId(asset.getCategory().getId())
-                .category(asset.getCategory().getName())
+                .category(getCategoryDisplayName(asset.getCategory()))
                 .status(asset.getStatus())
                 .locationId(asset.getLocation().getId())
                 .locationName(asset.getLocation().getRoomName())
@@ -209,6 +212,21 @@ public class AssetService {
                 .homeLocationName(asset.getHomeLocation().getRoomName())
                 .qrCodeBase64(qrCodeBase64)
                 .build();
+    }
+
+    private String getCategoryDisplayName(Category category) {
+        return category == null ? null : category.getName();
+    }
+
+    private String normalizeKeyword(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D');
+        return normalized.toLowerCase(Locale.ROOT);
     }
 
     private void validateCreateRequest(AssetCreateRequest request) {

@@ -3,6 +3,19 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 
 const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
+const techRoleOptions = [
+  { label: 'Kỹ thuật viên công nghệ', techTypeId: 1 },
+  { label: 'Kỹ thuật viên thiết bị giảng dạy', techTypeId: 2 },
+  { label: 'Kỹ thuật viên thiết bị thí nghiệm', techTypeId: 3 },
+  { label: 'Kỹ thuật viên thiết bị thể dục thể thao', techTypeId: 4 },
+]
+
+function toRoleLabel(role) {
+  if (role === 'Admin') return 'Quản trị viên'
+  if (role === 'NhanVien') return 'Nhân viên'
+  if (role === 'TechSupport') return 'Kỹ thuật viên'
+  return role || '-'
+}
 const statusOptions = ['Hoạt động', 'Khóa']
 const PAGE_SIZE = 10
 
@@ -30,10 +43,12 @@ function UserManagement() {
     birthday: '',
     phone: '',
     role: 'NhanVien',
+    techTypeId: 0,
     status: 'Hoạt động',
   })
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
+  const isTechSupportRole = form.role === 'TechSupport'
 
   const loadUsers = async (page = 0, nextFilters = filters) => {
     setLoading(true)
@@ -75,6 +90,7 @@ function UserManagement() {
       birthday: '',
       phone: '',
       role: 'NhanVien',
+      techTypeId: 0,
       status: 'Hoạt động',
     })
   }
@@ -98,6 +114,7 @@ function UserManagement() {
       birthday: item.birthday || '',
       phone: item.phone || '',
       role: item.role || 'NhanVien',
+      techTypeId: item.techTypeId ?? 0,
       status: item.status || 'Hoạt động',
     })
     setShowFormModal(true)
@@ -116,6 +133,10 @@ function UserManagement() {
       toast.error('Ngày sinh phải là ngày trong quá khứ.')
       return
     }
+    if (isTechSupportRole && !Number(form.techTypeId)) {
+      toast.error('Vui lòng chọn chuyên môn cho tài khoản kỹ thuật viên.')
+      return
+    }
     setSubmitting(true)
     try {
       await axiosClient.post('/api/users', {
@@ -125,6 +146,7 @@ function UserManagement() {
         birthday: form.birthday,
         phone: form.phone.trim(),
         role: form.role,
+        techTypeId: isTechSupportRole ? Number(form.techTypeId) : 0,
         status: form.status,
       })
       toast.success('Thêm tài khoản thành công.')
@@ -144,6 +166,10 @@ function UserManagement() {
       toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
       return
     }
+    if (isTechSupportRole && !Number(form.techTypeId)) {
+      toast.error('Vui lòng chọn chuyên môn cho tài khoản kỹ thuật viên.')
+      return
+    }
     setSubmitting(true)
     try {
       await axiosClient.put(`/api/users/${selectedUserId}`, {
@@ -153,6 +179,7 @@ function UserManagement() {
         birthday: form.birthday || null,
         phone: form.phone.trim() || null,
         role: form.role,
+        techTypeId: isTechSupportRole ? Number(form.techTypeId) : 0,
         status: form.status,
       })
       toast.success('Cập nhật tài khoản thành công.')
@@ -217,7 +244,7 @@ function UserManagement() {
             <option value="">Tất cả vai trò</option>
             {roleOptions.map((role) => (
               <option key={role} value={role}>
-                {role}
+                {toRoleLabel(role)}
               </option>
             ))}
           </select>
@@ -264,6 +291,7 @@ function UserManagement() {
                 <th className="px-3 py-2 text-left">Ngày sinh</th>
                 <th className="px-3 py-2 text-left">Số điện thoại</th>
                 <th className="px-3 py-2 text-left">Vai trò</th>
+                <th className="px-3 py-2 text-left">Chuyên môn kỹ thuật</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
@@ -276,7 +304,12 @@ function UserManagement() {
                     <td className="px-3 py-2">{row.fullName || '-'}</td>
                     <td className="px-3 py-2">{row.birthday || '-'}</td>
                     <td className="px-3 py-2">{row.phone || '-'}</td>
-                    <td className="px-3 py-2">{row.role}</td>
+                    <td className="px-3 py-2">{toRoleLabel(row.role)}</td>
+                    <td className="px-3 py-2">
+                      {row.role === 'TechSupport'
+                        ? row.techTypeName || 'Kỹ thuật viên'
+                        : '-'}
+                    </td>
                     <td className="px-3 py-2">{row.status}</td>
                     <td className="px-3 py-2">
                       <button
@@ -291,7 +324,7 @@ function UserManagement() {
                 ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center text-slate-500">
+                  <td colSpan={8} className="px-3 py-4 text-center text-slate-500">
                     Không có dữ liệu tài khoản.
                   </td>
                 </tr>
@@ -409,16 +442,40 @@ function UserManagement() {
                 <label className="mb-1 block text-sm font-medium text-slate-700">Vai trò</label>
                 <select
                   value={form.role}
-                  onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === 'TechSupport') {
+                      setForm((prev) => ({ ...prev, role: 'TechSupport', techTypeId: '' }))
+                    } else {
+                      setForm((prev) => ({ ...prev, role: value, techTypeId: 0 }))
+                    }
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                 >
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {toRoleLabel(role)}
                     </option>
                   ))}
                 </select>
               </div>
+              {isTechSupportRole && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Chuyên môn kỹ thuật *</label>
+                  <select
+                    value={form.techTypeId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, techTypeId: Number(e.target.value) || '' }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  >
+                    <option value="">Chọn chuyên môn</option>
+                    {techRoleOptions.map((item) => (
+                      <option key={item.techTypeId} value={item.techTypeId}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
                 <select

@@ -18,4 +18,6 @@ public class UserAdminResponse {
     private LocalDate birthday;
     private String phone;
     private String status;
+    private Integer techTypeId;
+    private String techTypeName;
 }

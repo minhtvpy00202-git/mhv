@@ -5,6 +5,19 @@ import axiosClient from '../../api/axiosClient'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
 
+function toVietnamesePriority(priority) {
+  if (priority === 'HIGH') return 'Cao'
+  if (priority === 'LOW') return 'Thấp'
+  return 'Trung bình'
+}
+
+function toVietnameseStatus(status) {
+  if (status === 'PENDING') return 'Mới báo hỏng'
+  if (status === 'IN_PROGRESS') return 'Đang xử lý'
+  if (status === 'RESOLVED') return 'Đã hoàn tất'
+  return status
+}
+
 function formatDateTime(value) {
   if (!value) return '-'
   const date = new Date(value)
@@ -29,6 +42,12 @@ function TicketManagement() {
     assigneeId: '',
   })
   const [assignDraft, setAssignDraft] = useState({})
+
+  const getEligibleTechSupports = (ticket) => {
+    const techTypeId = Number(ticket?.assetCategoryTechTypeId) || 0
+    if (!techTypeId) return []
+    return techSupports.filter((tech) => Number(tech.techTypeId) === techTypeId)
+  }
 
   const loadTechSupports = async () => {
     try {
@@ -119,7 +138,7 @@ function TicketManagement() {
             <option value="">Tất cả trạng thái</option>
             {statusOptions.map((status) => (
               <option key={status} value={status}>
-                {status}
+                {toVietnameseStatus(status)}
               </option>
             ))}
           </select>
@@ -156,16 +175,19 @@ function TicketManagement() {
         </div>
 
         <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-[1200px] text-sm">
+          <table className="min-w-[1500px] text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left">Ticket</th>
-                <th className="px-3 py-2 text-left">Thiết bị</th>
+                <th className="px-3 py-2 text-left">Mã thiết bị</th>
+                <th className="px-3 py-2 text-left">Tên thiết bị</th>
+                <th className="px-3 py-2 text-left">Phòng</th>
+                <th className="px-3 py-2 text-left">Loại thiết bị</th>
                 <th className="px-3 py-2 text-left">Người báo</th>
                 <th className="px-3 py-2 text-left">Ưu tiên</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
                 <th className="px-3 py-2 text-left">KTV phụ trách</th>
-                <th className="px-3 py-2 text-left">SLA</th>
+                <th className="px-3 py-2 text-left">Hạn sửa chữa</th>
                 <th className="px-3 py-2 text-left">Chat</th>
               </tr>
             </thead>
@@ -174,8 +196,11 @@ function TicketManagement() {
                 <tr key={ticket.id} className="border-t border-slate-100 align-top">
                   <td className="px-3 py-2">#{ticket.id}</td>
                   <td className="px-3 py-2">{ticket.assetQaCode}</td>
-                  <td className="px-3 py-2">#{ticket.reporterId}</td>
-                  <td className="px-3 py-2">{ticket.priority}</td>
+                  <td className="px-3 py-2">{ticket.assetName || '-'}</td>
+                  <td className="px-3 py-2">{ticket.assetLocationName || '-'}</td>
+                  <td className="px-3 py-2">{ticket.assetCategoryName || '-'}</td>
+                  <td className="px-3 py-2">{ticket.reporterName || `#${ticket.reporterId}`}</td>
+                  <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                       ticket.status === 'RESOLVED'
@@ -185,12 +210,15 @@ function TicketManagement() {
                           : 'bg-amber-100 text-amber-800'
                     }`}
                     >
-                      {ticket.status}
+                      {toVietnameseStatus(ticket.status)}
                     </span>
                   </td>
                   <td className="px-3 py-2">
                     {ticket.status === 'PENDING' ? (
                       <div className="flex items-center gap-2">
+                        {getEligibleTechSupports(ticket).length === 0 ? (
+                          <p className="text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
+                        ) : (
                         <select
                           value={assignDraft[ticket.id] || ''}
                           onChange={(event) =>
@@ -199,12 +227,13 @@ function TicketManagement() {
                           className="rounded border border-slate-300 px-2 py-1 text-xs"
                         >
                           <option value="">Chọn kỹ thuật viên</option>
-                          {techSupports.map((tech) => (
+                          {getEligibleTechSupports(ticket).map((tech) => (
                             <option key={tech.id} value={tech.id}>
                               {tech.fullName || tech.username}
                             </option>
                           ))}
                         </select>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleAssign(ticket.id)}
@@ -215,7 +244,7 @@ function TicketManagement() {
                         </button>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-700">#{ticket.assigneeId}</p>
+                      <p className="text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -234,7 +263,7 @@ function TicketManagement() {
               ))}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={11} className="px-3 py-3 text-center text-slate-500">
                     Không có ticket phù hợp.
                   </td>
                 </tr>

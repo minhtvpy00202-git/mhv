@@ -21,6 +21,7 @@ public class CategoryService {
                 .map(category -> CategoryResponse.builder()
                         .id(category.getId())
                         .name(category.getName())
+                        .techTypeId(category.getTechSupportType().getId())
                         .build())
                 .toList();
     }

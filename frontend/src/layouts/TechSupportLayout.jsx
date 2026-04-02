@@ -9,6 +9,10 @@ const navItems = [
   { to: '/tech/tickets', label: 'Ticket hỗ trợ', icon: ClipboardList },
 ]
 
+function isDeviceFailureNotification(notification) {
+  return notification?.eventType === 'TICKET_CREATED'
+}
+
 function TechSupportLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -24,8 +28,9 @@ function TechSupportLayout() {
     const loadFeed = async () => {
       try {
         const response = await axiosClient.get('/api/notifications')
-        setNotifications(response.data?.items || [])
-        setUnreadCount(response.data?.unreadCount || 0)
+        const filteredItems = (response.data?.items || []).filter(isDeviceFailureNotification)
+        setNotifications(filteredItems)
+        setUnreadCount(filteredItems.filter((item) => !item.isRead).length)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được thông báo.'
         toast.error(message)
@@ -99,6 +104,16 @@ function TechSupportLayout() {
     setUnreadChatCount((prev) => (prev > 0 ? prev - 1 : 0))
     setShowNotificationDropdown(false)
     navigate(notification.ticketPath)
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      await axiosClient.post('/api/notifications/read-all')
+    } catch {}
+    setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+    setUnreadCount(0)
+    setChatNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+    setUnreadChatCount(0)
   }
 
   return (
@@ -184,8 +199,15 @@ function TechSupportLayout() {
               </button>
               {showNotificationDropdown && (
                 <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg">
-                  <div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
-                    Thông báo
+                  <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                    <p className="text-sm font-semibold text-slate-700">Thông báo</p>
+                    <button
+                      type="button"
+                      onClick={handleMarkAllRead}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      Đánh dấu tất cả là đã đọc
+                    </button>
                   </div>
                   <div className="max-h-96 overflow-auto">
                     {chatNotifications.map((notification) => (

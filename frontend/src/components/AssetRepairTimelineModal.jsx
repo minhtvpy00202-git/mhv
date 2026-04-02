@@ -22,6 +22,21 @@ function formatDurationMinutes(createdAt, resolvedAt) {
   return `${hours} giờ ${remainMinutes} phút`
 }
 
+function toVietnameseStatus(status) {
+  if (status === 'PENDING') return 'Mới báo hỏng'
+  if (status === 'IN_PROGRESS') return 'Đang sửa chữa'
+  if (status === 'RESOLVED') return 'Đã hoàn tất'
+  return status || '-'
+}
+
+function splitChunks(array, size) {
+  const chunks = []
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size))
+  }
+  return chunks
+}
+
 function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
   const [loading, setLoading] = useState(false)
   const [timeline, setTimeline] = useState([])
@@ -31,10 +46,16 @@ function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
     const loadTimeline = async () => {
       setLoading(true)
       try {
-        const response = await axiosClient.get('/api/tickets', {
-          params: { asset_qa_code: assetQaCode },
-        })
-        setTimeline(response.data || [])
+        try {
+          const response = await axiosClient.get('/api/tickets', {
+            params: { asset_qa_code: assetQaCode },
+          })
+          setTimeline(response.data || [])
+        } catch {
+          const fallback = await axiosClient.get('/api/tickets')
+          const filtered = (fallback.data || []).filter((item) => item.assetQaCode === assetQaCode)
+          setTimeline(filtered)
+        }
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được timeline sửa chữa.'
         toast.error(message)
@@ -47,17 +68,20 @@ function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
 
   const timelineRows = useMemo(
     () =>
-      timeline.map((item) => ({
+      timeline.map((item, index) => ({
         id: item.id,
+        repairIndex: index + 1,
         brokenAt: formatDateTime(item.createdAt),
         issue: item.description,
         fixer: item.assigneeName || 'Chưa có kỹ thuật viên',
         fixContent: item.description,
         duration: formatDurationMinutes(item.createdAt, item.resolvedAt),
-        status: item.status,
+        status: toVietnameseStatus(item.status),
       })),
     [timeline],
   )
+
+  const timelineChunks = useMemo(() => splitChunks(timelineRows, 4), [timelineRows])
 
   if (!open) return null
 
@@ -79,41 +103,51 @@ function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
             Đóng
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-[1100px] text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-3 py-2 text-left">Ticket</th>
-                <th className="px-3 py-2 text-left">Thiết bị hỏng khi nào</th>
-                <th className="px-3 py-2 text-left">Lỗi hỏng là gì</th>
-                <th className="px-3 py-2 text-left">Ai sửa</th>
-                <th className="px-3 py-2 text-left">Sửa cái gì</th>
-                <th className="px-3 py-2 text-left">Sửa mất bao lâu</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!loading &&
-                timelineRows.map((row) => (
-                  <tr key={row.id} className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-2">#{row.id}</td>
-                    <td className="px-3 py-2">{row.brokenAt}</td>
-                    <td className="px-3 py-2">{row.issue}</td>
-                    <td className="px-3 py-2">{row.fixer}</td>
-                    <td className="px-3 py-2">{row.fixContent}</td>
-                    <td className="px-3 py-2">{row.duration}</td>
-                    <td className="px-3 py-2">{row.status}</td>
-                  </tr>
-                ))}
-              {!loading && timelineRows.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-3 py-4 text-center text-slate-500">
-                    Thiết bị này chưa có lịch sử sửa chữa.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          {!loading && timelineRows.length === 0 && (
+            <p className="text-center text-sm text-slate-500">Thiết bị này chưa có lịch sử sửa chữa.</p>
+          )}
+          {!loading && timelineRows.length > 0 && (
+            <div className="space-y-3">
+              {timelineChunks.map((chunk, rowIndex) => {
+                const isReverse = rowIndex % 2 === 1
+                const displayChunk = isReverse ? [...chunk].reverse() : chunk
+                const isLastRow = rowIndex === timelineChunks.length - 1
+                return (
+                  <div key={`row-${rowIndex}`}>
+                    <div className="relative rounded-xl border border-slate-200 bg-white px-4 py-6">
+                      <div className="absolute left-6 right-6 top-8 h-0.5 bg-slate-300" />
+                      <div className="grid gap-3 md:grid-cols-4">
+                        {displayChunk.map((row) => (
+                          <div key={row.id} className="relative pt-4">
+                            <div className="absolute left-1/2 top-0 z-10 h-3 w-3 -translate-x-1/2 rounded-full border-2 border-white bg-fptOrange shadow" />
+                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                              <p className="font-semibold text-slate-800">Lần sửa: {row.repairIndex}</p>
+                              <p className="mt-1 text-slate-700">Hỏng khi: {row.brokenAt}</p>
+                              <p className="mt-1 text-slate-700">Lỗi: {row.issue}</p>
+                              <p className="mt-1 text-slate-700">Người sửa: {row.fixer}</p>
+                              <p className="mt-1 text-slate-700">Chi tiết lỗi: {row.fixContent}</p>
+                              <p className="mt-1 text-slate-700">Thời gian sửa: {row.duration}</p>
+                              <p className="mt-1 font-semibold text-slate-700">Trạng thái: {row.status}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {!isLastRow && (
+                      <div className={`flex ${isReverse ? 'justify-start' : 'justify-end'} px-2`}>
+                        <div
+                          className={`h-12 w-12 border-2 border-slate-300 ${
+                            isReverse ? 'rounded-bl-full border-r-0 border-t-0' : 'rounded-br-full border-l-0 border-t-0'
+                          }`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
           {loading && <p className="px-3 py-3 text-sm text-slate-500">Đang tải timeline...</p>}
         </div>
       </div>

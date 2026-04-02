@@ -14,4 +14,6 @@ public class JwtResponse {
     private Integer id;
     private String username;
     private String role;
+    private Integer techTypeId;
+    private String techTypeName;
 }
