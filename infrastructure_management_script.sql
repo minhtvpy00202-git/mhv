@@ -276,10 +276,10 @@ GO
 -- Seed Users
 INSERT INTO users (username, password, role, full_name, birthday, phone, status, tech_type_id) VALUES
 ('admin', 'hashed_password_1', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động', 0),
-('john_doe', 'hashed_password_2', 'NhanVien', N'John Doe', '1998-05-20', '0900000002', N'Hoạt động', 0),
-('jane_smith', 'hashed_password_3', 'NhanVien', N'Jane Smith', '1999-08-12', '0900000003', N'Hoạt động', 1),
-('bob_wilson', 'hashed_password_4', 'NhanVien', N'Bob Wilson', '1997-03-14', '0900000004', N'Hoạt động', 2),
-('alice_brown', 'hashed_password_5', 'NhanVien', N'Alice Brown', '1996-11-30', '0900000005', N'Hoạt động', 3);
+('nhanvien', 'hashed_password_2', 'NhanVien', N'John Doe', '1998-05-20', '0900000002', N'Hoạt động', 0),
+('techsup', 'hashed_password_3', 'TechSupport', N'Jane Smith', '1999-08-12', '0900000003', N'Hoạt động', 1),
+('techsup1', 'hashed_password_4', 'TechSupport', N'Bob Wilson', '1997-03-14', '0900000004', N'Hoạt động', 2),
+('techsup2', 'hashed_password_5', 'TechSupport', N'Alice Brown', '1996-11-30', '0900000005', N'Hoạt động', 3);
 GO
 
 -- Seed Assets
