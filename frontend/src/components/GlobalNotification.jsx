@@ -78,6 +78,9 @@ function GlobalNotification() {
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
     const unsubscribe = subscribe(`/topic/users/${user.userId}/chat-notifications`, (payload) => {
+      if (Number(payload?.senderId) === Number(user.userId)) {
+        return
+      }
       const senderName = payload?.senderName || 'Người dùng'
       const messagePreview = payload?.messagePreview || 'Bạn có tin nhắn mới.'
       const ticketId = payload?.ticketId

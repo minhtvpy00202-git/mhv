@@ -244,6 +244,7 @@ public class TicketService {
         return TicketResponse.builder()
                 .id(ticket.getId())
                 .assetQaCode(ticket.getAsset().getQaCode())
+                .assetName(ticket.getAsset().getName())
                 .reporterId(ticket.getReporter().getId())
                 .reporterName(reporterName)
                 .reporterRole(ticket.getReporter().getRole())

@@ -139,7 +139,7 @@ function TechSupportTickets() {
                 <th className="px-3 py-2 text-left">Mô tả</th>
                 <th className="px-3 py-2 text-left">Ưu tiên</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
-                <th className="px-3 py-2 text-left">SLA</th>
+                <th className="px-3 py-2 text-left">Hạn xử lý theo SLA</th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>

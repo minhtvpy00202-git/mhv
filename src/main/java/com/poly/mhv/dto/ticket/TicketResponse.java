@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class TicketResponse {
     private Integer id;
     private String assetQaCode;
+    private String assetName;
     private Integer reporterId;
     private String reporterName;
     private String reporterRole;

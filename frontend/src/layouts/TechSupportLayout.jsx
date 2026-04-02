@@ -1,4 +1,4 @@
-import { Bell, ClipboardList, LogOut, MessageCircle } from 'lucide-react'
+import { Bell, ClipboardList, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -7,7 +7,6 @@ import { useAuth } from '../context/AuthContext'
 
 const navItems = [
   { to: '/tech/tickets', label: 'Ticket hỗ trợ', icon: ClipboardList },
-  { to: '/tech/chats', label: 'Trao đổi sự cố', icon: MessageCircle },
 ]
 
 function TechSupportLayout() {

@@ -3,8 +3,10 @@ package com.poly.mhv.controller;
 import com.poly.mhv.dto.chat.ChatMessageResponse;
 import com.poly.mhv.dto.chat.ChatMessageSendRequest;
 import com.poly.mhv.dto.chat.ChatIncomingNotificationResponse;
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Ticket;
 import com.poly.mhv.exception.CustomException;
+import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.service.ChatService;
 import java.security.Principal;
@@ -23,6 +25,7 @@ public class WebSocketChatController {
 
     private final ChatService chatService;
     private final TicketRepository ticketRepository;
+    private final AppUserRepository appUserRepository;
     private final SimpMessagingTemplate simpMessagingTemplate;
 
     @MessageMapping("/chat/{ticketId}")
@@ -50,6 +53,9 @@ public class WebSocketChatController {
         receivers.add(ticket.getReporter().getId());
         if (ticket.getAssignee() != null) {
             receivers.add(ticket.getAssignee().getId());
+        }
+        for (AppUser techSupport : appUserRepository.findByRole("TechSupport")) {
+            receivers.add(techSupport.getId());
         }
         receivers.remove(savedMessage.getSenderId());
 
