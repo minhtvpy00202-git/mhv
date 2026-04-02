@@ -1,10 +1,9 @@
-import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, TriangleAlert, Users } from 'lucide-react'
+import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, Ticket, TriangleAlert, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
@@ -12,6 +11,7 @@ const menuItems = [
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
   { to: '/admin/maintenance-history', label: 'Lịch sử báo hỏng', icon: TriangleAlert },
+  { to: '/admin/tickets', label: 'Điều phối ticket', icon: Ticket },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
 ]
 
@@ -36,46 +36,6 @@ function AdminLayout() {
     loadFeed()
     const timer = setInterval(loadFeed, 20000)
     return () => clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token')
-    if (!token) return undefined
-    let eventSource
-    let reconnectTimer
-    const handleAlertEvent = (event) => {
-      try {
-        const payload = JSON.parse(event.data)
-        if (payload?.message) {
-          const showToast = payload?.eventType === 'MAINTENANCE_REPORT' ? toast.error : toast.info
-          showToast(payload.message, {
-            autoClose: 7000,
-            position: 'top-right',
-          })
-        }
-      } catch {
-        return
-      }
-    }
-    const connectSse = () => {
-      eventSource = new EventSource(`${API_BASE_URL}/api/alerts/stream?token=${encodeURIComponent(token)}`)
-      eventSource.addEventListener('notification_alert', handleAlertEvent)
-      eventSource.addEventListener('maintenance_alert', handleAlertEvent)
-      eventSource.onmessage = handleAlertEvent
-      eventSource.onerror = () => {
-        eventSource.close()
-        reconnectTimer = window.setTimeout(connectSse, 2000)
-      }
-    }
-    connectSse()
-    return () => {
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer)
-      }
-      if (eventSource) {
-        eventSource.close()
-      }
-    }
   }, [])
 
   const handleOpenNotification = async (notification) => {

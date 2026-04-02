@@ -36,12 +36,12 @@ public class UsageHistory {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "asset_qa_code", nullable = false)
-    @JsonIgnoreProperties({"usageHistories", "maintenanceRequests", "location"})
+    @JsonIgnoreProperties({"usageHistories", "location"})
     private Asset asset;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @JsonIgnoreProperties({"usageHistories", "maintenanceRequestsReported", "maintenanceRequestsAssigned", "password"})
+    @JsonIgnoreProperties({"usageHistories", "password"})
     private AppUser user;
 
     @ManyToOne(fetch = FetchType.LAZY)

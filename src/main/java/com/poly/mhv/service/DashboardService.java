@@ -3,7 +3,7 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.dashboard.DashboardSummaryResponse;
 import com.poly.mhv.dto.dashboard.SmartSuggestionResponse;
 import com.poly.mhv.repository.AssetRepository;
-import com.poly.mhv.repository.MaintenanceRequestRepository;
+import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -17,16 +17,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class DashboardService {
 
     private final AssetRepository assetRepository;
-    private final MaintenanceRequestRepository maintenanceRequestRepository;
+    private final TicketRepository ticketRepository;
     private final UsageHistoryRepository usageHistoryRepository;
 
     public DashboardService(
             AssetRepository assetRepository,
-            MaintenanceRequestRepository maintenanceRequestRepository,
+            TicketRepository ticketRepository,
             UsageHistoryRepository usageHistoryRepository
     ) {
         this.assetRepository = assetRepository;
-        this.maintenanceRequestRepository = maintenanceRequestRepository;
+        this.ticketRepository = ticketRepository;
         this.usageHistoryRepository = usageHistoryRepository;
     }
 
@@ -55,7 +55,7 @@ public class DashboardService {
         }
 
 
-        List<String> suggestions = maintenanceRequestRepository.getMaintenanceStatsInPeriod(start, end).stream()
+        List<String> suggestions = ticketRepository.getTicketStatsInPeriod(start, end).stream()
                 .limit(5)
                 .map(row -> {
                     String qaCode = String.valueOf(row[0]);

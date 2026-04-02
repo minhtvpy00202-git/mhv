@@ -2,9 +2,18 @@ import { createContext, useContext, useMemo, useState } from 'react'
 
 const AuthContext = createContext(null)
 
+const normalizeRole = (role) => {
+  if (!role) return role
+  const value = String(role).trim().toLowerCase()
+  if (value === 'admin') return 'Admin'
+  if (value === 'nhanvien') return 'NhanVien'
+  if (value === 'techsupport' || value === 'techsup') return 'TechSupport'
+  return role
+}
+
 const getStoredUser = () => ({
   userId: Number(localStorage.getItem('auth_user_id')) || null,
-  role: localStorage.getItem('auth_role'),
+  role: normalizeRole(localStorage.getItem('auth_role')),
   username: localStorage.getItem('auth_username'),
 })
 
@@ -13,16 +22,17 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(getStoredUser())
 
   const login = ({ token: nextToken, id, role, username }) => {
+    const normalizedRole = normalizeRole(role)
     const nextUser = {
       userId: id,
-      role,
+      role: normalizedRole,
       username,
     }
     setToken(nextToken)
     setUser(nextUser)
     localStorage.setItem('auth_token', nextToken)
     localStorage.setItem('auth_user_id', String(id))
-    localStorage.setItem('auth_role', role)
+    localStorage.setItem('auth_role', normalizedRole)
     localStorage.setItem('auth_username', username)
   }
 

@@ -53,14 +53,4 @@ public class AppUser {
     @OneToMany(mappedBy = "user")
     @Builder.Default
     private List<UsageHistory> usageHistories = new ArrayList<>();
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "reportedBy")
-    @Builder.Default
-    private List<MaintenanceRequest> maintenanceRequestsReported = new ArrayList<>();
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "assignedTo")
-    @Builder.Default
-    private List<MaintenanceRequest> maintenanceRequestsAssigned = new ArrayList<>();
 }

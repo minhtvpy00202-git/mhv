@@ -104,7 +104,7 @@ public class UserService {
         int normalizedSize = Math.max(1, Math.min(size, 100));
         Pageable pageable = PageRequest.of(normalizedPage, normalizedSize);
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        String normalizedRole = StringUtils.hasText(role) ? role.trim() : null;
+        String normalizedRole = normalizeRoleValue(role);
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
         Page<AppUser> result = appUserRepository.searchForAdmin(normalizedKeyword, normalizedRole, normalizedStatus, pageable);
         return UserPageResponse.builder()
@@ -283,11 +283,28 @@ public class UserService {
         if (!StringUtils.hasText(role)) {
             throw new CustomException("Vai trò là bắt buộc.");
         }
-        String normalizedRole = role.trim();
-        if (!"Admin".equals(normalizedRole) && !"NhanVien".equals(normalizedRole)) {
+        String normalizedRole = normalizeRoleValue(role);
+        if (normalizedRole == null) {
             throw new CustomException("Vai trò không hợp lệ.");
         }
         return normalizedRole;
+    }
+
+    private String normalizeRoleValue(String role) {
+        if (!StringUtils.hasText(role)) {
+            return null;
+        }
+        String normalizedRole = role.trim();
+        if ("admin".equalsIgnoreCase(normalizedRole)) {
+            return "Admin";
+        }
+        if ("nhanvien".equalsIgnoreCase(normalizedRole)) {
+            return "NhanVien";
+        }
+        if ("techsupport".equalsIgnoreCase(normalizedRole)) {
+            return "TechSupport";
+        }
+        return null;
     }
 
     private String validateStatus(String status) {

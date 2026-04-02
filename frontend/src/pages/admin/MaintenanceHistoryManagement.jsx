@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 
 const PAGE_SIZE = 10
-const assetStatusOptions = ['Đang sử dụng', 'Hỏng', 'Sẵn sàng', 'Bảo trì']
 
 function getRowKey(item) {
   return `${item.id}-${item.assetQaCode}-${item.reportTime}`
@@ -17,10 +17,9 @@ function formatDateTime(value) {
 }
 
 function MaintenanceHistoryManagement() {
+  const navigate = useNavigate()
   const [rows, setRows] = useState([])
-  const [draftStatus, setDraftStatus] = useState({})
   const [loading, setLoading] = useState(true)
-  const [submittingId, setSubmittingId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
 
   const loadData = async () => {
@@ -29,9 +28,6 @@ function MaintenanceHistoryManagement() {
       const response = await axiosClient.get('/api/maintenance/history')
       const data = response.data || []
       setRows(data)
-      setDraftStatus(
-        data.reduce((acc, item) => ({ ...acc, [getRowKey(item)]: item.assetStatus || 'Hỏng' }), {}),
-      )
       setCurrentPage(1)
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được lịch sử báo hỏng.'
@@ -51,22 +47,24 @@ function MaintenanceHistoryManagement() {
     return rows.slice(start, start + PAGE_SIZE)
   }, [rows, currentPage])
 
-  const handleUpdate = async (item) => {
-    const rowKey = getRowKey(item)
-    const status = draftStatus[rowKey]
-    if (!status) return
-    setSubmittingId(item.id)
+  const handleOpenTicketChat = async (item) => {
     try {
-      await axiosClient.put(`/api/maintenance/${item.id}/asset-status`, {
-        assetStatus: status,
-      })
-      toast.success(`Đã cập nhật trạng thái thiết bị ${item.assetQaCode}.`)
-      await loadData()
+      const response = await axiosClient.get('/api/tickets')
+      const matchedTickets = (response.data || []).filter((ticket) => ticket.assetQaCode === item.assetQaCode)
+      if (matchedTickets.length === 0) {
+        toast.info(`Chưa có ticket sự cố cho thiết bị ${item.assetQaCode}.`)
+        return
+      }
+      const ticketToOpen = [...matchedTickets].sort((a, b) => {
+        const aOpen = a.status !== 'RESOLVED' ? 1 : 0
+        const bOpen = b.status !== 'RESOLVED' ? 1 : 0
+        if (aOpen !== bOpen) return bOpen - aOpen
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      })[0]
+      navigate(`/admin/tickets/${ticketToOpen.id}`)
     } catch (error) {
-      const message = error?.response?.data?.message || 'Cập nhật trạng thái thất bại.'
+      const message = error?.response?.data?.message || 'Không mở được ticket/chat.'
       toast.error(message)
-    } finally {
-      setSubmittingId(null)
     }
   }
 
@@ -75,7 +73,7 @@ function MaintenanceHistoryManagement() {
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Lịch sử báo hỏng</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Danh sách thiết bị đã được báo hỏng, cho phép cập nhật trạng thái tài sản ngay tại từng dòng.
+          Luồng maintenance cũ đã đồng bộ theo ticket. Admin theo dõi lịch sử và mở ticket/chat để điều phối xử lý.
         </p>
       </section>
 
@@ -109,31 +107,24 @@ function MaintenanceHistoryManagement() {
                     <td className="px-3 py-2">{item.description}</td>
                     <td className="px-3 py-2">{formatDateTime(item.reportTime)}</td>
                     <td className="px-3 py-2">
-                      <select
-                        value={draftStatus[rowKey] || item.assetStatus}
-                        onChange={(e) =>
-                          setDraftStatus((prev) => ({
-                            ...prev,
-                            [rowKey]: e.target.value,
-                          }))
-                        }
-                        className="rounded border border-slate-300 px-2 py-1 text-sm"
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        item.assetStatus === 'Sẵn sàng'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : item.assetStatus === 'Bảo trì'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
+                      }`}
                       >
-                        {assetStatusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
+                        {item.assetStatus}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => handleUpdate(item)}
-                        disabled={submittingId === item.id}
-                        className="rounded-md bg-fptOrange px-3 py-1.5 text-xs font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                        onClick={() => handleOpenTicketChat(item)}
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
-                        Cập nhật
+                        Mở ticket/chat
                       </button>
                     </td>
                   </tr>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 
-const roleOptions = ['Admin', 'NhanVien']
+const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
 const statusOptions = ['Hoạt động', 'Khóa']
 const PAGE_SIZE = 10
 
@@ -11,6 +11,7 @@ function UserManagement() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [showFormModal, setShowFormModal] = useState(false)
   const [pageInfo, setPageInfo] = useState({
     page: 0,
     size: PAGE_SIZE,
@@ -78,6 +79,16 @@ function UserManagement() {
     })
   }
 
+  const closeFormModal = () => {
+    setShowFormModal(false)
+    resetForm()
+  }
+
+  const openCreateModal = () => {
+    resetForm()
+    setShowFormModal(true)
+  }
+
   const handleSelect = (item) => {
     setSelectedUserId(item.id)
     setForm({
@@ -89,6 +100,7 @@ function UserManagement() {
       role: item.role || 'NhanVien',
       status: item.status || 'Hoạt động',
     })
+    setShowFormModal(true)
   }
 
   const handleCreate = async () => {
@@ -116,7 +128,7 @@ function UserManagement() {
         status: form.status,
       })
       toast.success('Thêm tài khoản thành công.')
-      resetForm()
+      closeFormModal()
       await loadUsers(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm tài khoản thất bại.'
@@ -144,7 +156,7 @@ function UserManagement() {
         status: form.status,
       })
       toast.success('Cập nhật tài khoản thành công.')
-      resetForm()
+      closeFormModal()
       await loadUsers(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Cập nhật tài khoản thất bại.'
@@ -163,7 +175,7 @@ function UserManagement() {
       await axiosClient.delete(`/api/users/${id}`)
       toast.success('Xóa tài khoản thành công.')
       if (id === selectedUserId) {
-        resetForm()
+        closeFormModal()
       }
       await loadUsers(pageInfo.page)
     } catch (error) {
@@ -179,123 +191,17 @@ function UserManagement() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-slate-800">Quản lý tài khoản</h2>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Username *</label>
-            <input
-              value={form.username}
-              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              placeholder="Nhập username"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              {isEditing ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu *'}
-            </label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              placeholder="Nhập mật khẩu"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
-            <input
-              value={form.fullName}
-              onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              placeholder="Nhập họ và tên"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh *</label>
-            <input
-              type="date"
-              value={form.birthday || ''}
-              onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại *</label>
-            <input
-              value={form.phone}
-              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              placeholder="Nhập số điện thoại"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Vai trò</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-800">Quản lý tài khoản</h2>
           <button
             type="button"
-            onClick={handleCreate}
-            disabled={submitting || isEditing}
-            className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+            onClick={openCreateModal}
+            className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
           >
             Thêm mới
           </button>
-          <button
-            type="button"
-            onClick={handleUpdate}
-            disabled={submitting || !isEditing}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            Cập nhật
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDelete(selectedUserId)}
-            disabled={submitting || !isEditing}
-            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-          >
-            Xóa
-          </button>
-          <button
-            type="button"
-            onClick={resetForm}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Làm mới
-          </button>
         </div>
-      </div>
 
-      <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 md:grid-cols-4">
           <input
             value={filters.keyword}
@@ -435,6 +341,136 @@ function UserManagement() {
           </div>
         </div>
       </div>
+
+      {showFormModal && (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 p-4 md:items-center">
+          <div className="w-full max-w-3xl rounded-2xl bg-white p-4 shadow-xl md:p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-800">{isEditing ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'}</h3>
+              <button
+                type="button"
+                onClick={closeFormModal}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Username *</label>
+                <input
+                  value={form.username}
+                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Nhập username"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  {isEditing ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu *'}
+                </label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Nhập mật khẩu"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
+                <input
+                  value={form.fullName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Nhập họ và tên"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh *</label>
+                <input
+                  type="date"
+                  value={form.birthday || ''}
+                  onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại *</label>
+                <input
+                  value={form.phone}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Nhập số điện thoại"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Vai trò</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                >
+                  {roleOptions.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                >
+                  {statusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={submitting || isEditing}
+                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                Thêm mới
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdate}
+                disabled={submitting || !isEditing}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                Cập nhật
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(selectedUserId)}
+                disabled={submitting || !isEditing}
+                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                Xóa
+              </button>
+              <button
+                type="button"
+                onClick={closeFormModal}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

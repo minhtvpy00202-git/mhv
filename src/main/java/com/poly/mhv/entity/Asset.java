@@ -57,9 +57,4 @@ public class Asset {
     @OneToMany(mappedBy = "asset")
     @Builder.Default
     private List<UsageHistory> usageHistories = new ArrayList<>();
-
-    @JsonIgnore
-    @OneToMany(mappedBy = "asset")
-    @Builder.Default
-    private List<MaintenanceRequest> maintenanceRequests = new ArrayList<>();
 }

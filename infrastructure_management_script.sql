@@ -52,6 +52,7 @@ CREATE TABLE usage_histories (
 );
 GO
 
+-- DEPRECATED (Phase 2.4): legacy table, sẽ được migrate dữ liệu sang tickets và drop ở cuối script.
 CREATE TABLE maintenance_requests (
     id INT IDENTITY(1,1) PRIMARY KEY,
     asset_qa_code VARCHAR(20) NOT NULL,
@@ -135,6 +136,7 @@ INSERT INTO usage_histories (asset_qa_code, user_id, start_time, end_time, from_
 ('QA005', 2, '2026-01-05 12:00:00', '2026-01-05 18:00:00', 4, 5);
 GO
 
+-- DEPRECATED seed dữ liệu legacy cho maintenance_requests.
 INSERT INTO maintenance_requests (asset_qa_code, reported_by, assigned_to, description, status) VALUES
 ('QA003', 2, 4, N'Màn hình không hiển thị hình ảnh', N'Đang xử lý'),
 ('QA004', 4, 2, N'Router mất kết nối mạng', N'Đang xử lý'),
@@ -658,7 +660,9 @@ BEGIN
 END;
 GO
 
----update
+use FpolyDnInfrastructure;
+
+---update for final round----
 IF COL_LENGTH('users', 'full_name') IS NULL
 BEGIN
     ALTER TABLE users ADD full_name NVARCHAR(100) NULL;
@@ -715,5 +719,99 @@ GO
 IF OBJECT_ID('CK_users_status', 'C') IS NULL
 BEGIN
     ALTER TABLE users ADD CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa'));
+END;
+GO
+
+--update
+IF OBJECT_ID('CK_users_role', 'C') IS NOT NULL
+BEGIN
+    ALTER TABLE users DROP CONSTRAINT CK_users_role;
+END;
+GO
+
+ALTER TABLE users
+ADD CONSTRAINT CK_users_role CHECK (role IN ('Admin', 'NhanVien', 'TechSupport'));
+GO
+
+IF OBJECT_ID('tickets', 'U') IS NULL
+BEGIN
+    CREATE TABLE tickets (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        asset_qa_code VARCHAR(20) NOT NULL,
+        reporter_id INT NOT NULL,
+        assignee_id INT NULL,
+        description NVARCHAR(500) NOT NULL,
+        image_url VARCHAR(500) NULL,
+        priority VARCHAR(20) NOT NULL,
+        status VARCHAR(20) NOT NULL CONSTRAINT DF_tickets_status DEFAULT 'PENDING',
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_tickets_created_at DEFAULT SYSDATETIME(),
+        due_date DATETIME2 NULL,
+        CONSTRAINT FK_tickets_asset FOREIGN KEY (asset_qa_code) REFERENCES assets(qa_code),
+        CONSTRAINT FK_tickets_reporter FOREIGN KEY (reporter_id) REFERENCES users(id),
+        CONSTRAINT FK_tickets_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
+        CONSTRAINT CK_tickets_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
+        CONSTRAINT CK_tickets_status CHECK (status IN ('PENDING', 'IN_PROGRESS', 'RESOLVED'))
+    );
+END;
+GO
+
+IF OBJECT_ID('chat_messages', 'U') IS NULL
+BEGIN
+    CREATE TABLE chat_messages (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        ticket_id INT NOT NULL,
+        sender_id INT NOT NULL,
+        content NVARCHAR(MAX) NOT NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT SYSDATETIME(),
+        CONSTRAINT FK_chat_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id),
+        CONSTRAINT FK_chat_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id)
+    );
+END;
+GO
+
+-- ==========================================================
+-- PHASE 2.4 - DEPRECATE maintenance_requests (Ticket là source-of-truth)
+-- ==========================================================
+IF OBJECT_ID('maintenance_requests', 'U') IS NOT NULL
+BEGIN
+    IF OBJECT_ID('tickets', 'U') IS NOT NULL
+    BEGIN
+        INSERT INTO tickets (
+            asset_qa_code,
+            reporter_id,
+            assignee_id,
+            description,
+            image_url,
+            priority,
+            status,
+            created_at,
+            due_date
+        )
+        SELECT
+            mr.asset_qa_code,
+            mr.reported_by,
+            mr.assigned_to,
+            mr.description,
+            NULL AS image_url,
+            'MEDIUM' AS priority,
+            CASE
+                WHEN mr.status = N'Mới tạo' THEN 'PENDING'
+                WHEN mr.status = N'Đang xử lý' THEN 'IN_PROGRESS'
+                ELSE 'RESOLVED'
+            END AS status,
+            mr.report_time AS created_at,
+            DATEADD(HOUR, 48, mr.report_time) AS due_date
+        FROM maintenance_requests mr
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM tickets t
+            WHERE t.asset_qa_code = mr.asset_qa_code
+              AND t.reporter_id = mr.reported_by
+              AND t.description = mr.description
+              AND t.created_at = mr.report_time
+        );
+    END;
+
+    DROP TABLE maintenance_requests;
 END;
 GO

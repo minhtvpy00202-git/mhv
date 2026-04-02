@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 
 const scannerElementId = 'maintenance-scanner'
 
 function MaintenanceReport() {
+  const navigate = useNavigate()
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const [assetQaCode, setAssetQaCode] = useState('')
@@ -13,6 +15,7 @@ function MaintenanceReport() {
   const [assetLocationName, setAssetLocationName] = useState('')
   const [assetHomeLocationName, setAssetHomeLocationName] = useState('')
   const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState('MEDIUM')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -95,6 +98,7 @@ function MaintenanceReport() {
     setAssetLocationName('')
     setAssetHomeLocationName('')
     setDescription('')
+    setPriority('MEDIUM')
     startScanner()
   }
 
@@ -106,9 +110,17 @@ function MaintenanceReport() {
     }
     setLoading(true)
     try {
-      await axiosClient.post('/api/maintenance/report', { assetQaCode, description })
-      toast.success(`Đã gửi báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
+      const response = await axiosClient.post('/api/tickets', {
+        asset_qa_code: assetQaCode,
+        description,
+        priority,
+      })
+      const ticketId = response.data?.id
+      toast.success(`Đã tạo ticket báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
       closeModal()
+      if (ticketId) {
+        navigate(`/mobile/tickets/${ticketId}`)
+      }
     } catch (error) {
       const message = error?.response?.data?.message || 'Gửi báo hỏng thất bại.'
       toast.error(message)
@@ -141,6 +153,18 @@ function MaintenanceReport() {
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
                 placeholder="Mô tả chi tiết tình trạng hỏng"
               />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Mức độ ưu tiên</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
+              >
+                <option value="LOW">LOW - Thấp</option>
+                <option value="MEDIUM">MEDIUM - Trung bình</option>
+                <option value="HIGH">HIGH - Cao</option>
+              </select>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button

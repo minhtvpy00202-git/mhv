@@ -28,8 +28,11 @@ function Login() {
         username: data.username,
       })
       toast.success('Đăng nhập thành công.')
-      if (data.role === 'Admin') {
+      const normalizedRole = String(data.role || '').trim().toLowerCase()
+      if (normalizedRole === 'admin') {
         navigate('/admin/dashboard', { replace: true })
+      } else if (normalizedRole === 'techsupport' || normalizedRole === 'techsup') {
+        navigate('/tech/tickets', { replace: true })
       } else {
         navigate('/mobile/home', { replace: true })
       }
