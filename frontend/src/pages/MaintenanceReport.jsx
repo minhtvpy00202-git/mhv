@@ -22,6 +22,7 @@ function MaintenanceReport() {
   const [priority, setPriority] = useState('MEDIUM')
   const [imageUrl, setImageUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -112,6 +113,7 @@ function MaintenanceReport() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    setProcessingImage(true)
     try {
       const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
@@ -121,6 +123,8 @@ function MaintenanceReport() {
       setImageUrl(compressedDataUrl)
     } catch {
       toast.error('Không thể nén ảnh để đính kèm.')
+    } finally {
+      setProcessingImage(false)
     }
   }
 
@@ -220,6 +224,7 @@ function MaintenanceReport() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={processingImage || loading}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <ImagePlus size={16} />
@@ -228,6 +233,7 @@ function MaintenanceReport() {
               <button
                 type="button"
                 onClick={handleOpenCamera}
+                disabled={processingImage || loading}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <Camera size={16} />
@@ -240,6 +246,7 @@ function MaintenanceReport() {
                 <img src={imageUrl} alt="error-preview" className="h-28 w-28 rounded-md border border-slate-200 object-cover" />
               </div>
             )}
+            {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="submit"

@@ -1,5 +1,5 @@
 const TARGET_IMAGE_BYTES = 700 * 1024
-const MAX_IMAGE_DIMENSION = 1600
+const MAX_IMAGE_DIMENSION = 1280
 
 function canvasToBlob(canvas, quality) {
   return new Promise((resolve) => {
@@ -16,14 +16,24 @@ function blobToDataUrl(blob) {
   })
 }
 
-export async function compressImageForUpload(file) {
-  const rawDataUrl = await blobToDataUrl(file)
-  const image = await new Promise((resolve, reject) => {
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
     const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('image-load-failed'))
-    img.src = rawDataUrl
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('image-load-failed'))
+    }
+    img.src = url
   })
+}
+
+export async function compressImageForUpload(file) {
+  const image = await fileToImage(file)
 
   let width = image.width
   let height = image.height
@@ -37,39 +47,22 @@ export async function compressImageForUpload(file) {
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d')
   if (!context) {
-    return rawDataUrl
+    return blobToDataUrl(file)
   }
 
-  let bestBlob = null
-  let workingWidth = width
-  let workingHeight = height
-  const qualitySteps = [0.86, 0.76, 0.66, 0.56, 0.46]
+  canvas.width = width
+  canvas.height = height
+  context.clearRect(0, 0, width, height)
+  context.drawImage(image, 0, 0, width, height)
 
-  for (let cycle = 0; cycle < 4; cycle += 1) {
-    canvas.width = workingWidth
-    canvas.height = workingHeight
-    context.clearRect(0, 0, workingWidth, workingHeight)
-    context.drawImage(image, 0, 0, workingWidth, workingHeight)
-
-    for (const quality of qualitySteps) {
-      const blob = await canvasToBlob(canvas, quality)
-      if (!blob) continue
-      bestBlob = blob
-      if (blob.size <= TARGET_IMAGE_BYTES) {
-        return blobToDataUrl(blob)
-      }
-    }
-
-    if (workingWidth < 500 || workingHeight < 500) {
-      break
-    }
-    workingWidth = Math.round(workingWidth * 0.82)
-    workingHeight = Math.round(workingHeight * 0.82)
-    await new Promise((resolve) => setTimeout(resolve, 0))
+  const primary = await canvasToBlob(canvas, 0.78)
+  if (primary && primary.size <= TARGET_IMAGE_BYTES) {
+    return blobToDataUrl(primary)
   }
 
-  if (!bestBlob) {
-    return rawDataUrl
+  const fallback = await canvasToBlob(canvas, 0.6)
+  if (fallback) {
+    return blobToDataUrl(fallback)
   }
-  return blobToDataUrl(bestBlob)
+  return blobToDataUrl(file)
 }

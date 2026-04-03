@@ -36,6 +36,7 @@ function TicketChatBox({ ticketId, onClose }) {
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
   const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
   const [minimized, setMinimized] = useState(false)
@@ -137,6 +138,7 @@ function TicketChatBox({ ticketId, onClose }) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    setProcessingImage(true)
     try {
       const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
@@ -146,6 +148,8 @@ function TicketChatBox({ ticketId, onClose }) {
       void publishMessage(`${IMG_PREFIX}${compressedDataUrl}`)
     } catch {
       toast.error('Không thể nén ảnh để gửi.')
+    } finally {
+      setProcessingImage(false)
     }
   }
 
@@ -282,6 +286,7 @@ function TicketChatBox({ ticketId, onClose }) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            disabled={processingImage || sending}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ImagePlus size={14} />
@@ -290,7 +295,7 @@ function TicketChatBox({ ticketId, onClose }) {
           <button
             type="button"
             onClick={handleOpenCamera}
-            disabled={sending}
+            disabled={processingImage || sending}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ImagePlus size={14} />
@@ -326,6 +331,7 @@ function TicketChatBox({ ticketId, onClose }) {
             <Send size={18} />
           </button>
         </div>
+        {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
       </form>
       </>
       )}
