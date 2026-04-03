@@ -52,7 +52,9 @@ function TicketChatBox({ ticketId, onClose }) {
     const loadInitialMessages = async () => {
       setLoading(true)
       try {
-        const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`)
+        const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`, {
+          params: { limit: 120 },
+        })
         if (mounted) {
           setMessages(response.data || [])
         }

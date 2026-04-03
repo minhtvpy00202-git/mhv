@@ -209,7 +209,7 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<TicketResponse> getTickets(String status, Integer assigneeId, String assetQaCode) {
+    public List<TicketResponse> getTickets(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {
         String normalizedStatus = null;
         if (StringUtils.hasText(status)) {
             normalizedStatus = status.trim().toUpperCase();
@@ -234,6 +234,7 @@ public class TicketService {
         }
         return tickets.stream()
                 .filter(ticket -> normalizedAssetQaCode == null || normalizedAssetQaCode.equals(ticket.getAsset().getQaCode()))
+                .filter(ticket -> reporterId == null || reporterId.equals(ticket.getReporter().getId()))
                 .filter(ticket -> {
                     if (!"TechSupport".equals(actor.getRole())) {
                         return true;

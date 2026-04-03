@@ -23,8 +23,10 @@ function MobileChats() {
     const loadTickets = async () => {
       setLoading(true)
       try {
-        const response = await axiosClient.get('/api/tickets')
-        const rows = (response.data || []).filter((item) => Number(item.reporterId) === Number(user?.userId))
+        const response = await axiosClient.get('/api/tickets', {
+          params: { reporter_id: user?.userId },
+        })
+        const rows = response.data || []
         setTickets(rows)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được danh sách chat ticket.'

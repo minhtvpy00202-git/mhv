@@ -9,8 +9,10 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.ChatMessageRepository;
 import com.poly.mhv.repository.TicketRepository;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -49,12 +51,20 @@ public class ChatService {
     }
 
     @Transactional(readOnly = true)
-    public List<ChatMessageResponse> getTicketChats(Integer ticketId) {
+    public List<ChatMessageResponse> getTicketChats(Integer ticketId, Integer limit) {
         if (ticketId == null) {
             throw new CustomException("ticketId là bắt buộc.");
         }
         if (!ticketRepository.existsById(ticketId)) {
             throw new CustomException("Không tìm thấy ticket.");
+        }
+        int safeLimit = limit == null ? 0 : limit;
+        if (safeLimit > 0) {
+            int bounded = Math.min(safeLimit, 200);
+            return chatMessageRepository.findByTicketIdOrderByCreatedAtDesc(ticketId, PageRequest.of(0, bounded)).stream()
+                    .sorted(Comparator.comparing(ChatMessage::getCreatedAt))
+                    .map(this::mapToResponse)
+                    .toList();
         }
         return chatMessageRepository.findByTicketIdOrderByCreatedAtAsc(ticketId).stream()
                 .map(this::mapToResponse)

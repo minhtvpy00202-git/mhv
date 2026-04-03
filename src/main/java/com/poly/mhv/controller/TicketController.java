@@ -51,8 +51,9 @@ public class TicketController {
     public ResponseEntity<List<TicketResponse>> getTickets(
             @RequestParam(required = false) String status,
             @RequestParam(name = "assignee_id", required = false) Integer assigneeId,
-            @RequestParam(name = "asset_qa_code", required = false) String assetQaCode
+            @RequestParam(name = "asset_qa_code", required = false) String assetQaCode,
+            @RequestParam(name = "reporter_id", required = false) Integer reporterId
     ) {
-        return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode));
+        return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode, reporterId));
     }
 }
