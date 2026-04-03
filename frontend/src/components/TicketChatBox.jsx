@@ -110,10 +110,13 @@ function TicketChatBox({ ticketId, onClose }) {
   const [loading, setLoading] = useState(false)
   const [recording, setRecording] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [showCameraModal, setShowCameraModal] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
+  const cameraVideoRef = useRef(null)
+  const cameraStreamRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
 
@@ -169,6 +172,15 @@ function TicketChatBox({ ticketId, onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages.length])
 
+  const stopCameraStream = useCallback(() => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = null
+    }
+  }, [])
+
+  useEffect(() => () => stopCameraStream(), [stopCameraStream])
+
   const normalizedMessages = useMemo(
     () =>
       messages.map((message) => ({
@@ -223,6 +235,51 @@ function TicketChatBox({ ticketId, onClose }) {
       void publishMessage(`${IMG_PREFIX}${compressedDataUrl}`)
     } catch {
       toast.error('Không thể nén ảnh để gửi.')
+    }
+  }
+
+  const handleOpenCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      cameraStreamRef.current = stream
+      setShowCameraModal(true)
+      setTimeout(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream
+          void cameraVideoRef.current.play()
+        }
+      }, 0)
+    } catch {
+      cameraInputRef.current?.click()
+    }
+  }
+
+  const handleCaptureFromCamera = async () => {
+    const video = cameraVideoRef.current
+    if (!video) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((resolve) => canvas.toBlob((value) => resolve(value), 'image/jpeg', 0.92))
+    if (!blob) return
+    const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    try {
+      const compressedDataUrl = await compressImageFile(file)
+      if (compressedDataUrl) {
+        void publishMessage(`${IMG_PREFIX}${compressedDataUrl}`)
+      }
+    } catch {
+      toast.error('Không thể nén ảnh để gửi.')
+    } finally {
+      stopCameraStream()
+      setShowCameraModal(false)
     }
   }
 
@@ -362,7 +419,7 @@ function TicketChatBox({ ticketId, onClose }) {
           </button>
           <button
             type="button"
-            onClick={() => cameraInputRef.current?.click()}
+            onClick={handleOpenCamera}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ImagePlus size={14} />
@@ -400,6 +457,32 @@ function TicketChatBox({ ticketId, onClose }) {
         </div>
       </form>
       </>
+      )}
+      {showCameraModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3">
+          <div className="w-full max-w-sm rounded-xl bg-white p-3">
+            <video ref={cameraVideoRef} autoPlay playsInline className="h-64 w-full rounded-lg bg-black object-cover" />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleCaptureFromCamera}
+                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
+              >
+                Chụp và gửi
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopCameraStream()
+                  setShowCameraModal(false)
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

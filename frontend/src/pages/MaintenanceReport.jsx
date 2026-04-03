@@ -86,6 +86,8 @@ function MaintenanceReport() {
   const isScanningRef = useRef(false)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
+  const cameraVideoRef = useRef(null)
+  const cameraStreamRef = useRef(null)
   const [assetQaCode, setAssetQaCode] = useState('')
   const [assetName, setAssetName] = useState('')
   const [assetLocationName, setAssetLocationName] = useState('')
@@ -94,6 +96,7 @@ function MaintenanceReport() {
   const [priority, setPriority] = useState('MEDIUM')
   const [imageUrl, setImageUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showCameraModal, setShowCameraModal] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -180,6 +183,13 @@ function MaintenanceReport() {
     startScanner()
   }
 
+  const stopCameraStream = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = null
+    }
+  }
+
   const handleSelectImage = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -212,7 +222,14 @@ function MaintenanceReport() {
       })
       const ticketId = response.data?.id
       toast.success(`Đã tạo ticket báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
-      closeModal()
+      setShowModal(false)
+      setAssetQaCode('')
+      setAssetName('')
+      setAssetLocationName('')
+      setAssetHomeLocationName('')
+      setDescription('')
+      setPriority('MEDIUM')
+      setImageUrl('')
       if (ticketId) {
         navigate(`/mobile/tickets/${ticketId}`)
       }
@@ -221,6 +238,54 @@ function MaintenanceReport() {
       toast.error(message)
     } finally {
       setLoading(false)
+      startScanner()
+    }
+  }
+
+  const handleOpenCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      cameraStreamRef.current = stream
+      setShowCameraModal(true)
+      setTimeout(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream
+          void cameraVideoRef.current.play()
+        }
+      }, 0)
+    } catch {
+      cameraInputRef.current?.click()
+    }
+  }
+
+  const handleCaptureFromCamera = async () => {
+    const video = cameraVideoRef.current
+    if (!video) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth || 1280
+    canvas.height = video.videoHeight || 720
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise((resolve) => canvas.toBlob((value) => resolve(value), 'image/jpeg', 0.92))
+    if (!blob) return
+    const file = new File([blob], `maintenance-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    try {
+      const compressedDataUrl = await compressImageFile(file)
+      if (!compressedDataUrl) {
+        toast.error('Không xử lý được ảnh.')
+        return
+      }
+      setImageUrl(compressedDataUrl)
+    } catch {
+      toast.error('Không thể nén ảnh để đính kèm.')
+    } finally {
+      stopCameraStream()
+      setShowCameraModal(false)
     }
   }
 
@@ -287,7 +352,7 @@ function MaintenanceReport() {
               </button>
               <button
                 type="button"
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={handleOpenCamera}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <Camera size={16} />
@@ -318,6 +383,32 @@ function MaintenanceReport() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {showCameraModal && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-3">
+            <video ref={cameraVideoRef} autoPlay playsInline className="h-64 w-full rounded-lg bg-black object-cover" />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleCaptureFromCamera}
+                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
+              >
+                Chụp và dùng ảnh
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  stopCameraStream()
+                  setShowCameraModal(false)
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
