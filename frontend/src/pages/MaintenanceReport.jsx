@@ -24,10 +24,15 @@ function MaintenanceReport() {
   const [showModal, setShowModal] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [loading, setLoading] = useState(false)
+  const processingFallbackTimerRef = useRef(null)
 
   useEffect(() => {
     startScanner()
     return () => {
+      if (processingFallbackTimerRef.current) {
+        clearTimeout(processingFallbackTimerRef.current)
+        processingFallbackTimerRef.current = null
+      }
       stopScanner()
     }
   }, [])
@@ -114,6 +119,10 @@ function MaintenanceReport() {
     event.target.value = ''
     if (!file) return
     setProcessingImage(true)
+    processingFallbackTimerRef.current = setTimeout(() => {
+      setProcessingImage(false)
+      toast.error('Thiết bị xử lý ảnh quá lâu. Vui lòng thử ảnh khác hoặc chọn ảnh từ thư viện.')
+    }, 12000)
     try {
       const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
@@ -124,6 +133,10 @@ function MaintenanceReport() {
     } catch {
       toast.error('Không thể nén ảnh để đính kèm.')
     } finally {
+      if (processingFallbackTimerRef.current) {
+        clearTimeout(processingFallbackTimerRef.current)
+        processingFallbackTimerRef.current = null
+      }
       setProcessingImage(false)
     }
   }

@@ -46,6 +46,16 @@ function TicketChatBox({ ticketId, onClose }) {
   const cameraInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
+  const processingFallbackTimerRef = useRef(null)
+
+  useEffect(() => {
+    return () => {
+      if (processingFallbackTimerRef.current) {
+        clearTimeout(processingFallbackTimerRef.current)
+        processingFallbackTimerRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!ticketId) return
@@ -139,6 +149,10 @@ function TicketChatBox({ ticketId, onClose }) {
     event.target.value = ''
     if (!file) return
     setProcessingImage(true)
+    processingFallbackTimerRef.current = setTimeout(() => {
+      setProcessingImage(false)
+      toast.error('Thiết bị xử lý ảnh quá lâu. Vui lòng thử ảnh khác hoặc chọn ảnh từ thư viện.')
+    }, 12000)
     try {
       const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
@@ -149,6 +163,10 @@ function TicketChatBox({ ticketId, onClose }) {
     } catch {
       toast.error('Không thể nén ảnh để gửi.')
     } finally {
+      if (processingFallbackTimerRef.current) {
+        clearTimeout(processingFallbackTimerRef.current)
+        processingFallbackTimerRef.current = null
+      }
       setProcessingImage(false)
     }
   }
