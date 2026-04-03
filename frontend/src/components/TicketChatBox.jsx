@@ -48,7 +48,7 @@ function parseMessage(message) {
 
 function TicketChatBox({ ticketId, onClose, embedded = false }) {
   const { token, user } = useAuth()
-  const { connected, subscribe, connectionDebug } = useWebSocket(token)
+  const { connected, subscribe } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
@@ -248,16 +248,6 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
         <p className={`mt-1 text-xs ${connected ? 'text-emerald-600' : 'text-amber-600'}`}>
           {connected ? 'Realtime: đã kết nối' : 'Realtime: chế độ dự phòng (đồng bộ tự động)'}
         </p>
-        {!connected && connectionDebug?.message && (
-          <p className="mt-1 break-all text-[11px] text-rose-600">
-            {connectionDebug.message}
-          </p>
-        )}
-        {!connected && connectionDebug?.wsUrl && (
-          <p className="mt-0.5 break-all text-[10px] text-slate-500">
-            WS: {connectionDebug.wsUrl}
-          </p>
-        )}
         </div>
         {!embedded && <div className="flex items-center gap-1">
           <button
