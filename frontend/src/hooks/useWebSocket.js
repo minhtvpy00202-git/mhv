@@ -7,6 +7,8 @@ const WS_URL = (
   import.meta.env.VITE_WS_URL
   || (API_BASE_URL ? `${API_BASE_URL}/ws` : `${window.location.origin}/ws`)
 ).replace(/\/$/, '')
+const WS_BROKER_URL = WS_URL.replace(/^http/i, 'ws')
+const IS_NGROK_URL = /ngrok-free\.(app|dev)/i.test(WS_URL)
 
 export default function useWebSocket(token) {
   const clientRef = useRef(null)
@@ -30,12 +32,14 @@ export default function useWebSocket(token) {
 
     setConnectionDebug({
       status: 'connecting',
-      message: `Đang kết nối websocket tới ${WS_URL}`,
+      message: `Đang kết nối websocket tới ${WS_URL}${IS_NGROK_URL ? ' (ngrok mode: native ws)' : ''}`,
       wsUrl: WS_URL,
     })
 
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_URL),
+      ...(IS_NGROK_URL
+        ? { brokerURL: WS_BROKER_URL }
+        : { webSocketFactory: () => new SockJS(WS_URL) }),
       connectHeaders: {
         Authorization: `Bearer ${token}`,
       },
@@ -48,7 +52,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'connected',
         message: 'Kết nối websocket thành công.',
-        wsUrl: WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
       })
     }
 
@@ -59,7 +63,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'stomp-error',
         message: `${errorCode}${errorBody ? ` | ${errorBody}` : ''}`,
-        wsUrl: WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
       })
     }
 
@@ -68,7 +72,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'ws-close',
         message: `WebSocket đóng kết nối (code=${event?.code ?? 'n/a'}, reason=${event?.reason || 'empty'})`,
-        wsUrl: WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
       })
     }
 
@@ -77,7 +81,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'ws-error',
         message: `WebSocket error: ${event?.message || event?.type || 'unknown error'}`,
-        wsUrl: WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
       })
     }
 
