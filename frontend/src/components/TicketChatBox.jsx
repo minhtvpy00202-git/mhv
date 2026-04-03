@@ -30,7 +30,7 @@ function parseMessage(content) {
   return { type: 'text', value: content }
 }
 
-function TicketChatBox({ ticketId, onClose }) {
+function TicketChatBox({ ticketId, onClose, embedded = false }) {
   const { token, user } = useAuth()
   const { connected, subscribe } = useWebSocket(token)
   const [messages, setMessages] = useState([])
@@ -217,9 +217,13 @@ function TicketChatBox({ ticketId, onClose }) {
 
   return (
     <section
-      className={`fixed bottom-4 right-4 z-40 w-[min(92vw,390px)] rounded-2xl border border-slate-200 bg-white shadow-2xl ${
-        minimized ? 'h-auto' : 'h-[min(80vh,620px)]'
-      }`}
+      className={
+        embedded
+          ? 'flex h-[calc(100vh-190px)] min-h-[540px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+          : `fixed bottom-4 right-4 z-40 w-[min(92vw,390px)] rounded-2xl border border-slate-200 bg-white shadow-2xl ${
+              minimized ? 'h-auto' : 'h-[min(80vh,620px)]'
+            }`
+      }
     >
       <header className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
         <div>
@@ -229,7 +233,7 @@ function TicketChatBox({ ticketId, onClose }) {
           {connected ? 'Realtime: đã kết nối' : 'Realtime: đang kết nối...'}
         </p>
         </div>
-        <div className="flex items-center gap-1">
+        {!embedded && <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setMinimized((prev) => !prev)}
@@ -244,12 +248,12 @@ function TicketChatBox({ ticketId, onClose }) {
           >
             <X size={16} />
           </button>
-        </div>
+        </div>}
       </header>
 
-      {!minimized && (
+      {(embedded || !minimized) && (
         <>
-      <div className="h-[calc(100%-170px)] min-h-[240px] overflow-y-auto bg-slate-50 px-3 py-3">
+      <div className={`overflow-y-auto bg-slate-50 px-3 py-3 ${embedded ? 'flex-1 min-h-0' : 'h-[calc(100%-170px)] min-h-[240px]'}`}>
         {loading && <p className="text-center text-sm text-slate-500">Đang tải tin nhắn...</p>}
         {!loading && normalizedMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500">Chưa có tin nhắn nào. Hãy bắt đầu cuộc trao đổi.</p>
@@ -284,7 +288,7 @@ function TicketChatBox({ ticketId, onClose }) {
         </div>
       </div>
 
-      <form onSubmit={handleSendMessage} className="border-t border-slate-200 p-3 md:p-4">
+      <form onSubmit={handleSendMessage} className={`border-t border-slate-200 p-3 md:p-4 ${embedded ? 'bg-white' : ''}`}>
         <input
           ref={fileInputRef}
           type="file"

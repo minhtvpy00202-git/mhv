@@ -69,9 +69,10 @@ function TicketDetail() {
     : location.pathname.startsWith('/tech/')
       ? '/tech/tickets'
       : '/mobile/home'
+  const isMobileRoute = location.pathname.startsWith('/mobile/')
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -122,15 +123,21 @@ function TicketDetail() {
         </section>
       )}
 
-      {showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
-      {!showChat && (
-        <button
-          type="button"
-          onClick={() => setShowChat(true)}
-          className="fixed bottom-4 right-4 z-40 rounded-full bg-fptOrange px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-fptOrangeDark"
-        >
-          Mở chat
-        </button>
+      {isMobileRoute ? (
+        <TicketChatBox ticketId={Number(ticketId)} embedded />
+      ) : (
+        <>
+          {showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
+          {!showChat && (
+            <button
+              type="button"
+              onClick={() => setShowChat(true)}
+              className="fixed bottom-4 right-4 z-40 rounded-full bg-fptOrange px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-fptOrangeDark"
+            >
+              Mở chat
+            </button>
+          )}
+        </>
       )}
     </div>
   )
