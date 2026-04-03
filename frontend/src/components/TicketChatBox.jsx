@@ -4,6 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
+import { compressImageForUpload } from '../utils/imageProcessing'
 
 function formatMessageTime(value) {
   if (!value) return ''
@@ -17,8 +18,6 @@ function formatMessageTime(value) {
 
 const IMG_PREFIX = '[[IMG]]'
 const AUDIO_PREFIX = '[[AUDIO]]'
-const TARGET_IMAGE_BYTES = 700 * 1024
-const MAX_IMAGE_DIMENSION = 1600
 
 function parseMessage(content) {
   if (!content) return { type: 'text', value: '' }
@@ -31,106 +30,21 @@ function parseMessage(content) {
   return { type: 'text', value: content }
 }
 
-function canvasToBlob(canvas, quality) {
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality)
-  })
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('read-failed'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-async function compressImageFile(file) {
-  const rawDataUrl = await blobToDataUrl(file)
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('image-load-failed'))
-    img.src = rawDataUrl
-  })
-
-  let width = image.width
-  let height = image.height
-  const maxDimension = Math.max(width, height)
-  if (maxDimension > MAX_IMAGE_DIMENSION) {
-    const scale = MAX_IMAGE_DIMENSION / maxDimension
-    width = Math.round(width * scale)
-    height = Math.round(height * scale)
-  }
-
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')
-  if (!context) {
-    return rawDataUrl
-  }
-
-  let bestBlob = null
-  let workingWidth = width
-  let workingHeight = height
-
-  for (let cycle = 0; cycle < 6; cycle += 1) {
-    canvas.width = workingWidth
-    canvas.height = workingHeight
-    context.clearRect(0, 0, workingWidth, workingHeight)
-    context.drawImage(image, 0, 0, workingWidth, workingHeight)
-
-    for (let quality = 0.88; quality >= 0.38; quality -= 0.1) {
-      const blob = await canvasToBlob(canvas, quality)
-      if (!blob) continue
-      bestBlob = blob
-      if (blob.size <= TARGET_IMAGE_BYTES) {
-        return blobToDataUrl(blob)
-      }
-    }
-
-    if (workingWidth < 500 || workingHeight < 500) {
-      break
-    }
-    workingWidth = Math.round(workingWidth * 0.82)
-    workingHeight = Math.round(workingHeight * 0.82)
-  }
-
-  if (!bestBlob) {
-    return rawDataUrl
-  }
-  return blobToDataUrl(bestBlob)
-}
-
 function TicketChatBox({ ticketId, onClose }) {
   const { token, user } = useAuth()
   const { connected, subscribe } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
   const [minimized, setMinimized] = useState(false)
-  const [showCameraModal, setShowCameraModal] = useState(false)
-  const [cameraReady, setCameraReady] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
-  const cameraVideoRef = useRef(null)
-  const cameraStreamRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
-
-  const loadMessages = useCallback(async () => {
-    if (!ticketId) return
-    try {
-      const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`)
-      setMessages(response.data || [])
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không tải được lịch sử chat.'
-      toast.error(message)
-    }
-  }, [ticketId])
 
   useEffect(() => {
     if (!ticketId) return
@@ -173,15 +87,6 @@ function TicketChatBox({ ticketId, onClose }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messages.length])
 
-  const stopCameraStream = useCallback(() => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach((track) => track.stop())
-      cameraStreamRef.current = null
-    }
-  }, [])
-
-  useEffect(() => () => stopCameraStream(), [stopCameraStream])
-
   const normalizedMessages = useMemo(
     () =>
       messages.map((message) => ({
@@ -195,6 +100,7 @@ function TicketChatBox({ ticketId, onClose }) {
 
   const publishMessage = useCallback(async (messageContent) => {
     if (!messageContent || !ticketId) return
+    setSending(true)
     try {
       const response = await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
         ticketId: Number(ticketId),
@@ -212,6 +118,8 @@ function TicketChatBox({ ticketId, onClose }) {
     } catch (error) {
       const message = error?.response?.data?.message || 'Gửi tin nhắn thất bại.'
       toast.error(message)
+    } finally {
+      setSending(false)
     }
   }, [ticketId])
 
@@ -228,7 +136,7 @@ function TicketChatBox({ ticketId, onClose }) {
     event.target.value = ''
     if (!file) return
     try {
-      const compressedDataUrl = await compressImageFile(file)
+      const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
         toast.error('Không xử lý được ảnh.')
         return
@@ -239,61 +147,8 @@ function TicketChatBox({ ticketId, onClose }) {
     }
   }
 
-  const handleOpenCamera = async () => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
-    if (isMobile) {
-      cameraInputRef.current?.click()
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      cameraInputRef.current?.click()
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      cameraStreamRef.current = stream
-      setCameraReady(false)
-      setShowCameraModal(true)
-      setTimeout(() => {
-        if (cameraVideoRef.current) {
-          cameraVideoRef.current.srcObject = stream
-          cameraVideoRef.current.onloadedmetadata = () => setCameraReady(true)
-          void cameraVideoRef.current.play()
-        }
-      }, 0)
-    } catch {
-      cameraInputRef.current?.click()
-    }
-  }
-
-  const handleCaptureFromCamera = async () => {
-    const video = cameraVideoRef.current
-    if (!video) return
-    if (!cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
-      toast.error('Camera chưa sẵn sàng, vui lòng thử lại.')
-      return
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
-    const context = canvas.getContext('2d')
-    if (!context) return
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise((resolve) => canvas.toBlob((value) => resolve(value), 'image/jpeg', 0.92))
-    if (!blob) return
-    const file = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
-    try {
-      const compressedDataUrl = await compressImageFile(file)
-      if (compressedDataUrl) {
-        void publishMessage(`${IMG_PREFIX}${compressedDataUrl}`)
-      }
-    } catch {
-      toast.error('Không thể nén ảnh để gửi.')
-    } finally {
-      stopCameraStream()
-      setShowCameraModal(false)
-      setCameraReady(false)
-    }
+  const handleOpenCamera = () => {
+    cameraInputRef.current?.click()
   }
 
   const handleToggleRecording = async () => {
@@ -433,6 +288,7 @@ function TicketChatBox({ ticketId, onClose }) {
           <button
             type="button"
             onClick={handleOpenCamera}
+            disabled={sending}
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ImagePlus size={14} />
@@ -462,7 +318,7 @@ function TicketChatBox({ ticketId, onClose }) {
           />
           <button
             type="submit"
-            disabled={!content.trim()}
+            disabled={!content.trim() || sending}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-fptOrange text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send size={18} />
@@ -470,33 +326,6 @@ function TicketChatBox({ ticketId, onClose }) {
         </div>
       </form>
       </>
-      )}
-      {showCameraModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3">
-          <div className="w-full max-w-sm rounded-xl bg-white p-3">
-            <video ref={cameraVideoRef} autoPlay playsInline className="h-64 w-full rounded-lg bg-black object-cover" />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleCaptureFromCamera}
-                disabled={!cameraReady}
-                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-              >
-                Chụp và gửi
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  stopCameraStream()
-                  setShowCameraModal(false)
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </section>
   )

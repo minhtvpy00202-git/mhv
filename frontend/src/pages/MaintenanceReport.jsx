@@ -4,81 +4,9 @@ import { Camera, ImagePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import { compressImageForUpload } from '../utils/imageProcessing'
 
 const scannerElementId = 'maintenance-scanner'
-const TARGET_IMAGE_BYTES = 700 * 1024
-const MAX_IMAGE_DIMENSION = 1600
-
-function canvasToBlob(canvas, quality) {
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality)
-  })
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('read-failed'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-async function compressImageFile(file) {
-  const rawDataUrl = await blobToDataUrl(file)
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('image-load-failed'))
-    img.src = rawDataUrl
-  })
-
-  let width = image.width
-  let height = image.height
-  const maxDimension = Math.max(width, height)
-  if (maxDimension > MAX_IMAGE_DIMENSION) {
-    const scale = MAX_IMAGE_DIMENSION / maxDimension
-    width = Math.round(width * scale)
-    height = Math.round(height * scale)
-  }
-
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')
-  if (!context) {
-    return rawDataUrl
-  }
-
-  let bestBlob = null
-  let workingWidth = width
-  let workingHeight = height
-
-  for (let cycle = 0; cycle < 6; cycle += 1) {
-    canvas.width = workingWidth
-    canvas.height = workingHeight
-    context.clearRect(0, 0, workingWidth, workingHeight)
-    context.drawImage(image, 0, 0, workingWidth, workingHeight)
-
-    for (let quality = 0.88; quality >= 0.38; quality -= 0.1) {
-      const blob = await canvasToBlob(canvas, quality)
-      if (!blob) continue
-      bestBlob = blob
-      if (blob.size <= TARGET_IMAGE_BYTES) {
-        return blobToDataUrl(blob)
-      }
-    }
-
-    if (workingWidth < 500 || workingHeight < 500) {
-      break
-    }
-    workingWidth = Math.round(workingWidth * 0.82)
-    workingHeight = Math.round(workingHeight * 0.82)
-  }
-
-  if (!bestBlob) {
-    return rawDataUrl
-  }
-  return blobToDataUrl(bestBlob)
-}
 
 function MaintenanceReport() {
   const navigate = useNavigate()
@@ -86,8 +14,6 @@ function MaintenanceReport() {
   const isScanningRef = useRef(false)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
-  const cameraVideoRef = useRef(null)
-  const cameraStreamRef = useRef(null)
   const [assetQaCode, setAssetQaCode] = useState('')
   const [assetName, setAssetName] = useState('')
   const [assetLocationName, setAssetLocationName] = useState('')
@@ -96,8 +22,6 @@ function MaintenanceReport() {
   const [priority, setPriority] = useState('MEDIUM')
   const [imageUrl, setImageUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [showCameraModal, setShowCameraModal] = useState(false)
-  const [cameraReady, setCameraReady] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -184,19 +108,12 @@ function MaintenanceReport() {
     startScanner()
   }
 
-  const stopCameraStream = () => {
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getTracks().forEach((track) => track.stop())
-      cameraStreamRef.current = null
-    }
-  }
-
   const handleSelectImage = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     try {
-      const compressedDataUrl = await compressImageFile(file)
+      const compressedDataUrl = await compressImageForUpload(file)
       if (!compressedDataUrl) {
         toast.error('Không xử lý được ảnh.')
         return
@@ -243,63 +160,8 @@ function MaintenanceReport() {
     }
   }
 
-  const handleOpenCamera = async () => {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
-    if (isMobile) {
-      cameraInputRef.current?.click()
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      cameraInputRef.current?.click()
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      cameraStreamRef.current = stream
-      setCameraReady(false)
-      setShowCameraModal(true)
-      setTimeout(() => {
-        if (cameraVideoRef.current) {
-          cameraVideoRef.current.srcObject = stream
-          cameraVideoRef.current.onloadedmetadata = () => setCameraReady(true)
-          void cameraVideoRef.current.play()
-        }
-      }, 0)
-    } catch {
-      cameraInputRef.current?.click()
-    }
-  }
-
-  const handleCaptureFromCamera = async () => {
-    const video = cameraVideoRef.current
-    if (!video) return
-    if (!cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
-      toast.error('Camera chưa sẵn sàng, vui lòng thử lại.')
-      return
-    }
-    const canvas = document.createElement('canvas')
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
-    const context = canvas.getContext('2d')
-    if (!context) return
-    context.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise((resolve) => canvas.toBlob((value) => resolve(value), 'image/jpeg', 0.92))
-    if (!blob) return
-    const file = new File([blob], `maintenance-${Date.now()}.jpg`, { type: 'image/jpeg' })
-    try {
-      const compressedDataUrl = await compressImageFile(file)
-      if (!compressedDataUrl) {
-        toast.error('Không xử lý được ảnh.')
-        return
-      }
-      setImageUrl(compressedDataUrl)
-    } catch {
-      toast.error('Không thể nén ảnh để đính kèm.')
-    } finally {
-      stopCameraStream()
-      setShowCameraModal(false)
-      setCameraReady(false)
-    }
+  const handleOpenCamera = () => {
+    cameraInputRef.current?.click()
   }
 
   return (
@@ -396,33 +258,6 @@ function MaintenanceReport() {
               </button>
             </div>
           </form>
-        </div>
-      )}
-      {showCameraModal && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white p-3">
-            <video ref={cameraVideoRef} autoPlay playsInline className="h-64 w-full rounded-lg bg-black object-cover" />
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleCaptureFromCamera}
-                disabled={!cameraReady}
-                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-              >
-                Chụp và dùng ảnh
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  stopCameraStream()
-                  setShowCameraModal(false)
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
