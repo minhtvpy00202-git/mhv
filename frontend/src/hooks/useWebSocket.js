@@ -7,6 +7,10 @@ const WS_URL = (
   import.meta.env.VITE_WS_URL
   || (API_BASE_URL ? `${API_BASE_URL}/ws` : `${window.location.origin}/ws`)
 ).replace(/\/$/, '')
+const SOCKJS_URL = (
+  import.meta.env.VITE_SOCKJS_URL
+  || (API_BASE_URL ? `${API_BASE_URL}/ws-sockjs` : `${window.location.origin}/ws-sockjs`)
+).replace(/\/$/, '')
 const WS_BROKER_URL = WS_URL.replace(/^http/i, 'ws')
 const IS_NGROK_URL = /ngrok-free\.(app|dev)/i.test(WS_URL)
 
@@ -32,14 +36,14 @@ export default function useWebSocket(token) {
 
     setConnectionDebug({
       status: 'connecting',
-      message: `Đang kết nối websocket tới ${WS_URL}${IS_NGROK_URL ? ' (ngrok mode: native ws)' : ''}`,
-      wsUrl: WS_URL,
+      message: `Đang kết nối websocket tới ${IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL}${IS_NGROK_URL ? ' (ngrok mode: native ws)' : ''}`,
+      wsUrl: IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL,
     })
 
     const client = new Client({
       ...(IS_NGROK_URL
         ? { brokerURL: WS_BROKER_URL }
-        : { webSocketFactory: () => new SockJS(WS_URL) }),
+        : { webSocketFactory: () => new SockJS(SOCKJS_URL) }),
       connectHeaders: {
         Authorization: `Bearer ${token}`,
       },
@@ -52,7 +56,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'connected',
         message: 'Kết nối websocket thành công.',
-        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL,
       })
     }
 
@@ -63,7 +67,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'stomp-error',
         message: `${errorCode}${errorBody ? ` | ${errorBody}` : ''}`,
-        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL,
       })
     }
 
@@ -72,7 +76,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'ws-close',
         message: `WebSocket đóng kết nối (code=${event?.code ?? 'n/a'}, reason=${event?.reason || 'empty'})`,
-        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL,
       })
     }
 
@@ -81,7 +85,7 @@ export default function useWebSocket(token) {
       setConnectionDebug({
         status: 'ws-error',
         message: `WebSocket error: ${event?.message || event?.type || 'unknown error'}`,
-        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : WS_URL,
+        wsUrl: IS_NGROK_URL ? WS_BROKER_URL : SOCKJS_URL,
       })
     }
 
