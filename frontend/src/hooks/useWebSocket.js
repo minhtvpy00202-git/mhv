@@ -11,12 +11,28 @@ const WS_URL = (
 export default function useWebSocket(token) {
   const clientRef = useRef(null)
   const [connected, setConnected] = useState(false)
+  const [connectionDebug, setConnectionDebug] = useState({
+    status: 'idle',
+    message: '',
+    wsUrl: WS_URL,
+  })
 
   useEffect(() => {
     if (!token) {
       setConnected(false)
+      setConnectionDebug({
+        status: 'no-token',
+        message: 'Chưa có token đăng nhập cho websocket.',
+        wsUrl: WS_URL,
+      })
       return undefined
     }
+
+    setConnectionDebug({
+      status: 'connecting',
+      message: `Đang kết nối websocket tới ${WS_URL}`,
+      wsUrl: WS_URL,
+    })
 
     const client = new Client({
       webSocketFactory: () => new SockJS(WS_URL),
@@ -29,18 +45,40 @@ export default function useWebSocket(token) {
 
     client.onConnect = () => {
       setConnected(true)
+      setConnectionDebug({
+        status: 'connected',
+        message: 'Kết nối websocket thành công.',
+        wsUrl: WS_URL,
+      })
     }
 
-    client.onStompError = () => {
+    client.onStompError = (frame) => {
       setConnected(false)
+      const errorCode = frame?.headers?.message || frame?.headers?.['content-type'] || 'STOMP_ERROR'
+      const errorBody = frame?.body ? String(frame.body).slice(0, 300) : ''
+      setConnectionDebug({
+        status: 'stomp-error',
+        message: `${errorCode}${errorBody ? ` | ${errorBody}` : ''}`,
+        wsUrl: WS_URL,
+      })
     }
 
-    client.onWebSocketClose = () => {
+    client.onWebSocketClose = (event) => {
       setConnected(false)
+      setConnectionDebug({
+        status: 'ws-close',
+        message: `WebSocket đóng kết nối (code=${event?.code ?? 'n/a'}, reason=${event?.reason || 'empty'})`,
+        wsUrl: WS_URL,
+      })
     }
 
-    client.onWebSocketError = () => {
+    client.onWebSocketError = (event) => {
       setConnected(false)
+      setConnectionDebug({
+        status: 'ws-error',
+        message: `WebSocket error: ${event?.message || event?.type || 'unknown error'}`,
+        wsUrl: WS_URL,
+      })
     }
 
     client.activate()
@@ -81,5 +119,6 @@ export default function useWebSocket(token) {
     connected,
     subscribe,
     publish,
+    connectionDebug,
   }
 }
