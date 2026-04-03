@@ -220,8 +220,8 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       className={
         embedded
           ? 'flex h-[calc(100vh-190px)] min-h-[540px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
-          : `fixed bottom-4 right-4 z-40 w-[min(92vw,390px)] rounded-2xl border border-slate-200 bg-white shadow-2xl ${
-              minimized ? 'h-auto' : 'h-[min(80vh,620px)]'
+          : `fixed bottom-4 right-4 z-40 flex w-[min(92vw,390px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${
+              minimized ? 'h-auto' : 'h-[min(74vh,620px)] max-h-[calc(100vh-2rem)]'
             }`
       }
     >
@@ -253,7 +253,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
 
       {(embedded || !minimized) && (
         <>
-      <div className={`overflow-y-auto bg-slate-50 px-3 py-3 ${embedded ? 'flex-1 min-h-0' : 'h-[calc(100%-170px)] min-h-[240px]'}`}>
+      <div className={`overflow-y-auto bg-slate-50 px-3 py-3 ${embedded ? 'flex-1 min-h-0' : 'flex-1 min-h-0'}`}>
         {loading && <p className="text-center text-sm text-slate-500">Đang tải tin nhắn...</p>}
         {!loading && normalizedMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500">Chưa có tin nhắn nào. Hãy bắt đầu cuộc trao đổi.</p>
