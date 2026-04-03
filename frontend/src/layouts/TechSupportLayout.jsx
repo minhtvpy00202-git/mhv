@@ -13,6 +13,12 @@ function isDeviceFailureNotification(notification) {
   return notification?.eventType === 'TICKET_CREATED'
 }
 
+function extractTicketIdFromLink(linkPath) {
+  if (!linkPath) return null
+  const match = String(linkPath).match(/\/tickets\/(\d+)/)
+  return match?.[1] ? Number(match[1]) : null
+}
+
 function TechSupportLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -25,10 +31,16 @@ function TechSupportLayout() {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
 
   useEffect(() => {
+    const allowedTicketIds = new Set((contactTickets || []).map((item) => Number(item.id)))
     const loadFeed = async () => {
       try {
         const response = await axiosClient.get('/api/notifications')
-        const filteredItems = (response.data?.items || []).filter(isDeviceFailureNotification)
+        const filteredItems = (response.data?.items || [])
+          .filter(isDeviceFailureNotification)
+          .filter((item) => {
+            const ticketId = extractTicketIdFromLink(item.linkPath)
+            return ticketId != null && allowedTicketIds.has(ticketId)
+          })
         setNotifications(filteredItems)
         setUnreadCount(filteredItems.filter((item) => !item.isRead).length)
       } catch (error) {
@@ -39,7 +51,7 @@ function TechSupportLayout() {
     loadFeed()
     const timer = setInterval(loadFeed, 20000)
     return () => clearInterval(timer)
-  }, [])
+  }, [contactTickets])
 
   useEffect(() => {
     const loadContactTickets = async () => {
@@ -107,8 +119,9 @@ function TechSupportLayout() {
   }
 
   const handleMarkAllRead = async () => {
+    const unreadNotificationIds = notifications.filter((item) => !item.isRead).map((item) => item.id)
     try {
-      await axiosClient.post('/api/notifications/read-all')
+      await Promise.all(unreadNotificationIds.map((id) => axiosClient.post(`/api/notifications/${id}/read`)))
     } catch {}
     setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
     setUnreadCount(0)

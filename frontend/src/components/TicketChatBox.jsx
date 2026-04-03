@@ -230,7 +230,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
         <h3 className="text-sm font-semibold text-slate-800 md:text-base">Trao đổi xử lý sự cố</h3>
         <p className="mt-1 text-xs text-slate-500">Ticket #{ticketId}</p>
         <p className={`mt-1 text-xs ${connected ? 'text-emerald-600' : 'text-amber-600'}`}>
-          {connected ? 'Realtime: đã kết nối' : 'Realtime: đang kết nối...'}
+          {connected ? 'Realtime: đã kết nối' : 'Realtime: chế độ dự phòng (đồng bộ tự động)'}
         </p>
         </div>
         {!embedded && <div className="flex items-center gap-1">
