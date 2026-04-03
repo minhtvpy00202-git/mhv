@@ -6,6 +6,79 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 
 const scannerElementId = 'maintenance-scanner'
+const TARGET_IMAGE_BYTES = 700 * 1024
+const MAX_IMAGE_DIMENSION = 1600
+
+function canvasToBlob(canvas, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality)
+  })
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('read-failed'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function compressImageFile(file) {
+  const rawDataUrl = await blobToDataUrl(file)
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('image-load-failed'))
+    img.src = rawDataUrl
+  })
+
+  let width = image.width
+  let height = image.height
+  const maxDimension = Math.max(width, height)
+  if (maxDimension > MAX_IMAGE_DIMENSION) {
+    const scale = MAX_IMAGE_DIMENSION / maxDimension
+    width = Math.round(width * scale)
+    height = Math.round(height * scale)
+  }
+
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return rawDataUrl
+  }
+
+  let bestBlob = null
+  let workingWidth = width
+  let workingHeight = height
+
+  for (let cycle = 0; cycle < 6; cycle += 1) {
+    canvas.width = workingWidth
+    canvas.height = workingHeight
+    context.clearRect(0, 0, workingWidth, workingHeight)
+    context.drawImage(image, 0, 0, workingWidth, workingHeight)
+
+    for (let quality = 0.88; quality >= 0.38; quality -= 0.1) {
+      const blob = await canvasToBlob(canvas, quality)
+      if (!blob) continue
+      bestBlob = blob
+      if (blob.size <= TARGET_IMAGE_BYTES) {
+        return blobToDataUrl(blob)
+      }
+    }
+
+    if (workingWidth < 500 || workingHeight < 500) {
+      break
+    }
+    workingWidth = Math.round(workingWidth * 0.82)
+    workingHeight = Math.round(workingHeight * 0.82)
+  }
+
+  if (!bestBlob) {
+    return rawDataUrl
+  }
+  return blobToDataUrl(bestBlob)
+}
 
 function MaintenanceReport() {
   const navigate = useNavigate()
@@ -107,21 +180,20 @@ function MaintenanceReport() {
     startScanner()
   }
 
-  const handleSelectImage = (event) => {
+  const handleSelectImage = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Ảnh vượt quá 2MB.')
-      return
+    try {
+      const compressedDataUrl = await compressImageFile(file)
+      if (!compressedDataUrl) {
+        toast.error('Không xử lý được ảnh.')
+        return
+      }
+      setImageUrl(compressedDataUrl)
+    } catch {
+      toast.error('Không thể nén ảnh để đính kèm.')
     }
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = String(reader.result || '')
-      if (!dataUrl) return
-      setImageUrl(dataUrl)
-    }
-    reader.readAsDataURL(file)
   }
 
   const handleSubmit = async (event) => {
