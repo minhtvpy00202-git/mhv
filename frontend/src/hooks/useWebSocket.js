@@ -5,7 +5,7 @@ import SockJS from 'sockjs-client/dist/sockjs'
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 const WS_URL = (
   import.meta.env.VITE_WS_URL
-  || (API_BASE_URL ? `${API_BASE_URL}/ws` : 'http://localhost:8080/ws')
+  || (API_BASE_URL ? `${API_BASE_URL}/ws` : `${window.location.origin}/ws`)
 ).replace(/\/$/, '')
 
 export default function useWebSocket(token) {

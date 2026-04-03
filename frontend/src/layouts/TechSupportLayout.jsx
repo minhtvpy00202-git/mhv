@@ -31,6 +31,7 @@ function TechSupportLayout() {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
 
   useEffect(() => {
+    if (!contactTickets.length) return
     const allowedTicketIds = new Set((contactTickets || []).map((item) => Number(item.id)))
     const loadFeed = async () => {
       try {
