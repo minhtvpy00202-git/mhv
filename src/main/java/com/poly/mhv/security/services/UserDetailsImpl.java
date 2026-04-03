@@ -15,6 +15,7 @@ public class UserDetailsImpl implements UserDetails {
 
     private Integer id;
     private String username;
+    private String fullName;
     private String password;
     private String role;
     private String status;
@@ -29,6 +30,7 @@ public class UserDetailsImpl implements UserDetails {
         return new UserDetailsImpl(
                 appUser.getId(),
                 appUser.getUsername(),
+                appUser.getFullName(),
                 appUser.getPassword(),
                 appUser.getRole(),
                 appUser.getStatus(),

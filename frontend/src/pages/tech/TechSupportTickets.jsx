@@ -147,17 +147,18 @@ function TechSupportTickets() {
           </button>
         </div>
 
-        <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-[1100px] text-sm">
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="min-w-[1250px] text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left">Ticket</th>
-                <th className="px-3 py-2 text-left">Thiết bị</th>
+                <th className="px-3 py-2 text-left">Mã thiết bị</th>
+                <th className="px-3 py-2 text-left">Tên TB</th>
                 <th className="px-3 py-2 text-left">Mô tả</th>
                 <th className="px-3 py-2 text-left">Ưu tiên</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
                 <th className="px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="px-3 py-2 text-left">Hạn xử lý theo SLA</th>
+                <th className="px-3 py-2 text-left">Hạn xử lý</th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
@@ -168,6 +169,7 @@ function TechSupportTickets() {
                   <tr key={ticket.id} className="border-t border-slate-100 align-top">
                     <td className="px-3 py-2">#{ticket.id}</td>
                     <td className="px-3 py-2">{ticket.assetQaCode}</td>
+                    <td className="px-3 py-2">{ticket.assetName || '-'}</td>
                     <td className="px-3 py-2">{ticket.description}</td>
                     <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
                     <td className="px-3 py-2">
@@ -247,7 +249,7 @@ function TechSupportTickets() {
               })}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={9} className="px-3 py-3 text-center text-slate-500">
                     Không có ticket cần xử lý.
                   </td>
                 </tr>

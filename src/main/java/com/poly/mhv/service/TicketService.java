@@ -225,6 +225,8 @@ public class TicketService {
             tickets = ticketRepository.findByAssetQaCodeOrderByCreatedAtDesc(normalizedAssetQaCode);
         } else if (normalizedStatus != null && assigneeId != null) {
             tickets = ticketRepository.findByStatusAndAssigneeId(normalizedStatus, assigneeId);
+        } else if (reporterId != null && normalizedStatus == null && assigneeId == null) {
+            tickets = ticketRepository.findByReporterIdOrderByCreatedAtDesc(reporterId);
         } else if (normalizedStatus != null) {
             tickets = ticketRepository.findByStatus(normalizedStatus);
         } else if (assigneeId != null) {

@@ -3,13 +3,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SockJS from 'sockjs-client/dist/sockjs'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const isLocalFrontendHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+const DEFAULT_LOCAL_BACKEND = 'http://localhost:8080'
+const WS_BASE_URL = API_BASE_URL || (isLocalFrontendHost ? DEFAULT_LOCAL_BACKEND : window.location.origin)
 const WS_URL = (
   import.meta.env.VITE_WS_URL
-  || (API_BASE_URL ? `${API_BASE_URL}/ws` : `${window.location.origin}/ws`)
+  || `${WS_BASE_URL}/ws`
 ).replace(/\/$/, '')
 const SOCKJS_URL = (
   import.meta.env.VITE_SOCKJS_URL
-  || (API_BASE_URL ? `${API_BASE_URL}/ws-sockjs` : `${window.location.origin}/ws-sockjs`)
+  || `${WS_BASE_URL}/ws-sockjs`
 ).replace(/\/$/, '')
 const WS_BROKER_URL = WS_URL.replace(/^http/i, 'ws')
 const IS_NGROK_URL = /ngrok-free\.(app|dev)/i.test(WS_URL)

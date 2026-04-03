@@ -86,7 +86,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
 
   useEffect(() => {
     if (!connected || !ticketId) return undefined
-    const unsubscribe = subscribe(`/topic/tickets/${ticketId}`, (incoming) => {
+    const unsubscribe = subscribe(`/topic/users/${user?.userId}/tickets/${ticketId}`, (incoming) => {
       setMessages((prev) => {
         if (!incoming?.id) return prev
         if (prev.some((item) => item.id === incoming.id)) return prev
@@ -94,7 +94,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       })
     })
     return () => unsubscribe()
-  }, [connected, subscribe, ticketId])
+  }, [connected, subscribe, ticketId, user?.userId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })

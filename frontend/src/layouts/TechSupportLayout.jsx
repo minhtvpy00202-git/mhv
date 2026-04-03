@@ -57,10 +57,10 @@ function TechSupportLayout() {
   useEffect(() => {
     const loadContactTickets = async () => {
       try {
-        const response = await axiosClient.get('/api/tickets')
-        const items = (response.data || []).filter(
-          (item) => Number(item.assigneeId) === Number(user?.userId) || item.status === 'PENDING',
-        )
+        const response = await axiosClient.get('/api/tickets', {
+          params: { assignee_id: user?.userId },
+        })
+        const items = response.data || []
         setContactTickets(items)
       } catch {}
     }
@@ -195,7 +195,7 @@ function TechSupportLayout() {
         <header className="flex items-center justify-between bg-white px-4 py-3 shadow-sm md:px-6">
           <div>
             <p className="text-sm text-slate-500">Kỹ thuật viên hỗ trợ</p>
-            <p className="font-semibold text-slate-800">{user?.username || 'TechSupport'}</p>
+            <p className="font-semibold text-slate-800">{user?.fullName || user?.username || 'TechSupport'}</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">

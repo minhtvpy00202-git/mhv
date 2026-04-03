@@ -5,9 +5,7 @@ import com.poly.mhv.dto.chat.ChatMessageResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Ticket;
 import com.poly.mhv.exception.CustomException;
-import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.TicketRepository;
-import java.util.HashSet;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -18,24 +16,29 @@ import org.springframework.stereotype.Service;
 public class ChatRealtimeService {
 
     private final TicketRepository ticketRepository;
-    private final AppUserRepository appUserRepository;
     private final SimpMessagingTemplate simpMessagingTemplate;
 
     public void broadcastTicketMessage(Integer ticketId, ChatMessageResponse savedMessage, String senderUsername) {
-        simpMessagingTemplate.convertAndSend("/topic/tickets/" + ticketId, savedMessage);
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket để phát tin nhắn chat."));
+        if (ticket.getReporter() != null) {
+            simpMessagingTemplate.convertAndSend("/topic/users/" + ticket.getReporter().getId() + "/tickets/" + ticketId, savedMessage);
+        }
+        if (ticket.getAssignee() != null) {
+            simpMessagingTemplate.convertAndSend("/topic/users/" + ticket.getAssignee().getId() + "/tickets/" + ticketId, savedMessage);
+        }
         pushIncomingChatNotification(savedMessage, senderUsername);
     }
 
     private void pushIncomingChatNotification(ChatMessageResponse savedMessage, String senderUsername) {
         Ticket ticket = ticketRepository.findById(savedMessage.getTicketId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket để gửi thông báo chat."));
-        Set<Integer> receivers = new HashSet<>();
-        receivers.add(ticket.getReporter().getId());
+        Set<Integer> receivers = new java.util.HashSet<>();
+        if (ticket.getReporter() != null) {
+            receivers.add(ticket.getReporter().getId());
+        }
         if (ticket.getAssignee() != null) {
             receivers.add(ticket.getAssignee().getId());
-        }
-        for (AppUser techSupport : appUserRepository.findByRole("TechSupport")) {
-            receivers.add(techSupport.getId());
         }
         receivers.remove(savedMessage.getSenderId());
 

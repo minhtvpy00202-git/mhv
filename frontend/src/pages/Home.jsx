@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 
@@ -37,11 +36,9 @@ function Pagination({ page, totalPages, onFirst, onPrev, onNext, onLast }) {
 }
 
 function Home() {
-  const navigate = useNavigate()
   const [usageHistory, setUsageHistory] = useState([])
   const [maintenanceHistory, setMaintenanceHistory] = useState([])
   const [auditHistory, setAuditHistory] = useState([])
-  const [ticketId, setTicketId] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [usagePage, setUsagePage] = useState(1)
   const [maintenancePage, setMaintenancePage] = useState(1)
@@ -93,27 +90,6 @@ function Home() {
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Xin chào nhân viên</h2>
         <p className="mt-1 text-sm text-slate-600">Dưới đây là lịch sử thao tác của tài khoản đang đăng nhập.</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
-            value={ticketId}
-            onChange={(event) => setTicketId(event.target.value.replace(/\D/g, ''))}
-            placeholder="Nhập mã ticket để mở chat"
-            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fptOrange"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!ticketId) {
-                toast.error('Vui lòng nhập mã ticket.')
-                return
-              }
-              navigate(`/mobile/tickets/${ticketId}`)
-            }}
-            className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-          >
-            Mở chat ticket
-          </button>
-        </div>
       </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm">

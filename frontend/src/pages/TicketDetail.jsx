@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import TicketChatBox from '../components/TicketChatBox'
+import { useAuth } from '../context/AuthContext'
 
 function formatDateTime(value) {
   if (!value) return '-'
@@ -26,6 +27,8 @@ function toVietnameseRole(role) {
 function TicketDetail() {
   const { ticketId } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showChat, setShowChat] = useState(true)
@@ -70,6 +73,8 @@ function TicketDetail() {
       ? '/tech/tickets'
       : '/mobile/home'
   const isMobileRoute = location.pathname.startsWith('/mobile/')
+  const isTechRoute = location.pathname.startsWith('/tech/')
+  const canOpenChat = !isTechRoute || Number(ticket?.assigneeId) === Number(user?.userId)
 
   return (
     <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
@@ -123,7 +128,13 @@ function TicketDetail() {
         </section>
       )}
 
-      {isMobileRoute ? (
+      {!canOpenChat && isTechRoute && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Bạn chỉ có thể mở chat sau khi bấm “Nhận xử lý” ticket này.
+        </section>
+      )}
+
+      {canOpenChat && (isMobileRoute ? (
         <TicketChatBox ticketId={Number(ticketId)} embedded />
       ) : (
         <>
@@ -138,7 +149,7 @@ function TicketDetail() {
             </button>
           )}
         </>
-      )}
+      ))}
     </div>
   )
 }

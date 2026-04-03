@@ -12,7 +12,7 @@ const navItems = [
 ]
 
 function MobileLayout() {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
@@ -82,7 +82,10 @@ function MobileLayout() {
   return (
     <div className="mx-auto min-h-screen w-full max-w-md bg-slate-50">
       <header className="sticky top-0 z-10 flex items-center justify-between bg-fptOrange px-4 py-3 text-white shadow">
-        <h1 className="text-lg font-semibold">FPT Infrastructure</h1>
+        <div>
+          <h1 className="text-sm font-medium text-white/90">Nhân viên</h1>
+          <p className="text-base font-semibold">{user?.fullName || user?.username || 'FPT Infrastructure'}</p>
+        </div>
         <div className="flex items-center gap-2">
           <div className="relative">
             <button

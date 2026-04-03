@@ -85,8 +85,8 @@ function AdminLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between bg-white px-4 py-3 shadow-sm md:px-6">
           <div>
-            <p className="text-sm text-slate-500">Trang quản trị</p>
-            <p className="font-semibold text-slate-800">{user?.username || 'Admin'}</p>
+            <p className="text-sm text-slate-500">Quản trị viên</p>
+            <p className="font-semibold text-slate-800">{user?.fullName || user?.username || 'Admin'}</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">

@@ -24,6 +24,7 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final TicketRepository ticketRepository;
     private final AppUserRepository appUserRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     @Transactional
     public ChatMessageResponse saveTicketMessage(Integer ticketId, String content, String senderUsername) {
@@ -40,6 +41,7 @@ public class ChatService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
         AppUser sender = appUserRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
+        ensureCanAccessTicketChat(ticket, sender);
         ChatMessage chatMessage = ChatMessage.builder()
                 .ticket(ticket)
                 .sender(sender)
@@ -55,9 +57,10 @@ public class ChatService {
         if (ticketId == null) {
             throw new CustomException("ticketId là bắt buộc.");
         }
-        if (!ticketRepository.existsById(ticketId)) {
-            throw new CustomException("Không tìm thấy ticket.");
-        }
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        AppUser actor = currentUserProvider.getCurrentUser();
+        ensureCanAccessTicketChat(ticket, actor);
         int safeLimit = limit == null ? 0 : limit;
         if (safeLimit > 0) {
             int bounded = Math.min(safeLimit, 200);
@@ -79,5 +82,16 @@ public class ChatService {
                 .content(chatMessage.getContent())
                 .createdAt(chatMessage.getCreatedAt())
                 .build();
+    }
+
+    private void ensureCanAccessTicketChat(Ticket ticket, AppUser actor) {
+        if (ticket == null || actor == null) {
+            throw new CustomException("Không xác định được quyền truy cập chat.");
+        }
+        boolean isReporter = ticket.getReporter() != null && actor.getId().equals(ticket.getReporter().getId());
+        boolean isAssignee = ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
+        if (!isReporter && !isAssignee) {
+            throw new CustomException("Bạn không có quyền truy cập chat của ticket này.");
+        }
     }
 }

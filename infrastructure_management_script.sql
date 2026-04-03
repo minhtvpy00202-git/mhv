@@ -205,6 +205,11 @@ CREATE UNIQUE INDEX UX_usage_histories_asset_open ON usage_histories(asset_qa_co
 CREATE INDEX IX_notifications_occurred_at ON notifications(occurred_at DESC);
 CREATE INDEX IX_notifications_is_read ON notifications(is_read);
 
+CREATE INDEX IX_tickets_assignee_status_created_at ON tickets(assignee_id, status, created_at DESC);
+CREATE INDEX IX_tickets_reporter_created_at ON tickets(reporter_id, created_at DESC);
+CREATE INDEX IX_tickets_asset_created_at ON tickets(asset_qa_code, created_at DESC);
+CREATE INDEX IX_chat_messages_ticket_created_at ON chat_messages(ticket_id, created_at DESC);
+
 CREATE INDEX IX_inventory_audits_location_status ON inventory_audits(location_id, status);
 CREATE INDEX IX_inventory_audit_missing_audit ON inventory_audit_missing(audit_id);
 GO

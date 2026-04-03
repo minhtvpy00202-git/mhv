@@ -26,6 +26,7 @@ function Login() {
         id: data.id,
         role: data.role,
         username: data.username,
+        fullName: data.fullName,
         techTypeId: data.techTypeId,
       })
       toast.success('Đăng nhập thành công.')
