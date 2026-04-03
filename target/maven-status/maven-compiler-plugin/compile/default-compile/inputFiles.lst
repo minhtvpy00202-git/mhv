@@ -1,5 +1,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/MhvApplication.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/config/ChatMediaMigrationRunner.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/config/DatabaseSeeder.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/config/StaticResourceConfig.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/config/WebSocketConfig.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/controller/AdminAlertController.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/controller/AssetController.java
@@ -90,6 +92,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/AdminAlertSseService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/AssetService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/CategoryService.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/ChatMediaStorageService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/ChatRealtimeService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/ChatService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/CurrentUserProvider.java

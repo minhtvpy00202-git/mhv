@@ -119,7 +119,9 @@ CREATE TABLE chat_messages (
     id INT IDENTITY(1,1) PRIMARY KEY,
     ticket_id INT NOT NULL,
     sender_id INT NOT NULL,
-    content NVARCHAR(MAX) NOT NULL,
+    content NVARCHAR(MAX) NULL,
+    media_url NVARCHAR(1000) NULL,
+    media_type VARCHAR(20) NULL,
     created_at DATETIME2 NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT SYSDATETIME(),
     CONSTRAINT FK_chat_messages_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id),
     CONSTRAINT FK_chat_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id)

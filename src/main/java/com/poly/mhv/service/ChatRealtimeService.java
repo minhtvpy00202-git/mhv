@@ -43,6 +43,15 @@ public class ChatRealtimeService {
         receivers.remove(savedMessage.getSenderId());
 
         String messagePreview = savedMessage.getContent();
+        if (!org.springframework.util.StringUtils.hasText(messagePreview)) {
+            if ("image".equalsIgnoreCase(savedMessage.getMediaType())) {
+                messagePreview = "[Ảnh]";
+            } else if ("audio".equalsIgnoreCase(savedMessage.getMediaType())) {
+                messagePreview = "[Ghi âm]";
+            } else {
+                messagePreview = "Bạn có tin nhắn mới.";
+            }
+        }
         if (messagePreview.length() > 120) {
             messagePreview = messagePreview.substring(0, 120) + "...";
         }

@@ -38,8 +38,14 @@ public class ChatMessage {
     @JsonIgnoreProperties({"usageHistories", "password"})
     private AppUser sender;
 
-    @Column(nullable = false, columnDefinition = "NVARCHAR(MAX)")
+    @Column(columnDefinition = "NVARCHAR(MAX)")
     private String content;
+
+    @Column(name = "media_url", length = 1000)
+    private String mediaUrl;
+
+    @Column(name = "media_type", length = 20)
+    private String mediaType;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

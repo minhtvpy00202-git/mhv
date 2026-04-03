@@ -25,14 +25,12 @@ public class ChatService {
     private final TicketRepository ticketRepository;
     private final AppUserRepository appUserRepository;
     private final CurrentUserProvider currentUserProvider;
+    private final ChatMediaStorageService chatMediaStorageService;
 
     @Transactional
     public ChatMessageResponse saveTicketMessage(Integer ticketId, String content, String senderUsername) {
         if (ticketId == null) {
             throw new CustomException("ticketId là bắt buộc.");
-        }
-        if (!StringUtils.hasText(content)) {
-            throw new CustomException("content là bắt buộc.");
         }
         if (!StringUtils.hasText(senderUsername)) {
             throw new CustomException("Không xác định được người gửi.");
@@ -42,10 +40,13 @@ public class ChatService {
         AppUser sender = appUserRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
         ensureCanAccessTicketChat(ticket, sender);
+        ChatMediaStorageService.ProcessedChatPayload payload = chatMediaStorageService.processIncomingContent(content);
         ChatMessage chatMessage = ChatMessage.builder()
                 .ticket(ticket)
                 .sender(sender)
-                .content(content.trim())
+                .content(payload.content())
+                .mediaUrl(payload.mediaUrl())
+                .mediaType(payload.mediaType())
                 .createdAt(LocalDateTime.now())
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
@@ -80,6 +81,8 @@ public class ChatService {
                 .ticketId(chatMessage.getTicket().getId())
                 .senderId(chatMessage.getSender().getId())
                 .content(chatMessage.getContent())
+                .mediaUrl(chatMessage.getMediaUrl())
+                .mediaType(chatMessage.getMediaType())
                 .createdAt(chatMessage.getCreatedAt())
                 .build();
     }

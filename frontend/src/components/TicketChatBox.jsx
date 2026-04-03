@@ -18,14 +18,30 @@ function formatMessageTime(value) {
 
 const IMG_PREFIX = '[[IMG]]'
 const AUDIO_PREFIX = '[[AUDIO]]'
+const INITIAL_CHAT_LIMIT = Number(import.meta.env.VITE_CHAT_INITIAL_LIMIT) || 40
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
-function parseMessage(content) {
-  if (!content) return { type: 'text', value: '' }
+function resolveMediaUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url
+  }
+  if (url.startsWith('/')) {
+    return `${API_BASE_URL}${url}`
+  }
+  return `${API_BASE_URL}/${url}`
+}
+
+function parseMessage(message) {
+  if (message?.mediaType && message?.mediaUrl) {
+    return { type: message.mediaType, value: resolveMediaUrl(message.mediaUrl) }
+  }
+  const content = message?.content || ''
   if (content.startsWith(IMG_PREFIX)) {
-    return { type: 'image', value: content.slice(IMG_PREFIX.length) }
+    return { type: 'image', value: resolveMediaUrl(content.slice(IMG_PREFIX.length)) }
   }
   if (content.startsWith(AUDIO_PREFIX)) {
-    return { type: 'audio', value: content.slice(AUDIO_PREFIX.length) }
+    return { type: 'audio', value: resolveMediaUrl(content.slice(AUDIO_PREFIX.length)) }
   }
   return { type: 'text', value: content }
 }
@@ -64,7 +80,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       setLoading(true)
       try {
         const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`, {
-          params: { limit: 120 },
+          params: { limit: INITIAL_CHAT_LIMIT },
         })
         if (mounted) {
           setMessages(response.data || [])
@@ -106,7 +122,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
         ...message,
         isMine: Number(message.senderId) === Number(user?.userId),
         timeText: formatMessageTime(message.createdAt),
-        parsed: parseMessage(message.content),
+        parsed: parseMessage(message),
       })),
     [messages, user?.userId],
   )

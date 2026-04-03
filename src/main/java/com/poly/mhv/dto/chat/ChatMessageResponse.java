@@ -15,5 +15,7 @@ public class ChatMessageResponse {
     private Integer ticketId;
     private Integer senderId;
     private String content;
+    private String mediaUrl;
+    private String mediaType;
     private LocalDateTime createdAt;
 }
