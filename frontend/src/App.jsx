@@ -8,6 +8,7 @@ import Home from './pages/Home'
 import InventoryAuditScanner from './pages/InventoryAuditScanner'
 import Login from './pages/Login'
 import MaintenanceReport from './pages/MaintenanceReport'
+import MobileChats from './pages/MobileChats'
 import QRScanner from './pages/QRScanner'
 import Register from './pages/Register'
 import TicketDetail from './pages/TicketDetail'
@@ -74,6 +75,7 @@ function App() {
         >
           <Route path="/mobile/home" element={<Home />} />
           <Route path="/mobile/scan" element={<QRScanner />} />
+          <Route path="/mobile/chats" element={<MobileChats />} />
           <Route path="/mobile/maintenance" element={<MaintenanceReport />} />
           <Route path="/mobile/inventory-audit" element={<InventoryAuditScanner />} />
           <Route path="/mobile/tickets/:ticketId" element={<TicketDetail />} />
