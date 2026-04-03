@@ -12,6 +12,7 @@ function MaintenanceReport() {
   const navigate = useNavigate()
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
+  const keepScannerAliveRef = useRef(true)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
   const [assetQaCode, setAssetQaCode] = useState('')
@@ -27,15 +28,36 @@ function MaintenanceReport() {
   const processingFallbackTimerRef = useRef(null)
 
   useEffect(() => {
-    startScanner()
+    if (!showModal && keepScannerAliveRef.current) {
+      void startScanner()
+    } else {
+      void stopScanner()
+    }
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        void stopScanner()
+        return
+      }
+      if (!showModal && keepScannerAliveRef.current) {
+        void startScanner()
+      }
+    }
+    const handlePageHide = () => {
+      void stopScanner()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', handlePageHide)
     return () => {
+      keepScannerAliveRef.current = false
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
         processingFallbackTimerRef.current = null
       }
-      stopScanner()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', handlePageHide)
+      void stopScanner()
     }
-  }, [])
+  }, [showModal])
 
   const extractQaCode = (decodedText) => {
     try {
@@ -157,6 +179,8 @@ function MaintenanceReport() {
       })
       const ticketId = response.data?.id
       toast.success(`Đã tạo ticket báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
+      keepScannerAliveRef.current = false
+      await stopScanner()
       setShowModal(false)
       setAssetQaCode('')
       setAssetName('')
@@ -173,7 +197,6 @@ function MaintenanceReport() {
       toast.error(message)
     } finally {
       setLoading(false)
-      startScanner()
     }
   }
 

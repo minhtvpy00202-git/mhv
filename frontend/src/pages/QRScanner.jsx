@@ -9,6 +9,7 @@ const scannerElementId = 'qa-scanner'
 function QRScanner() {
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
+  const keepScannerAliveRef = useRef(true)
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
   const [scannedLocationId, setScannedLocationId] = useState(null)
@@ -31,12 +32,33 @@ function QRScanner() {
   }, [locationQuery, locations])
 
   useEffect(() => {
-    startScanner()
-    fetchLocations()
-    return () => {
-      stopScanner()
+    if (!showActionModal && keepScannerAliveRef.current) {
+      void startScanner()
+    } else {
+      void stopScanner()
     }
-  }, [])
+    fetchLocations()
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        void stopScanner()
+        return
+      }
+      if (!showActionModal && keepScannerAliveRef.current) {
+        void startScanner()
+      }
+    }
+    const handlePageHide = () => {
+      void stopScanner()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', handlePageHide)
+    return () => {
+      keepScannerAliveRef.current = false
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', handlePageHide)
+      void stopScanner()
+    }
+  }, [showActionModal])
 
   const fetchLocations = async () => {
     try {
