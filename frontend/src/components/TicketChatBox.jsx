@@ -183,18 +183,24 @@ function TicketChatBox({ ticketId, onClose }) {
   const publishMessage = useCallback(async (messageContent) => {
     if (!messageContent || !ticketId) return
     try {
-      await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
+      const response = await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
         ticketId: Number(ticketId),
         content: messageContent,
       })
-      setTimeout(() => {
-        loadMessages()
-      }, 400)
+      const saved = response.data
+      if (saved?.id) {
+        setMessages((prev) => {
+          if (prev.some((item) => item.id === saved.id)) {
+            return prev
+          }
+          return [...prev, saved]
+        })
+      }
     } catch (error) {
       const message = error?.response?.data?.message || 'Gửi tin nhắn thất bại.'
       toast.error(message)
     }
-  }, [loadMessages, ticketId])
+  }, [ticketId])
 
   const handleSendMessage = (event) => {
     event.preventDefault()
