@@ -97,6 +97,7 @@ function MaintenanceReport() {
   const [imageUrl, setImageUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [showCameraModal, setShowCameraModal] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -243,6 +244,11 @@ function MaintenanceReport() {
   }
 
   const handleOpenCamera = async () => {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+    if (isMobile) {
+      cameraInputRef.current?.click()
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       cameraInputRef.current?.click()
       return
@@ -250,10 +256,12 @@ function MaintenanceReport() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       cameraStreamRef.current = stream
+      setCameraReady(false)
       setShowCameraModal(true)
       setTimeout(() => {
         if (cameraVideoRef.current) {
           cameraVideoRef.current.srcObject = stream
+          cameraVideoRef.current.onloadedmetadata = () => setCameraReady(true)
           void cameraVideoRef.current.play()
         }
       }, 0)
@@ -265,6 +273,10 @@ function MaintenanceReport() {
   const handleCaptureFromCamera = async () => {
     const video = cameraVideoRef.current
     if (!video) return
+    if (!cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      toast.error('Camera chưa sẵn sàng, vui lòng thử lại.')
+      return
+    }
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth || 1280
     canvas.height = video.videoHeight || 720
@@ -286,6 +298,7 @@ function MaintenanceReport() {
     } finally {
       stopCameraStream()
       setShowCameraModal(false)
+      setCameraReady(false)
     }
   }
 
@@ -393,6 +406,7 @@ function MaintenanceReport() {
               <button
                 type="button"
                 onClick={handleCaptureFromCamera}
+                disabled={!cameraReady}
                 className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
               >
                 Chụp và dùng ảnh

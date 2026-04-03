@@ -18,11 +18,8 @@ export default function useWebSocket(token) {
       return undefined
     }
 
-    const isLocalHostWs = WS_URL.includes('localhost') || WS_URL.includes('127.0.0.1')
     const client = new Client({
-      ...(isLocalHostWs
-        ? { webSocketFactory: () => new SockJS(WS_URL) }
-        : { brokerURL: WS_URL.replace(/^http/i, 'ws') }),
+      webSocketFactory: () => new SockJS(WS_URL),
       connectHeaders: {
         Authorization: `Bearer ${token}`,
       },

@@ -111,6 +111,7 @@ function TicketChatBox({ ticketId, onClose }) {
   const [recording, setRecording] = useState(false)
   const [minimized, setMinimized] = useState(false)
   const [showCameraModal, setShowCameraModal] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -239,6 +240,11 @@ function TicketChatBox({ ticketId, onClose }) {
   }
 
   const handleOpenCamera = async () => {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
+    if (isMobile) {
+      cameraInputRef.current?.click()
+      return
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       cameraInputRef.current?.click()
       return
@@ -246,10 +252,12 @@ function TicketChatBox({ ticketId, onClose }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       cameraStreamRef.current = stream
+      setCameraReady(false)
       setShowCameraModal(true)
       setTimeout(() => {
         if (cameraVideoRef.current) {
           cameraVideoRef.current.srcObject = stream
+          cameraVideoRef.current.onloadedmetadata = () => setCameraReady(true)
           void cameraVideoRef.current.play()
         }
       }, 0)
@@ -261,6 +269,10 @@ function TicketChatBox({ ticketId, onClose }) {
   const handleCaptureFromCamera = async () => {
     const video = cameraVideoRef.current
     if (!video) return
+    if (!cameraReady || video.videoWidth === 0 || video.videoHeight === 0) {
+      toast.error('Camera chưa sẵn sàng, vui lòng thử lại.')
+      return
+    }
     const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth || 1280
     canvas.height = video.videoHeight || 720
@@ -280,6 +292,7 @@ function TicketChatBox({ ticketId, onClose }) {
     } finally {
       stopCameraStream()
       setShowCameraModal(false)
+      setCameraReady(false)
     }
   }
 
@@ -449,7 +462,7 @@ function TicketChatBox({ ticketId, onClose }) {
           />
           <button
             type="submit"
-            disabled={!content.trim() || !connected}
+            disabled={!content.trim()}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-fptOrange text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Send size={18} />
@@ -466,6 +479,7 @@ function TicketChatBox({ ticketId, onClose }) {
               <button
                 type="button"
                 onClick={handleCaptureFromCamera}
+                disabled={!cameraReady}
                 className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
               >
                 Chụp và gửi
