@@ -30,6 +30,7 @@ public class TicketService {
     private final AsyncRealtimePushService asyncRealtimePushService;
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
+    private final TicketEventService ticketEventService;
 
     @Transactional
     public TicketResponse createTicket(TicketCreateRequest request) {
@@ -97,6 +98,17 @@ public class TicketService {
                 saved,
                 eligibleTechSupports
         );
+        ticketEventService.recordEvent(
+                saved,
+                "TICKET_CREATED",
+                reporter,
+                "Tạo ticket mới",
+                Map.of(
+                        "Trạng thái", saved.getStatus(),
+                        "Mức ưu tiên", saved.getPriority(),
+                        "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName()
+                )
+        );
         return mapToResponse(saved);
     }
 
@@ -159,6 +171,26 @@ public class TicketService {
                 "Ticket #" + saved.getId() + " đã được gán cho " + assignee.getUsername() + ".",
                 saved
         );
+        ticketEventService.recordEvent(
+                saved,
+                "TICKET_ASSIGNED",
+                actor,
+                "Gán kỹ thuật viên xử lý",
+                Map.of(
+                        "Kỹ thuật viên", StringUtils.hasText(assignee.getFullName()) ? assignee.getFullName() : assignee.getUsername(),
+                        "Trạng thái", saved.getStatus()
+                )
+        );
+        ticketEventService.recordEvent(
+                saved,
+                "TICKET_STATUS_CHANGED",
+                actor,
+                "Cập nhật trạng thái ticket",
+                Map.of(
+                        "Từ trạng thái", "PENDING",
+                        "Sang trạng thái", saved.getStatus()
+                )
+        );
         return mapToResponse(saved);
     }
 
@@ -207,6 +239,16 @@ public class TicketService {
                 "TICKET_RESOLVED",
                 "Ticket #" + saved.getId() + " đã được xử lý xong.",
                 saved
+        );
+        ticketEventService.recordEvent(
+                saved,
+                "TICKET_STATUS_CHANGED",
+                actor,
+                "Cập nhật trạng thái ticket",
+                Map.of(
+                        "Từ trạng thái", "IN_PROGRESS",
+                        "Sang trạng thái", saved.getStatus()
+                )
         );
         return mapToResponse(saved);
     }

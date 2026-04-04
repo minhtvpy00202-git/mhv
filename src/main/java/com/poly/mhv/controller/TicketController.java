@@ -3,6 +3,8 @@ package com.poly.mhv.controller;
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.ticket.TicketResponse;
+import com.poly.mhv.dto.ticket.TicketTimelineEventResponse;
+import com.poly.mhv.service.TicketEventService;
 import com.poly.mhv.service.TicketService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final TicketEventService ticketEventService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('NhanVien','Admin')")
@@ -55,5 +58,14 @@ public class TicketController {
             @RequestParam(name = "reporter_id", required = false) Integer reporterId
     ) {
         return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode, reporterId));
+    }
+
+    @GetMapping("/{id}/timeline")
+    @PreAuthorize("hasAnyRole('Admin','NhanVien','TechSupport')")
+    public ResponseEntity<List<TicketTimelineEventResponse>> getTicketTimeline(
+            @PathVariable Integer id,
+            @RequestParam(required = false) Integer limit
+    ) {
+        return ResponseEntity.ok(ticketEventService.getTimeline(id, limit));
     }
 }

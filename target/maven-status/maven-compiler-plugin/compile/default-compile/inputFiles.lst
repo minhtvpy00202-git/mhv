@@ -49,6 +49,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/ticket/TicketAssignRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/ticket/TicketCreateRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/ticket/TicketResponse.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/ticket/TicketTimelineEventResponse.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/CheckinRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/CheckoutRequest.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/dto/usage/UsageHistoryAdminResponse.java
@@ -68,6 +69,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Notification.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/TechSupportType.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/Ticket.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/TicketEvent.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/entity/UsageHistory.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/exception/CustomException.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/exception/GlobalExceptionHandler.java
@@ -81,6 +83,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/LocationRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/NotificationRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/TechSupportTypeRepository.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/TicketEventRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/TicketRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/repository/UsageHistoryRepository.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/security/SecurityConfig.java
@@ -103,6 +106,7 @@
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/MaintenanceService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/NotificationService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/ReportService.java
+/Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/TicketEventService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/TicketService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/UsageHistoryService.java
 /Users/tranminh/FPOLY/AI/mhv/src/main/java/com/poly/mhv/service/UserService.java

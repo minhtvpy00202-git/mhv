@@ -32,6 +32,7 @@ function TicketDetail() {
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showChat, setShowChat] = useState(true)
+  const [timeline, setTimeline] = useState([])
 
   useEffect(() => {
     if (!ticketId) return
@@ -57,7 +58,20 @@ function TicketDetail() {
         }
       }
     }
+    const loadTimeline = async () => {
+      try {
+        const response = await axiosClient.get(`/api/tickets/${ticketId}/timeline`, {
+          params: { limit: 100 },
+        })
+        if (!mounted) return
+        setTimeline(response.data || [])
+      } catch (error) {
+        const message = error?.response?.data?.message || 'Không tải được lịch sử ticket.'
+        toast.error(message)
+      }
+    }
     loadTicket()
+    loadTimeline()
     return () => {
       mounted = false
     }
@@ -125,6 +139,32 @@ function TicketDetail() {
           <div className="md:col-span-2">
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName}`}>{ticket.status}</span>
           </div>
+        </section>
+      )}
+
+      {!loading && ticket && (
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800">Lịch sử ticket</h3>
+          {timeline.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">Chưa có dữ liệu lịch sử.</p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {timeline.map((event) => (
+                <div key={event.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">{event.message}</p>
+                    <p className="text-xs text-slate-500">{formatDateTime(event.occurredAt)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {event.actorName || 'Hệ thống'} · {event.eventType}
+                  </p>
+                  {event.detail && (
+                    <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-600">{event.detail}</pre>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

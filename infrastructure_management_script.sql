@@ -144,7 +144,22 @@ CREATE TABLE notifications (
 );
 GO
 
--- 10. Bảng inventory_audits
+-- 10. Bảng ticket_events
+CREATE TABLE ticket_events (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    ticket_id INT NOT NULL,
+    event_type VARCHAR(40) NOT NULL,
+    actor_id INT NULL,
+    actor_name NVARCHAR(120) NULL,
+    message NVARCHAR(500) NOT NULL,
+    detail_json NVARCHAR(4000) NULL,
+    occurred_at DATETIME2 NOT NULL CONSTRAINT DF_ticket_events_occurred_at DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_ticket_events_ticket FOREIGN KEY (ticket_id) REFERENCES tickets(id),
+    CONSTRAINT FK_ticket_events_actor FOREIGN KEY (actor_id) REFERENCES users(id)
+);
+GO
+
+-- 11. Bảng inventory_audits
 CREATE TABLE inventory_audits (
     id INT IDENTITY(1,1) PRIMARY KEY,
     location_id INT NOT NULL,
@@ -161,7 +176,7 @@ CREATE TABLE inventory_audits (
 );
 GO
 
--- 11. Bảng inventory_audit_items
+-- 12. Bảng inventory_audit_items
 CREATE TABLE inventory_audit_items (
     id INT IDENTITY(1,1) PRIMARY KEY,
     audit_id INT NOT NULL,
@@ -174,7 +189,7 @@ CREATE TABLE inventory_audit_items (
 );
 GO
 
--- 12. Bảng inventory_audit_missing
+-- 13. Bảng inventory_audit_missing
 CREATE TABLE inventory_audit_missing (
     id INT IDENTITY(1,1) PRIMARY KEY,
     audit_id INT NOT NULL,
@@ -211,6 +226,7 @@ CREATE INDEX IX_tickets_assignee_status_created_at ON tickets(assignee_id, statu
 CREATE INDEX IX_tickets_reporter_created_at ON tickets(reporter_id, created_at DESC);
 CREATE INDEX IX_tickets_asset_created_at ON tickets(asset_qa_code, created_at DESC);
 CREATE INDEX IX_chat_messages_ticket_created_at ON chat_messages(ticket_id, created_at DESC);
+CREATE INDEX IX_ticket_events_ticket_occurred_at ON ticket_events(ticket_id, occurred_at DESC);
 
 CREATE INDEX IX_inventory_audits_location_status ON inventory_audits(location_id, status);
 CREATE INDEX IX_inventory_audit_missing_audit ON inventory_audit_missing(audit_id);

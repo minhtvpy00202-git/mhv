@@ -11,6 +11,7 @@ import com.poly.mhv.repository.TicketRepository;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class ChatService {
     private final AppUserRepository appUserRepository;
     private final CurrentUserProvider currentUserProvider;
     private final ChatMediaStorageService chatMediaStorageService;
+    private final TicketEventService ticketEventService;
 
     @Transactional
     public ChatMessageResponse saveTicketMessage(Integer ticketId, String content, String senderUsername) {
@@ -50,6 +52,20 @@ public class ChatService {
                 .createdAt(LocalDateTime.now())
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
+        String preview = payload.content();
+        if (!StringUtils.hasText(preview)) {
+            preview = "image".equalsIgnoreCase(payload.mediaType()) ? "[Ảnh]" : "[Ghi âm]";
+        }
+        if (preview.length() > 120) {
+            preview = preview.substring(0, 120) + "...";
+        }
+        ticketEventService.recordEvent(
+                ticket,
+                "TICKET_CHAT",
+                sender,
+                "Trao đổi trong ticket",
+                Map.of("Nội dung", preview)
+        );
         return mapToResponse(saved);
     }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
+import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
 import { useAuth } from '../../context/AuthContext'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
@@ -36,7 +36,7 @@ function TechSupportTickets() {
   const [statusFilter, setStatusFilter] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [showTimelineModal, setShowTimelineModal] = useState(false)
-  const [timelineAsset, setTimelineAsset] = useState(null)
+  const [timelineTicket, setTimelineTicket] = useState(null)
 
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
@@ -232,9 +232,12 @@ function TechSupportTickets() {
                         <button
                           type="button"
                           onClick={() => {
-                            setTimelineAsset({
+                            setTimelineTicket({
+                              id: ticket.id,
                               qaCode: ticket.assetQaCode,
+                              assetQaCode: ticket.assetQaCode,
                               name: ticket.assetName,
+                              assetName: ticket.assetName,
                             })
                             setShowTimelineModal(true)
                           }}
@@ -274,14 +277,13 @@ function TechSupportTickets() {
           </div>
         </div>
       )}
-      <AssetRepairTimelineModal
+      <TicketEventTimelineModal
         open={showTimelineModal}
         onClose={() => {
           setShowTimelineModal(false)
-          setTimelineAsset(null)
+          setTimelineTicket(null)
         }}
-        assetQaCode={timelineAsset?.qaCode}
-        assetName={timelineAsset?.name}
+        ticket={timelineTicket}
       />
     </div>
   )
