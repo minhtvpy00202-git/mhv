@@ -20,6 +20,8 @@ const IMG_PREFIX = '[[IMG]]'
 const AUDIO_PREFIX = '[[AUDIO]]'
 const INITIAL_CHAT_LIMIT = Number(import.meta.env.VITE_CHAT_INITIAL_LIMIT) || 40
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const isLocalFrontendHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+const MEDIA_BASE_URL = API_BASE_URL || (isLocalFrontendHost ? 'http://localhost:8080' : window.location.origin)
 
 function resolveMediaUrl(url) {
   if (!url) return ''
@@ -27,9 +29,9 @@ function resolveMediaUrl(url) {
     return url
   }
   if (url.startsWith('/')) {
-    return `${API_BASE_URL}${url}`
+    return `${MEDIA_BASE_URL}${url}`
   }
-  return `${API_BASE_URL}/${url}`
+  return `${MEDIA_BASE_URL}/${url}`
 }
 
 function parseMessage(message) {
