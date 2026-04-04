@@ -104,8 +104,8 @@ public class TicketService {
                 reporter,
                 "Tạo ticket mới",
                 Map.of(
-                        "Trạng thái", saved.getStatus(),
-                        "Mức ưu tiên", saved.getPriority(),
+                        "Trạng thái", toVietnameseStatus(saved.getStatus()),
+                        "Mức ưu tiên", toVietnamesePriority(saved.getPriority()),
                         "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName()
                 )
         );
@@ -141,17 +141,18 @@ public class TicketService {
         if ("TechSupport".equals(actor.getRole()) && !actor.getId().equals(assignee.getId())) {
             throw new CustomException("Kỹ thuật viên chỉ được nhận ticket cho chính mình.");
         }
+        String previousStatus = ticket.getStatus();
 
         int changed = ticketRepository.claimTicketIfPending(ticketId, assignee.getId());
         if (changed == 0) {
             throw new CustomException("Ticket đã được nhận xử lý bởi người khác.");
         }
-        Ticket claimed = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
-        claimed.setResolvedAt(null);
+        ticket.setAssignee(assignee);
+        ticket.setStatus("IN_PROGRESS");
+        ticket.setResolvedAt(null);
         ticket.getAsset().setStatus("Bảo trì");
         assetRepository.save(ticket.getAsset());
-        Ticket saved = ticketRepository.save(claimed);
+        Ticket saved = ticketRepository.save(ticket);
         notificationService.createNotification(
                 "TICKET_ASSIGNED",
                 "Ticket đã được nhận xử lý",
@@ -162,7 +163,7 @@ public class TicketService {
                 Map.of(
                         "Ticket", "#" + saved.getId(),
                         "Kỹ thuật viên", assignee.getUsername(),
-                        "Trạng thái", saved.getStatus(),
+                        "Trạng thái", toVietnameseStatus("IN_PROGRESS"),
                         "Người thao tác", actor.getUsername()
                 )
         );
@@ -178,7 +179,7 @@ public class TicketService {
                 "Gán kỹ thuật viên xử lý",
                 Map.of(
                         "Kỹ thuật viên", StringUtils.hasText(assignee.getFullName()) ? assignee.getFullName() : assignee.getUsername(),
-                        "Trạng thái", saved.getStatus()
+                        "Trạng thái", toVietnameseStatus("IN_PROGRESS")
                 )
         );
         ticketEventService.recordEvent(
@@ -187,8 +188,8 @@ public class TicketService {
                 actor,
                 "Cập nhật trạng thái ticket",
                 Map.of(
-                        "Từ trạng thái", "PENDING",
-                        "Sang trạng thái", saved.getStatus()
+                        "Từ trạng thái", toVietnameseStatus(previousStatus),
+                        "Sang trạng thái", toVietnameseStatus("IN_PROGRESS")
                 )
         );
         return mapToResponse(saved);
@@ -231,7 +232,7 @@ public class TicketService {
                 Map.of(
                         "Ticket", "#" + saved.getId(),
                         "Thiết bị", saved.getAsset().getQaCode(),
-                        "Trạng thái", saved.getStatus(),
+                        "Trạng thái", toVietnameseStatus(saved.getStatus()),
                         "Người thao tác", actor.getUsername()
                 )
         );
@@ -246,8 +247,8 @@ public class TicketService {
                 actor,
                 "Cập nhật trạng thái ticket",
                 Map.of(
-                        "Từ trạng thái", "IN_PROGRESS",
-                        "Sang trạng thái", saved.getStatus()
+                        "Từ trạng thái", toVietnameseStatus("IN_PROGRESS"),
+                        "Sang trạng thái", toVietnameseStatus(saved.getStatus())
                 )
         );
         return mapToResponse(saved);
@@ -352,6 +353,20 @@ public class TicketService {
             return 0;
         }
         return asset.getCategory().getTechSupportType().getId();
+    }
+
+    private String toVietnameseStatus(String status) {
+        if ("PENDING".equals(status)) return "Mới báo hỏng";
+        if ("IN_PROGRESS".equals(status)) return "Đang xử lý";
+        if ("RESOLVED".equals(status)) return "Đã hoàn tất";
+        return status;
+    }
+
+    private String toVietnamesePriority(String priority) {
+        if ("HIGH".equals(priority)) return "Cao";
+        if ("LOW".equals(priority)) return "Thấp";
+        if ("MEDIUM".equals(priority)) return "Trung bình";
+        return priority;
     }
 
     private void pushNotification(String type, String message, Ticket ticket) {

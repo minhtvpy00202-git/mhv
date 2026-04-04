@@ -18,10 +18,21 @@ function formatTimeShort(value) {
 
 function toActionLabel(event) {
   if (event?.eventType === 'TICKET_CREATED') return 'Tạo ticket'
-  if (event?.eventType === 'TICKET_ASSIGNED') return 'Assign kỹ thuật viên'
+  if (event?.eventType === 'TICKET_ASSIGNED') return 'Gán kỹ thuật viên'
   if (event?.eventType === 'TICKET_STATUS_CHANGED') return 'Cập nhật trạng thái'
   if (event?.eventType === 'TICKET_CHAT') return 'Comment/Chat'
   return event?.message || event?.eventType || 'Sự kiện'
+}
+
+function localizeDetail(detail) {
+  if (!detail) return ''
+  return String(detail)
+    .replaceAll('PENDING', 'Mới báo hỏng')
+    .replaceAll('IN_PROGRESS', 'Đang xử lý')
+    .replaceAll('RESOLVED', 'Đã hoàn tất')
+    .replaceAll('HIGH', 'Cao')
+    .replaceAll('MEDIUM', 'Trung bình')
+    .replaceAll('LOW', 'Thấp')
 }
 
 function TicketEventTimelineModal({ open, onClose, ticket }) {
@@ -83,7 +94,9 @@ function TicketEventTimelineModal({ open, onClose, ticket }) {
                       {formatTimeShort(event.occurredAt)} - {event.actorName || 'Hệ thống'} - {toActionLabel(event)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">{formatDateTime(event.occurredAt)}</p>
-                    {event.detail && <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{event.detail}</pre>}
+                    {event.detail && (
+                      <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{localizeDetail(event.detail)}</pre>
+                    )}
                   </div>
                 ))}
               </div>
