@@ -6,7 +6,7 @@ import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
-  { to: '/tech/tickets', label: 'Ticket hỗ trợ', icon: ClipboardList },
+  { to: '/tech/tickets', label: 'Danh sách Ticket', icon: ClipboardList },
 ]
 
 function isDeviceFailureNotification(notification) {

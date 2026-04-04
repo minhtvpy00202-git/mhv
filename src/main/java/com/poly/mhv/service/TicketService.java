@@ -301,9 +301,9 @@ public class TicketService {
 
     private LocalDateTime calculateDueDate(String priority, LocalDateTime createdAt) {
         return switch (priority) {
-            case "LOW" -> createdAt.plusHours(72);
-            case "MEDIUM" -> createdAt.plusHours(48);
-            case "HIGH" -> createdAt.plusHours(24);
+            case "LOW" -> createdAt.plusHours(48);
+            case "MEDIUM" -> createdAt.plusHours(24);
+            case "HIGH" -> createdAt.plusHours(1);
             default -> createdAt.plusHours(48);
         };
     }
