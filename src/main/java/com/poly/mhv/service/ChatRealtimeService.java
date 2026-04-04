@@ -8,7 +8,6 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketRepository;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,16 +15,16 @@ import org.springframework.stereotype.Service;
 public class ChatRealtimeService {
 
     private final TicketRepository ticketRepository;
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final AsyncRealtimePushService asyncRealtimePushService;
 
     public void broadcastTicketMessage(Integer ticketId, ChatMessageResponse savedMessage, String senderUsername) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket để phát tin nhắn chat."));
         if (ticket.getReporter() != null) {
-            simpMessagingTemplate.convertAndSend("/topic/users/" + ticket.getReporter().getId() + "/tickets/" + ticketId, savedMessage);
+            asyncRealtimePushService.pushToDestination("/topic/users/" + ticket.getReporter().getId() + "/tickets/" + ticketId, savedMessage);
         }
         if (ticket.getAssignee() != null) {
-            simpMessagingTemplate.convertAndSend("/topic/users/" + ticket.getAssignee().getId() + "/tickets/" + ticketId, savedMessage);
+            asyncRealtimePushService.pushToDestination("/topic/users/" + ticket.getAssignee().getId() + "/tickets/" + ticketId, savedMessage);
         }
         pushIncomingChatNotification(savedMessage, senderUsername);
     }
@@ -63,7 +62,7 @@ public class ChatRealtimeService {
                 .createdAt(savedMessage.getCreatedAt())
                 .build();
         for (Integer receiverId : receivers) {
-            simpMessagingTemplate.convertAndSend("/topic/users/" + receiverId + "/chat-notifications", payload);
+            asyncRealtimePushService.pushToDestination("/topic/users/" + receiverId + "/chat-notifications", payload);
         }
     }
 }

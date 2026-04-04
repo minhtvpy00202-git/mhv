@@ -4,6 +4,7 @@ import com.poly.mhv.entity.Ticket;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +16,21 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     List<Ticket> findByStatusAndAssigneeId(String status, Integer assigneeId);
     List<Ticket> findByReporterIdOrderByCreatedAtDesc(Integer reporterId);
     List<Ticket> findAllByOrderByCreatedAtDesc();
+
+    @Modifying
+    @Query(value = """
+            UPDATE tickets
+            SET assignee_id = :assigneeId,
+                status = 'IN_PROGRESS',
+                resolved_at = NULL
+            WHERE id = :ticketId
+              AND status = 'PENDING'
+              AND assignee_id IS NULL
+            """, nativeQuery = true)
+    int claimTicketIfPending(
+            @Param("ticketId") Integer ticketId,
+            @Param("assigneeId") Integer assigneeId
+    );
 
     @Query("""
             select t.asset.qaCode, t.asset.name, t.asset.homeLocation.roomName, count(t)

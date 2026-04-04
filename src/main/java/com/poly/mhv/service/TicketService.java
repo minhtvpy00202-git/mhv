@@ -16,7 +16,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -28,7 +27,7 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final AsyncRealtimePushService asyncRealtimePushService;
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
 
@@ -131,12 +130,16 @@ public class TicketService {
             throw new CustomException("Kỹ thuật viên chỉ được nhận ticket cho chính mình.");
         }
 
-        ticket.setAssignee(assignee);
-        ticket.setStatus("IN_PROGRESS");
-        ticket.setResolvedAt(null);
+        int changed = ticketRepository.claimTicketIfPending(ticketId, assignee.getId());
+        if (changed == 0) {
+            throw new CustomException("Ticket đã được nhận xử lý bởi người khác.");
+        }
+        Ticket claimed = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        claimed.setResolvedAt(null);
         ticket.getAsset().setStatus("Bảo trì");
         assetRepository.save(ticket.getAsset());
-        Ticket saved = ticketRepository.save(ticket);
+        Ticket saved = ticketRepository.save(claimed);
         notificationService.createNotification(
                 "TICKET_ASSIGNED",
                 "Ticket đã được nhận xử lý",
@@ -324,13 +327,13 @@ public class TicketService {
                 .build();
         if ("TICKET_CREATED".equals(type)) {
             for (AppUser receiver : receivers) {
-                simpMessagingTemplate.convertAndSend("/topic/users/" + receiver.getId() + "/notifications", payload);
+                asyncRealtimePushService.pushToDestination("/topic/users/" + receiver.getId() + "/notifications", payload);
             }
             for (AppUser admin : appUserRepository.findByRole("Admin")) {
-                simpMessagingTemplate.convertAndSend("/topic/users/" + admin.getId() + "/notifications", payload);
+                asyncRealtimePushService.pushToDestination("/topic/users/" + admin.getId() + "/notifications", payload);
             }
             return;
         }
-        simpMessagingTemplate.convertAndSend("/topic/notifications", payload);
+        asyncRealtimePushService.pushToDestination("/topic/notifications", payload);
     }
 }
