@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "inventory_audits")
@@ -54,5 +55,6 @@ public class InventoryAudit {
     private Integer missingCount;
 
     @Column(length = 500)
+    @Nationalized
     private String notes;
 }

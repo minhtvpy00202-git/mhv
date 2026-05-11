@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "locations")
@@ -28,6 +29,7 @@ public class Location {
     private Integer id;
 
     @Column(name = "room_name", nullable = false, length = 100)
+    @Nationalized
     private String roomName;
 
     @JsonIgnore

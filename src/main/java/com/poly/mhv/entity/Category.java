@@ -16,6 +16,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "categories")
@@ -30,6 +31,7 @@ public class Category {
     private Integer id;
 
     @Column(nullable = false, unique = true, length = 50)
+    @Nationalized
     private String name;
 
     @ManyToOne

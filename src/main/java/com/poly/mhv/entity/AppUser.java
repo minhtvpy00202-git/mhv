@@ -17,6 +17,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "users")
@@ -40,6 +41,7 @@ public class AppUser {
     private String role;
 
     @Column(name = "full_name", length = 100)
+    @Nationalized
     private String fullName;
 
     @Column(name = "birthday")
@@ -49,6 +51,7 @@ public class AppUser {
     private String phone;
 
     @Column(nullable = false, length = 20)
+    @Nationalized
     private String status;
 
     @ManyToOne
