@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/usage")
+@RequestMapping({"/api/usage", "/usage"})
 public class UsageHistoryController {
 
     private final UsageHistoryService usageHistoryService;

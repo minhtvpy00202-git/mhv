@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/assets")
+@RequestMapping({"/api/assets", "/assets"})
 public class AssetController {
 
     private final AssetService assetService;

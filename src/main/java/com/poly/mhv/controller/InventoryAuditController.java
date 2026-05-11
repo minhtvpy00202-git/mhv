@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/inventory-audits")
+@RequestMapping({"/api/inventory-audits", "/inventory-audits"})
 public class InventoryAuditController {
 
     private final InventoryAuditService inventoryAuditService;
