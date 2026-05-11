@@ -88,7 +88,7 @@ function Register() {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow">
         <h1 className="text-xl font-bold text-fptOrange">Đăng ký tài khoản</h1>
-        <p className="mt-1 text-sm text-slate-500">Infrastructure Management</p>
+        <p className="mt-1 text-sm text-slate-500">Asset Management</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
