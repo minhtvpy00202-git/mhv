@@ -24,6 +24,13 @@ public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
     List<AppUser> findByRoleAndTechSupportTypeId(@Param("role") String role, @Param("techTypeId") Integer techTypeId);
 
     @Query("""
+            select count(distinct u.id) from AppUser u
+            join u.techSupportTypes t
+            where t.id = :techTypeId
+            """)
+    long countUsersByTechSupportTypeId(@Param("techTypeId") Integer techTypeId);
+
+    @Query("""
             SELECT u FROM AppUser u
             WHERE (:keyword IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))

@@ -5,6 +5,11 @@ import com.poly.mhv.dto.chat.ChatMessageSendRequest;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.ChatService;
 import com.poly.mhv.service.ChatRealtimeService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -20,12 +25,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping({"/api/tickets", "/tickets"})
 @RequiredArgsConstructor
+@Tag(name = "Trao đổi ticket", description = "API lấy lịch sử chat và gửi tin nhắn trong ticket")
+@SecurityRequirement(name = "bearerAuth")
 public class ChatController {
 
     private final ChatService chatService;
     private final ChatRealtimeService chatRealtimeService;
 
     @GetMapping("/{ticketId}/chats")
+    @Operation(summary = "Lấy lịch sử chat của ticket", description = "Lấy danh sách tin nhắn trao đổi trong một ticket.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy lịch sử chat thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
+    })
     public ResponseEntity<List<ChatMessageResponse>> getTicketChats(
             @PathVariable Integer ticketId,
             @RequestParam(name = "limit", required = false) Integer limit
@@ -34,6 +47,13 @@ public class ChatController {
     }
 
     @PostMapping("/{ticketId}/chats")
+    @Operation(summary = "Gửi tin nhắn cho ticket", description = "Gửi một tin nhắn mới vào luồng trao đổi của ticket.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Gửi tin nhắn thành công"),
+            @ApiResponse(responseCode = "400", description = "Payload không hợp lệ"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
+    })
     public ResponseEntity<ChatMessageResponse> sendTicketChat(
             @PathVariable Integer ticketId,
             @RequestBody ChatMessageSendRequest request,

@@ -12,6 +12,7 @@ import {
   Ticket,
   TriangleAlert,
   Users,
+  Wrench,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -28,6 +29,7 @@ const menuItems = [
     children: [
       { to: '/admin/assets', label: 'Quản lý thiết bị', icon: Boxes },
       { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
+      { to: '/admin/tech-support-types', label: 'Quản lý loại kỹ thuật viên', icon: Wrench },
       { to: '/admin/locations', label: 'Quản lý phòng', icon: MapPin },
     ],
   },
@@ -51,6 +53,7 @@ function AdminLayout() {
     if (
       location.pathname.startsWith('/admin/assets')
       || location.pathname.startsWith('/admin/categories')
+      || location.pathname.startsWith('/admin/tech-support-types')
       || location.pathname.startsWith('/admin/locations')
     ) {
       setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))

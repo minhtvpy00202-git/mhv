@@ -2,6 +2,11 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.ReportService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.io.IOException;
 import java.time.LocalDate;
 import org.springframework.http.ContentDisposition;
@@ -17,6 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/reports", "/reports"})
+@Tag(name = "Báo cáo", description = "API xuất báo cáo Excel cho thiết bị, lịch sử mượn trả và kiểm kê")
+@SecurityRequirement(name = "bearerAuth")
 public class ReportController {
 
     private final ReportService reportService;
@@ -26,6 +33,12 @@ public class ReportController {
     }
 
     @GetMapping("/export-assets")
+    @Operation(summary = "Xuất Excel danh sách thiết bị", description = "Xuất file Excel chứa danh sách toàn bộ thiết bị.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Xuất báo cáo thiết bị thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "500", description = "Lỗi xuất file Excel")
+    })
     public ResponseEntity<byte[]> exportAssets() {
         try {
             byte[] excelBytes = reportService.exportAssetsExcel();
@@ -41,6 +54,12 @@ public class ReportController {
     }
 
     @GetMapping("/export-usage-history")
+    @Operation(summary = "Xuất Excel lịch sử mượn trả", description = "Xuất file Excel lịch sử mượn trả với các bộ lọc tương ứng.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Xuất báo cáo lịch sử mượn trả thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "500", description = "Lỗi xuất file Excel")
+    })
     public ResponseEntity<byte[]> exportUsageHistory(
             @RequestParam(required = false) String assetName,
             @RequestParam(required = false) Integer borrowedLocationId,
@@ -62,6 +81,13 @@ public class ReportController {
     }
 
     @GetMapping("/export-inventory-audit/{auditId}")
+    @Operation(summary = "Xuất Excel biên bản kiểm kê", description = "Xuất file Excel biên bản kiểm kê theo id phiên kiểm kê.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Xuất biên bản kiểm kê thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê"),
+            @ApiResponse(responseCode = "500", description = "Lỗi xuất file Excel")
+    })
     public ResponseEntity<byte[]> exportInventoryAudit(@PathVariable Integer auditId) {
         try {
             byte[] excelBytes = reportService.exportInventoryAuditExcel(auditId);

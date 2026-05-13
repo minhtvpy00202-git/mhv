@@ -12,6 +12,7 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
     boolean existsByNameIgnoreCase(String name);
     boolean existsByNameIgnoreCaseAndIdNot(String name, Integer id);
     boolean existsByCodePrefixIgnoreCase(String codePrefix);
+    long countByTechSupportTypeId(Integer techTypeId);
 
     @Query("""
             select c from Category c

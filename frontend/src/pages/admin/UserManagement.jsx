@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-import { techSupportTypeOptions as techRoleOptions } from '../../constants/techSupportTypes'
+import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 
 const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
 
@@ -20,6 +20,7 @@ function UserManagement() {
   const [submitting, setSubmitting] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [showFormModal, setShowFormModal] = useState(false)
+  const [techRoleOptions, setTechRoleOptions] = useState([])
   const [pageInfo, setPageInfo] = useState({
     page: 0,
     size: PAGE_SIZE,
@@ -74,7 +75,18 @@ function UserManagement() {
 
   useEffect(() => {
     loadUsers(0)
+    loadTechSupportTypes()
   }, [])
+
+  const loadTechSupportTypes = async () => {
+    try {
+      const options = await fetchTechSupportTypeOptions()
+      setTechRoleOptions(options)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh sách loại kỹ thuật viên.'
+      toast.error(message)
+    }
+  }
 
   const resetForm = () => {
     setSelectedUserId(null)

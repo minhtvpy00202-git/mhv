@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-import { techSupportTypeOptions } from '../../constants/techSupportTypes'
+import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 
 const PAGE_SIZE = 10
 
@@ -12,6 +12,7 @@ function CategoryManagement() {
   const [showFormModal, setShowFormModal] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [techSupportTypeOptions, setTechSupportTypeOptions] = useState([])
   const [filters, setFilters] = useState({
     keyword: '',
     techTypeId: '',
@@ -47,7 +48,18 @@ function CategoryManagement() {
 
   useEffect(() => {
     loadCategories()
+    loadTechSupportTypes()
   }, [])
+
+  const loadTechSupportTypes = async () => {
+    try {
+      const options = await fetchTechSupportTypeOptions()
+      setTechSupportTypeOptions(options)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh sách loại kỹ thuật viên.'
+      toast.error(message)
+    }
+  }
 
   const resetForm = () => {
     setSelectedCategoryId(null)

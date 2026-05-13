@@ -21,7 +21,7 @@ GO
 -- PHẦN 1: TẠO BẢNG (TABLES) THEO THỨ TỰ PHỤ THUỘC (TỪ ĐỘC LẬP TỚI PHỤ THUỘC)
 -- ==============================================================================
 
--- 1. Bảng tech_support_types (Chứa nhóm quyền và thiết bị)
+-- 1. Bảng tech_support_types (Chứa các loại kỹ thuật viên / nhóm chuyên môn)
 CREATE TABLE tech_support_types (
     id INT PRIMARY KEY,
     name NVARCHAR(100) NOT NULL UNIQUE
@@ -45,23 +45,34 @@ CREATE TABLE users (
     birthday DATE NULL,
     phone VARCHAR(20) NULL,
     status NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT N'Hoạt động',
-    tech_type_id INT NOT NULL,
     CONSTRAINT CK_users_role CHECK (role IN ('Admin', 'NhanVien', 'TechSupport')),
-    CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa')),
-    CONSTRAINT FK_users_tech_type FOREIGN KEY (tech_type_id) REFERENCES tech_support_types(id)
+    CONSTRAINT CK_users_status CHECK (status IN (N'Hoạt động', N'Khóa'))
 );
 GO
 
--- 4. Bảng categories (Chuẩn hóa 4 loại chính)
+-- 4. Bảng user_tech_support_types (Mỗi kỹ thuật viên có thể có nhiều chuyên môn)
+CREATE TABLE user_tech_support_types (
+    user_id INT NOT NULL,
+    tech_type_id INT NOT NULL,
+    CONSTRAINT PK_user_tech_support_types PRIMARY KEY (user_id, tech_type_id),
+    CONSTRAINT FK_user_tech_support_types_user FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT FK_user_tech_support_types_tech_type FOREIGN KEY (tech_type_id) REFERENCES tech_support_types(id)
+);
+GO
+
+-- 5. Bảng categories (Chuẩn hóa loại thiết bị và prefix sinh mã QA)
 CREATE TABLE categories (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    name NVARCHAR(150) NOT NULL,
+    name NVARCHAR(50) NOT NULL,
+    code_prefix VARCHAR(10) NOT NULL,
     tech_type_id INT NOT NULL,
+    CONSTRAINT UQ_categories_name UNIQUE (name),
+    CONSTRAINT UQ_categories_code_prefix UNIQUE (code_prefix),
     CONSTRAINT FK_categories_tech_type FOREIGN KEY (tech_type_id) REFERENCES tech_support_types(id)
 );
 GO
 
--- 5. Bảng assets
+-- 6. Bảng assets
 CREATE TABLE assets (
     qa_code VARCHAR(20) PRIMARY KEY,
     name NVARCHAR(100) NOT NULL,
@@ -76,7 +87,7 @@ CREATE TABLE assets (
 );
 GO
 
--- 6. Bảng usage_histories
+-- 7. Bảng usage_histories
 CREATE TABLE usage_histories (
     id INT IDENTITY(1,1) PRIMARY KEY,
     asset_qa_code VARCHAR(20) NOT NULL,
@@ -93,7 +104,7 @@ CREATE TABLE usage_histories (
 );
 GO
 
--- 7. Bảng tickets (Thay thế maintenance_requests)
+-- 8. Bảng tickets (Thay thế maintenance_requests)
 CREATE TABLE tickets (
     id INT IDENTITY(1,1) PRIMARY KEY,
     asset_qa_code VARCHAR(20) NOT NULL,
@@ -114,7 +125,7 @@ CREATE TABLE tickets (
 );
 GO
 
--- 8. Bảng chat_messages
+-- 9. Bảng chat_messages
 CREATE TABLE chat_messages (
     id INT IDENTITY(1,1) PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -128,7 +139,7 @@ CREATE TABLE chat_messages (
 );
 GO
 
--- 9. Bảng notifications
+-- 10. Bảng notifications
 CREATE TABLE notifications (
     id INT IDENTITY(1,1) PRIMARY KEY,
     event_type VARCHAR(50) NOT NULL,
@@ -144,7 +155,7 @@ CREATE TABLE notifications (
 );
 GO
 
--- 10. Bảng ticket_events
+-- 11. Bảng ticket_events
 CREATE TABLE ticket_events (
     id INT IDENTITY(1,1) PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -159,7 +170,7 @@ CREATE TABLE ticket_events (
 );
 GO
 
--- 11. Bảng inventory_audits
+-- 12. Bảng inventory_audits
 CREATE TABLE inventory_audits (
     id INT IDENTITY(1,1) PRIMARY KEY,
     location_id INT NOT NULL,
@@ -176,7 +187,7 @@ CREATE TABLE inventory_audits (
 );
 GO
 
--- 12. Bảng inventory_audit_items
+-- 13. Bảng inventory_audit_items
 CREATE TABLE inventory_audit_items (
     id INT IDENTITY(1,1) PRIMARY KEY,
     audit_id INT NOT NULL,
@@ -189,7 +200,7 @@ CREATE TABLE inventory_audit_items (
 );
 GO
 
--- 13. Bảng inventory_audit_missing
+-- 14. Bảng inventory_audit_missing
 CREATE TABLE inventory_audit_missing (
     id INT IDENTITY(1,1) PRIMARY KEY,
     audit_id INT NOT NULL,
@@ -301,11 +312,11 @@ GO
 
 -- Seed Categories (Force Identity Insert)
 SET IDENTITY_INSERT categories ON;
-INSERT INTO categories (id, name, tech_type_id) VALUES
-(1, N'Thiết bị công nghệ', 1),
-(2, N'Thiết bị giảng dạy truyền thống', 2),
-(3, N'Thiết bị phòng thí nghiệm/chức năng', 3),
-(4, N'Thiết bị thể dục thể thao', 4);
+INSERT INTO categories (id, name, code_prefix, tech_type_id) VALUES
+(1, N'Thiết bị công nghệ', 'TCN', 1),
+(2, N'Thiết bị giảng dạy truyền thống', 'GDT', 2),
+(3, N'Thiết bị phòng thí nghiệm/chức năng', 'PTN', 3),
+(4, N'Thiết bị thể dục thể thao', 'TDT', 4);
 SET IDENTITY_INSERT categories OFF;
 GO
 
@@ -328,12 +339,26 @@ OPTION (MAXRECURSION 20);
 GO
 
 -- Seed Users
-INSERT INTO users (username, password, role, full_name, birthday, phone, status, tech_type_id) VALUES
-('admin', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động', 0),
-('nhanvien', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'NhanVien', N'Lê Trần', '1998-05-20', '0900000002', N'Hoạt động', 0),
-('techsup', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'An', '1999-08-12', '0900000003', N'Hoạt động', 1),
-('techsup1', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Vương', '1997-03-14', '0900000004', N'Hoạt động', 2),
-('techsup2', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Nghĩa', '1996-11-30', '0900000005', N'Hoạt động', 3);
+INSERT INTO users (username, password, role, full_name, birthday, phone, status) VALUES
+('admin', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'Admin', N'Quản trị hệ thống', '1990-01-01', '0900000001', N'Hoạt động'),
+('nhanvien', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'NhanVien', N'Lê Trần', '1998-05-20', '0900000002', N'Hoạt động'),
+('techsup', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'An', '1999-08-12', '0900000003', N'Hoạt động'),
+('techsup1', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Vương', '1997-03-14', '0900000004', N'Hoạt động'),
+('techsup2', '$2a$10$KRN/6lT3hD.seFsGzrk2v./EDmp5.1lQqJMAH7Wltaj0yxKtXz3Oi', 'TechSupport', N'Nghĩa', '1996-11-30', '0900000005', N'Hoạt động');
+GO
+
+-- Seed chuyên môn kỹ thuật cho người dùng (hỗ trợ nhiều chuyên môn)
+INSERT INTO user_tech_support_types (user_id, tech_type_id)
+SELECT u.id, mapping.tech_type_id
+FROM users u
+JOIN (
+    SELECT 'techsup' AS username, 1 AS tech_type_id
+    UNION ALL SELECT 'techsup', 2
+    UNION ALL SELECT 'techsup', 3
+    UNION ALL SELECT 'techsup', 4
+    UNION ALL SELECT 'techsup1', 2
+    UNION ALL SELECT 'techsup2', 3
+) mapping ON mapping.username = u.username;
 GO
 
 -- Seed Assets

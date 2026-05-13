@@ -5,6 +5,10 @@ import com.poly.mhv.dto.auth.LoginRequest;
 import com.poly.mhv.dto.auth.RegisterRequest;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import com.poly.mhv.security.jwt.JwtUtils;
 import com.poly.mhv.security.services.UserDetailsImpl;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/auth", "/auth"})
+@Tag(name = "Xác thực", description = "API đăng nhập, đăng ký và kiểm tra tài khoản")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -36,6 +41,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Đăng nhập", description = "Xác thực người dùng và trả về JWT để gọi các API bảo vệ.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Đăng nhập thành công"),
+            @ApiResponse(responseCode = "400", description = "Sai username hoặc password, hoặc tài khoản bị khóa")
+    })
     public JwtResponse authenticateUser(@RequestBody LoginRequest loginRequest) {
         try {
             Authentication authentication = authenticationManager.authenticate(
@@ -62,6 +72,11 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Operation(summary = "Đăng ký tài khoản", description = "Tạo mới tài khoản người dùng theo dữ liệu đăng ký.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Đăng ký thành công"),
+            @ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ hoặc username đã tồn tại")
+    })
     public JwtResponse register(@Valid @RequestBody RegisterRequest request) {
         var created = userService.register(request);
         return JwtResponse.builder()
@@ -75,6 +90,10 @@ public class AuthController {
     }
 
     @GetMapping("/check-username")
+    @Operation(summary = "Kiểm tra username", description = "Kiểm tra username đã tồn tại trong hệ thống hay chưa.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Kiểm tra thành công")
+    })
     public java.util.Map<String, Boolean> checkUsername(@RequestParam String username) {
         return java.util.Map.of("exists", userService.existsByUsername(username));
     }

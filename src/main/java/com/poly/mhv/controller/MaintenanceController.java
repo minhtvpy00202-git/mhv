@@ -4,6 +4,11 @@ import com.poly.mhv.dto.maintenance.MaintenanceHistoryResponse;
 import com.poly.mhv.dto.maintenance.MaintenanceReportRequest;
 import com.poly.mhv.dto.maintenance.MaintenanceReportResponse;
 import com.poly.mhv.service.MaintenanceService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +21,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/maintenance", "/maintenance"})
+@Tag(name = "Báo hỏng", description = "API báo hỏng thiết bị và tra cứu lịch sử bảo trì")
+@SecurityRequirement(name = "bearerAuth")
 public class MaintenanceController {
 
     private final MaintenanceService maintenanceService;
@@ -25,17 +32,34 @@ public class MaintenanceController {
     }
 
     @PostMapping("/report")
+    @Operation(summary = "Báo hỏng thiết bị", description = "Tạo mới một báo cáo hỏng hóc cho thiết bị.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Báo hỏng thành công"),
+            @ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
     public ResponseEntity<MaintenanceReportResponse> report(@RequestBody MaintenanceReportRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(maintenanceService.report(request));
     }
 
     @GetMapping("/history/me")
+    @Operation(summary = "Lấy lịch sử báo hỏng của tôi", description = "Lấy các bản ghi bảo trì do người dùng hiện tại tạo.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy lịch sử báo hỏng cá nhân thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
     public ResponseEntity<List<MaintenanceHistoryResponse>> getMyHistory() {
         return ResponseEntity.ok(maintenanceService.getMyHistory());
     }
 
     @GetMapping("/history")
     @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Lấy toàn bộ lịch sử bảo trì", description = "Lấy danh sách lịch sử báo hỏng và bảo trì dành cho quản trị.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy lịch sử bảo trì thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép truy cập")
+    })
     public ResponseEntity<List<MaintenanceHistoryResponse>> getHistoryForAdmin() {
         return ResponseEntity.ok(maintenanceService.getAllForAdminHistory());
     }
