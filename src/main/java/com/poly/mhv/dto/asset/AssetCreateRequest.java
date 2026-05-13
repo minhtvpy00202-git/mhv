@@ -10,7 +10,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class AssetCreateRequest {
-    private String qaCode;
     private String name;
     private Integer categoryId;
     private Integer locationId;

@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { techSupportTypeOptions as techRoleOptions } from '../../constants/techSupportTypes'
 
 const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
-const techRoleOptions = [
-  { label: 'Kỹ thuật viên công nghệ', techTypeId: 1 },
-  { label: 'Kỹ thuật viên thiết bị giảng dạy', techTypeId: 2 },
-  { label: 'Kỹ thuật viên thiết bị thí nghiệm', techTypeId: 3 },
-  { label: 'Kỹ thuật viên thiết bị thể dục thể thao', techTypeId: 4 },
-]
 
 function toRoleLabel(role) {
   if (role === 'Admin') return 'Quản trị viên'

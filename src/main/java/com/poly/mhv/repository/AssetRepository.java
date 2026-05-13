@@ -11,6 +11,10 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     List<Asset> findByHomeLocationId(Integer homeLocationId);
     List<Asset> findByStatus(String status);
     List<Asset> findByQaCodeContainingIgnoreCaseOrNameContainingIgnoreCase(String qaCode, String name);
+    List<Asset> findByCategoryId(Integer categoryId);
+    long countByCategoryId(Integer categoryId);
+    long countByLocationIdOrHomeLocationId(Integer locationId, Integer homeLocationId);
+
     @Query("""
             select a from Asset a
             join fetch a.location l

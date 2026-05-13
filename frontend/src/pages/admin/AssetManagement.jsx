@@ -38,7 +38,6 @@ function AssetManagement() {
     categoryKeyword: '',
   })
   const [form, setForm] = useState({
-    qaCode: '',
     name: '',
     categoryId: '',
     locationId: '',
@@ -113,7 +112,6 @@ function AssetManagement() {
   const resetForm = () => {
     setSelectedQaCode(null)
     setForm({
-      qaCode: '',
       name: '',
       categoryId: '',
       locationId: '',
@@ -142,14 +140,13 @@ function AssetManagement() {
   }
 
   const handleCreateAsset = async () => {
-    if (!form.qaCode || !form.name || !form.categoryId || !form.locationId) {
+    if (!form.name || !form.categoryId || !form.locationId) {
       toast.error('Vui lòng nhập đầy đủ thông tin thiết bị.')
       return
     }
     setSubmitting(true)
     try {
       const response = await axiosClient.post('/api/assets', {
-        qaCode: form.qaCode.trim(),
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(form.locationId),
@@ -160,7 +157,7 @@ function AssetManagement() {
       } else {
         setQrImage('')
       }
-      toast.success('Thêm thiết bị thành công.')
+      toast.success(`Thêm thiết bị thành công. Mã mới: ${response.data?.qaCode || 'đã tự sinh'}.`)
       setShowFormModal(false)
       resetForm()
       await loadAssets()
@@ -221,7 +218,6 @@ function AssetManagement() {
     setSelectedQaCode(asset.qaCode)
     setQrImage('')
     setForm({
-      qaCode: asset.qaCode,
       name: asset.name,
       categoryId: String(asset.categoryId),
       locationId: String(asset.homeLocationId || asset.locationId),
@@ -289,7 +285,10 @@ function AssetManagement() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-slate-800">Thiết bị hiện có</h2>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-800">Quản lý thiết bị</h2>
+          <p className="text-sm text-slate-500">Theo dõi danh sách thiết bị, mã QR và phòng gốc của từng tài sản.</p>
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           <button
             type="button"
@@ -321,7 +320,7 @@ function AssetManagement() {
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-base font-semibold text-slate-800">Lọc và tìm thiết bị</h3>
+        <h3 className="mb-3 text-base font-semibold text-slate-800">Lọc và tìm kiếm thiết bị</h3>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <input
             value={filters.name}
@@ -581,16 +580,21 @@ function AssetManagement() {
             </button>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Mã QA</label>
-              <input
-                value={form.qaCode}
-                onChange={(e) => setForm((prev) => ({ ...prev, qaCode: e.target.value }))}
-                disabled={isEditing}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:bg-slate-100"
-                placeholder="Ví dụ: QA001"
-              />
-            </div>
+            {isEditing && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Mã QA</label>
+                <input
+                  value={selectedQaCode || ''}
+                  disabled
+                  className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-600"
+                />
+              </div>
+            )}
+            {!isEditing && (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:col-span-2">
+                Mã QA sẽ được hệ thống tự sinh sau khi bạn chọn loại thiết bị và lưu bản ghi mới.
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Tên thiết bị</label>
               <input

@@ -13,6 +13,8 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
     Optional<UsageHistory> findByAssetQaCodeAndEndTimeIsNull(String assetQaCode);
     List<UsageHistory> findByAssetQaCode(String assetQaCode);
     List<UsageHistory> findByUserId(Integer userId);
+    long countByFromLocationIdOrToLocationId(Integer fromLocationId, Integer toLocationId);
+
     @Query("""
             select uh from UsageHistory uh
             join fetch uh.asset a

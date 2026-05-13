@@ -14,8 +14,10 @@ import Register from './pages/Register'
 import TicketDetail from './pages/TicketDetail'
 import Unauthorized from './pages/Unauthorized'
 import AssetManagement from './pages/admin/AssetManagement'
+import CategoryManagement from './pages/admin/CategoryManagement'
 import Dashboard from './pages/admin/Dashboard'
 import InventoryAuditManagement from './pages/admin/InventoryAuditManagement'
+import LocationManagement from './pages/admin/LocationManagement'
 import MaintenanceHistoryManagement from './pages/admin/MaintenanceHistoryManagement'
 import NotificationDetail from './pages/admin/NotificationDetail'
 import TicketManagement from './pages/admin/TicketManagement'
@@ -106,6 +108,8 @@ function App() {
         >
           <Route path="/admin/dashboard" element={<Dashboard />} />
           <Route path="/admin/assets" element={<AssetManagement />} />
+          <Route path="/admin/categories" element={<CategoryManagement />} />
+          <Route path="/admin/locations" element={<LocationManagement />} />
           <Route path="/admin/usage-history" element={<UsageHistoryManagement />} />
           <Route path="/admin/maintenance-history" element={<MaintenanceHistoryManagement />} />
           <Route path="/admin/inventory-audits" element={<InventoryAuditManagement />} />

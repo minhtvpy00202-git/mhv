@@ -61,10 +61,13 @@ public class JwtUtils {
 
         byte[] keyBytes;
         try {
-            String base64Candidate = secret.replaceAll("\\s+", "");
+            String base64Candidate = secret
+                    .replace("\\n", "")
+                    .replace("\\r", "")
+                    .replace("\\", "")
+                    .replaceAll("\\s+", "");
             keyBytes = Decoders.BASE64.decode(base64Candidate);
-        } catch (IllegalArgumentException ex) {
-            // Fallback for plain-text secrets in some environments.
+        } catch (RuntimeException ex) {
             keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         }
         return Keys.hmacShaKeyFor(keyBytes);

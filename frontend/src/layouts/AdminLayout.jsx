@@ -1,13 +1,36 @@
-import { Bell, BarChart3, Boxes, ClipboardCheck, History, LogOut, Ticket, TriangleAlert, Users } from 'lucide-react'
+import {
+  Bell,
+  BarChart3,
+  Boxes,
+  ChevronDown,
+  ChevronRight,
+  ClipboardCheck,
+  History,
+  LogOut,
+  MapPin,
+  Tags,
+  Ticket,
+  TriangleAlert,
+  Users,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
-  { to: '/admin/assets', label: 'Thiết bị hiện có', icon: Boxes },
+  {
+    id: 'shared-management',
+    label: 'Quản lý chung',
+    icon: Boxes,
+    children: [
+      { to: '/admin/assets', label: 'Quản lý thiết bị', icon: Boxes },
+      { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
+      { to: '/admin/locations', label: 'Quản lý phòng', icon: MapPin },
+    ],
+  },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
   { to: '/admin/maintenance-history', label: 'Lịch sử báo hỏng', icon: TriangleAlert },
@@ -18,9 +41,21 @@ const menuItems = [
 function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true })
+
+  useEffect(() => {
+    if (
+      location.pathname.startsWith('/admin/assets')
+      || location.pathname.startsWith('/admin/categories')
+      || location.pathname.startsWith('/admin/locations')
+    ) {
+      setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))
+    }
+  }, [location.pathname])
 
   useEffect(() => {
     const loadFeed = async () => {
@@ -65,20 +100,66 @@ function AdminLayout() {
           <h1 className="text-lg font-semibold">FPT Admin</h1>
         </div>
         <nav className="mt-4 space-y-2">
-          {menuItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive ? 'bg-orange-50 text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
-                }`
-              }
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </NavLink>
-          ))}
+          {menuItems.map((item) => {
+            if (!item.children) {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      isActive ? 'bg-orange-50 text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
+                    }`
+                  }
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </NavLink>
+              )
+            }
+
+            const isExpanded = expandedMenus[item.id]
+            const isParentActive = item.children.some((child) => location.pathname.startsWith(child.to))
+            const ParentIcon = item.icon
+
+            return (
+              <div key={item.id} className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedMenus((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    isParentActive ? 'bg-orange-50 text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <ParentIcon size={18} />
+                    <span>{item.label}</span>
+                  </span>
+                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+
+                {isExpanded && (
+                  <div className="space-y-1 pl-4">
+                    {item.children.map(({ to, label, icon: Icon }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        className={({ isActive }) =>
+                          `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                            isActive ? 'bg-orange-50 font-semibold text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
+                          }`
+                        }
+                      >
+                        <Icon size={16} />
+                        <span>{label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </nav>
       </aside>
 

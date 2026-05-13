@@ -13,4 +13,5 @@ public class CategoryResponse {
     private Integer id;
     private String name;
     private Integer techTypeId;
+    private String techTypeName;
 }

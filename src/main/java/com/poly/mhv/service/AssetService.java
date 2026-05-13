@@ -15,6 +15,7 @@ import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
 import java.text.Normalizer;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,17 +54,14 @@ public class AssetService {
     @Transactional
     public AssetResponse createAsset(AssetCreateRequest request) {
         validateCreateRequest(request);
-        if (assetRepository.existsById(request.getQaCode())) {
-            throw new CustomException("Mã thiết bị đã tồn tại: " + request.getQaCode());
-        }
-
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại thiết bị với id: " + request.getCategoryId()));
+        String generatedQaCode = generateQaCode(category);
 
         Asset asset = Asset.builder()
-                .qaCode(request.getQaCode())
+                .qaCode(generatedQaCode)
                 .name(request.getName())
                 .category(category)
                 .status("Sẵn sàng")
@@ -229,12 +227,86 @@ public class AssetService {
         return normalized.toLowerCase(Locale.ROOT);
     }
 
+    private String generateQaCode(Category category) {
+        String prefix = buildCategoryPrefix(category.getName());
+        int currentMax = assetRepository.findByCategoryId(category.getId()).stream()
+                .map(Asset::getQaCode)
+                .filter(StringUtils::hasText)
+                .filter(qaCode -> qaCode.startsWith(prefix))
+                .map(qaCode -> extractNumericSuffix(qaCode, prefix))
+                .filter(number -> number > 0)
+                .max(Comparator.naturalOrder())
+                .orElse(0);
+
+        int nextNumber = currentMax + 1;
+        while (nextNumber <= 9999) {
+            String candidate = prefix + String.format("%04d", nextNumber);
+            if (!assetRepository.existsById(candidate)) {
+                return candidate;
+            }
+            nextNumber++;
+        }
+        throw new CustomException("Đã vượt giới hạn sinh mã thiết bị cho loại " + category.getName() + ".");
+    }
+
+    private int extractNumericSuffix(String qaCode, String prefix) {
+        if (!StringUtils.hasText(qaCode) || !qaCode.startsWith(prefix)) {
+            return -1;
+        }
+        String suffix = qaCode.substring(prefix.length());
+        if (!suffix.matches("\\d{4}")) {
+            return -1;
+        }
+        return Integer.parseInt(suffix);
+    }
+
+    private String buildCategoryPrefix(String categoryName) {
+        String englishPhrase = translateCategoryToEnglish(categoryName);
+        String prefix = List.of(englishPhrase.split("\\s+")).stream()
+                .filter(StringUtils::hasText)
+                .map(word -> String.valueOf(Character.toUpperCase(word.charAt(0))))
+                .reduce("", String::concat);
+        if (!StringUtils.hasText(prefix)) {
+            throw new CustomException("Không thể sinh mã cho loại thiết bị này.");
+        }
+        return prefix;
+    }
+
+    private String translateCategoryToEnglish(String categoryName) {
+        String normalizedCategoryName = normalizeKeyword(categoryName);
+        if (normalizedCategoryName == null) {
+            throw new CustomException("Tên loại thiết bị không hợp lệ.");
+        }
+
+        return switch (normalizedCategoryName) {
+            case "thiet bi cong nghe" -> "technology equipment";
+            case "thiet bi giang day truyen thong" -> "traditional teaching equipment";
+            case "thiet bi phong thi nghiem/chuc nang" -> "laboratory functional equipment";
+            case "thiet bi phong thi nghiem chuc nang" -> "laboratory functional equipment";
+            case "thiet bi the duc the thao" -> "sports equipment";
+            default -> buildEnglishFallback(normalizedCategoryName);
+        };
+    }
+
+    private String buildEnglishFallback(String normalizedCategoryName) {
+        return normalizedCategoryName
+                .replace('/', ' ')
+                .replaceAll("\\s+", " ")
+                .trim()
+                .replace("thiet bi", "equipment")
+                .replace("cong nghe", "technology")
+                .replace("giang day", "teaching")
+                .replace("truyen thong", "traditional")
+                .replace("phong thi nghiem", "laboratory")
+                .replace("chuc nang", "functional")
+                .replace("the duc the thao", "sports")
+                .replace("the duc", "physical")
+                .replace("the thao", "sports");
+    }
+
     private void validateCreateRequest(AssetCreateRequest request) {
         if (request == null) {
             throw new CustomException("Dữ liệu tạo thiết bị không được để trống.");
-        }
-        if (!StringUtils.hasText(request.getQaCode())) {
-            throw new CustomException("qaCode là bắt buộc.");
         }
         if (!StringUtils.hasText(request.getName())) {
             throw new CustomException("name là bắt buộc.");
