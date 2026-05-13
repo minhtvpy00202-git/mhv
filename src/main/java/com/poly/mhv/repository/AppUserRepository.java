@@ -12,9 +12,16 @@ import org.springframework.data.repository.query.Param;
 public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
     Optional<AppUser> findByUsername(String username);
     List<AppUser> findByRole(String role);
-    List<AppUser> findByRoleAndTechSupportTypeId(String role, Integer techTypeId);
     List<AppUser> findAllByOrderByUsernameAsc();
     boolean existsByUsername(String username);
+
+    @Query("""
+            SELECT DISTINCT u FROM AppUser u
+            JOIN u.techSupportTypes t
+            WHERE u.role = :role AND t.id = :techTypeId
+            ORDER BY u.username ASC
+            """)
+    List<AppUser> findByRoleAndTechSupportTypeId(@Param("role") String role, @Param("techTypeId") Integer techTypeId);
 
     @Query("""
             SELECT u FROM AppUser u

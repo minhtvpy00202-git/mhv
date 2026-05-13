@@ -51,8 +51,8 @@ public class AuthController {
                     .username(userDetails.getUsername())
                     .fullName(userDetails.getFullName())
                     .role(userDetails.getRole())
-                    .techTypeId(userDetails.getTechTypeId())
-                    .techTypeName(userDetails.getTechTypeName())
+                    .techTypeIds(userDetails.getTechTypeIds())
+                    .techTypeNames(userDetails.getTechTypeNames())
                     .build();
         } catch (DisabledException ex) {
             throw new CustomException("Tài khoản đang bị khóa.");
@@ -69,8 +69,8 @@ public class AuthController {
                 .username(created.getUsername())
                 .fullName(created.getFullName())
                 .role(created.getRole())
-                .techTypeId(created.getTechTypeId())
-                .techTypeName(created.getTechTypeName())
+                .techTypeIds(created.getTechTypeIds())
+                .techTypeNames(created.getTechTypeNames())
                 .build();
     }
 

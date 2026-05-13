@@ -6,8 +6,9 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinTable;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
@@ -54,9 +55,14 @@ public class AppUser {
     @Nationalized
     private String status;
 
-    @ManyToOne
-    @JoinColumn(name = "tech_type_id", nullable = false)
-    private TechSupportType techSupportType;
+    @ManyToMany
+    @JoinTable(
+            name = "user_tech_support_types",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "tech_type_id")
+    )
+    @Builder.Default
+    private List<TechSupportType> techSupportTypes = new ArrayList<>();
 
     @JsonIgnore
     @OneToMany(mappedBy = "user")

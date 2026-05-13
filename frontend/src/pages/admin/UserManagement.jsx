@@ -38,7 +38,7 @@ function UserManagement() {
     birthday: '',
     phone: '',
     role: 'NhanVien',
-    techTypeId: 0,
+    techTypeIds: [],
     status: 'Hoạt động',
   })
 
@@ -85,7 +85,7 @@ function UserManagement() {
       birthday: '',
       phone: '',
       role: 'NhanVien',
-      techTypeId: 0,
+      techTypeIds: [],
       status: 'Hoạt động',
     })
   }
@@ -109,7 +109,7 @@ function UserManagement() {
       birthday: item.birthday || '',
       phone: item.phone || '',
       role: item.role || 'NhanVien',
-      techTypeId: item.techTypeId ?? 0,
+      techTypeIds: item.techTypeIds || [],
       status: item.status || 'Hoạt động',
     })
     setShowFormModal(true)
@@ -128,8 +128,8 @@ function UserManagement() {
       toast.error('Ngày sinh phải là ngày trong quá khứ.')
       return
     }
-    if (isTechSupportRole && !Number(form.techTypeId)) {
-      toast.error('Vui lòng chọn chuyên môn cho tài khoản kỹ thuật viên.')
+    if (isTechSupportRole && form.techTypeIds.length === 0) {
+      toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
       return
     }
     setSubmitting(true)
@@ -141,7 +141,7 @@ function UserManagement() {
         birthday: form.birthday,
         phone: form.phone.trim(),
         role: form.role,
-        techTypeId: isTechSupportRole ? Number(form.techTypeId) : 0,
+        techTypeIds: isTechSupportRole ? form.techTypeIds.map(Number) : [],
         status: form.status,
       })
       toast.success('Thêm tài khoản thành công.')
@@ -161,8 +161,8 @@ function UserManagement() {
       toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
       return
     }
-    if (isTechSupportRole && !Number(form.techTypeId)) {
-      toast.error('Vui lòng chọn chuyên môn cho tài khoản kỹ thuật viên.')
+    if (isTechSupportRole && form.techTypeIds.length === 0) {
+      toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
       return
     }
     setSubmitting(true)
@@ -174,7 +174,7 @@ function UserManagement() {
         birthday: form.birthday || null,
         phone: form.phone.trim() || null,
         role: form.role,
-        techTypeId: isTechSupportRole ? Number(form.techTypeId) : 0,
+        techTypeIds: isTechSupportRole ? form.techTypeIds.map(Number) : [],
         status: form.status,
       })
       toast.success('Cập nhật tài khoản thành công.')
@@ -302,7 +302,7 @@ function UserManagement() {
                     <td className="px-3 py-2">{toRoleLabel(row.role)}</td>
                     <td className="px-3 py-2">
                       {row.role === 'TechSupport'
-                        ? row.techTypeName || 'Kỹ thuật viên'
+                        ? (row.techTypeNames?.join(', ') || 'Kỹ thuật viên')
                         : '-'}
                     </td>
                     <td className="px-3 py-2">{row.status}</td>
@@ -440,9 +440,9 @@ function UserManagement() {
                   onChange={(e) => {
                     const value = e.target.value
                     if (value === 'TechSupport') {
-                      setForm((prev) => ({ ...prev, role: 'TechSupport', techTypeId: '' }))
+                      setForm((prev) => ({ ...prev, role: 'TechSupport', techTypeIds: prev.techTypeIds || [] }))
                     } else {
-                      setForm((prev) => ({ ...prev, role: value, techTypeId: 0 }))
+                      setForm((prev) => ({ ...prev, role: value, techTypeIds: [] }))
                     }
                   }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
@@ -457,18 +457,30 @@ function UserManagement() {
               {isTechSupportRole && (
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Chuyên môn kỹ thuật *</label>
-                  <select
-                    value={form.techTypeId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, techTypeId: Number(e.target.value) || '' }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  >
-                    <option value="">Chọn chuyên môn</option>
-                    {techRoleOptions.map((item) => (
-                      <option key={item.techTypeId} value={item.techTypeId}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-2 rounded-lg border border-slate-300 px-3 py-2">
+                    {techRoleOptions.map((item) => {
+                      const checked = form.techTypeIds.includes(item.techTypeId)
+                      return (
+                        <label key={item.techTypeId} className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setForm((prev) => ({
+                                ...prev,
+                                techTypeIds: e.target.checked
+                                  ? [...prev.techTypeIds, item.techTypeId]
+                                  : prev.techTypeIds.filter((id) => id !== item.techTypeId),
+                              }))
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">Có thể chọn nhiều chuyên môn cho một kỹ thuật viên.</p>
                 </div>
               )}
               <div>

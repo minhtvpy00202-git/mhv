@@ -27,7 +27,7 @@ function Login() {
         role: data.role,
         username: data.username,
         fullName: data.fullName,
-        techTypeId: data.techTypeId,
+        techTypeIds: data.techTypeIds,
       })
       toast.success('Đăng nhập thành công.')
       const normalizedRole = String(data.role || '').trim().toLowerCase()

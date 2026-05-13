@@ -11,6 +11,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Page;
@@ -74,7 +75,7 @@ public class UserService {
                 .birthday(request.getBirthday())
                 .phone(request.getPhone().trim())
                 .status("Hoạt động")
-                .techSupportType(getTechSupportTypeOrThrow(0))
+                .techSupportTypes(new ArrayList<>())
                 .build();
         AppUser saved = appUserRepository.save(appUser);
         notificationService.createNotification(
@@ -130,7 +131,7 @@ public class UserService {
             throw new CustomException("Tên đăng nhập đã tồn tại, vui lòng chọn tên đăng nhập khác");
         }
         String validatedRole = validateRole(request.getRole());
-        Integer techTypeId = resolveTechTypeId(validatedRole, request.getTechTypeId());
+        List<TechSupportType> techSupportTypes = resolveTechSupportTypes(validatedRole, request);
         AppUser appUser = AppUser.builder()
                 .username(username)
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -139,7 +140,7 @@ public class UserService {
                 .birthday(request.getBirthday())
                 .phone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null)
                 .status(validateStatus(request.getStatus()))
-                .techSupportType(getTechSupportTypeOrThrow(techTypeId))
+                .techSupportTypes(new ArrayList<>(techSupportTypes))
                 .build();
         AppUser saved = appUserRepository.save(appUser);
         String actor = getCurrentUsername();
@@ -191,8 +192,9 @@ public class UserService {
         appUser.setBirthday(request.getBirthday());
         appUser.setPhone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null);
         String validatedRole = validateRole(request.getRole());
+        List<TechSupportType> techSupportTypes = resolveTechSupportTypes(validatedRole, request);
         appUser.setRole(validatedRole);
-        appUser.setTechSupportType(getTechSupportTypeOrThrow(resolveTechTypeId(validatedRole, request.getTechTypeId())));
+        appUser.setTechSupportTypes(new ArrayList<>(techSupportTypes));
         appUser.setStatus(validateStatus(request.getStatus()));
         if (StringUtils.hasText(request.getPassword())) {
             appUser.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -279,6 +281,13 @@ public class UserService {
     }
 
     private UserAdminResponse mapToResponse(AppUser appUser) {
+        List<TechSupportType> effectiveTechSupportTypes = getEffectiveTechSupportTypes(appUser);
+        List<Integer> techTypeIds = effectiveTechSupportTypes.stream()
+                .map(TechSupportType::getId)
+                .toList();
+        List<String> techTypeNames = effectiveTechSupportTypes.stream()
+                .map(TechSupportType::getName)
+                .toList();
         return UserAdminResponse.builder()
                 .id(appUser.getId())
                 .username(appUser.getUsername())
@@ -287,8 +296,8 @@ public class UserService {
                 .birthday(appUser.getBirthday())
                 .phone(appUser.getPhone())
                 .status(appUser.getStatus())
-                .techTypeId(appUser.getTechSupportType() != null ? appUser.getTechSupportType().getId() : 0)
-                .techTypeName(appUser.getTechSupportType() != null ? appUser.getTechSupportType().getName() : null)
+                .techTypeIds(techTypeIds)
+                .techTypeNames(techTypeNames)
                 .build();
     }
 
@@ -331,19 +340,43 @@ public class UserService {
         return normalizedStatus;
     }
 
-    private Integer resolveTechTypeId(String role, Integer techTypeId) {
+    private List<TechSupportType> resolveTechSupportTypes(String role, UserAdminRequest request) {
         if (!"TechSupport".equals(role)) {
-            return 0;
+            return List.of();
         }
-        if (techTypeId == null || techTypeId < 1 || techTypeId > 4) {
-            throw new CustomException("TechSupport phải có chuyên môn kỹ thuật hợp lệ.");
+        List<Integer> techTypeIds = extractTechTypeIds(request);
+        if (techTypeIds.isEmpty()) {
+            throw new CustomException("Kỹ thuật viên phải có ít nhất một chuyên môn kỹ thuật hợp lệ.");
         }
-        return techTypeId;
+        return techTypeIds.stream()
+                .map(this::getTechSupportTypeOrThrow)
+                .toList();
+    }
+
+    private List<Integer> extractTechTypeIds(UserAdminRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        return request.getTechTypeIds() == null
+                ? List.of()
+                : request.getTechTypeIds().stream()
+                        .filter(id -> id != null && id > 0)
+                        .distinct()
+                        .toList();
     }
 
     private TechSupportType getTechSupportTypeOrThrow(Integer techTypeId) {
         return techSupportTypeRepository.findById(techTypeId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại chuyên môn kỹ thuật."));
+    }
+
+    private List<TechSupportType> getEffectiveTechSupportTypes(AppUser appUser) {
+        if (appUser.getTechSupportTypes() != null) {
+            return appUser.getTechSupportTypes().stream()
+                    .filter(type -> type != null && type.getId() != null && type.getId() > 0)
+                    .toList();
+        }
+        return List.of();
     }
 
     private String getCurrentUsername() {

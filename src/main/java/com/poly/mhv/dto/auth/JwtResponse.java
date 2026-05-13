@@ -1,5 +1,6 @@
 package com.poly.mhv.dto.auth;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +16,6 @@ public class JwtResponse {
     private String username;
     private String fullName;
     private String role;
-    private Integer techTypeId;
-    private String techTypeName;
+    private List<Integer> techTypeIds;
+    private List<String> techTypeNames;
 }

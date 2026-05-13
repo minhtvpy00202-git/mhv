@@ -207,33 +207,64 @@ GO
 -- PHẦN 2: TẠO INDEXES & TRIGGERS
 -- ==============================================================================
 
-CREATE INDEX IX_assets_name ON assets(name);
-CREATE INDEX IX_assets_status ON assets(status);
-CREATE INDEX IX_assets_location_id ON assets(location_id);
-CREATE INDEX IX_assets_home_location_id ON assets(home_location_id);
-CREATE INDEX IX_assets_category_id ON assets(category_id);
-CREATE INDEX IX_assets_search_name_status_category ON assets(name, status, category_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_name' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_name ON dbo.assets(name);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_status' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_status ON dbo.assets(status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_location_id' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_location_id ON dbo.assets(location_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_home_location_id' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_home_location_id ON dbo.assets(home_location_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_category_id' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_category_id ON dbo.assets(category_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_assets_search_name_status_category' AND object_id = OBJECT_ID('dbo.assets'))
+    CREATE INDEX IX_assets_search_name_status_category ON dbo.assets(name, status, category_id);
 
-CREATE INDEX IX_usage_histories_asset_qa_code ON usage_histories(asset_qa_code);
-CREATE INDEX IX_usage_histories_user_id ON usage_histories(user_id);
-CREATE INDEX IX_usage_histories_start_time ON usage_histories(start_time);
-CREATE UNIQUE INDEX UX_usage_histories_asset_open ON usage_histories(asset_qa_code) WHERE end_time IS NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_usage_histories_asset_qa_code' AND object_id = OBJECT_ID('dbo.usage_histories'))
+    CREATE INDEX IX_usage_histories_asset_qa_code ON dbo.usage_histories(asset_qa_code);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_usage_histories_user_id' AND object_id = OBJECT_ID('dbo.usage_histories'))
+    CREATE INDEX IX_usage_histories_user_id ON dbo.usage_histories(user_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_usage_histories_start_time' AND object_id = OBJECT_ID('dbo.usage_histories'))
+    CREATE INDEX IX_usage_histories_start_time ON dbo.usage_histories(start_time);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_usage_histories_asset_open' AND object_id = OBJECT_ID('dbo.usage_histories'))
+    CREATE UNIQUE INDEX UX_usage_histories_asset_open ON dbo.usage_histories(asset_qa_code) WHERE end_time IS NULL;
 
-CREATE INDEX IX_notifications_occurred_at ON notifications(occurred_at DESC);
-CREATE INDEX IX_notifications_is_read ON notifications(is_read);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_notifications_occurred_at' AND object_id = OBJECT_ID('dbo.notifications'))
+    CREATE INDEX IX_notifications_occurred_at ON dbo.notifications(occurred_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_notifications_is_read' AND object_id = OBJECT_ID('dbo.notifications'))
+    CREATE INDEX IX_notifications_is_read ON dbo.notifications(is_read);
 
-CREATE INDEX IX_tickets_assignee_status_created_at ON tickets(assignee_id, status, created_at DESC);
-CREATE INDEX IX_tickets_reporter_created_at ON tickets(reporter_id, created_at DESC);
-CREATE INDEX IX_tickets_asset_created_at ON tickets(asset_qa_code, created_at DESC);
-CREATE INDEX IX_chat_messages_ticket_created_at ON chat_messages(ticket_id, created_at DESC);
-CREATE INDEX IX_ticket_events_ticket_occurred_at ON ticket_events(ticket_id, occurred_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tickets_assignee_status_created_at' AND object_id = OBJECT_ID('dbo.tickets'))
+    CREATE INDEX IX_tickets_assignee_status_created_at ON dbo.tickets(assignee_id, status, created_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tickets_reporter_created_at' AND object_id = OBJECT_ID('dbo.tickets'))
+    CREATE INDEX IX_tickets_reporter_created_at ON dbo.tickets(reporter_id, created_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_tickets_asset_created_at' AND object_id = OBJECT_ID('dbo.tickets'))
+    CREATE INDEX IX_tickets_asset_created_at ON dbo.tickets(asset_qa_code, created_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_chat_messages_ticket_created_at' AND object_id = OBJECT_ID('dbo.chat_messages'))
+    CREATE INDEX IX_chat_messages_ticket_created_at ON dbo.chat_messages(ticket_id, created_at DESC);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ticket_events_ticket_occurred_at' AND object_id = OBJECT_ID('dbo.ticket_events'))
+    CREATE INDEX IX_ticket_events_ticket_occurred_at ON dbo.ticket_events(ticket_id, occurred_at DESC);
 
-CREATE INDEX IX_inventory_audits_location_status ON inventory_audits(location_id, status);
-CREATE INDEX IX_inventory_audit_missing_audit ON inventory_audit_missing(audit_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_inventory_audits_location_status' AND object_id = OBJECT_ID('dbo.inventory_audits'))
+    CREATE INDEX IX_inventory_audits_location_status ON dbo.inventory_audits(location_id, status);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_inventory_audit_items_audit' AND object_id = OBJECT_ID('dbo.inventory_audit_items'))
+    CREATE INDEX IX_inventory_audit_items_audit ON dbo.inventory_audit_items(audit_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_inventory_audit_items_asset_qa_code' AND object_id = OBJECT_ID('dbo.inventory_audit_items'))
+    CREATE INDEX IX_inventory_audit_items_asset_qa_code ON dbo.inventory_audit_items(asset_qa_code);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_inventory_audit_missing_audit' AND object_id = OBJECT_ID('dbo.inventory_audit_missing'))
+    CREATE INDEX IX_inventory_audit_missing_audit ON dbo.inventory_audit_missing(audit_id);
+
+IF OBJECT_ID('dbo.user_tech_support_types', 'U') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_user_tech_support_types_user_id' AND object_id = OBJECT_ID('dbo.user_tech_support_types'))
+        CREATE INDEX IX_user_tech_support_types_user_id ON dbo.user_tech_support_types(user_id);
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_user_tech_support_types_tech_type_id' AND object_id = OBJECT_ID('dbo.user_tech_support_types'))
+        CREATE INDEX IX_user_tech_support_types_tech_type_id ON dbo.user_tech_support_types(tech_type_id);
+END;
 GO
 
-CREATE TRIGGER TR_usage_histories_validate_insert
-ON usage_histories
+CREATE OR ALTER TRIGGER TR_usage_histories_validate_insert
+ON dbo.usage_histories
 INSTEAD OF INSERT
 AS
 BEGIN
@@ -242,14 +273,14 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM inserted i
-        JOIN assets a ON a.qa_code = i.asset_qa_code
+        JOIN dbo.assets a ON a.qa_code = i.asset_qa_code
         WHERE a.status IN (N'Đang sử dụng', N'Bảo trì')
     )
     BEGIN
         THROW 50001, N'Thiết bị đang bận hoặc đang bảo trì, không thể check-out.', 1;
     END;
 
-    INSERT INTO usage_histories (asset_qa_code, user_id, start_time, end_time, from_location_id, to_location_id)
+    INSERT INTO dbo.usage_histories (asset_qa_code, user_id, start_time, end_time, from_location_id, to_location_id)
     SELECT i.asset_qa_code, i.user_id, i.start_time, i.end_time, i.from_location_id, i.to_location_id
     FROM inserted i;
 END;

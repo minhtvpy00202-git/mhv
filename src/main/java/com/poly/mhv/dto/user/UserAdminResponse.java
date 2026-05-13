@@ -1,6 +1,7 @@
 package com.poly.mhv.dto.user;
 
 import java.time.LocalDate;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,6 +19,6 @@ public class UserAdminResponse {
     private LocalDate birthday;
     private String phone;
     private String status;
-    private Integer techTypeId;
-    private String techTypeName;
+    private List<Integer> techTypeIds;
+    private List<String> techTypeNames;
 }

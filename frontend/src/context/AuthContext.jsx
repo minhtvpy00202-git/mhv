@@ -16,21 +16,24 @@ const getStoredUser = () => ({
   role: normalizeRole(localStorage.getItem('auth_role')),
   username: localStorage.getItem('auth_username'),
   fullName: localStorage.getItem('auth_full_name'),
-  techTypeId: Number(localStorage.getItem('auth_tech_type_id')) || 0,
+  techTypeIds: JSON.parse(localStorage.getItem('auth_tech_type_ids') || '[]'),
 })
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
   const [user, setUser] = useState(getStoredUser())
 
-  const login = ({ token: nextToken, id, role, username, fullName, techTypeId }) => {
+  const login = ({ token: nextToken, id, role, username, fullName, techTypeIds }) => {
     const normalizedRole = normalizeRole(role)
+    const normalizedTechTypeIds = Array.isArray(techTypeIds)
+      ? techTypeIds.map(Number).filter((value) => value > 0)
+      : []
     const nextUser = {
       userId: id,
       role: normalizedRole,
       username,
       fullName,
-      techTypeId: Number(techTypeId) || 0,
+      techTypeIds: normalizedTechTypeIds,
     }
     setToken(nextToken)
     setUser(nextUser)
@@ -39,18 +42,18 @@ export function AuthProvider({ children }) {
     localStorage.setItem('auth_role', normalizedRole)
     localStorage.setItem('auth_username', username)
     localStorage.setItem('auth_full_name', fullName || '')
-    localStorage.setItem('auth_tech_type_id', String(Number(techTypeId) || 0))
+    localStorage.setItem('auth_tech_type_ids', JSON.stringify(normalizedTechTypeIds))
   }
 
   const logout = () => {
     setToken(null)
-    setUser({ userId: null, role: null, username: null, fullName: null, techTypeId: 0 })
+    setUser({ userId: null, role: null, username: null, fullName: null, techTypeIds: [] })
     localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_user_id')
     localStorage.removeItem('auth_role')
     localStorage.removeItem('auth_username')
     localStorage.removeItem('auth_full_name')
-    localStorage.removeItem('auth_tech_type_id')
+    localStorage.removeItem('auth_tech_type_ids')
   }
 
   const value = useMemo(

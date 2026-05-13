@@ -4,6 +4,7 @@ import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.TechSupportType;
 import com.poly.mhv.repository.TechSupportTypeRepository;
 import com.poly.mhv.repository.AppUserRepository;
+import java.util.ArrayList;
 import java.util.Map;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -59,10 +60,7 @@ public class DatabaseSeeder implements CommandLineRunner {
         }
         appUser.setRole(role);
         appUser.setStatus("Hoạt động");
-        appUser.setTechSupportType(
-                techSupportTypeRepository.findById(0)
-                        .orElseThrow(() -> new IllegalStateException("Thiếu nhóm kỹ thuật mặc định id=0"))
-        );
+        appUser.setTechSupportTypes(new ArrayList<>());
         if (appUser.getFullName() == null || appUser.getFullName().isBlank()) {
             appUser.setFullName(username);
         }
@@ -80,10 +78,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         appUser.setRole("TechSupport");
         appUser.setStatus("Hoạt động");
         appUser.setFullName(fullName);
-        appUser.setTechSupportType(
-                techSupportTypeRepository.findById(techTypeId)
-                        .orElseThrow(() -> new IllegalStateException("Thiếu nhóm kỹ thuật id=" + techTypeId))
-        );
+        TechSupportType techSupportType = techSupportTypeRepository.findById(techTypeId)
+                .orElseThrow(() -> new IllegalStateException("Thiếu nhóm kỹ thuật id=" + techTypeId));
+        appUser.setTechSupportTypes(new ArrayList<>(java.util.List.of(techSupportType)));
         appUserRepository.save(appUser);
     }
 }

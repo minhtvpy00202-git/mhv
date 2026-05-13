@@ -97,15 +97,25 @@ public class TicketEventService {
             return;
         }
         if ("TechSupport".equals(actor.getRole())) {
-            Integer actorTechTypeId = actor.getTechSupportType() != null ? actor.getTechSupportType().getId() : 0;
             Asset asset = ticket.getAsset();
             Integer ticketTechTypeId = (asset != null && asset.getCategory() != null && asset.getCategory().getTechSupportType() != null)
                     ? asset.getCategory().getTechSupportType().getId()
                     : 0;
-            if (ticketTechTypeId > 0 && actorTechTypeId.equals(ticketTechTypeId)) {
+            if (ticketTechTypeId > 0 && userHasTechSupportType(actor, ticketTechTypeId)) {
                 return;
             }
         }
         throw new CustomException("Bạn không có quyền xem lịch sử ticket này.");
+    }
+
+    private boolean userHasTechSupportType(AppUser user, Integer techTypeId) {
+        if (user == null || techTypeId == null || techTypeId <= 0) {
+            return false;
+        }
+        if (user.getTechSupportTypes() != null) {
+            return user.getTechSupportTypes().stream()
+                    .anyMatch(type -> type != null && techTypeId.equals(type.getId()));
+        }
+        return false;
     }
 }

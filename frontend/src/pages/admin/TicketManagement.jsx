@@ -46,7 +46,7 @@ function TicketManagement() {
   const getEligibleTechSupports = (ticket) => {
     const techTypeId = Number(ticket?.assetCategoryTechTypeId) || 0
     if (!techTypeId) return []
-    return techSupports.filter((tech) => Number(tech.techTypeId) === techTypeId)
+    return techSupports.filter((tech) => Array.isArray(tech.techTypeIds) && tech.techTypeIds.map(Number).includes(techTypeId))
   }
 
   const loadTechSupports = async () => {

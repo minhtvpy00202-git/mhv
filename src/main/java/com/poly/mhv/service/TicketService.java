@@ -138,8 +138,7 @@ public class TicketService {
             throw new CustomException("Người được gán phải có vai trò TechSupport.");
         }
         Integer requiredTechTypeId = getAssetTechTypeId(ticket.getAsset());
-        Integer assigneeTechTypeId = assignee.getTechSupportType() != null ? assignee.getTechSupportType().getId() : 0;
-        if (requiredTechTypeId > 0 && !requiredTechTypeId.equals(assigneeTechTypeId)) {
+        if (requiredTechTypeId > 0 && !userHasTechSupportType(assignee, requiredTechTypeId)) {
             throw new CustomException("Kỹ thuật viên không đúng chuyên môn với loại thiết bị này.");
         }
         AppUser actor = currentUserProvider.getCurrentUser();
@@ -301,12 +300,12 @@ public class TicketService {
                     if (!"TechSupport".equals(actor.getRole())) {
                         return true;
                     }
-                    Integer actorTechTypeId = actor.getTechSupportType() != null ? actor.getTechSupportType().getId() : 0;
                     Integer ticketTechTypeId = getAssetTechTypeId(ticket.getAsset());
                     if (ticketTechTypeId <= 0) {
                         return ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
                     }
-                    return actorTechTypeId.equals(ticketTechTypeId) || (ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId()));
+                    return userHasTechSupportType(actor, ticketTechTypeId)
+                            || (ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId()));
                 })
                 .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
                 .map(this::mapToResponse)
@@ -367,6 +366,17 @@ public class TicketService {
             return 0;
         }
         return asset.getCategory().getTechSupportType().getId();
+    }
+
+    private boolean userHasTechSupportType(AppUser user, Integer techTypeId) {
+        if (user == null || techTypeId == null || techTypeId <= 0) {
+            return false;
+        }
+        if (user.getTechSupportTypes() != null) {
+            return user.getTechSupportTypes().stream()
+                    .anyMatch(type -> type != null && techTypeId.equals(type.getId()));
+        }
+        return false;
     }
 
     private String toVietnameseStatus(String status) {
