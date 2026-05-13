@@ -70,10 +70,12 @@ public class AssetService {
                 .build();
         Asset saved = assetRepository.save(asset);
         AppUser actor = getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "ASSET_CREATE",
                 "Thêm mới thiết bị",
-                "Thiết bị " + saved.getQaCode() + " đã được thêm mới.",
+                actorDisplayName + " đã thêm thiết bị " + saved.getName()
+                        + " tại phòng gốc " + saved.getHomeLocation().getRoomName() + ".",
                 actor.getUsername(),
                 saved.getQaCode(),
                 saved.getName(),
@@ -82,7 +84,7 @@ public class AssetService {
                         "Loại", getCategoryDisplayName(saved.getCategory()),
                         "Phòng gốc", saved.getHomeLocation().getRoomName(),
                         "Trạng thái", saved.getStatus(),
-                        "Người thực hiện", actor.getUsername()
+                        "Người thực hiện", actorDisplayName
                 )
         );
         return mapToAssetResponse(saved, true);
@@ -143,10 +145,12 @@ public class AssetService {
         }
         Asset updated = assetRepository.save(asset);
         AppUser actor = getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "ASSET_UPDATE",
                 "Cập nhật thiết bị",
-                "Thiết bị " + updated.getQaCode() + " đã được cập nhật.",
+                actorDisplayName + " đã cập nhật thiết bị " + updated.getName()
+                        + " tại phòng gốc " + updated.getHomeLocation().getRoomName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
@@ -160,7 +164,7 @@ public class AssetService {
                         Map.entry("Trạng thái mới", updated.getStatus()),
                         Map.entry("Phòng gốc cũ", oldHome),
                         Map.entry("Phòng gốc mới", updated.getHomeLocation().getRoomName()),
-                        Map.entry("Người thực hiện", actor.getUsername())
+                        Map.entry("Người thực hiện", actorDisplayName)
                 )
         );
         return mapToAssetResponse(updated, false);
@@ -175,10 +179,12 @@ public class AssetService {
         String homeLocationName = asset.getHomeLocation().getRoomName();
         assetRepository.delete(asset);
         AppUser actor = getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "ASSET_DELETE",
                 "Xóa thiết bị",
-                "Thiết bị " + qaCode + " đã bị xóa.",
+                actorDisplayName + " đã xóa thiết bị " + assetName
+                        + " tại phòng gốc " + homeLocationName + ".",
                 actor.getUsername(),
                 qaCode,
                 assetName,
@@ -187,7 +193,7 @@ public class AssetService {
                         "Tên thiết bị", assetName,
                         "Loại", categoryName,
                         "Phòng gốc", homeLocationName,
-                        "Người thực hiện", actor.getUsername()
+                        "Người thực hiện", actorDisplayName
                 )
         );
     }
@@ -295,5 +301,22 @@ public class AssetService {
         }
         return appUserRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new CustomException("Không tìm thấy người dùng đăng nhập."));
+    }
+
+    private String getActorDisplayName(AppUser user) {
+        return toRoleLabel(user.getRole()) + " " + getFullNameOrUsername(user);
+    }
+
+    private String getFullNameOrUsername(AppUser user) {
+        return StringUtils.hasText(user.getFullName()) ? user.getFullName().trim() : user.getUsername();
+    }
+
+    private String toRoleLabel(String role) {
+        return switch (role) {
+            case "Admin" -> "Quản trị viên";
+            case "NhanVien" -> "Nhân viên";
+            case "TechSupport" -> "Kỹ thuật viên";
+            default -> "Người dùng";
+        };
     }
 }

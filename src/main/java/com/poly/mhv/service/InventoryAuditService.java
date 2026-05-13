@@ -222,10 +222,13 @@ public class InventoryAuditService {
         inventoryAuditRepository.save(audit);
 
         AppUser actor = getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "INVENTORY_AUDIT_COMPLETED",
                 "Hoàn thành kiểm kê",
-                "Phiên kiểm kê phòng " + audit.getLocation().getRoomName() + " đã hoàn tất, thất lạc: " + missingCount + " thiết bị.",
+                actorDisplayName + " đã hoàn thành kiểm kê phòng " + audit.getLocation().getRoomName()
+                        + ": đã quét " + audit.getScannedCount() + "/" + audit.getExpectedCount()
+                        + " thiết bị, thất lạc " + missingCount + " thiết bị.",
                 actor.getUsername(),
                 null,
                 "Phiên kiểm kê phòng " + audit.getLocation().getRoomName(),
@@ -235,7 +238,7 @@ public class InventoryAuditService {
                         "Số lượng dự kiến", audit.getExpectedCount(),
                         "Số lượng đã quét", audit.getScannedCount(),
                         "Số lượng thất lạc", missingCount,
-                        "Người thực hiện", actor.getUsername()
+                        "Người thực hiện", actorDisplayName
                 )
         );
 
@@ -302,5 +305,22 @@ public class InventoryAuditService {
         }
         return appUserRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new CustomException("Không tìm thấy người dùng đăng nhập."));
+    }
+
+    private String getActorDisplayName(AppUser user) {
+        return toRoleLabel(user.getRole()) + " " + getFullNameOrUsername(user);
+    }
+
+    private String getFullNameOrUsername(AppUser user) {
+        return StringUtils.hasText(user.getFullName()) ? user.getFullName().trim() : user.getUsername();
+    }
+
+    private String toRoleLabel(String role) {
+        return switch (role) {
+            case "Admin" -> "Quản trị viên";
+            case "NhanVien" -> "Nhân viên";
+            case "TechSupport" -> "Kỹ thuật viên";
+            default -> "Người dùng";
+        };
     }
 }

@@ -78,10 +78,13 @@ public class TicketService {
         assetRepository.save(asset);
         Ticket saved = ticketRepository.save(ticket);
         List<AppUser> eligibleTechSupports = getEligibleTechSupportsByAsset(asset);
+        String reporterDisplayName = getActorDisplayName(reporter);
         notificationService.createNotification(
                 "TICKET_CREATED",
                 "Ticket mới cần tiếp nhận",
-                reporter.getUsername() + " đã tạo ticket #" + saved.getId() + " cho thiết bị " + asset.getQaCode() + ".",
+                reporterDisplayName + " đã tạo ticket #" + saved.getId()
+                        + " cho " + asset.getName()
+                        + " tại phòng gốc " + asset.getHomeLocation().getRoomName() + ".",
                 reporter.getUsername(),
                 asset.getQaCode(),
                 asset.getName(),
@@ -89,7 +92,9 @@ public class TicketService {
                         "Ticket", "#" + saved.getId(),
                         "Thiết bị", asset.getQaCode() + " - " + asset.getName(),
                         "Mức ưu tiên", saved.getPriority(),
-                        "Trạng thái", saved.getStatus()
+                        "Trạng thái", saved.getStatus(),
+                        "Người thực hiện", reporterDisplayName,
+                        "Phòng gốc", asset.getHomeLocation().getRoomName()
                 )
         );
         pushNotification(
@@ -153,18 +158,23 @@ public class TicketService {
         ticket.getAsset().setStatus("Bảo trì");
         assetRepository.save(ticket.getAsset());
         Ticket saved = ticketRepository.save(ticket);
+        String actorDisplayName = getActorDisplayName(actor);
+        String assigneeDisplayName = getActorDisplayName(assignee);
         notificationService.createNotification(
                 "TICKET_ASSIGNED",
                 "Ticket đã được nhận xử lý",
-                "Ticket #" + saved.getId() + " đã được gán cho " + assignee.getUsername() + ".",
+                actorDisplayName + " đã giao ticket #" + saved.getId()
+                        + " của " + saved.getAsset().getName()
+                        + " cho " + assigneeDisplayName + ".",
                 actor.getUsername(),
                 saved.getAsset().getQaCode(),
                 saved.getAsset().getName(),
                 Map.of(
                         "Ticket", "#" + saved.getId(),
-                        "Kỹ thuật viên", assignee.getUsername(),
+                        "Kỹ thuật viên", assigneeDisplayName,
                         "Trạng thái", toVietnameseStatus("IN_PROGRESS"),
-                        "Người thao tác", actor.getUsername()
+                        "Người thao tác", actorDisplayName,
+                        "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
                 )
         );
         pushNotification(
@@ -222,18 +232,22 @@ public class TicketService {
         asset.setStatus("Sẵn sàng");
         assetRepository.save(asset);
         Ticket saved = ticketRepository.save(ticket);
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "TICKET_RESOLVED",
                 "Ticket đã hoàn tất bảo trì",
-                actor.getUsername() + " đã hoàn tất ticket #" + saved.getId() + ".",
+                actorDisplayName + " đã hoàn tất ticket #" + saved.getId()
+                        + " cho " + saved.getAsset().getName()
+                        + " tại phòng gốc " + saved.getAsset().getHomeLocation().getRoomName() + ".",
                 actor.getUsername(),
                 saved.getAsset().getQaCode(),
                 saved.getAsset().getName(),
                 Map.of(
                         "Ticket", "#" + saved.getId(),
-                        "Thiết bị", saved.getAsset().getQaCode(),
+                        "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName(),
                         "Trạng thái", toVietnameseStatus(saved.getStatus()),
-                        "Người thao tác", actor.getUsername()
+                        "Người thao tác", actorDisplayName,
+                        "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
                 )
         );
         pushNotification(
@@ -392,5 +406,22 @@ public class TicketService {
             return;
         }
         asyncRealtimePushService.pushToDestination("/topic/notifications", payload);
+    }
+
+    private String getActorDisplayName(AppUser user) {
+        return toRoleLabel(user.getRole()) + " " + getFullNameOrUsername(user);
+    }
+
+    private String getFullNameOrUsername(AppUser user) {
+        return StringUtils.hasText(user.getFullName()) ? user.getFullName().trim() : user.getUsername();
+    }
+
+    private String toRoleLabel(String role) {
+        return switch (role) {
+            case "Admin" -> "Quản trị viên";
+            case "NhanVien" -> "Nhân viên";
+            case "TechSupport" -> "Kỹ thuật viên";
+            default -> "Người dùng";
+        };
     }
 }
