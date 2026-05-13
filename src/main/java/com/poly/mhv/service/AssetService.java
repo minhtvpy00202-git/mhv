@@ -228,7 +228,7 @@ public class AssetService {
     }
 
     private String generateQaCode(Category category) {
-        String prefix = buildCategoryPrefix(category.getName());
+        String prefix = normalizeCodePrefix(category.getCodePrefix());
         int currentMax = assetRepository.findByCategoryId(category.getId()).stream()
                 .map(Asset::getQaCode)
                 .filter(StringUtils::hasText)
@@ -249,6 +249,14 @@ public class AssetService {
         throw new CustomException("Đã vượt giới hạn sinh mã thiết bị cho loại " + category.getName() + ".");
     }
 
+    private String normalizeCodePrefix(String codePrefix) {
+        String normalizedPrefix = codePrefix == null ? null : codePrefix.trim().toUpperCase(Locale.ROOT);
+        if (!StringUtils.hasText(normalizedPrefix)) {
+            throw new CustomException("Loại thiết bị chưa được cấu hình code prefix.");
+        }
+        return normalizedPrefix;
+    }
+
     private int extractNumericSuffix(String qaCode, String prefix) {
         if (!StringUtils.hasText(qaCode) || !qaCode.startsWith(prefix)) {
             return -1;
@@ -258,50 +266,6 @@ public class AssetService {
             return -1;
         }
         return Integer.parseInt(suffix);
-    }
-
-    private String buildCategoryPrefix(String categoryName) {
-        String englishPhrase = translateCategoryToEnglish(categoryName);
-        String prefix = List.of(englishPhrase.split("\\s+")).stream()
-                .filter(StringUtils::hasText)
-                .map(word -> String.valueOf(Character.toUpperCase(word.charAt(0))))
-                .reduce("", String::concat);
-        if (!StringUtils.hasText(prefix)) {
-            throw new CustomException("Không thể sinh mã cho loại thiết bị này.");
-        }
-        return prefix;
-    }
-
-    private String translateCategoryToEnglish(String categoryName) {
-        String normalizedCategoryName = normalizeKeyword(categoryName);
-        if (normalizedCategoryName == null) {
-            throw new CustomException("Tên loại thiết bị không hợp lệ.");
-        }
-
-        return switch (normalizedCategoryName) {
-            case "thiet bi cong nghe" -> "technology equipment";
-            case "thiet bi giang day truyen thong" -> "traditional teaching equipment";
-            case "thiet bi phong thi nghiem/chuc nang" -> "laboratory functional equipment";
-            case "thiet bi phong thi nghiem chuc nang" -> "laboratory functional equipment";
-            case "thiet bi the duc the thao" -> "sports equipment";
-            default -> buildEnglishFallback(normalizedCategoryName);
-        };
-    }
-
-    private String buildEnglishFallback(String normalizedCategoryName) {
-        return normalizedCategoryName
-                .replace('/', ' ')
-                .replaceAll("\\s+", " ")
-                .trim()
-                .replace("thiet bi", "equipment")
-                .replace("cong nghe", "technology")
-                .replace("giang day", "teaching")
-                .replace("truyen thong", "traditional")
-                .replace("phong thi nghiem", "laboratory")
-                .replace("chuc nang", "functional")
-                .replace("the duc the thao", "sports")
-                .replace("the duc", "physical")
-                .replace("the thao", "sports");
     }
 
     private void validateCreateRequest(AssetCreateRequest request) {

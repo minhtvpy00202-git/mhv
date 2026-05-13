@@ -34,6 +34,9 @@ public class Category {
     @Nationalized
     private String name;
 
+    @Column(name = "code_prefix", nullable = false, unique = true, length = 10)
+    private String codePrefix;
+
     @ManyToOne
     @JoinColumn(name = "tech_type_id", nullable = false)
     private TechSupportType techSupportType;

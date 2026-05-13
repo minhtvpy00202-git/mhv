@@ -9,7 +9,12 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -50,9 +55,11 @@ public class CategoryService {
         if (categoryRepository.existsByNameIgnoreCase(normalizedName)) {
             throw new CustomException("Tên loại thiết bị đã tồn tại.");
         }
+        String generatedCodePrefix = generateCodePrefix(normalizedName);
 
         Category category = Category.builder()
                 .name(normalizedName)
+                .codePrefix(generatedCodePrefix)
                 .techSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()))
                 .build();
         return mapToResponse(categoryRepository.save(category));
@@ -99,10 +106,83 @@ public class CategoryService {
         return normalizedName;
     }
 
+    private String generateCodePrefix(String categoryName) {
+        List<String> meaningfulWords = extractMeaningfulWords(categoryName);
+        if (meaningfulWords.isEmpty()) {
+            throw new CustomException("Không thể sinh code prefix cho loại thiết bị này.");
+        }
+
+        Set<String> candidates = new LinkedHashSet<>();
+        int prefixLength = Math.min(3, meaningfulWords.size());
+        collectPrefixCandidates(meaningfulWords, 0, prefixLength, new StringBuilder(), candidates);
+
+        for (String candidate : candidates) {
+            if (!categoryRepository.existsByCodePrefixIgnoreCase(candidate)) {
+                return candidate;
+            }
+        }
+
+        throw new CustomException("Không thể sinh code prefix duy nhất cho loại thiết bị này.");
+    }
+
+    private List<String> extractMeaningfulWords(String categoryName) {
+        String normalizedCategoryName = normalizeKeyword(categoryName);
+        if (normalizedCategoryName == null) {
+            throw new CustomException("Tên loại thiết bị không hợp lệ.");
+        }
+        List<String> words = new ArrayList<>(List.of(
+                normalizedCategoryName
+                        .replace('/', ' ')
+                        .replaceAll("\\s+", " ")
+                        .trim()
+                        .split(" ")
+        ));
+        if (words.size() >= 2 && "thiet".equals(words.get(0)) && "bi".equals(words.get(1))) {
+            words = new ArrayList<>(words.subList(2, words.size()));
+        }
+        words.removeIf(word -> !StringUtils.hasText(word));
+        return words;
+    }
+
+    private void collectPrefixCandidates(
+            List<String> words,
+            int startIndex,
+            int targetLength,
+            StringBuilder current,
+            Set<String> candidates
+    ) {
+        if (current.length() == targetLength) {
+            candidates.add(current.toString());
+            return;
+        }
+
+        for (int index = startIndex; index < words.size(); index++) {
+            String word = words.get(index);
+            if (!StringUtils.hasText(word)) {
+                continue;
+            }
+            current.append(Character.toUpperCase(word.charAt(0)));
+            collectPrefixCandidates(words, index + 1, targetLength, current, candidates);
+            current.deleteCharAt(current.length() - 1);
+        }
+    }
+
+    private String normalizeKeyword(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D');
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
     private CategoryResponse mapToResponse(Category category) {
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
+                .codePrefix(category.getCodePrefix())
                 .techTypeId(category.getTechSupportType().getId())
                 .techTypeName(category.getTechSupportType().getName())
                 .build();

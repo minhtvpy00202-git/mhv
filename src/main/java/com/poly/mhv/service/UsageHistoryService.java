@@ -82,10 +82,13 @@ public class UsageHistoryService {
         asset.setStatus("Đang sử dụng");
         asset.setLocation(toLocation);
         assetRepository.save(asset);
+        String actorDisplayName = getActorDisplayName(user);
         notificationService.createNotification(
                 "CHECKOUT",
                 "Mượn thiết bị",
-                user.getUsername() + " đã mượn thiết bị " + asset.getQaCode() + ".",
+                actorDisplayName + " đã mượn " + asset.getName()
+                        + " từ phòng gốc " + asset.getHomeLocation().getRoomName()
+                        + " đến phòng " + toLocation.getRoomName() + ".",
                 user.getUsername(),
                 asset.getQaCode(),
                 asset.getName(),
@@ -93,9 +96,10 @@ public class UsageHistoryService {
                         "Thiết bị", asset.getQaCode() + " - " + asset.getName(),
                         "Nghiệp vụ", "Mượn thiết bị",
                         "Thời gian", saved.getStartTime(),
-                        "Người thực hiện", user.getUsername(),
-                        "Đích đến", toLocation.getRoomName(),
-                        "Phòng nguồn", fromLocation.getRoomName()
+                        "Người thực hiện", actorDisplayName,
+                        "Phòng gốc", asset.getHomeLocation().getRoomName(),
+                        "Phòng hiện tại trước khi mượn", fromLocation.getRoomName(),
+                        "Phòng đích", toLocation.getRoomName()
                 )
         );
         return mapToResponse(saved);
@@ -123,10 +127,13 @@ public class UsageHistoryService {
 
         assetRepository.save(asset);
         UsageHistory saved = usageHistoryRepository.save(usageHistory);
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "CHECKIN",
                 "Trả thiết bị",
-                actor.getUsername() + " đã trả thiết bị " + asset.getQaCode() + ".",
+                actorDisplayName + " đã trả " + asset.getName()
+                        + " từ phòng " + usageHistory.getToLocation().getRoomName()
+                        + " về phòng gốc " + asset.getHomeLocation().getRoomName() + ".",
                 actor.getUsername(),
                 asset.getQaCode(),
                 asset.getName(),
@@ -134,9 +141,10 @@ public class UsageHistoryService {
                         "Thiết bị", asset.getQaCode() + " - " + asset.getName(),
                         "Nghiệp vụ", "Trả thiết bị",
                         "Thời gian", saved.getEndTime(),
-                        "Người thực hiện", actor.getUsername(),
-                        "Đích đến", asset.getHomeLocation().getRoomName(),
-                        "Phòng đang mượn", usageHistory.getToLocation().getRoomName()
+                        "Người thực hiện", actorDisplayName,
+                        "Phòng gốc", asset.getHomeLocation().getRoomName(),
+                        "Phòng đang mượn", usageHistory.getToLocation().getRoomName(),
+                        "Điểm trả", asset.getHomeLocation().getRoomName()
                 )
         );
         return mapToResponse(saved);
@@ -248,5 +256,22 @@ public class UsageHistoryService {
         }
         return appUserRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new CustomException("Không tìm thấy người dùng đăng nhập."));
+    }
+
+    private String getActorDisplayName(AppUser user) {
+        return toRoleLabel(user.getRole()) + " " + getFullNameOrUsername(user);
+    }
+
+    private String getFullNameOrUsername(AppUser user) {
+        return StringUtils.hasText(user.getFullName()) ? user.getFullName().trim() : user.getUsername();
+    }
+
+    private String toRoleLabel(String role) {
+        return switch (role) {
+            case "Admin" -> "Quản trị viên";
+            case "NhanVien" -> "Nhân viên";
+            case "TechSupport" -> "Kỹ thuật viên";
+            default -> "Người dùng";
+        };
     }
 }

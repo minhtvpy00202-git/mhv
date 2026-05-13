@@ -11,6 +11,7 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
     List<Category> findAllByOrderByNameAsc();
     boolean existsByNameIgnoreCase(String name);
     boolean existsByNameIgnoreCaseAndIdNot(String name, Integer id);
+    boolean existsByCodePrefixIgnoreCase(String codePrefix);
 
     @Query("""
             select c from Category c
