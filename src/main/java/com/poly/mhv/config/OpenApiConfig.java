@@ -19,7 +19,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("MHV Asset Management API")
-                        .description("Tai lieu API cho he thong quan ly thiet bi, muon tra, ticket va kiem ke.")
+                        .description("Tài liệu API cho hệ thống")
                         .version("v1")
                         .contact(new Contact()
                                 .name("MHV Team")))
