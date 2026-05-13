@@ -10,6 +10,13 @@ export default defineConfig({
       devOptions: {
         enabled: true,
       },
+      workbox: {
+        navigateFallbackDenylist: [
+          /^\/api\/.*/,
+          /^\/swagger-ui\/.*/,
+          /^\/v3\/.*/,
+        ],
+      },
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
         name: 'FPT Asset Management',
