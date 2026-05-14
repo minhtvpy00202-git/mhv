@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -33,6 +34,7 @@ public class AdminAlertSseService {
         }
     }
 
+    @Async("notificationExecutor")
     public void notifyNotificationAlert(String eventType, String title, String message) {
         Map<String, Object> payload = Map.of(
                 "type", "notification_alert",
@@ -44,6 +46,7 @@ public class AdminAlertSseService {
         notifyAlert("notification_alert", payload);
     }
 
+    @Async("notificationExecutor")
     public void notifyMaintenanceAlert(String message) {
         Map<String, Object> payload = Map.of(
                 "type", "maintenance_alert",

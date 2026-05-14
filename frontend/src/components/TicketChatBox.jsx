@@ -65,6 +65,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
   const processingFallbackTimerRef = useRef(null)
+  const syncInFlightRef = useRef(false)
 
   useEffect(() => {
     return () => {
@@ -75,32 +76,45 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (!ticketId) return
-    let mounted = true
-    const loadInitialMessages = async () => {
+  const syncMessages = useCallback(async ({ silent = false } = {}) => {
+    if (!ticketId || syncInFlightRef.current) return
+    syncInFlightRef.current = true
+    if (!silent) {
       setLoading(true)
-      try {
-        const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`, {
-          params: { limit: INITIAL_CHAT_LIMIT },
-        })
-        if (mounted) {
-          setMessages(response.data || [])
+    }
+    try {
+      const response = await axiosClient.get(`/api/tickets/${ticketId}/chats`, {
+        params: { limit: INITIAL_CHAT_LIMIT },
+      })
+      const incoming = Array.isArray(response.data) ? response.data : []
+      setMessages((prev) => {
+        if (!prev.length) {
+          return incoming
         }
-      } catch (error) {
+        const merged = new Map(prev.map((item) => [item.id, item]))
+        incoming.forEach((item) => {
+          merged.set(item.id, item)
+        })
+        return Array.from(merged.values()).sort(
+          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+        )
+      })
+    } catch (error) {
+      if (!silent) {
         const message = error?.response?.data?.message || 'Không tải được lịch sử chat.'
         toast.error(message)
-      } finally {
-        if (mounted) {
-          setLoading(false)
-        }
+      }
+    } finally {
+      syncInFlightRef.current = false
+      if (!silent) {
+        setLoading(false)
       }
     }
-    loadInitialMessages()
-    return () => {
-      mounted = false
-    }
   }, [ticketId])
+
+  useEffect(() => {
+    void syncMessages()
+  }, [syncMessages])
 
   useEffect(() => {
     if (!connected || !ticketId) return undefined
@@ -113,6 +127,20 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     })
     return () => unsubscribe()
   }, [connected, subscribe, ticketId, user?.userId])
+
+  useEffect(() => {
+    if (!ticketId) return undefined
+    const syncIntervalMs = connected ? 15000 : 4000
+    const intervalId = window.setInterval(() => {
+      void syncMessages({ silent: true })
+    }, syncIntervalMs)
+    return () => window.clearInterval(intervalId)
+  }, [connected, syncMessages, ticketId])
+
+  useEffect(() => {
+    if (!connected) return
+    void syncMessages({ silent: true })
+  }, [connected, syncMessages])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })

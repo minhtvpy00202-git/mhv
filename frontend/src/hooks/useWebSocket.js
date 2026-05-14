@@ -50,7 +50,9 @@ export default function useWebSocket(token) {
       connectHeaders: {
         Authorization: `Bearer ${token}`,
       },
-      reconnectDelay: 5000,
+      reconnectDelay: 1500,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
       debug: () => {},
     })
 
