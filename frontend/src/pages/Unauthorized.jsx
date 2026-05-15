@@ -1,13 +1,14 @@
 import { ShieldAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getTechSupportHomePath } from '../utils/navigation'
 
 function Unauthorized() {
   const { user } = useAuth()
   const homePath = user?.role === 'Admin'
     ? '/admin/dashboard'
     : user?.role === 'TechSupport'
-      ? '/tech/tickets'
+      ? getTechSupportHomePath()
       : '/mobile/home'
 
   return (

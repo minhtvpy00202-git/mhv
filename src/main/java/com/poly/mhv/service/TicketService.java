@@ -347,6 +347,7 @@ public class TicketService {
                 .reporterId(ticket.getReporter().getId())
                 .reporterName(reporterName)
                 .reporterRole(ticket.getReporter().getRole())
+                .reporterPhone(ticket.getReporter().getPhone())
                 .assigneeId(ticket.getAssignee() != null ? ticket.getAssignee().getId() : null)
                 .assigneeName(assigneeName)
                 .description(ticket.getDescription())

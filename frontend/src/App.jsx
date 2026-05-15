@@ -3,6 +3,7 @@ import GlobalNotification from './components/GlobalNotification'
 import { useAuth } from './context/AuthContext'
 import AdminLayout from './layouts/AdminLayout'
 import MobileLayout from './layouts/MobileLayout'
+import MobileTechSupportLayout from './layouts/MobileTechSupportLayout'
 import TechSupportLayout from './layouts/TechSupportLayout'
 import Home from './pages/Home'
 import InventoryAuditScanner from './pages/InventoryAuditScanner'
@@ -24,8 +25,11 @@ import TechSupportTypeManagement from './pages/admin/TechSupportTypeManagement'
 import TicketManagement from './pages/admin/TicketManagement'
 import UserManagement from './pages/admin/UserManagement'
 import UsageHistoryManagement from './pages/admin/UsageHistoryManagement'
+import MobileTechSupportChats from './pages/tech/MobileTechSupportChats'
+import MobileTechSupportTickets from './pages/tech/MobileTechSupportTickets'
 import TechSupportChats from './pages/tech/TechSupportChats'
 import TechSupportTickets from './pages/tech/TechSupportTickets'
+import { getTechSupportHomePath } from './utils/navigation'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -52,7 +56,7 @@ function RootRedirect() {
     return <Navigate to="/admin/dashboard" replace />
   }
   if (user?.role === 'TechSupport') {
-    return <Navigate to="/tech/tickets" replace />
+    return <Navigate to={getTechSupportHomePath()} replace />
   }
   return <Navigate to="/mobile/home" replace />
 }
@@ -96,6 +100,20 @@ function App() {
           <Route path="/tech/tickets" element={<TechSupportTickets />} />
           <Route path="/tech/chats" element={<TechSupportChats />} />
           <Route path="/tech/tickets/:ticketId" element={<TicketDetail />} />
+        </Route>
+
+        <Route
+          element={(
+            <ProtectedRoute>
+              <RoleRoute allowRoles={['TechSupport']}>
+                <MobileTechSupportLayout />
+              </RoleRoute>
+            </ProtectedRoute>
+          )}
+        >
+          <Route path="/tech-mobile/tickets" element={<MobileTechSupportTickets />} />
+          <Route path="/tech-mobile/chats" element={<MobileTechSupportChats />} />
+          <Route path="/tech-mobile/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
 
         <Route

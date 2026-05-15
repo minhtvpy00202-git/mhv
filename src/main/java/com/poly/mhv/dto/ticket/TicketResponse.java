@@ -40,6 +40,9 @@ public class TicketResponse {
     @Schema(description = "Vai trò người báo hỏng", example = "NhanVien")
     private String reporterRole;
 
+    @Schema(description = "Số điện thoại người báo hỏng", example = "0987654321", nullable = true)
+    private String reporterPhone;
+
     @Schema(description = "ID kỹ thuật viên đang được giao", example = "7", nullable = true)
     private Integer assigneeId;
 

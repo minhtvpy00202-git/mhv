@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
+import { getTechSupportHomePath } from '../utils/navigation'
 
 function Login() {
   const [username, setUsername] = useState('')
@@ -34,7 +35,7 @@ function Login() {
       if (normalizedRole === 'admin') {
         navigate('/admin/dashboard', { replace: true })
       } else if (normalizedRole === 'techsupport' || normalizedRole === 'techsup') {
-        navigate('/tech/tickets', { replace: true })
+        navigate(getTechSupportHomePath(), { replace: true })
       } else {
         navigate('/mobile/home', { replace: true })
       }

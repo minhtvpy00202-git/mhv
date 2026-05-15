@@ -3,6 +3,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
+import { getTechSupportTicketPath } from '../utils/navigation'
 
 function GlobalNotification() {
   const { token, isAuthenticated, user } = useAuth()
@@ -104,7 +105,7 @@ function GlobalNotification() {
         detail: {
           ...payload,
           ticketPath: user.role === 'TechSupport'
-            ? `/tech/tickets/${ticketId}`
+            ? getTechSupportTicketPath(ticketId)
             : user.role === 'Admin'
               ? `/admin/tickets/${ticketId}`
               : `/mobile/tickets/${ticketId}`,

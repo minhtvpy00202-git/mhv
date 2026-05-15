@@ -1,10 +1,13 @@
+import { Copy, MessageCircle, Phone } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import TicketChatBox from '../components/TicketChatBox'
 import { useAuth } from '../context/AuthContext'
+import { copyText, getZaloUrl, normalizePhone } from '../utils/contact'
 import { formatVietnamDateTime } from '../utils/datetime'
+import { isTechSupportMobilePath } from '../utils/navigation'
 
 const statusStyles = {
   PENDING: 'bg-amber-100 text-amber-800',
@@ -75,14 +78,21 @@ function TicketDetail() {
     () => statusStyles[ticket?.status] || 'bg-slate-100 text-slate-700',
     [ticket?.status],
   )
+  const isTechMobileRoute = isTechSupportMobilePath(location.pathname)
+  const isTechRoute = location.pathname.startsWith('/tech/')
+  const isTechSupportRoute = isTechRoute || isTechMobileRoute
+  const isStandardMobileRoute = location.pathname.startsWith('/mobile/')
   const backPath = location.pathname.startsWith('/admin/')
     ? '/admin/tickets'
-    : location.pathname.startsWith('/tech/')
+    : isTechMobileRoute
+      ? '/tech-mobile/tickets'
+      : isTechRoute
       ? '/tech/tickets'
       : '/mobile/home'
-  const isMobileRoute = location.pathname.startsWith('/mobile/')
-  const isTechRoute = location.pathname.startsWith('/tech/')
-  const canOpenChat = !isTechRoute || Number(ticket?.assigneeId) === Number(user?.userId)
+  const isMobileRoute = isStandardMobileRoute || isTechMobileRoute
+  const canOpenChat = !isTechSupportRoute || Number(ticket?.assigneeId) === Number(user?.userId)
+  const reporterPhone = normalizePhone(ticket?.reporterPhone)
+  const zaloUrl = getZaloUrl(ticket?.reporterPhone)
 
   return (
     <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
@@ -119,6 +129,9 @@ function TicketDetail() {
             <span className="font-semibold">Người báo:</span> {ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}
           </p>
           <p className="text-sm text-slate-700">
+            <span className="font-semibold">Điện thoại:</span> {ticket.reporterPhone || 'Chưa có số'}
+          </p>
+          <p className="text-sm text-slate-700">
             <span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}
           </p>
           <p className="text-sm text-slate-700 md:col-span-2">
@@ -133,6 +146,45 @@ function TicketDetail() {
           <div className="md:col-span-2">
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName}`}>{ticket.status}</span>
           </div>
+          {isTechMobileRoute && reporterPhone && (
+            <div className="md:col-span-2">
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`tel:${reporterPhone}`}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"
+                >
+                  <Phone size={16} />
+                  Gọi điện người báo hỏng
+                </a>
+                {zaloUrl && (
+                  <a
+                    href={zaloUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700"
+                  >
+                    <MessageCircle size={16} />
+                    Nhắn Zalo
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await copyText(reporterPhone)
+                      toast.success(`Đã copy số ${reporterPhone}.`)
+                    } catch {
+                      toast.error('Không copy được số điện thoại.')
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                >
+                  <Copy size={16} />
+                  Copy số
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
