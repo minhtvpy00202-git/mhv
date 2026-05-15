@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-
-function formatDateTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('vi-VN')
-}
+import { formatVietnamDateTime } from '../../utils/datetime'
 
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
@@ -194,8 +188,8 @@ function InventoryAuditManagement() {
                     <td className="px-3 py-2">#{audit.id}</td>
                     <td className="px-3 py-2">{audit.locationName}</td>
                     <td className="px-3 py-2">{audit.status}</td>
-                    <td className="px-3 py-2">{formatDateTime(audit.startedAt)}</td>
-                    <td className="px-3 py-2">{formatDateTime(audit.completedAt)}</td>
+                    <td className="px-3 py-2">{formatVietnamDateTime(audit.startedAt, '')}</td>
+                    <td className="px-3 py-2">{formatVietnamDateTime(audit.completedAt, '')}</td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
@@ -251,7 +245,7 @@ function InventoryAuditManagement() {
                       {item.assetQaCode} - {item.assetName}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {item.scannedByUsername} • {formatDateTime(item.scannedAt)}
+                      {item.scannedByUsername} • {formatVietnamDateTime(item.scannedAt, '')}
                     </p>
                   </div>
                 ))}

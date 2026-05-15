@@ -1,20 +1,23 @@
-import { ImagePlus, Mic, Minus, Send, Square, X } from 'lucide-react'
+import { ImagePlus, Mic, Minus, Pause, Play, Send, Square, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
+import { formatVietnamTime, getServerDateTimeMs } from '../utils/datetime'
 import { compressImageToBlob } from '../utils/imageProcessing'
 import { resolveBackendMediaUrl } from '../utils/mediaUrl'
 
 function formatMessageTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatVietnamTime(value, '')
+}
+
+function formatAudioDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '00:00'
+  const wholeSeconds = Math.floor(seconds)
+  const minutes = String(Math.floor(wholeSeconds / 60)).padStart(2, '0')
+  const remainingSeconds = String(wholeSeconds % 60).padStart(2, '0')
+  return `${minutes}:${remainingSeconds}`
 }
 
 const IMG_PREFIX = '[[IMG]]'
@@ -36,6 +39,99 @@ function parseMessage(message) {
     return { type: 'audio', value: resolveMediaUrl(content.slice(AUDIO_PREFIX.length)) }
   }
   return { type: 'text', value: content }
+}
+
+function VoiceMessagePlayer({ src, isMine }) {
+  const audioRef = useRef(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return undefined
+
+    const handleLoadedMetadata = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    }
+    const handleTimeUpdate = () => {
+      setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0)
+    }
+    const handleEnded = () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+    }
+    const handlePause = () => setIsPlaying(false)
+    const handlePlay = () => setIsPlaying(true)
+
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.addEventListener('timeupdate', handleTimeUpdate)
+    audio.addEventListener('ended', handleEnded)
+    audio.addEventListener('pause', handlePause)
+    audio.addEventListener('play', handlePlay)
+
+    return () => {
+      audio.pause()
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      audio.removeEventListener('timeupdate', handleTimeUpdate)
+      audio.removeEventListener('ended', handleEnded)
+      audio.removeEventListener('pause', handlePause)
+      audio.removeEventListener('play', handlePlay)
+    }
+  }, [src])
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (isPlaying) {
+      audio.pause()
+      return
+    }
+    try {
+      await audio.play()
+    } catch {
+      toast.error('Không thể phát ghi âm.')
+    }
+  }
+
+  const shownTime = isPlaying ? currentTime : duration
+  const waveformBars = [18, 28, 22, 34]
+
+  return (
+    <div
+      className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2 ${
+        isMine ? 'bg-orange-100/20' : 'bg-white/70'
+      }`}
+    >
+      <audio ref={audioRef} preload="metadata" src={src} />
+      <button
+        type="button"
+        onClick={togglePlayback}
+        className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
+          isMine ? 'bg-white text-fptOrange' : 'bg-blue-500 text-white'
+        }`}
+      >
+        {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+      </button>
+      <div className="flex items-end gap-1">
+        {waveformBars.map((height, index) => (
+          <span
+            key={`${height}-${index}`}
+            className={`w-1.5 rounded-full transition-all duration-200 ${
+              isMine ? 'bg-white/90' : 'bg-blue-500'
+            } ${isPlaying ? 'opacity-100' : 'opacity-70'}`}
+            style={{
+              height: `${height}px`,
+              transform: isPlaying && index % 2 === 0 ? 'scaleY(0.75)' : 'scaleY(1)',
+            }}
+          />
+        ))}
+      </div>
+      <span className={`text-sm font-semibold ${isMine ? 'text-white' : 'text-slate-700'}`}>
+        {formatAudioDuration(shownTime)}
+      </span>
+    </div>
+  )
 }
 
 function TicketChatBox({ ticketId, onClose, embedded = false }) {
@@ -91,7 +187,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
           merged.set(item.id, item)
         })
         return Array.from(merged.values()).sort(
-          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+          (a, b) => getServerDateTimeMs(a.createdAt) - getServerDateTimeMs(b.createdAt),
         )
       })
     } catch (error) {
@@ -367,9 +463,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
                   <img src={message.parsed.value} alt="chat-img" className="max-h-64 w-full rounded-lg object-contain" />
                 )}
                 {message.parsed.type === 'audio' && (
-                  <audio controls className="w-full">
-                    <source src={message.parsed.value} />
-                  </audio>
+                  <VoiceMessagePlayer src={message.parsed.value} isMine={message.isMine} />
                 )}
                 {message.parsed.type === 'text' && (
                   <p className="whitespace-pre-wrap break-words">{message.parsed.value}</p>

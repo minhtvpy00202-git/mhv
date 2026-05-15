@@ -2,19 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
 const PAGE_SIZE = 10
 
 function getRowKey(item) {
   return `${item.id}-${item.assetQaCode}-${item.reportTime}`
-}
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
 }
 
 function MaintenanceHistoryManagement() {
@@ -61,7 +55,7 @@ function MaintenanceHistoryManagement() {
         const aOpen = a.status !== 'RESOLVED' ? 1 : 0
         const bOpen = b.status !== 'RESOLVED' ? 1 : 0
         if (aOpen !== bOpen) return bOpen - aOpen
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        return getServerDateTimeMs(b.createdAt) - getServerDateTimeMs(a.createdAt)
       })[0]
       navigate(`/admin/tickets/${ticketToOpen.id}`)
     } catch (error) {
@@ -108,7 +102,7 @@ function MaintenanceHistoryManagement() {
                     <td className="px-3 py-2">{item.currentLocationName}</td>
                     <td className="px-3 py-2">{item.reporterFullName}</td>
                     <td className="px-3 py-2">{item.description}</td>
-                    <td className="px-3 py-2">{formatDateTime(item.reportTime)}</td>
+                    <td className="px-3 py-2">{formatVietnamDateTime(item.reportTime)}</td>
                     <td className="px-3 py-2">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                         item.assetStatus === 'Sẵn sàng'

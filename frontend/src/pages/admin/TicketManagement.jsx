@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
 
@@ -18,16 +19,9 @@ function toVietnameseStatus(status) {
   return status
 }
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
-}
-
 function isOverdue(ticket) {
   if (!ticket?.dueDate || ticket?.status === 'RESOLVED') return false
-  const dueTime = new Date(ticket.dueDate).getTime()
+  const dueTime = getServerDateTimeMs(ticket.dueDate)
   if (Number.isNaN(dueTime)) return false
   return dueTime < Date.now()
 }
@@ -248,7 +242,7 @@ function TicketManagement() {
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    <p>{formatDateTime(ticket.dueDate)}</p>
+                    <p>{formatVietnamDateTime(ticket.dueDate)}</p>
                     {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
                   </td>
                   <td className="px-3 py-2">

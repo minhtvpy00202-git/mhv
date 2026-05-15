@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-
-function formatDateTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('vi-VN')
-}
+import { formatVietnamDateTime } from '../../utils/datetime'
 
 function NotificationDetail() {
   const { id } = useParams()
@@ -51,7 +45,7 @@ function NotificationDetail() {
             <span className="font-semibold">Tiêu đề:</span> {notification.title}
           </p>
           <p>
-            <span className="font-semibold">Thời gian xảy ra:</span> {formatDateTime(notification.occurredAt)}
+            <span className="font-semibold">Thời gian xảy ra:</span> {formatVietnamDateTime(notification.occurredAt, '')}
           </p>
           <p>
             <span className="font-semibold">Người thực hiện:</span> {notification.actorUsername}

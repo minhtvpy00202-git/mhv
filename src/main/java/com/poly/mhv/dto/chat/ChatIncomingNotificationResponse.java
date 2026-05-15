@@ -1,6 +1,6 @@
 package com.poly.mhv.dto.chat;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,5 +15,5 @@ public class ChatIncomingNotificationResponse {
     private Integer senderId;
     private String senderName;
     private String messagePreview;
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 }

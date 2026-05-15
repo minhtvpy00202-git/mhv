@@ -2,7 +2,6 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.dto.chat.ChatIncomingNotificationResponse;
 import com.poly.mhv.dto.chat.ChatMessageResponse;
-import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Ticket;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketRepository;

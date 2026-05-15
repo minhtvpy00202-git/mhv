@@ -1,20 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
-}
-
-function formatTimeShort(value) {
-  if (!value) return '--:--'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '--:--'
-  return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-}
+import { formatVietnamDateTime, formatVietnamTime } from '../utils/datetime'
 
 function toActionLabel(event) {
   if (event?.eventType === 'TICKET_CREATED') return 'Tạo ticket'
@@ -91,9 +78,9 @@ function TicketEventTimelineModal({ open, onClose, ticket }) {
                   <div key={event.id} className="relative rounded-lg border border-slate-200 bg-white p-3">
                     <div className="absolute -left-[17px] top-4 h-3 w-3 rounded-full border-2 border-white bg-fptOrange" />
                     <p className="text-sm font-semibold text-slate-800">
-                      {formatTimeShort(event.occurredAt)} - {event.actorName || 'Hệ thống'} - {toActionLabel(event)}
+                      {formatVietnamTime(event.occurredAt)} - {event.actorName || 'Hệ thống'} - {toActionLabel(event)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">{formatDateTime(event.occurredAt)}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatVietnamDateTime(event.occurredAt)}</p>
                     {event.detail && (
                       <pre className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{localizeDetail(event.detail)}</pre>
                     )}

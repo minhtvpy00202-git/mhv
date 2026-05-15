@@ -1,6 +1,6 @@
 package com.poly.mhv.dto.chat;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,5 +17,5 @@ public class ChatMessageResponse {
     private String content;
     private String mediaUrl;
     private String mediaType;
-    private LocalDateTime createdAt;
+    private OffsetDateTime createdAt;
 }

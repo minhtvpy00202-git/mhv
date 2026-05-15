@@ -4,13 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import TicketChatBox from '../components/TicketChatBox'
 import { useAuth } from '../context/AuthContext'
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
-}
+import { formatVietnamDateTime } from '../utils/datetime'
 
 const statusStyles = {
   PENDING: 'bg-amber-100 text-amber-800',
@@ -131,10 +125,10 @@ function TicketDetail() {
             <span className="font-semibold">Mô tả:</span> {ticket.description}
           </p>
           <p className="text-sm text-slate-700">
-            <span className="font-semibold">Tạo lúc:</span> {formatDateTime(ticket.createdAt)}
+            <span className="font-semibold">Tạo lúc:</span> {formatVietnamDateTime(ticket.createdAt)}
           </p>
           <p className="text-sm text-slate-700">
-            <span className="font-semibold">Hạn SLA:</span> {formatDateTime(ticket.dueDate)}
+            <span className="font-semibold">Hạn SLA:</span> {formatVietnamDateTime(ticket.dueDate)}
           </p>
           <div className="md:col-span-2">
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName}`}>{ticket.status}</span>
@@ -153,7 +147,7 @@ function TicketDetail() {
                 <div key={event.id} className="rounded-xl border border-slate-200 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-800">{event.message}</p>
-                    <p className="text-xs text-slate-500">{formatDateTime(event.occurredAt)}</p>
+                    <p className="text-xs text-slate-500">{formatVietnamDateTime(event.occurredAt)}</p>
                   </div>
                   <p className="mt-1 text-xs text-slate-600">
                     {event.actorName || 'Hệ thống'} · {event.eventType}

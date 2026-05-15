@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 const PAGE_SIZE = 10
-
-function formatDateTime(value) {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString('vi-VN')
-}
 
 function UsageHistoryManagement() {
   const [histories, setHistories] = useState([])
@@ -58,8 +52,8 @@ function UsageHistoryManagement() {
     const list = [...histories]
     const { key, direction } = sortConfig
     list.sort((a, b) => {
-      const av = key.includes('Time') ? new Date(a[key] || 0).getTime() : String(a[key] ?? '').toLowerCase()
-      const bv = key.includes('Time') ? new Date(b[key] || 0).getTime() : String(b[key] ?? '').toLowerCase()
+      const av = key.includes('Time') ? getServerDateTimeMs(a[key]) : String(a[key] ?? '').toLowerCase()
+      const bv = key.includes('Time') ? getServerDateTimeMs(b[key]) : String(b[key] ?? '').toLowerCase()
       if (av < bv) return direction === 'asc' ? -1 : 1
       if (av > bv) return direction === 'asc' ? 1 : -1
       return 0
@@ -323,9 +317,9 @@ function UsageHistoryManagement() {
                   <td className="px-3 py-2">{history.assetQaCode}</td>
                   <td className="px-3 py-2">{history.assetName}</td>
                   <td className="px-3 py-2">{history.homeLocationName}</td>
-                  <td className="px-3 py-2">{formatDateTime(history.startTime)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(history.startTime, '')}</td>
                   <td className="px-3 py-2">{history.borrowedLocationName}</td>
-                  <td className="px-3 py-2">{history.endTime ? formatDateTime(history.endTime) : ''}</td>
+                  <td className="px-3 py-2">{history.endTime ? formatVietnamDateTime(history.endTime, '') : ''}</td>
                   <td className="px-3 py-2">{history.username}</td>
                 </tr>
               ))}

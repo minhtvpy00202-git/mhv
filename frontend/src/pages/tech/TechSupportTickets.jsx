@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { formatVietnamDateTime } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
 import { useAuth } from '../../context/AuthContext'
@@ -19,13 +20,6 @@ function toVietnameseStatus(status) {
   if (status === 'IN_PROGRESS') return 'Đang xử lý'
   if (status === 'RESOLVED') return 'Đã hoàn tất'
   return status
-}
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
 }
 
 function TechSupportTickets() {
@@ -200,7 +194,7 @@ function TechSupportTickets() {
                         Lỗi
                       </button>
                     </td>
-                    <td className="px-3 py-2">{formatDateTime(ticket.dueDate)}</td>
+                    <td className="px-3 py-2">{formatVietnamDateTime(ticket.dueDate)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-2">
                         {ticket.status === 'PENDING' && (

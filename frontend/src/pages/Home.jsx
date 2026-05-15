@@ -1,16 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import { formatVietnamDateTime } from '../utils/datetime'
 import { resolveBackendMediaUrl } from '../utils/mediaUrl'
-
-const PAGE_SIZE = 5
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
-}
 
 function Pagination({ page, totalPages, onFirst, onPrev, onNext, onLast }) {
   return (
@@ -114,8 +106,8 @@ function Home() {
                   <td className="px-3 py-2">{item.assetName}</td>
                   <td className="px-3 py-2">{item.homeLocationName}</td>
                   <td className="px-3 py-2">{item.borrowedLocationName}</td>
-                  <td className="px-3 py-2">{formatDateTime(item.startTime)}</td>
-                  <td className="px-3 py-2">{formatDateTime(item.endTime)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(item.startTime)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(item.endTime)}</td>
                 </tr>
               ))}
               {usageRows.length === 0 && (
@@ -160,7 +152,7 @@ function Home() {
                   <td className="px-3 py-2">{item.assetName}</td>
                   <td className="px-3 py-2">{item.homeLocationName}</td>
                   <td className="px-3 py-2">{item.currentLocationName}</td>
-                  <td className="px-3 py-2">{formatDateTime(item.reportTime)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(item.reportTime)}</td>
                   <td className="px-3 py-2">{item.assetStatus}</td>
                   <td className="px-3 py-2">
                     <button
@@ -220,8 +212,8 @@ function Home() {
                 <tr key={item.id} className="border-t border-slate-100">
                   <td className="px-3 py-2">#{item.id}</td>
                   <td className="px-3 py-2">{item.locationName}</td>
-                  <td className="px-3 py-2">{formatDateTime(item.startedAt)}</td>
-                  <td className="px-3 py-2">{formatDateTime(item.completedAt)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(item.startedAt)}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(item.completedAt)}</td>
                   <td className="px-3 py-2">{item.expectedCount ?? 0}</td>
                   <td className="px-3 py-2">{item.scannedCount ?? 0}</td>
                   <td className="px-3 py-2">{item.missingCount ?? 0}</td>

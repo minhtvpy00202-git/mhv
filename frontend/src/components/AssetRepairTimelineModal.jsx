@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
-
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN')
-}
+import { formatVietnamDateTime, getServerDateTimeMs } from '../utils/datetime'
 
 function formatDurationMinutes(createdAt, resolvedAt) {
   if (!createdAt || !resolvedAt) return 'Đang xử lý'
-  const start = new Date(createdAt).getTime()
-  const end = new Date(resolvedAt).getTime()
+  const start = getServerDateTimeMs(createdAt)
+  const end = getServerDateTimeMs(resolvedAt)
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '-'
   const minutes = Math.floor((end - start) / 60000)
   const hours = Math.floor(minutes / 60)
@@ -71,7 +65,7 @@ function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
       timeline.map((item, index) => ({
         id: item.id,
         repairIndex: index + 1,
-        brokenAt: formatDateTime(item.createdAt),
+        brokenAt: formatVietnamDateTime(item.createdAt),
         issue: item.description,
         fixer: item.assigneeName || 'Chưa có kỹ thuật viên',
         fixContent: item.description,

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import { formatVietnamDate } from '../../utils/datetime'
 
 const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
 
@@ -309,7 +310,7 @@ function UserManagement() {
                   <tr key={row.id} className="border-t border-slate-100">
                     <td className="px-3 py-2 font-medium">{row.username}</td>
                     <td className="px-3 py-2">{row.fullName || '-'}</td>
-                    <td className="px-3 py-2">{row.birthday || '-'}</td>
+                    <td className="px-3 py-2">{formatVietnamDate(row.birthday)}</td>
                     <td className="px-3 py-2">{row.phone || '-'}</td>
                     <td className="px-3 py-2">{toRoleLabel(row.role)}</td>
                     <td className="px-3 py-2">
