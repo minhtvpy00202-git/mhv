@@ -31,8 +31,7 @@ public class WebSocketChatController {
         if (principal == null || principal.getName() == null) {
             throw new CustomException("Không xác định được người gửi từ phiên realtime.");
         }
-        String content = payload != null ? payload.getContent() : null;
-        ChatMessageResponse savedMessage = chatService.saveTicketMessage(ticketId, content, principal.getName());
+        ChatMessageResponse savedMessage = chatService.saveTicketMessage(ticketId, payload, principal.getName());
         chatRealtimeService.broadcastTicketMessage(ticketId, savedMessage, principal.getName());
     }
 }

@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,7 +18,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/api/maintenance", "/maintenance"})
@@ -31,7 +35,7 @@ public class MaintenanceController {
         this.maintenanceService = maintenanceService;
     }
 
-    @PostMapping("/report")
+    @PostMapping(path = "/report", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Báo hỏng thiết bị", description = "Tạo mới một báo cáo hỏng hóc cho thiết bị.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Báo hỏng thành công"),
@@ -40,6 +44,27 @@ public class MaintenanceController {
     })
     public ResponseEntity<MaintenanceReportResponse> report(@RequestBody MaintenanceReportRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(maintenanceService.report(request));
+    }
+
+    @PostMapping(path = "/report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Báo hỏng thiết bị kèm ảnh", description = "Tạo mới báo cáo hỏng hóc với dữ liệu multipart/form-data và ảnh đính kèm.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Báo hỏng thành công"),
+            @ApiResponse(responseCode = "400", description = "Dữ liệu hoặc ảnh không hợp lệ"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<MaintenanceReportResponse> reportMultipart(
+            @RequestParam("assetQaCode") String assetQaCode,
+            @RequestParam("description") String description,
+            @RequestParam(name = "priority", required = false) String priority,
+            @RequestPart(name = "image", required = false) MultipartFile image
+    ) {
+        MaintenanceReportRequest request = MaintenanceReportRequest.builder()
+                .assetQaCode(assetQaCode)
+                .description(description)
+                .priority(priority)
+                .build();
+        return ResponseEntity.status(HttpStatus.CREATED).body(maintenanceService.report(request, image));
     }
 
     @GetMapping("/history/me")

@@ -1,6 +1,8 @@
 package com.poly.mhv.service;
 
+import com.poly.mhv.dto.chat.ChatMediaUploadResponse;
 import com.poly.mhv.dto.chat.ChatMessageResponse;
+import com.poly.mhv.dto.chat.ChatMessageSendRequest;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.ChatMessage;
 import com.poly.mhv.entity.Ticket;
@@ -17,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +34,14 @@ public class ChatService {
 
     @Transactional
     public ChatMessageResponse saveTicketMessage(Integer ticketId, String content, String senderUsername) {
+        return saveTicketMessage(ticketId, ChatMessageSendRequest.builder()
+                .ticketId(ticketId)
+                .content(content)
+                .build(), senderUsername);
+    }
+
+    @Transactional
+    public ChatMessageResponse saveTicketMessage(Integer ticketId, ChatMessageSendRequest request, String senderUsername) {
         if (ticketId == null) {
             throw new CustomException("ticketId là bắt buộc.");
         }
@@ -42,7 +53,7 @@ public class ChatService {
         AppUser sender = appUserRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
         ensureCanAccessTicketChat(ticket, sender);
-        ChatMediaStorageService.ProcessedChatPayload payload = chatMediaStorageService.processIncomingContent(content);
+        ChatMediaStorageService.ProcessedChatPayload payload = normalizePayload(request);
         ChatMessage chatMessage = ChatMessage.builder()
                 .ticket(ticket)
                 .sender(sender)
@@ -67,6 +78,26 @@ public class ChatService {
                 Map.of("Nội dung", preview)
         );
         return mapToResponse(saved);
+    }
+
+    @Transactional
+    public ChatMediaUploadResponse uploadTicketMedia(Integer ticketId, MultipartFile file, String senderUsername) {
+        if (ticketId == null) {
+            throw new CustomException("ticketId là bắt buộc.");
+        }
+        if (!StringUtils.hasText(senderUsername)) {
+            throw new CustomException("Không xác định được người gửi.");
+        }
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        AppUser sender = appUserRepository.findByUsername(senderUsername)
+                .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
+        ensureCanAccessTicketChat(ticket, sender);
+        ChatMediaStorageService.ProcessedChatPayload storedMedia = chatMediaStorageService.storeUploadedFile(file);
+        return ChatMediaUploadResponse.builder()
+                .mediaUrl(storedMedia.mediaUrl())
+                .mediaType(storedMedia.mediaType())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -101,6 +132,25 @@ public class ChatService {
                 .mediaType(chatMessage.getMediaType())
                 .createdAt(chatMessage.getCreatedAt())
                 .build();
+    }
+
+    private ChatMediaStorageService.ProcessedChatPayload normalizePayload(ChatMessageSendRequest request) {
+        String rawContent = request != null ? request.getContent() : null;
+        String mediaUrl = request != null && StringUtils.hasText(request.getMediaUrl())
+                ? request.getMediaUrl().trim()
+                : null;
+        String mediaType = request != null && StringUtils.hasText(request.getMediaType())
+                ? request.getMediaType().trim().toLowerCase()
+                : null;
+
+        if (mediaUrl != null) {
+            if (!StringUtils.hasText(mediaType) || !List.of("image", "audio").contains(mediaType)) {
+                throw new CustomException("Loại media không hợp lệ.");
+            }
+            String normalizedContent = StringUtils.hasText(rawContent) ? rawContent.trim() : null;
+            return new ChatMediaStorageService.ProcessedChatPayload(normalizedContent, mediaUrl, mediaType);
+        }
+        return chatMediaStorageService.processIncomingContent(rawContent);
     }
 
     private void ensureCanAccessTicketChat(Ticket ticket, AppUser actor) {

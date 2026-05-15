@@ -49,6 +49,11 @@ async function fileToBitmapOrImage(file) {
 }
 
 export async function compressImageForUpload(file) {
+  const blob = await compressImageToBlob(file)
+  return blobToDataUrl(blob)
+}
+
+export async function compressImageToBlob(file) {
   const source = await fileToBitmapOrImage(file)
 
   let width = source.width
@@ -75,12 +80,12 @@ export async function compressImageForUpload(file) {
 
   const primary = await canvasToBlob(canvas, 0.72)
   if (primary && primary.size <= TARGET_IMAGE_BYTES) {
-    return blobToDataUrl(primary)
+    return primary
   }
 
   const fallback = await canvasToBlob(canvas, 0.58)
   if (fallback) {
-    return blobToDataUrl(fallback)
+    return fallback
   }
   throw new Error('compress-failed')
 }

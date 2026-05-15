@@ -121,11 +121,12 @@ export default function useWebSocket(token) {
 
   const publish = useCallback((destination, body) => {
     const client = clientRef.current
-    if (!client || !client.connected) return
+    if (!client || !client.connected) return false
     client.publish({
       destination,
       body: JSON.stringify(body),
     })
+    return true
   }, [])
 
   return {

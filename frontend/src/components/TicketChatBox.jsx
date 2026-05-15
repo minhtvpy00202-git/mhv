@@ -4,7 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
-import { compressImageForUpload } from '../utils/imageProcessing'
+import { compressImageToBlob } from '../utils/imageProcessing'
 
 function formatMessageTime(value) {
   if (!value) return ''
@@ -50,7 +50,7 @@ function parseMessage(message) {
 
 function TicketChatBox({ ticketId, onClose, embedded = false }) {
   const { token, user } = useAuth()
-  const { connected, subscribe } = useWebSocket(token)
+  const { connected, subscribe, publish } = useWebSocket(token)
   const [messages, setMessages] = useState([])
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
@@ -66,12 +66,17 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
   const mediaStreamRef = useRef(null)
   const processingFallbackTimerRef = useRef(null)
   const syncInFlightRef = useRef(false)
+  const postSendSyncTimerRef = useRef(null)
 
   useEffect(() => {
     return () => {
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
         processingFallbackTimerRef.current = null
+      }
+      if (postSendSyncTimerRef.current) {
+        clearTimeout(postSendSyncTimerRef.current)
+        postSendSyncTimerRef.current = null
       }
     }
   }, [])
@@ -157,37 +162,72 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     [messages, user?.userId],
   )
 
-  const publishMessage = useCallback(async (messageContent) => {
-    if (!messageContent || !ticketId) return
-    setSending(true)
-    try {
-      const response = await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
-        ticketId: Number(ticketId),
-        content: messageContent,
+  const scheduleSyncAfterSend = useCallback(() => {
+    if (postSendSyncTimerRef.current) {
+      clearTimeout(postSendSyncTimerRef.current)
+    }
+    postSendSyncTimerRef.current = window.setTimeout(() => {
+      void syncMessages({ silent: true })
+    }, 1200)
+  }, [syncMessages])
+
+  const sendFallbackMessage = useCallback(async (payload) => {
+    const response = await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
+      ticketId: Number(ticketId),
+      ...payload,
+    })
+    const saved = response.data
+    if (saved?.id) {
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === saved.id)) {
+          return prev
+        }
+        return [...prev, saved]
       })
-      const saved = response.data
-      if (saved?.id) {
-        setMessages((prev) => {
-          if (prev.some((item) => item.id === saved.id)) {
-            return prev
-          }
-          return [...prev, saved]
-        })
-      }
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Gửi tin nhắn thất bại.'
-      toast.error(message)
-    } finally {
-      setSending(false)
     }
   }, [ticketId])
 
-  const handleSendMessage = (event) => {
+  const dispatchChatMessage = useCallback(async (payload) => {
+    if (!ticketId) return false
+    try {
+      const sentViaRealtime = publish(`/app/chat/${ticketId}`, {
+        ticketId: Number(ticketId),
+        ...payload,
+      })
+      if (!sentViaRealtime) {
+        await sendFallbackMessage(payload)
+      } else {
+        scheduleSyncAfterSend()
+      }
+      return true
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Gửi tin nhắn thất bại.'
+      toast.error(message)
+      return false
+    }
+  }, [publish, scheduleSyncAfterSend, sendFallbackMessage, ticketId])
+
+  const uploadChatMedia = useCallback(async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await axiosClient.post(`/api/tickets/${ticketId}/chats/media`, formData)
+    if (!response.data?.mediaUrl || !response.data?.mediaType) {
+      throw new Error('invalid-upload-response')
+    }
+    return response.data
+  }, [ticketId])
+
+  const handleSendMessage = async (event) => {
     event.preventDefault()
     if (!content.trim()) return
-    void publishMessage(content.trim())
-    setContent('')
-    inputRef.current?.focus()
+    const text = content.trim()
+    setSending(true)
+    const sent = await dispatchChatMessage({ content: text })
+    setSending(false)
+    if (sent) {
+      setContent('')
+      inputRef.current?.focus()
+    }
   }
 
   const handleSelectImage = async (event) => {
@@ -200,19 +240,28 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       toast.error('Thiết bị xử lý ảnh quá lâu. Vui lòng thử ảnh khác hoặc chọn ảnh từ thư viện.')
     }, 12000)
     try {
-      const compressedDataUrl = await compressImageForUpload(file)
-      if (!compressedDataUrl) {
+      const compressedBlob = await compressImageToBlob(file)
+      if (!compressedBlob) {
         toast.error('Không xử lý được ảnh.')
         return
       }
-      void publishMessage(`${IMG_PREFIX}${compressedDataUrl}`)
-    } catch {
-      toast.error('Không thể nén ảnh để gửi.')
+      setSending(true)
+      const normalizedName = file.name?.replace(/\.[^.]+$/, '') || `chat-image-${Date.now()}`
+      const uploadFile = new File([compressedBlob], `${normalizedName}.jpg`, { type: 'image/jpeg' })
+      const uploaded = await uploadChatMedia(uploadFile)
+      await dispatchChatMessage({
+        mediaUrl: uploaded?.mediaUrl,
+        mediaType: uploaded?.mediaType,
+      })
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể upload ảnh để gửi.'
+      toast.error(message)
     } finally {
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
         processingFallbackTimerRef.current = null
       }
+      setSending(false)
       setProcessingImage(false)
     }
   }
@@ -236,22 +285,30 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
         if (event.data.size > 0) chunks.push(event.data)
       }
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' })
-        if (blob.size > 2 * 1024 * 1024) {
-          toast.error('File ghi âm vượt quá 2MB.')
-        } else {
-          const reader = new FileReader()
-          reader.onload = () => {
-            const dataUrl = String(reader.result || '')
-            if (dataUrl) {
-              void publishMessage(`${AUDIO_PREFIX}${dataUrl}`)
+        void (async () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' })
+          try {
+            if (blob.size > 2 * 1024 * 1024) {
+              toast.error('File ghi âm vượt quá 2MB.')
+              return
             }
+            setSending(true)
+            const uploadFile = new File([blob], `chat-audio-${Date.now()}.webm`, { type: 'audio/webm' })
+            const uploaded = await uploadChatMedia(uploadFile)
+            await dispatchChatMessage({
+              mediaUrl: uploaded?.mediaUrl,
+              mediaType: uploaded?.mediaType,
+            })
+          } catch (error) {
+            const message = error?.response?.data?.message || 'Không thể upload ghi âm để gửi.'
+            toast.error(message)
+          } finally {
+            setSending(false)
+            stream.getTracks().forEach((track) => track.stop())
+            mediaStreamRef.current = null
+            mediaRecorderRef.current = null
           }
-          reader.readAsDataURL(blob)
-        }
-        stream.getTracks().forEach((track) => track.stop())
-        mediaStreamRef.current = null
-        mediaRecorderRef.current = null
+        })()
       }
       mediaRecorderRef.current = recorder
       recorder.start()
@@ -372,6 +429,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
           <button
             type="button"
             onClick={handleToggleRecording}
+            disabled={sending}
             className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold ${
               recording
                 ? 'border-red-500 bg-red-50 text-red-700'
@@ -399,7 +457,11 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
             <Send size={18} />
           </button>
         </div>
-        {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
+        {(processingImage || sending) && (
+          <p className="mt-2 text-xs text-slate-500">
+            {processingImage ? 'Đang xử lý và upload ảnh...' : 'Đang gửi dữ liệu chat...'}
+          </p>
+        )}
       </form>
       </>
       )}

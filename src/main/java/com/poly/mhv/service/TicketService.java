@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +32,15 @@ public class TicketService {
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
     private final TicketEventService ticketEventService;
+    private final TicketImageStorageService ticketImageStorageService;
 
     @Transactional
     public TicketResponse createTicket(TicketCreateRequest request) {
+        return createTicket(request, null);
+    }
+
+    @Transactional
+    public TicketResponse createTicket(TicketCreateRequest request, MultipartFile imageFile) {
         if (request == null) {
             throw new CustomException("Dữ liệu ticket không được để trống.");
         }
@@ -57,10 +64,9 @@ public class TicketService {
         AppUser reporter = currentUserProvider.getCurrentUser();
         LocalDateTime createdAt = LocalDateTime.now();
 
-        String imageUrl = null;
-        if (StringUtils.hasText(request.getImageUrl())) {
-            imageUrl = request.getImageUrl().trim();
-        }
+        String imageUrl = imageFile != null && !imageFile.isEmpty()
+                ? ticketImageStorageService.storeImage(imageFile)
+                : ticketImageStorageService.normalizeTicketImageUrl(request.getImageUrl());
 
         Ticket ticket = Ticket.builder()
                 .asset(asset)

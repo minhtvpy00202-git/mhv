@@ -4,7 +4,7 @@ import { Camera, ImagePlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
-import { compressImageForUpload } from '../utils/imageProcessing'
+import { compressImageToBlob } from '../utils/imageProcessing'
 
 const scannerElementId = 'maintenance-scanner'
 
@@ -21,7 +21,8 @@ function MaintenanceReport() {
   const [assetHomeLocationName, setAssetHomeLocationName] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('MEDIUM')
-  const [imageUrl, setImageUrl] = useState('')
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -52,6 +53,9 @@ function MaintenanceReport() {
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
         processingFallbackTimerRef.current = null
+      }
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl)
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pagehide', handlePageHide)
@@ -132,7 +136,11 @@ function MaintenanceReport() {
     setAssetHomeLocationName('')
     setDescription('')
     setPriority('MEDIUM')
-    setImageUrl('')
+    setImageFile(null)
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl)
+    }
+    setImagePreviewUrl('')
     startScanner()
   }
 
@@ -146,14 +154,21 @@ function MaintenanceReport() {
       toast.error('Thiết bị xử lý ảnh quá lâu. Vui lòng thử ảnh khác hoặc chọn ảnh từ thư viện.')
     }, 12000)
     try {
-      const compressedDataUrl = await compressImageForUpload(file)
-      if (!compressedDataUrl) {
+      const compressedBlob = await compressImageToBlob(file)
+      if (!compressedBlob) {
         toast.error('Không xử lý được ảnh.')
         return
       }
-      setImageUrl(compressedDataUrl)
-    } catch {
-      toast.error('Không thể nén ảnh để đính kèm.')
+      const normalizedName = file.name?.replace(/\.[^.]+$/, '') || `ticket-image-${Date.now()}`
+      const normalizedFile = new File([compressedBlob], `${normalizedName}.jpg`, { type: 'image/jpeg' })
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl)
+      }
+      setImageFile(normalizedFile)
+      setImagePreviewUrl(URL.createObjectURL(normalizedFile))
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể nén ảnh để đính kèm.'
+      toast.error(message)
     } finally {
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
@@ -171,12 +186,14 @@ function MaintenanceReport() {
     }
     setLoading(true)
     try {
-      const response = await axiosClient.post('/api/tickets', {
-        asset_qa_code: assetQaCode,
-        description,
-        priority,
-        image_url: imageUrl || null,
-      })
+      const formData = new FormData()
+      formData.append('assetQaCode', assetQaCode)
+      formData.append('description', description)
+      formData.append('priority', priority)
+      if (imageFile) {
+        formData.append('image', imageFile)
+      }
+      const response = await axiosClient.post('/api/tickets', formData)
       const ticketId = response.data?.id
       toast.success(`Đã tạo ticket báo hỏng thành công${assetName ? `: ${assetName}` : ''}.`)
       keepScannerAliveRef.current = false
@@ -188,7 +205,11 @@ function MaintenanceReport() {
       setAssetHomeLocationName('')
       setDescription('')
       setPriority('MEDIUM')
-      setImageUrl('')
+      setImageFile(null)
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl)
+      }
+      setImagePreviewUrl('')
       if (ticketId) {
         navigate(`/mobile/tickets/${ticketId}`)
       }
@@ -276,10 +297,10 @@ function MaintenanceReport() {
                 Chụp ảnh lỗi
               </button>
             </div>
-            {imageUrl && (
+            {imagePreviewUrl && (
               <div className="mt-3">
                 <p className="mb-1 text-xs text-slate-500">Ảnh lỗi đính kèm</p>
-                <img src={imageUrl} alt="error-preview" className="h-28 w-28 rounded-md border border-slate-200 object-cover" />
+                <img src={imagePreviewUrl} alt="error-preview" className="h-28 w-28 rounded-md border border-slate-200 object-cover" />
               </div>
             )}
             {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}

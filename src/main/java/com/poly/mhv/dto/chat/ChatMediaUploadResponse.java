@@ -9,9 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ChatMessageSendRequest {
-    private Integer ticketId;
-    private String content;
+public class ChatMediaUploadResponse {
     private String mediaUrl;
     private String mediaType;
 }

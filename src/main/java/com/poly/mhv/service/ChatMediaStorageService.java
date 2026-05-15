@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class ChatMediaStorageService {
@@ -73,6 +74,27 @@ public class ChatMediaStorageService {
         }
     }
 
+    public ProcessedChatPayload storeUploadedFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new CustomException("File media không được để trống.");
+        }
+        String mimeType = StringUtils.hasText(file.getContentType())
+                ? file.getContentType().trim().toLowerCase()
+                : null;
+        if (!StringUtils.hasText(mimeType)) {
+            throw new CustomException("Không xác định được loại media.");
+        }
+        String logicalType;
+        if (mimeType.startsWith("image/")) {
+            logicalType = "image";
+        } else if (mimeType.startsWith("audio/")) {
+            logicalType = "audio";
+        } else {
+            throw new CustomException("Chỉ hỗ trợ upload ảnh hoặc ghi âm.");
+        }
+        return writeBytes(file, logicalType, mimeType);
+    }
+
     private StoredMedia decodeAndStoreDataUrl(String dataUrl, String expectedType) {
         int commaIndex = dataUrl.indexOf(',');
         if (commaIndex <= 0) {
@@ -103,6 +125,19 @@ public class ChatMediaStorageService {
             Path filePath = uploadDir.resolve(fileName).normalize();
             Files.write(filePath, bytes, StandardOpenOption.CREATE_NEW);
             return new StoredMedia("/uploads/" + fileName, mimeType);
+        } catch (Exception ex) {
+            throw new CustomException("Không thể lưu media.");
+        }
+    }
+
+    private ProcessedChatPayload writeBytes(MultipartFile file, String logicalType, String mimeType) {
+        String extension = MIME_EXTENSION.getOrDefault(mimeType, logicalType.equals("image") ? "jpg" : "bin");
+        String fileName = UUID.randomUUID() + "." + extension;
+        try {
+            Files.createDirectories(uploadDir);
+            Path filePath = uploadDir.resolve(fileName).normalize();
+            file.transferTo(filePath);
+            return new ProcessedChatPayload(null, "/uploads/" + fileName, logicalType);
         } catch (Exception ex) {
             throw new CustomException("Không thể lưu media.");
         }

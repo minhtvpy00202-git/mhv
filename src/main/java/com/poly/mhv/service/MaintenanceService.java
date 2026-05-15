@@ -10,11 +10,11 @@ import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketRepository;
-import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class MaintenanceService {
@@ -35,13 +35,18 @@ public class MaintenanceService {
 
     @Transactional
     public MaintenanceReportResponse report(MaintenanceReportRequest request) {
+        return report(request, null);
+    }
+
+    @Transactional
+    public MaintenanceReportResponse report(MaintenanceReportRequest request, MultipartFile imageFile) {
         validateRequest(request);
         TicketResponse saved = ticketService.createTicket(TicketCreateRequest.builder()
                 .assetQaCode(request.getAssetQaCode())
                 .description(request.getDescription())
                 .priority(StringUtils.hasText(request.getPriority()) ? request.getPriority().trim().toUpperCase() : "MEDIUM")
                 .imageUrl(request.getImageUrl())
-                .build());
+                .build(), imageFile);
         return MaintenanceReportResponse.builder()
                 .id(saved.getId())
                 .assetQaCode(saved.getAssetQaCode())

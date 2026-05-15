@@ -14,16 +14,19 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/api/tickets", "/tickets"})
@@ -35,7 +38,7 @@ public class TicketController {
     private final TicketService ticketService;
     private final TicketEventService ticketEventService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAnyRole('NhanVien','Admin')")
     @Operation(summary = "Tạo ticket", description = "Tạo ticket báo hỏng cho một thiết bị.")
     @ApiResponses({
@@ -46,6 +49,29 @@ public class TicketController {
     })
     public ResponseEntity<TicketResponse> createTicket(@RequestBody TicketCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.createTicket(request));
+    }
+
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('NhanVien','Admin')")
+    @Operation(summary = "Tạo ticket kèm ảnh", description = "Tạo ticket báo hỏng với dữ liệu multipart/form-data và ảnh đính kèm.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Tạo ticket thành công"),
+            @ApiResponse(responseCode = "400", description = "Dữ liệu hoặc ảnh không hợp lệ"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền tạo ticket")
+    })
+    public ResponseEntity<TicketResponse> createTicketMultipart(
+            @RequestParam("assetQaCode") String assetQaCode,
+            @RequestParam("description") String description,
+            @RequestParam("priority") String priority,
+            @RequestPart(name = "image", required = false) MultipartFile image
+    ) {
+        TicketCreateRequest request = TicketCreateRequest.builder()
+                .assetQaCode(assetQaCode)
+                .description(description)
+                .priority(priority)
+                .build();
+        return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.createTicket(request, image));
     }
 
     @PutMapping("/{id}/assign")
