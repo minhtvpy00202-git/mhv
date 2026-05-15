@@ -1,9 +1,10 @@
 import { Bell, ClipboardList, LogOut, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
+import { isNarrowViewport, toTechSupportMobilePath } from '../utils/navigation'
 
 const navItems = [
   { to: '/tech/tickets', label: 'Danh sách Ticket', icon: ClipboardList },
@@ -22,6 +23,7 @@ function extractTicketIdFromLink(linkPath) {
 function TechSupportLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [chatNotifications, setChatNotifications] = useState([])
@@ -29,6 +31,22 @@ function TechSupportLayout() {
   const [contactTickets, setContactTickets] = useState([])
   const [chatKeyword, setChatKeyword] = useState('')
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+
+  useEffect(() => {
+    const syncViewportRoute = () => {
+      if (!isNarrowViewport()) return
+      const targetPath = toTechSupportMobilePath(location.pathname)
+      if (targetPath !== location.pathname) {
+        navigate(targetPath, { replace: true })
+      }
+    }
+
+    syncViewportRoute()
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
+    const handleChange = () => syncViewportRoute()
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [location.pathname, navigate])
 
   useEffect(() => {
     if (!contactTickets.length) return

@@ -5,17 +5,33 @@ export function isNarrowViewport() {
   return window.matchMedia('(max-width: 768px)').matches
 }
 
+export function toTechSupportMobilePath(pathname = '') {
+  const normalizedPath = String(pathname || '')
+  if (normalizedPath.startsWith('/tech-mobile/')) {
+    return normalizedPath
+  }
+  if (normalizedPath.startsWith('/tech/')) {
+    return normalizedPath.replace('/tech/', '/tech-mobile/')
+  }
+  return '/tech-mobile/tickets'
+}
+
+export function toTechSupportDesktopPath(pathname = '') {
+  const normalizedPath = String(pathname || '')
+  if (normalizedPath.startsWith('/tech/')) {
+    return normalizedPath
+  }
+  if (normalizedPath.startsWith('/tech-mobile/')) {
+    return normalizedPath.replace('/tech-mobile/', '/tech/')
+  }
+  return '/tech/tickets'
+}
+
 function prefersTechSupportMobilePath() {
   if (typeof window === 'undefined') {
     return false
   }
   const currentPath = window.location?.pathname || ''
-  if (currentPath.startsWith('/tech-mobile/')) {
-    return true
-  }
-  if (currentPath.startsWith('/tech/')) {
-    return false
-  }
   return isNarrowViewport()
 }
 

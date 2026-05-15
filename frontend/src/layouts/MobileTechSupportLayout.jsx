@@ -1,8 +1,12 @@
 import { Bell, ClipboardList, LogOut, MessageCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getTechSupportTicketPath } from '../utils/navigation'
+import {
+  getTechSupportTicketPath,
+  isNarrowViewport,
+  toTechSupportDesktopPath,
+} from '../utils/navigation'
 
 const navItems = [
   { to: '/tech-mobile/tickets', label: 'Công việc', icon: ClipboardList },
@@ -12,11 +16,28 @@ const navItems = [
 function MobileTechSupportLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [chatNotifications, setChatNotifications] = useState([])
   const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+
+  useEffect(() => {
+    const syncViewportRoute = () => {
+      if (isNarrowViewport()) return
+      const targetPath = toTechSupportDesktopPath(location.pathname)
+      if (targetPath !== location.pathname) {
+        navigate(targetPath, { replace: true })
+      }
+    }
+
+    syncViewportRoute()
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
+    const handleChange = () => syncViewportRoute()
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [location.pathname, navigate])
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
