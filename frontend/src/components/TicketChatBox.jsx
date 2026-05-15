@@ -41,6 +41,41 @@ function parseMessage(message) {
   return { type: 'text', value: content }
 }
 
+function appendRetryQuery(url, retryKey) {
+  if (!url) return ''
+  if (!retryKey) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}chat_media_retry=${retryKey}`
+}
+
+function ResilientChatImage({ src, alt }) {
+  const [retryKey, setRetryKey] = useState(0)
+  const [attempts, setAttempts] = useState(0)
+
+  useEffect(() => {
+    setRetryKey(0)
+    setAttempts(0)
+  }, [src])
+
+  const displaySrc = useMemo(() => appendRetryQuery(src, retryKey), [src, retryKey])
+
+  return (
+    <img
+      src={displaySrc}
+      alt={alt}
+      className="max-h-64 w-full rounded-lg object-contain"
+      onError={() => {
+        if (attempts >= 2) return
+        const nextAttempt = attempts + 1
+        setAttempts(nextAttempt)
+        window.setTimeout(() => {
+          setRetryKey(Date.now())
+        }, nextAttempt * 900)
+      }}
+    />
+  )
+}
+
 function VoiceMessagePlayer({ src, isMine }) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -210,6 +245,9 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
   useEffect(() => {
     if (!connected || !ticketId) return undefined
     const unsubscribe = subscribe(`/topic/users/${user?.userId}/tickets/${ticketId}`, (incoming) => {
+      if (incoming?.mediaUrl || incoming?.mediaType) {
+        scheduleSyncAfterRealtimeMedia()
+      }
       setMessages((prev) => {
         if (!incoming?.id) return prev
         if (prev.some((item) => item.id === incoming.id)) return prev
@@ -217,7 +255,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       })
     })
     return () => unsubscribe()
-  }, [connected, subscribe, ticketId, user?.userId])
+  }, [connected, scheduleSyncAfterRealtimeMedia, subscribe, ticketId, user?.userId])
 
   useEffect(() => {
     if (!ticketId) return undefined
@@ -255,6 +293,15 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     postSendSyncTimerRef.current = window.setTimeout(() => {
       void syncMessages({ silent: true })
     }, 1200)
+  }, [syncMessages])
+
+  const scheduleSyncAfterRealtimeMedia = useCallback(() => {
+    if (postSendSyncTimerRef.current) {
+      clearTimeout(postSendSyncTimerRef.current)
+    }
+    postSendSyncTimerRef.current = window.setTimeout(() => {
+      void syncMessages({ silent: true })
+    }, 2200)
   }, [syncMessages])
 
   const sendFallbackMessage = useCallback(async (payload) => {
@@ -460,7 +507,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
                   {message.isMine ? 'Bạn' : `User #${message.senderId}`} · {message.timeText}
                 </p>
                 {message.parsed.type === 'image' && (
-                  <img src={message.parsed.value} alt="chat-img" className="max-h-64 w-full rounded-lg object-contain" />
+                  <ResilientChatImage src={message.parsed.value} alt="chat-img" />
                 )}
                 {message.parsed.type === 'audio' && (
                   <VoiceMessagePlayer src={message.parsed.value} isMine={message.isMine} />

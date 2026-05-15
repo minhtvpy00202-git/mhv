@@ -16,6 +16,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     List<Ticket> findByStatusAndAssigneeId(String status, Integer assigneeId);
     List<Ticket> findByReporterIdOrderByCreatedAtDesc(Integer reporterId);
     List<Ticket> findAllByOrderByCreatedAtDesc();
+    List<Ticket> findByImageUrlIsNotNullOrderByIdAsc();
 
     @Modifying
     @Query(value = """
