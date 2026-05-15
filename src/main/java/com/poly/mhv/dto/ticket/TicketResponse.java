@@ -49,6 +49,9 @@ public class TicketResponse {
     @Schema(description = "Tên kỹ thuật viên đang phụ trách", example = "Tran Thi B", nullable = true)
     private String assigneeName;
 
+    @Schema(description = "Số điện thoại kỹ thuật viên đang phụ trách", example = "0912345678", nullable = true)
+    private String assigneePhone;
+
     @Schema(description = "Mô tả sự cố", example = "Máy chiếu không lên nguồn, đèn báo đỏ liên tục.")
     private String description;
 

@@ -350,6 +350,7 @@ public class TicketService {
                 .reporterPhone(ticket.getReporter().getPhone())
                 .assigneeId(ticket.getAssignee() != null ? ticket.getAssignee().getId() : null)
                 .assigneeName(assigneeName)
+                .assigneePhone(ticket.getAssignee() != null ? ticket.getAssignee().getPhone() : null)
                 .description(ticket.getDescription())
                 .imageUrl(ticket.getImageUrl())
                 .priority(ticket.getPriority())

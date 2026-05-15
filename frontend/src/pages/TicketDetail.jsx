@@ -92,7 +92,9 @@ function TicketDetail() {
   const isMobileRoute = isStandardMobileRoute || isTechMobileRoute
   const canOpenChat = !isTechSupportRoute || Number(ticket?.assigneeId) === Number(user?.userId)
   const reporterPhone = normalizePhone(ticket?.reporterPhone)
-  const zaloUrl = getZaloUrl(ticket?.reporterPhone)
+  const reporterZaloUrl = getZaloUrl(ticket?.reporterPhone)
+  const assigneePhone = normalizePhone(ticket?.assigneePhone)
+  const assigneeZaloUrl = getZaloUrl(ticket?.assigneePhone)
 
   return (
     <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
@@ -118,50 +120,56 @@ function TicketDetail() {
       )}
 
       {!loading && ticket && (
-        <section className="grid gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-2">
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Thiết bị:</span> {ticket.assetQaCode}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Mức độ ưu tiên:</span> {ticket.priority}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Người báo:</span> {ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Điện thoại:</span> {ticket.reporterPhone || 'Chưa có số'}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}
-          </p>
-          <p className="text-sm text-slate-700 md:col-span-2">
-            <span className="font-semibold">Mô tả:</span> {ticket.description}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Tạo lúc:</span> {formatVietnamDateTime(ticket.createdAt)}
-          </p>
-          <p className="text-sm text-slate-700">
-            <span className="font-semibold">Hạn SLA:</span> {formatVietnamDateTime(ticket.dueDate)}
-          </p>
-          <div className="md:col-span-2">
+        <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-800">{ticket.assetName || 'Thiết bị'}</p>
+              <p className="mt-1 text-xs text-slate-500">{ticket.assetQaCode} · {ticket.assetLocationName || 'Không rõ vị trí'}</p>
+            </div>
             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName}`}>{ticket.status}</span>
           </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thông tin ticket</p>
+              <div className="mt-2 space-y-2 text-sm text-slate-700">
+                <p><span className="font-semibold">Mức ưu tiên:</span> {ticket.priority}</p>
+                <p><span className="font-semibold">Tạo lúc:</span> {formatVietnamDateTime(ticket.createdAt)}</p>
+                <p><span className="font-semibold">Hạn SLA:</span> {formatVietnamDateTime(ticket.dueDate)}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Người liên quan</p>
+              <div className="mt-2 space-y-2 text-sm text-slate-700">
+                <p><span className="font-semibold">Người báo:</span> {ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}</p>
+                <p><span className="font-semibold">SĐT người báo:</span> {ticket.reporterPhone || 'Chưa có số'}</p>
+                <p><span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}</p>
+                <p><span className="font-semibold">SĐT kỹ thuật viên:</span> {ticket.assigneePhone || 'Chưa có số'}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-3 md:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả sự cố</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{ticket.description}</p>
+            </div>
+          </div>
+
           {isTechMobileRoute && reporterPhone && (
-            <div className="md:col-span-2">
-              <div className="flex flex-wrap gap-2">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-sm font-semibold text-emerald-800">Liên hệ người báo hỏng</p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <a
                   href={`tel:${reporterPhone}`}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
                 >
                   <Phone size={16} />
-                  Gọi điện người báo hỏng
+                  Gọi điện
                 </a>
-                {zaloUrl && (
+                {reporterZaloUrl && (
                   <a
-                    href={zaloUrl}
+                    href={reporterZaloUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700"
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
                   >
                     <MessageCircle size={16} />
                     Nhắn Zalo
@@ -177,12 +185,42 @@ function TicketDetail() {
                       toast.error('Không copy được số điện thoại.')
                     }
                   }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                 >
                   <Copy size={16} />
                   Copy số
                 </button>
               </div>
+            </div>
+          )}
+
+          {isStandardMobileRoute && (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
+              <p className="text-sm font-semibold text-sky-800">Liên hệ kỹ thuật viên hỗ trợ</p>
+              {!assigneePhone ? (
+                <p className="mt-2 text-sm text-sky-700">Ticket này chưa được gán kỹ thuật viên hoặc chưa có số điện thoại liên hệ.</p>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a
+                    href={`tel:${assigneePhone}`}
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
+                  >
+                    <Phone size={16} />
+                    Gọi kỹ thuật viên
+                  </a>
+                  {assigneeZaloUrl && (
+                    <a
+                      href={assigneeZaloUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
+                    >
+                      <MessageCircle size={16} />
+                      Chat Zalo
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </section>
