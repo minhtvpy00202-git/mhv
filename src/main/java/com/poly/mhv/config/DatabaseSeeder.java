@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 @Component
 public class DatabaseSeeder implements CommandLineRunner {
@@ -16,16 +17,26 @@ public class DatabaseSeeder implements CommandLineRunner {
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final TechSupportTypeRepository techSupportTypeRepository;
+    private final boolean demoUsersEnabled;
 
-    public DatabaseSeeder(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder, TechSupportTypeRepository techSupportTypeRepository) {
+    public DatabaseSeeder(
+            AppUserRepository appUserRepository,
+            PasswordEncoder passwordEncoder,
+            TechSupportTypeRepository techSupportTypeRepository,
+            @Value("${app.seed.demo-users.enabled:false}") boolean demoUsersEnabled
+    ) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.techSupportTypeRepository = techSupportTypeRepository;
+        this.demoUsersEnabled = demoUsersEnabled;
     }
 
     @Override
     public void run(String... args) {
         seedTechSupportTypes();
+        if (!demoUsersEnabled) {
+            return;
+        }
         upsertDemoUser("admin", "123456", "Admin");
         upsertDemoUser("nhanvien", "123456", "NhanVien");
         upsertTechSupportUser("techsup1", "123456", 1, "Kỹ thuật viên công nghệ");

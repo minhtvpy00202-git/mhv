@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
 import { useAuth } from '../../context/AuthContext'
 
@@ -266,7 +267,7 @@ function TechSupportTickets() {
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
           <div className="rounded-2xl bg-white p-4 shadow-xl">
-            <img src={previewImageUrl} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
+            <img src={resolveBackendMediaUrl(previewImageUrl)} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
             <button
               type="button"
               onClick={() => setPreviewImageUrl('')}

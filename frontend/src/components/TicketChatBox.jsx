@@ -5,6 +5,7 @@ import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
 import { compressImageToBlob } from '../utils/imageProcessing'
+import { resolveBackendMediaUrl } from '../utils/mediaUrl'
 
 function formatMessageTime(value) {
   if (!value) return ''
@@ -19,19 +20,8 @@ function formatMessageTime(value) {
 const IMG_PREFIX = '[[IMG]]'
 const AUDIO_PREFIX = '[[AUDIO]]'
 const INITIAL_CHAT_LIMIT = Number(import.meta.env.VITE_CHAT_INITIAL_LIMIT) || 40
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const isLocalFrontendHost = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-const MEDIA_BASE_URL = API_BASE_URL || (isLocalFrontendHost ? 'http://localhost:8080' : window.location.origin)
-
 function resolveMediaUrl(url) {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-    return url
-  }
-  if (url.startsWith('/')) {
-    return `${MEDIA_BASE_URL}${url}`
-  }
-  return `${MEDIA_BASE_URL}/${url}`
+  return resolveBackendMediaUrl(url)
 }
 
 function parseMessage(message) {
