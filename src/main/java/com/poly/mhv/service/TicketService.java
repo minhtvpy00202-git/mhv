@@ -352,7 +352,7 @@ public class TicketService {
                 .assigneeName(assigneeName)
                 .assigneePhone(ticket.getAssignee() != null ? ticket.getAssignee().getPhone() : null)
                 .description(ticket.getDescription())
-                .imageUrl(ticket.getImageUrl())
+                .imageUrl(ticketImageStorageService.toPublicImageUrl(ticket.getImageUrl()))
                 .priority(ticket.getPriority())
                 .status(ticket.getStatus())
                 .createdAt(ticket.getCreatedAt())

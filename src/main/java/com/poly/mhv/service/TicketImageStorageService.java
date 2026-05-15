@@ -38,6 +38,46 @@ public class TicketImageStorageService {
         if (normalized.startsWith("data:")) {
             return decodeAndStoreDataUrl(normalized);
         }
+        return toPublicImageUrl(normalized);
+    }
+
+    public String toPublicImageUrl(String rawImageUrl) {
+        if (!StringUtils.hasText(rawImageUrl)) {
+            return null;
+        }
+
+        String normalized = rawImageUrl.trim().replace('\\', '/');
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+
+        if (normalized.startsWith("http://") || normalized.startsWith("https://") || normalized.startsWith("data:")) {
+            return normalized;
+        }
+
+        if (normalized.startsWith("/api/uploads/")) {
+            return normalized.substring(4);
+        }
+
+        if (normalized.startsWith("/uploads/")) {
+            return normalized;
+        }
+
+        if (normalized.startsWith("uploads/")) {
+            return "/" + normalized;
+        }
+
+        int uploadsIndex = normalized.indexOf("/uploads/");
+        if (uploadsIndex >= 0) {
+            return normalized.substring(uploadsIndex);
+        }
+
+        Path normalizedUploadDir = uploadDir.normalize();
+        Path candidatePath = Paths.get(normalized).normalize();
+        if (candidatePath.startsWith(normalizedUploadDir) && candidatePath.getFileName() != null) {
+            return "/uploads/" + candidatePath.getFileName();
+        }
+
         return normalized;
     }
 

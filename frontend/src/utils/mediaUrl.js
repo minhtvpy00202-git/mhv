@@ -8,23 +8,37 @@ const BACKEND_BASE_URL = RAW_API_BASE_URL || DEFAULT_BACKEND_BASE_URL
 
 export function resolveBackendMediaUrl(url) {
   if (!url) return ''
+  const normalizedUrl = String(url).trim().replaceAll('\\', '/')
+  if (!normalizedUrl) return ''
   if (
-    url.startsWith('http://')
-    || url.startsWith('https://')
-    || url.startsWith('data:')
-    || url.startsWith('blob:')
+    normalizedUrl.startsWith('http://')
+    || normalizedUrl.startsWith('https://')
+    || normalizedUrl.startsWith('data:')
+    || normalizedUrl.startsWith('blob:')
   ) {
-    return url
+    return normalizedUrl
   }
 
-  if (url.startsWith('/api/')) {
-    return `${window.location.origin}${url}`
+  if (normalizedUrl.startsWith('/api/')) {
+    return `${window.location.origin}${normalizedUrl}`
   }
 
-  if (url.startsWith('/')) {
-    return `${BACKEND_BASE_URL}${url}`
+  if (normalizedUrl.startsWith('/uploads/')) {
+    return `${BACKEND_BASE_URL}${normalizedUrl}`
   }
 
-  return `${BACKEND_BASE_URL}/${url}`
+  if (normalizedUrl.startsWith('uploads/')) {
+    return `${BACKEND_BASE_URL}/${normalizedUrl}`
+  }
+
+  const uploadsIndex = normalizedUrl.indexOf('/uploads/')
+  if (uploadsIndex >= 0) {
+    return `${BACKEND_BASE_URL}${normalizedUrl.substring(uploadsIndex)}`
+  }
+
+  if (normalizedUrl.startsWith('/')) {
+    return `${BACKEND_BASE_URL}${normalizedUrl}`
+  }
+
+  return `${BACKEND_BASE_URL}/${normalizedUrl}`
 }
-

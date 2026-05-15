@@ -22,15 +22,18 @@ public class MaintenanceService {
     private final TicketRepository ticketRepository;
     private final TicketService ticketService;
     private final CurrentUserProvider currentUserProvider;
+    private final TicketImageStorageService ticketImageStorageService;
 
     public MaintenanceService(
             TicketRepository ticketRepository,
             TicketService ticketService,
-            CurrentUserProvider currentUserProvider
+            CurrentUserProvider currentUserProvider,
+            TicketImageStorageService ticketImageStorageService
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketService = ticketService;
         this.currentUserProvider = currentUserProvider;
+        this.ticketImageStorageService = ticketImageStorageService;
     }
 
     @Transactional
@@ -98,7 +101,7 @@ public class MaintenanceService {
                 .currentLocationName(asset.getLocation().getRoomName())
                 .reporterFullName(reporterFullName)
                 .description(ticket.getDescription())
-                .imageUrl(ticket.getImageUrl())
+                .imageUrl(ticketImageStorageService.toPublicImageUrl(ticket.getImageUrl()))
                 .reportTime(ticket.getCreatedAt())
                 .assetStatus(asset.getStatus())
                 .build();
