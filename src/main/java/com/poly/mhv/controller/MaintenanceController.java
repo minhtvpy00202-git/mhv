@@ -5,6 +5,8 @@ import com.poly.mhv.dto.maintenance.MaintenanceReportRequest;
 import com.poly.mhv.dto.maintenance.MaintenanceReportResponse;
 import com.poly.mhv.service.MaintenanceService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -54,9 +56,16 @@ public class MaintenanceController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
     public ResponseEntity<MaintenanceReportResponse> reportMultipart(
+            @Parameter(description = "Mã QA của thiết bị cần báo hỏng", example = "AT0007")
             @RequestParam("assetQaCode") String assetQaCode,
+            @Parameter(description = "Mô tả hỏng hóc hoặc triệu chứng gặp phải", example = "Loa bị rè và lúc có lúc mất tiếng.")
             @RequestParam("description") String description,
+            @Parameter(description = "Mức độ ưu tiên, có thể bỏ trống", example = "MEDIUM")
             @RequestParam(name = "priority", required = false) String priority,
+            @Parameter(
+                    description = "Ảnh minh họa hỏng hóc đính kèm theo multipart/form-data",
+                    schema = @Schema(type = "string", format = "binary")
+            )
             @RequestPart(name = "image", required = false) MultipartFile image
     ) {
         MaintenanceReportRequest request = MaintenanceReportRequest.builder()

@@ -7,10 +7,12 @@ import com.poly.mhv.dto.ticket.TicketTimelineEventResponse;
 import com.poly.mhv.service.TicketEventService;
 import com.poly.mhv.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -61,9 +63,16 @@ public class TicketController {
             @ApiResponse(responseCode = "403", description = "Không có quyền tạo ticket")
     })
     public ResponseEntity<TicketResponse> createTicketMultipart(
+            @Parameter(description = "Mã QA của thiết bị cần tạo ticket", example = "AT0007")
             @RequestParam("assetQaCode") String assetQaCode,
+            @Parameter(description = "Mô tả sự cố hoặc yêu cầu hỗ trợ", example = "Máy chiếu không lên nguồn, đèn báo nhấp nháy đỏ.")
             @RequestParam("description") String description,
+            @Parameter(description = "Mức độ ưu tiên của ticket", example = "HIGH")
             @RequestParam("priority") String priority,
+            @Parameter(
+                    description = "Ảnh minh họa sự cố đính kèm theo multipart/form-data",
+                    schema = @Schema(type = "string", format = "binary")
+            )
             @RequestPart(name = "image", required = false) MultipartFile image
     ) {
         TicketCreateRequest request = TicketCreateRequest.builder()
@@ -85,6 +94,7 @@ public class TicketController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket hoặc người được gán")
     })
     public ResponseEntity<TicketResponse> assignTicket(
+            @Parameter(description = "ID ticket cần phân công", example = "15")
             @PathVariable Integer id,
             @RequestBody TicketAssignRequest request
     ) {
@@ -100,7 +110,10 @@ public class TicketController {
             @ApiResponse(responseCode = "403", description = "Không có quyền xử lý ticket"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
     })
-    public ResponseEntity<TicketResponse> resolveTicket(@PathVariable Integer id) {
+    public ResponseEntity<TicketResponse> resolveTicket(
+            @Parameter(description = "ID ticket cần hoàn tất", example = "15")
+            @PathVariable Integer id
+    ) {
         return ResponseEntity.ok(ticketService.resolveTicket(id));
     }
 
@@ -113,9 +126,17 @@ public class TicketController {
             @ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
     })
     public ResponseEntity<List<TicketResponse>> getTickets(
+            @Parameter(
+                    description = "Lọc theo trạng thái ticket",
+                    example = "IN_PROGRESS",
+                    schema = @Schema(allowableValues = {"PENDING", "IN_PROGRESS", "RESOLVED"})
+            )
             @RequestParam(required = false) String status,
+            @Parameter(description = "Lọc theo ID kỹ thuật viên đang được giao ticket", example = "7")
             @RequestParam(name = "assignee_id", required = false) Integer assigneeId,
+            @Parameter(description = "Lọc theo mã QA thiết bị", example = "AT0007")
             @RequestParam(name = "asset_qa_code", required = false) String assetQaCode,
+            @Parameter(description = "Lọc theo ID người báo hỏng", example = "12")
             @RequestParam(name = "reporter_id", required = false) Integer reporterId
     ) {
         return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode, reporterId));
@@ -131,7 +152,9 @@ public class TicketController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
     })
     public ResponseEntity<List<TicketTimelineEventResponse>> getTicketTimeline(
+            @Parameter(description = "ID ticket cần xem timeline", example = "15")
             @PathVariable Integer id,
+            @Parameter(description = "Số lượng sự kiện tối đa trả về, mặc định 100, tối đa 300", example = "50")
             @RequestParam(required = false) Integer limit
     ) {
         return ResponseEntity.ok(ticketEventService.getTimeline(id, limit));

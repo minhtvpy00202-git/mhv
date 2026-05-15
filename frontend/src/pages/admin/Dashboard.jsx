@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import axiosClient from '../../api/axiosClient'
+import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
 
 const chartColors = ['#22c55e', '#3b82f6', '#ef4444', '#f59e0b']
 
@@ -14,15 +15,20 @@ function Dashboard() {
     availableAssets: 0,
   })
   const [suggestions, setSuggestions] = useState([])
+  const [helpdeskKpis, setHelpdeskKpis] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const response = await axiosClient.get('/api/dashboard/summary')
-        setSummary(response.data)
-        const suggestionResponse = await axiosClient.get('/api/dashboard/smart-suggestions')
+        const [summaryResponse, suggestionResponse, helpdeskResponse] = await Promise.all([
+          axiosClient.get('/api/dashboard/summary'),
+          axiosClient.get('/api/dashboard/smart-suggestions'),
+          axiosClient.get('/api/dashboard/helpdesk-kpis/admin'),
+        ])
+        setSummary(summaryResponse.data)
         setSuggestions(suggestionResponse.data?.suggestions || [])
+        setHelpdeskKpis(helpdeskResponse.data)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không thể tải dữ liệu dashboard.'
         toast.error(message)
@@ -114,6 +120,13 @@ function Dashboard() {
           ))}
         </div>
       </div>
+
+      <HelpdeskKpiPanel
+        title="Helpdesk KPI"
+        subtitle="Các KPI cho hệ thống ticket hỗ trợ và bảo trì."
+        summary={helpdeskKpis}
+        loading={loading}
+      />
     </div>
   )
 }

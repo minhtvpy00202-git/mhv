@@ -1,8 +1,10 @@
 package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.dashboard.DashboardSummaryResponse;
+import com.poly.mhv.dto.dashboard.HelpdeskKpiResponse;
 import com.poly.mhv.dto.dashboard.SmartSuggestionResponse;
 import com.poly.mhv.service.DashboardService;
+import com.poly.mhv.service.HelpdeskKpiService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -20,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final HelpdeskKpiService helpdeskKpiService;
 
-    public DashboardController(DashboardService dashboardService) {
+    public DashboardController(DashboardService dashboardService, HelpdeskKpiService helpdeskKpiService) {
         this.dashboardService = dashboardService;
+        this.helpdeskKpiService = helpdeskKpiService;
     }
 
     @GetMapping("/summary")
@@ -43,5 +47,27 @@ public class DashboardController {
     })
     public ResponseEntity<SmartSuggestionResponse> getSmartSuggestions() {
         return ResponseEntity.ok(dashboardService.getSmartSuggestions());
+    }
+
+    @GetMapping("/helpdesk-kpis/admin")
+    @Operation(summary = "Lấy KPI helpdesk cho admin", description = "Trả về 6 KPI helpdesk cốt lõi trên phạm vi toàn hệ thống.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy KPI helpdesk admin thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền xem KPI admin")
+    })
+    public ResponseEntity<HelpdeskKpiResponse> getAdminHelpdeskKpis() {
+        return ResponseEntity.ok(helpdeskKpiService.getAdminKpis());
+    }
+
+    @GetMapping("/helpdesk-kpis/me")
+    @Operation(summary = "Lấy KPI helpdesk cá nhân", description = "Trả về KPI helpdesk theo phạm vi kỹ thuật viên đang đăng nhập.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy KPI helpdesk cá nhân thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền xem KPI cá nhân")
+    })
+    public ResponseEntity<HelpdeskKpiResponse> getMyHelpdeskKpis() {
+        return ResponseEntity.ok(helpdeskKpiService.getCurrentTechnicianKpis());
     }
 }

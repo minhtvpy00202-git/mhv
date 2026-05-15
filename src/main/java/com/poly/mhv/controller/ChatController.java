@@ -7,6 +7,8 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.ChatService;
 import com.poly.mhv.service.ChatRealtimeService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -44,7 +46,9 @@ public class ChatController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
     })
     public ResponseEntity<List<ChatMessageResponse>> getTicketChats(
+            @Parameter(description = "ID ticket cần lấy lịch sử chat", example = "15")
             @PathVariable Integer ticketId,
+            @Parameter(description = "Giới hạn số tin nhắn gần nhất cần lấy, tối đa 200", example = "50")
             @RequestParam(name = "limit", required = false) Integer limit
     ) {
         return ResponseEntity.ok(chatService.getTicketChats(ticketId, limit));
@@ -59,6 +63,7 @@ public class ChatController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
     })
     public ResponseEntity<ChatMessageResponse> sendTicketChat(
+            @Parameter(description = "ID ticket cần gửi tin nhắn", example = "15")
             @PathVariable Integer ticketId,
             @RequestBody ChatMessageSendRequest request,
             Principal principal
@@ -83,7 +88,12 @@ public class ChatController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
     })
     public ResponseEntity<ChatMediaUploadResponse> uploadChatMedia(
+            @Parameter(description = "ID ticket cần upload media", example = "15")
             @PathVariable Integer ticketId,
+            @Parameter(
+                    description = "File ảnh hoặc ghi âm cần upload theo multipart/form-data",
+                    schema = @Schema(type = "string", format = "binary")
+            )
             @RequestPart("file") MultipartFile file,
             Principal principal
     ) {

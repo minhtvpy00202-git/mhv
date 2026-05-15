@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
 import { formatVietnamDateTime } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
@@ -32,6 +33,8 @@ function TechSupportTickets() {
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineTicket, setTimelineTicket] = useState(null)
+  const [kpis, setKpis] = useState(null)
+  const [kpiLoading, setKpiLoading] = useState(false)
 
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
@@ -53,8 +56,22 @@ function TechSupportTickets() {
     }
   }
 
+  const loadMyKpis = async () => {
+    setKpiLoading(true)
+    try {
+      const response = await axiosClient.get('/api/dashboard/helpdesk-kpis/me')
+      setKpis(response.data)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không tải được KPI cá nhân.'
+      toast.error(message)
+    } finally {
+      setKpiLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadTickets()
+    loadMyKpis()
   }, [user?.userId])
 
   const stats = useMemo(() => ({
@@ -74,7 +91,7 @@ function TechSupportTickets() {
         assignee_id: Number(user?.userId),
       })
       toast.success(`Đã nhận xử lý ticket #${ticketId}.`)
-      await loadTickets()
+      await Promise.all([loadTickets(), loadMyKpis()])
     } catch (error) {
       const message = error?.response?.data?.message || 'Nhận xử lý ticket thất bại.'
       toast.error(message)
@@ -88,7 +105,7 @@ function TechSupportTickets() {
     try {
       await axiosClient.put(`/api/tickets/${ticketId}/resolve`)
       toast.success(`Đã hoàn tất ticket #${ticketId}.`)
-      await loadTickets()
+      await Promise.all([loadTickets(), loadMyKpis()])
     } catch (error) {
       const message = error?.response?.data?.message || 'Hoàn tất ticket thất bại.'
       toast.error(message)
@@ -99,6 +116,16 @@ function TechSupportTickets() {
 
   return (
     <div className="space-y-4">
+      <HelpdeskKpiPanel
+        title="KPI cá nhân"
+        subtitle="Theo dõi ticket mới phù hợp với chuyên môn của bạn và hiệu suất xử lý ticket đã được giao."
+        summary={kpis}
+        loading={kpiLoading}
+        newTicketLabel="Tổng ticket mới phù hợp"
+        tableTitle="Khối lượng ticket của bạn"
+        emptyText="Chưa có dữ liệu KPI cá nhân."
+      />
+
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Bảng việc kỹ thuật viên</h2>
         <p className="mt-1 text-sm text-slate-600">Nhận việc, xử lý sự cố và trao đổi trực tiếp với người báo.</p>

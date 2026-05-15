@@ -7,4 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TicketEventRepository extends JpaRepository<TicketEvent, Integer> {
     List<TicketEvent> findByTicketIdOrderByOccurredAtDescIdDesc(Integer ticketId, Pageable pageable);
+
+    List<TicketEvent> findByTicketIdInOrderByTicketIdAscOccurredAtAscIdAsc(List<Integer> ticketIds);
 }
