@@ -8,12 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../utils/contact'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { isTechSupportMobilePath } from '../utils/navigation'
-
-const statusStyles = {
-  PENDING: 'bg-amber-100 text-amber-800',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800',
-  RESOLVED: 'bg-emerald-100 text-emerald-800',
-}
+import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 function toVietnameseRole(role) {
   if (role === 'Admin') return 'Quản trị viên'
@@ -74,10 +69,7 @@ function TicketDetail() {
     }
   }, [ticketId])
 
-  const statusClassName = useMemo(
-    () => statusStyles[ticket?.status] || 'bg-slate-100 text-slate-700',
-    [ticket?.status],
-  )
+  const statusMeta = useMemo(() => getTicketStatusMeta(ticket?.status), [ticket?.status])
   const isTechMobileRoute = isTechSupportMobilePath(location.pathname)
   const isTechRoute = location.pathname.startsWith('/tech/')
   const isTechSupportRoute = isTechRoute || isTechMobileRoute
@@ -126,7 +118,7 @@ function TicketDetail() {
               <p className="text-sm font-semibold text-slate-800">{ticket.assetName || 'Thiết bị'}</p>
               <p className="mt-1 text-xs text-slate-500">{ticket.assetQaCode} · {ticket.assetLocationName || 'Không rõ vị trí'}</p>
             </div>
-            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClassName}`}>{ticket.status}</span>
+            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>{statusMeta.label}</span>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">

@@ -5,13 +5,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import { formatVietnamDateTime } from '../utils/datetime'
-
-function toVietnameseStatus(status) {
-  if (status === 'PENDING') return 'Mới báo hỏng'
-  if (status === 'IN_PROGRESS') return 'Đang xử lý'
-  if (status === 'RESOLVED') return 'Đã hoàn tất'
-  return status
-}
+import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 function MobileChats() {
   const navigate = useNavigate()
@@ -77,7 +71,9 @@ function MobileChats() {
           <p className="rounded-2xl bg-white px-4 py-4 text-sm text-slate-500 shadow-sm">Bạn chưa có ticket nào để chat.</p>
         )}
         {!loading &&
-          filteredTickets.map((ticket) => (
+          filteredTickets.map((ticket) => {
+            const statusMeta = getTicketStatusMeta(ticket.status)
+            return (
             <button
               key={ticket.id}
               type="button"
@@ -89,20 +85,21 @@ function MobileChats() {
                   <p className="text-sm font-semibold text-slate-800">Ticket #{ticket.id}</p>
                   <p className="mt-1 text-xs text-slate-600">{ticket.assetQaCode} - {ticket.assetName}</p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                  {toVietnameseStatus(ticket.status)}
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusMeta.badgeClassName}`}>
+                  {statusMeta.label}
                 </span>
               </div>
               <p className="mt-3 line-clamp-2 text-xs text-slate-600">{ticket.description}</p>
               <div className="mt-3 flex items-center justify-between gap-3">
                 <p className="text-[11px] text-slate-500">{formatVietnamDateTime(ticket.createdAt)}</p>
                 <p className="inline-flex items-center gap-1 text-xs font-semibold text-fptOrange">
-                <MessageCircle size={13} />
-                Mở chat
+                  <MessageCircle size={13} />
+                  Mở chat
                 </p>
               </div>
             </button>
-          ))}
+            )
+          })}
       </div>
     </section>
   )
