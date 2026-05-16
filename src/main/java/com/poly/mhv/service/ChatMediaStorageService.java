@@ -1,14 +1,8 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.exception.CustomException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.Base64;
 import java.util.Map;
-import java.util.UUID;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,10 +25,10 @@ public class ChatMediaStorageService {
             "audio/ogg", "ogg"
     );
 
-    private final Path uploadDir;
+    private final MediaStorageService mediaStorageService;
 
-    public ChatMediaStorageService(@Value("${app.upload-dir:uploads}") String uploadDir) {
-        this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
+    public ChatMediaStorageService(MediaStorageService mediaStorageService) {
+        this.mediaStorageService = mediaStorageService;
     }
 
     public ProcessedChatPayload processIncomingContent(String rawContent) {
@@ -119,12 +113,11 @@ public class ChatMediaStorageService {
             throw new CustomException("Media rỗng.");
         }
         String extension = MIME_EXTENSION.getOrDefault(mimeType, expectedType.equals("image") ? "jpg" : "bin");
-        String fileName = UUID.randomUUID() + "." + extension;
         try {
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(fileName).normalize();
-            Files.write(filePath, bytes, StandardOpenOption.CREATE_NEW);
-            return new StoredMedia("/uploads/" + fileName, mimeType);
+            return new StoredMedia(
+                    mediaStorageService.storeBytes(bytes, mimeType, resolvePrefix(expectedType), extension),
+                    mimeType
+            );
         } catch (Exception ex) {
             throw new CustomException("Không thể lưu media.");
         }
@@ -132,15 +125,19 @@ public class ChatMediaStorageService {
 
     private ProcessedChatPayload writeBytes(MultipartFile file, String logicalType, String mimeType) {
         String extension = MIME_EXTENSION.getOrDefault(mimeType, logicalType.equals("image") ? "jpg" : "bin");
-        String fileName = UUID.randomUUID() + "." + extension;
         try {
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(fileName).normalize();
-            file.transferTo(filePath);
-            return new ProcessedChatPayload(null, "/uploads/" + fileName, logicalType);
+            return new ProcessedChatPayload(
+                    null,
+                    mediaStorageService.storeBytes(file.getBytes(), mimeType, resolvePrefix(logicalType), extension),
+                    logicalType
+            );
         } catch (Exception ex) {
             throw new CustomException("Không thể lưu media.");
         }
+    }
+
+    private String resolvePrefix(String logicalType) {
+        return "audio".equalsIgnoreCase(logicalType) ? "chat/audio" : "chat/image";
     }
 
     public record ProcessedChatPayload(String content, String mediaUrl, String mediaType) {}

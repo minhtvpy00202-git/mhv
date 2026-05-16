@@ -1,13 +1,10 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.exception.CustomException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.Base64;
 import java.util.Map;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -25,9 +22,14 @@ public class TicketImageStorageService {
     );
 
     private final Path uploadDir;
+    private final MediaStorageService mediaStorageService;
 
-    public TicketImageStorageService(@Value("${app.upload-dir:uploads}") String uploadDir) {
+    public TicketImageStorageService(
+            @Value("${app.upload-dir:uploads}") String uploadDir,
+            MediaStorageService mediaStorageService
+    ) {
         this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.mediaStorageService = mediaStorageService;
     }
 
     public String normalizeTicketImageUrl(String rawImageUrl) {
@@ -114,28 +116,18 @@ public class TicketImageStorageService {
                 throw new CustomException("Ảnh ticket rỗng.");
             }
             String extension = MIME_EXTENSION.getOrDefault(mimeType, "jpg");
-            String fileName = UUID.randomUUID() + "." + extension;
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(fileName).normalize();
-            Files.write(filePath, bytes, StandardOpenOption.CREATE_NEW);
-            return "/uploads/" + fileName;
+            return mediaStorageService.storeBytes(bytes, mimeType, "tickets", extension);
         } catch (IllegalArgumentException ex) {
             throw new CustomException("Ảnh ticket base64 không hợp lệ.");
         } catch (CustomException ex) {
             throw ex;
-        } catch (Exception ex) {
-            throw new CustomException("Không thể lưu ảnh ticket.");
         }
     }
 
     private String writeBytes(MultipartFile file, String mimeType) {
         String extension = MIME_EXTENSION.getOrDefault(mimeType, "jpg");
-        String fileName = UUID.randomUUID() + "." + extension;
         try {
-            Files.createDirectories(uploadDir);
-            Path filePath = uploadDir.resolve(fileName).normalize();
-            file.transferTo(filePath);
-            return "/uploads/" + fileName;
+            return mediaStorageService.storeBytes(file.getBytes(), mimeType, "tickets", extension);
         } catch (Exception ex) {
             throw new CustomException("Không thể lưu ảnh ticket.");
         }
