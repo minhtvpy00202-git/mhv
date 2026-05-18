@@ -10,8 +10,8 @@ import {
 
 const navItems = [
   { to: '/tech-mobile/tickets', label: 'Công việc', icon: ClipboardList },
-  { to: '/tech-mobile/inventory-audits', label: 'Kiểm kê', icon: ClipboardCheck },
-  { to: '/tech-mobile/inventory-audits/history', label: 'Lịch sử', icon: History },
+  { to: '/tech-mobile/inventory-audits', label: 'Kiểm kê', icon: ClipboardCheck, end: true },
+  { to: '/tech-mobile/inventory-audits/history', label: 'Lịch sử', icon: History, end: true },
   { to: '/tech-mobile/chats', label: 'Tin nhắn', icon: MessageCircle },
 ]
 
@@ -193,10 +193,11 @@ function MobileTechSupportLayout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
+            end={end}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition ${
                 isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-blue-50 hover:text-blue-700'

@@ -8,8 +8,8 @@ import { isNarrowViewport, toTechSupportMobilePath } from '../utils/navigation'
 
 const navItems = [
   { to: '/tech/tickets', label: 'Danh sách Ticket', icon: ClipboardList },
-  { to: '/tech/inventory-audits', label: 'Kiểm kê thiết bị', icon: ClipboardCheck },
-  { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History },
+  { to: '/tech/inventory-audits', label: 'Kiểm kê thiết bị', icon: ClipboardCheck, end: true },
+  { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History, end: true },
 ]
 
 function isDeviceFailureNotification(notification) {
@@ -157,10 +157,11 @@ function TechSupportLayout() {
           <h1 className="text-lg font-semibold">Tech Support</h1>
         </div>
         <nav className="mt-4 space-y-2">
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
+              end={end}
               className={({ isActive }) =>
                 `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
