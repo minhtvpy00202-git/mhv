@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -88,6 +89,7 @@ public class ReportController {
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê"),
             @ApiResponse(responseCode = "500", description = "Lỗi xuất file Excel")
     })
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<byte[]> exportInventoryAudit(@PathVariable Integer auditId) {
         try {
             byte[] excelBytes = reportService.exportInventoryAuditExcel(auditId);

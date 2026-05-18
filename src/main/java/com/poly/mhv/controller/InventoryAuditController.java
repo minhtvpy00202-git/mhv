@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +42,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ hoặc phòng đang có kiểm kê mở"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<InventoryAuditSummaryResponse> createAudit(@RequestBody InventoryAuditCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(inventoryAuditService.createAudit(request));
     }
@@ -51,6 +53,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "200", description = "Lấy danh sách kiểm kê thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<List<InventoryAuditSummaryResponse>> getAudits(@RequestParam(required = false) String status) {
         return ResponseEntity.ok(inventoryAuditService.getAudits(status));
     }
@@ -61,6 +64,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "200", description = "Lấy danh sách kiểm kê đang mở thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
+    @PreAuthorize("hasAnyRole('Admin','TechSupport')")
     public ResponseEntity<List<InventoryAuditSummaryResponse>> getActiveAudits() {
         return ResponseEntity.ok(inventoryAuditService.getActiveAudits());
     }
@@ -71,6 +75,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "200", description = "Lấy lịch sử kiểm kê cá nhân thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
+    @PreAuthorize("hasAnyRole('Admin','TechSupport')")
     public ResponseEntity<List<InventoryAuditSummaryResponse>> getMyAudits() {
         return ResponseEntity.ok(inventoryAuditService.getMyAudits());
     }
@@ -82,6 +87,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê")
     })
+    @PreAuthorize("hasAnyRole('Admin','TechSupport')")
     public ResponseEntity<InventoryAuditDetailResponse> getDetail(@PathVariable Integer auditId) {
         return ResponseEntity.ok(inventoryAuditService.getDetail(auditId));
     }
@@ -94,6 +100,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê")
     })
+    @PreAuthorize("hasAnyRole('Admin','TechSupport')")
     public ResponseEntity<InventoryAuditScanResultResponse> scanAsset(
             @PathVariable Integer auditId,
             @RequestBody InventoryAuditScanRequest request
@@ -108,6 +115,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê")
     })
+    @PreAuthorize("hasAnyRole('Admin','TechSupport')")
     public ResponseEntity<InventoryAuditDetailResponse> completeAudit(@PathVariable Integer auditId) {
         return ResponseEntity.ok(inventoryAuditService.completeAudit(auditId));
     }
@@ -119,6 +127,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê hoặc thiết bị")
     })
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<InventoryAuditDetailResponse> resolveFound(
             @PathVariable Integer auditId,
             @PathVariable String assetQaCode
@@ -133,6 +142,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy phiên kiểm kê hoặc thiết bị")
     })
+    @PreAuthorize("hasRole('Admin')")
     public ResponseEntity<InventoryAuditDetailResponse> resolveLost(
             @PathVariable Integer auditId,
             @PathVariable String assetQaCode

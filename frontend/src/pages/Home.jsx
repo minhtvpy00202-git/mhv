@@ -1,4 +1,4 @@
-import { ClipboardCheck, History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
+import { History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -59,26 +59,21 @@ function Pagination({ page, totalPages, onFirst, onPrev, onNext, onLast }) {
 function Home() {
   const [usageHistory, setUsageHistory] = useState([])
   const [maintenanceHistory, setMaintenanceHistory] = useState([])
-  const [auditHistory, setAuditHistory] = useState([])
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [usagePage, setUsagePage] = useState(1)
   const [maintenancePage, setMaintenancePage] = useState(1)
-  const [auditPage, setAuditPage] = useState(1)
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [usageRes, maintenanceRes, auditRes] = await Promise.all([
+        const [usageRes, maintenanceRes] = await Promise.all([
           axiosClient.get('/api/usage/history/me'),
           axiosClient.get('/api/maintenance/history/me'),
-          axiosClient.get('/api/inventory-audits/history/me'),
         ])
         setUsageHistory(usageRes.data || [])
         setMaintenanceHistory(maintenanceRes.data || [])
-        setAuditHistory(auditRes.data || [])
         setUsagePage(1)
         setMaintenancePage(1)
-        setAuditPage(1)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được lịch sử trang chủ.'
         toast.error(message)
@@ -89,7 +84,6 @@ function Home() {
 
   const usageTotalPages = Math.max(1, Math.ceil(usageHistory.length / PAGE_SIZE))
   const maintenanceTotalPages = Math.max(1, Math.ceil(maintenanceHistory.length / PAGE_SIZE))
-  const auditTotalPages = Math.max(1, Math.ceil(auditHistory.length / PAGE_SIZE))
 
   const usageRows = useMemo(() => {
     const start = (usagePage - 1) * PAGE_SIZE
@@ -100,11 +94,6 @@ function Home() {
     const start = (maintenancePage - 1) * PAGE_SIZE
     return maintenanceHistory.slice(start, start + PAGE_SIZE)
   }, [maintenanceHistory, maintenancePage])
-
-  const auditRows = useMemo(() => {
-    const start = (auditPage - 1) * PAGE_SIZE
-    return auditHistory.slice(start, start + PAGE_SIZE)
-  }, [auditHistory, auditPage])
 
   const openMaintenanceCount = useMemo(
     () => maintenanceHistory.filter((item) => item.assetStatus && item.assetStatus !== 'Sẵn sàng').length,
@@ -136,11 +125,10 @@ function Home() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3">
+      <section className="grid gap-3 sm:grid-cols-3">
         <StatCard label="Mượn / trả" value={usageHistory.length} hint="Tổng lượt thao tác của bạn" tone="border-sky-200 bg-sky-50 text-sky-800" />
         <StatCard label="Báo hỏng" value={maintenanceHistory.length} hint="Số lần đã tạo ticket" tone="border-orange-200 bg-orange-50 text-orange-800" />
         <StatCard label="Đang chờ xử lý" value={openMaintenanceCount} hint="Thiết bị chưa về trạng thái sẵn sàng" tone="border-rose-200 bg-rose-50 text-rose-800" />
-        <StatCard label="Kiểm kê" value={auditHistory.length} hint="Số phiên bạn từng tham gia" tone="border-amber-200 bg-amber-50 text-amber-800" />
       </section>
 
       <section className="rounded-2xl bg-white p-4 shadow-sm">
@@ -223,39 +211,6 @@ function Home() {
         <Pagination page={maintenancePage} totalPages={maintenanceTotalPages} onFirst={() => setMaintenancePage(1)} onPrev={() => setMaintenancePage((prev) => Math.max(1, prev - 1))} onNext={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))} onLast={() => setMaintenancePage(maintenanceTotalPages)} />
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Lịch sử kiểm kê</h3>
-            <p className="mt-1 text-sm text-slate-500">Các phiên kiểm kê bạn đã tham gia tại phòng thiết bị.</p>
-          </div>
-          <ClipboardCheck className="text-amber-500" size={20} />
-        </div>
-        <div className="mt-3 space-y-3">
-          {auditRows.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">Phiên kiểm kê #{item.id}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.locationName || 'Không rõ phòng kiểm kê'}</p>
-                </div>
-                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-                  {item.status || 'Đang theo dõi'}
-                </span>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600">
-                <p><span className="font-medium text-slate-700">Bắt đầu:</span> {formatVietnamDateTime(item.startedAt)}</p>
-                <p><span className="font-medium text-slate-700">Hoàn thành:</span> {formatVietnamDateTime(item.completedAt)}</p>
-                <p><span className="font-medium text-slate-700">Dự kiến:</span> {item.expectedCount ?? 0}</p>
-                <p><span className="font-medium text-slate-700">Đã quét:</span> {item.scannedCount ?? 0}</p>
-                <p className="col-span-2"><span className="font-medium text-slate-700">Thất lạc:</span> {item.missingCount ?? 0}</p>
-              </div>
-            </div>
-          ))}
-          {auditRows.length === 0 && <EmptyState>Chưa có dữ liệu kiểm kê.</EmptyState>}
-        </div>
-        <Pagination page={auditPage} totalPages={auditTotalPages} onFirst={() => setAuditPage(1)} onPrev={() => setAuditPage((prev) => Math.max(1, prev - 1))} onNext={() => setAuditPage((prev) => Math.min(auditTotalPages, prev + 1))} onLast={() => setAuditPage(auditTotalPages)} />
-      </section>
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl">

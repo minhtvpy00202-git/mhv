@@ -1,4 +1,4 @@
-import { Bell, ClipboardList, LogOut, Search } from 'lucide-react'
+import { Bell, ClipboardCheck, ClipboardList, History, LogOut, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -8,6 +8,8 @@ import { isNarrowViewport, toTechSupportMobilePath } from '../utils/navigation'
 
 const navItems = [
   { to: '/tech/tickets', label: 'Danh sách Ticket', icon: ClipboardList },
+  { to: '/tech/inventory-audits', label: 'Kiểm kê thiết bị', icon: ClipboardCheck },
+  { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History },
 ]
 
 function isDeviceFailureNotification(notification) {

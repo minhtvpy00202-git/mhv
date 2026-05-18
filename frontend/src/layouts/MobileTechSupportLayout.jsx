@@ -1,4 +1,4 @@
-import { Bell, ClipboardList, LogOut, MessageCircle } from 'lucide-react'
+import { Bell, ClipboardCheck, ClipboardList, History, LogOut, MessageCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -10,6 +10,8 @@ import {
 
 const navItems = [
   { to: '/tech-mobile/tickets', label: 'Công việc', icon: ClipboardList },
+  { to: '/tech-mobile/inventory-audits', label: 'Kiểm kê', icon: ClipboardCheck },
+  { to: '/tech-mobile/inventory-audits/history', label: 'Lịch sử', icon: History },
   { to: '/tech-mobile/chats', label: 'Tin nhắn', icon: MessageCircle },
 ]
 

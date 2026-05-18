@@ -1,4 +1,4 @@
-import { Bell, ClipboardCheck, Home, LogOut, MessageCircle, QrCode, Wrench } from 'lucide-react'
+import { Bell, Home, LogOut, MessageCircle, QrCode, Wrench } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -8,7 +8,6 @@ const navItems = [
   { to: '/mobile/scan', label: 'Quét QR', icon: QrCode },
   { to: '/mobile/chats', label: 'Chat', icon: MessageCircle },
   { to: '/mobile/maintenance', label: 'Báo hỏng', icon: Wrench },
-  { to: '/mobile/inventory-audit', label: 'Kiểm kê', icon: ClipboardCheck },
 ]
 
 function MobileLayout() {

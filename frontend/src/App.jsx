@@ -27,6 +27,7 @@ import UserManagement from './pages/admin/UserManagement'
 import UsageHistoryManagement from './pages/admin/UsageHistoryManagement'
 import MobileTechSupportChats from './pages/tech/MobileTechSupportChats'
 import MobileTechSupportTickets from './pages/tech/MobileTechSupportTickets'
+import TechSupportInventoryAuditHistory from './pages/tech/TechSupportInventoryAuditHistory'
 import TechSupportChats from './pages/tech/TechSupportChats'
 import TechSupportTickets from './pages/tech/TechSupportTickets'
 import { getTechSupportHomePath } from './utils/navigation'
@@ -84,7 +85,6 @@ function App() {
           <Route path="/mobile/scan" element={<QRScanner />} />
           <Route path="/mobile/chats" element={<MobileChats />} />
           <Route path="/mobile/maintenance" element={<MaintenanceReport />} />
-          <Route path="/mobile/inventory-audit" element={<InventoryAuditScanner />} />
           <Route path="/mobile/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
 
@@ -99,6 +99,8 @@ function App() {
         >
           <Route path="/tech/tickets" element={<TechSupportTickets />} />
           <Route path="/tech/chats" element={<TechSupportChats />} />
+          <Route path="/tech/inventory-audits" element={<InventoryAuditScanner />} />
+          <Route path="/tech/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />
           <Route path="/tech/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
 
@@ -113,6 +115,8 @@ function App() {
         >
           <Route path="/tech-mobile/tickets" element={<MobileTechSupportTickets />} />
           <Route path="/tech-mobile/chats" element={<MobileTechSupportChats />} />
+          <Route path="/tech-mobile/inventory-audits" element={<InventoryAuditScanner />} />
+          <Route path="/tech-mobile/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />
           <Route path="/tech-mobile/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
 
