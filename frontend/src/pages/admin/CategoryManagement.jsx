@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import { normalizeSpecTemplates } from '../../utils/assetSpecs'
+import { validateCategoryForm } from '../../utils/validation'
 
 const PAGE_SIZE = 10
+
+function getFieldClass(hasError) {
+  return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
+}
 
 function CategoryManagement() {
   const [categories, setCategories] = useState([])
@@ -20,14 +26,38 @@ function CategoryManagement() {
   const [form, setForm] = useState({
     name: '',
     techTypeId: '',
+    specTemplates: [],
   })
+  const [formErrors, setFormErrors] = useState({})
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' })
 
   const isEditing = Boolean(selectedCategoryId)
   const totalPages = Math.max(1, Math.ceil(categories.length / PAGE_SIZE))
+  const sortedCategories = useMemo(() => {
+    const list = [...categories]
+    const { key, direction } = sortConfig
+    list.sort((a, b) => {
+      const aValue = key === 'specTemplates'
+        ? (a.specTemplates?.length ?? 0)
+        : a[key]
+      const bValue = key === 'specTemplates'
+        ? (b.specTemplates?.length ?? 0)
+        : b[key]
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+      const av = String(aValue ?? '').toLowerCase()
+      const bv = String(bValue ?? '').toLowerCase()
+      if (av < bv) return direction === 'asc' ? -1 : 1
+      if (av > bv) return direction === 'asc' ? 1 : -1
+      return 0
+    })
+    return list
+  }, [categories, sortConfig])
   const paginatedCategories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
-    return categories.slice(start, start + PAGE_SIZE)
-  }, [categories, currentPage])
+    return sortedCategories.slice(start, start + PAGE_SIZE)
+  }, [sortedCategories, currentPage])
 
   const loadCategories = async (nextFilters = filters) => {
     setLoading(true)
@@ -63,9 +93,11 @@ function CategoryManagement() {
 
   const resetForm = () => {
     setSelectedCategoryId(null)
+    setFormErrors({})
     setForm({
       name: '',
       techTypeId: '',
+      specTemplates: [],
     })
   }
 
@@ -84,13 +116,16 @@ function CategoryManagement() {
     setForm({
       name: category.name || '',
       techTypeId: String(category.techTypeId || ''),
+      specTemplates: normalizeSpecTemplates(category.specTemplates),
     })
     setShowFormModal(true)
   }
 
   const handleCreate = async () => {
-    if (!form.name.trim() || !form.techTypeId) {
-      toast.error('Vui lòng nhập tên loại và chọn nhóm kỹ thuật.')
+    const nextErrors = validateCategoryForm(form)
+    setFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
       return
     }
     setSubmitting(true)
@@ -98,6 +133,7 @@ function CategoryManagement() {
       const response = await axiosClient.post('/api/categories', {
         name: form.name.trim(),
         techTypeId: Number(form.techTypeId),
+        specTemplates: normalizeSpecTemplates(form.specTemplates),
       })
       toast.success(`Thêm loại thiết bị thành công. Prefix: ${response.data?.codePrefix || 'đã tự sinh'}.`)
       closeFormModal()
@@ -112,8 +148,10 @@ function CategoryManagement() {
 
   const handleUpdate = async () => {
     if (!selectedCategoryId) return
-    if (!form.name.trim() || !form.techTypeId) {
-      toast.error('Vui lòng nhập đầy đủ thông tin loại thiết bị.')
+    const nextErrors = validateCategoryForm(form)
+    setFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
       return
     }
     setSubmitting(true)
@@ -121,6 +159,7 @@ function CategoryManagement() {
       await axiosClient.put(`/api/categories/${selectedCategoryId}`, {
         name: form.name.trim(),
         techTypeId: Number(form.techTypeId),
+        specTemplates: normalizeSpecTemplates(form.specTemplates),
       })
       toast.success('Cập nhật loại thiết bị thành công.')
       closeFormModal()
@@ -160,6 +199,43 @@ function CategoryManagement() {
     }
     setFilters(nextFilters)
     await loadCategories(nextFilters)
+  }
+
+  const updateSpecTemplate = (index, value) => {
+    setForm((prev) => ({
+      ...prev,
+      specTemplates: prev.specTemplates.map((item, itemIndex) => (itemIndex === index ? value : item)),
+    }))
+    setFormErrors((prev) => ({ ...prev, specTemplates: '' }))
+  }
+
+  const addSpecTemplate = () => {
+    setForm((prev) => ({
+      ...prev,
+      specTemplates: [...prev.specTemplates, ''],
+    }))
+    setFormErrors((prev) => ({ ...prev, specTemplates: '' }))
+  }
+
+  const removeSpecTemplate = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      specTemplates: prev.specTemplates.filter((_, itemIndex) => itemIndex !== index),
+    }))
+    setFormErrors((prev) => ({ ...prev, specTemplates: '' }))
+  }
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }))
+    setCurrentPage(1)
+  }
+
+  const getSortLabel = (key, label) => {
+    if (sortConfig.key !== key) return label
+    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
   }
 
   return (
@@ -240,10 +316,31 @@ function CategoryManagement() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">ID</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên loại thiết bị</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Code Prefix</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Nhóm kỹ thuật phụ trách</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                    {getSortLabel('id', 'ID')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                    {getSortLabel('name', 'Tên loại thiết bị')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('codePrefix')} className="hover:text-fptOrange">
+                    {getSortLabel('codePrefix', 'Code Prefix')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('techTypeName')} className="hover:text-fptOrange">
+                    {getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('specTemplates')} className="hover:text-fptOrange">
+                    {getSortLabel('specTemplates', 'Template specs')}
+                  </button>
+                </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>
@@ -264,6 +361,9 @@ function CategoryManagement() {
                       <div className="h-4 w-56 rounded bg-slate-200" />
                     </td>
                     <td className="px-3 py-2">
+                      <div className="h-4 w-32 rounded bg-slate-200" />
+                    </td>
+                    <td className="px-3 py-2">
                       <div className="ml-auto h-4 w-24 rounded bg-slate-200" />
                     </td>
                   </tr>
@@ -277,6 +377,21 @@ function CategoryManagement() {
                       <span className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700">{category.codePrefix || '-'}</span>
                     </td>
                     <td className="px-3 py-2">{category.techTypeName || '-'}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(category.specTemplates || []).slice(0, 3).map((template) => (
+                          <span key={template} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                            {template}
+                          </span>
+                        ))}
+                        {(category.specTemplates || []).length > 3 && (
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                            +{(category.specTemplates || []).length - 3}
+                          </span>
+                        )}
+                        {(category.specTemplates || []).length === 0 && <span>-</span>}
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <button
@@ -299,7 +414,7 @@ function CategoryManagement() {
                 ))}
               {!loading && categories.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có loại thiết bị phù hợp.
                   </td>
                 </tr>
@@ -369,17 +484,24 @@ function CategoryManagement() {
                 <label className="mb-1 block text-sm font-medium text-slate-700">Tên loại thiết bị</label>
                 <input
                   value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, name: e.target.value }))
+                    setFormErrors((prev) => ({ ...prev, name: '' }))
+                  }}
                   placeholder="Ví dụ: Máy chiếu"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  className={getFieldClass(Boolean(formErrors.name))}
                 />
+                {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Nhóm kỹ thuật phụ trách</label>
                 <select
                   value={form.techTypeId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, techTypeId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, techTypeId: e.target.value }))
+                    setFormErrors((prev) => ({ ...prev, techTypeId: '' }))
+                  }}
+                  className={getFieldClass(Boolean(formErrors.techTypeId))}
                 >
                   <option value="">Chọn nhóm kỹ thuật</option>
                   {techSupportTypeOptions.map((item) => (
@@ -388,6 +510,42 @@ function CategoryManagement() {
                     </option>
                   ))}
                 </select>
+                {formErrors.techTypeId && <p className="mt-1 text-xs text-red-600">{formErrors.techTypeId}</p>}
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <label className="block text-sm font-medium text-slate-700">Template đặc tính kỹ thuật</label>
+                  <button
+                    type="button"
+                    onClick={addSpecTemplate}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Thêm template
+                  </button>
+                </div>
+                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  {form.specTemplates.map((template, index) => (
+                    <div key={`template-${index}`} className="grid gap-2 md:grid-cols-[1fr_auto]">
+                      <input
+                        value={template}
+                        onChange={(e) => updateSpecTemplate(index, e.target.value)}
+                        placeholder="Ví dụ: RAM"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSpecTemplate(index)}
+                        className="rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  ))}
+                  {form.specTemplates.length === 0 && (
+                    <p className="text-sm text-slate-500">Chưa có template. Bạn có thể thêm các đặc tính như RAM, CPU, GPU...</p>
+                  )}
+                </div>
+                {formErrors.specTemplates && <p className="mt-1 text-xs text-red-600">{formErrors.specTemplates}</p>}
               </div>
             </div>
 

@@ -3,11 +3,10 @@ package com.poly.mhv.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
@@ -19,34 +18,30 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Nationalized;
 
 @Entity
-@Table(name = "categories")
+@Table(name = "suppliers")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Category {
+public class Supplier {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, length = 150, unique = true)
     @Nationalized
     private String name;
 
-    @Column(name = "code_prefix", nullable = false, unique = true, length = 10)
-    private String codePrefix;
-
-    @Column(name = "spec_templates", columnDefinition = "NVARCHAR(MAX)")
+    @Column(length = 255)
     @Nationalized
-    private String specTemplates;
+    private String address;
 
-    @ManyToOne
-    @JoinColumn(name = "tech_type_id", nullable = false)
-    private TechSupportType techSupportType;
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
 
     @JsonIgnore
-    @OneToMany(mappedBy = "category")
+    @OneToMany(mappedBy = "supplier", fetch = FetchType.LAZY)
     @Builder.Default
     private List<Asset> assets = new ArrayList<>();
 }

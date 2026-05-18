@@ -21,6 +21,7 @@ import InventoryAuditManagement from './pages/admin/InventoryAuditManagement'
 import LocationManagement from './pages/admin/LocationManagement'
 import MaintenanceHistoryManagement from './pages/admin/MaintenanceHistoryManagement'
 import NotificationDetail from './pages/admin/NotificationDetail'
+import SupplierManagement from './pages/admin/SupplierManagement'
 import TechSupportTypeManagement from './pages/admin/TechSupportTypeManagement'
 import TicketManagement from './pages/admin/TicketManagement'
 import UserManagement from './pages/admin/UserManagement'
@@ -131,6 +132,7 @@ function App() {
         >
           <Route path="/admin/dashboard" element={<Dashboard />} />
           <Route path="/admin/assets" element={<AssetManagement />} />
+          <Route path="/admin/suppliers" element={<SupplierManagement />} />
           <Route path="/admin/categories" element={<CategoryManagement />} />
           <Route path="/admin/locations" element={<LocationManagement />} />
           <Route path="/admin/tech-support-types" element={<TechSupportTypeManagement />} />

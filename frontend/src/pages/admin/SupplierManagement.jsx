@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { validateSupplierForm } from '../../utils/validation'
 
 const PAGE_SIZE = 10
 
-function TechSupportTypeManagement() {
+function getFieldClass(hasError) {
+  return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
+}
+
+function SupplierManagement() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [filters, setFilters] = useState({
-    keyword: '',
-  })
-  const [form, setForm] = useState({
-    name: '',
-  })
+  const [filters, setFilters] = useState({ keyword: '' })
+  const [form, setForm] = useState({ name: '', address: '', phoneNumber: '' })
+  const [formErrors, setFormErrors] = useState({})
   const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' })
 
   const isEditing = Boolean(selectedId)
@@ -48,11 +50,11 @@ function TechSupportTypeManagement() {
     try {
       const params = {}
       if (nextFilters.keyword.trim()) params.keyword = nextFilters.keyword.trim()
-      const response = await axiosClient.get('/api/tech-support-types', { params })
+      const response = await axiosClient.get('/api/suppliers', { params })
       setItems(response.data || [])
       setCurrentPage(1)
     } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể tải danh sách loại kỹ thuật viên.'
+      const message = error?.response?.data?.message || 'Không thể tải danh sách nhà cung cấp.'
       toast.error(message)
     } finally {
       setLoading(false)
@@ -65,7 +67,8 @@ function TechSupportTypeManagement() {
 
   const resetForm = () => {
     setSelectedId(null)
-    setForm({ name: '' })
+    setForm({ name: '', address: '', phoneNumber: '' })
+    setFormErrors({})
   }
 
   const closeFormModal = () => {
@@ -80,23 +83,33 @@ function TechSupportTypeManagement() {
 
   const handleSelect = (item) => {
     setSelectedId(item.id)
-    setForm({ name: item.name || '' })
+    setForm({
+      name: item.name || '',
+      address: item.address || '',
+      phoneNumber: item.phoneNumber || '',
+    })
     setShowFormModal(true)
   }
 
   const handleCreate = async () => {
-    if (!form.name.trim()) {
-      toast.error('Vui lòng nhập tên loại kỹ thuật viên.')
+    const nextErrors = validateSupplierForm(form)
+    setFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
       return
     }
     setSubmitting(true)
     try {
-      await axiosClient.post('/api/tech-support-types', { name: form.name.trim() })
-      toast.success('Thêm loại kỹ thuật viên thành công.')
+      await axiosClient.post('/api/suppliers', {
+        name: form.name.trim(),
+        address: form.address.trim(),
+        phoneNumber: form.phoneNumber.trim(),
+      })
+      toast.success('Thêm nhà cung cấp thành công.')
       closeFormModal()
       await loadItems()
     } catch (error) {
-      const message = error?.response?.data?.message || 'Thêm loại kỹ thuật viên thất bại.'
+      const message = error?.response?.data?.message || 'Thêm nhà cung cấp thất bại.'
       toast.error(message)
     } finally {
       setSubmitting(false)
@@ -105,18 +118,24 @@ function TechSupportTypeManagement() {
 
   const handleUpdate = async () => {
     if (!selectedId) return
-    if (!form.name.trim()) {
-      toast.error('Vui lòng nhập tên loại kỹ thuật viên.')
+    const nextErrors = validateSupplierForm(form)
+    setFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
       return
     }
     setSubmitting(true)
     try {
-      await axiosClient.put(`/api/tech-support-types/${selectedId}`, { name: form.name.trim() })
-      toast.success('Cập nhật loại kỹ thuật viên thành công.')
+      await axiosClient.put(`/api/suppliers/${selectedId}`, {
+        name: form.name.trim(),
+        address: form.address.trim(),
+        phoneNumber: form.phoneNumber.trim(),
+      })
+      toast.success('Cập nhật nhà cung cấp thành công.')
       closeFormModal()
       await loadItems()
     } catch (error) {
-      const message = error?.response?.data?.message || 'Cập nhật loại kỹ thuật viên thất bại.'
+      const message = error?.response?.data?.message || 'Cập nhật nhà cung cấp thất bại.'
       toast.error(message)
     } finally {
       setSubmitting(false)
@@ -125,18 +144,18 @@ function TechSupportTypeManagement() {
 
   const handleDelete = async (id = selectedId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa loại kỹ thuật viên này?')
+    const confirmed = window.confirm('Bạn có chắc muốn xóa nhà cung cấp này?')
     if (!confirmed) return
     setSubmitting(true)
     try {
-      await axiosClient.delete(`/api/tech-support-types/${id}`)
-      toast.success('Xóa loại kỹ thuật viên thành công.')
+      await axiosClient.delete(`/api/suppliers/${id}`)
+      toast.success('Xóa nhà cung cấp thành công.')
       if (id === selectedId) {
         closeFormModal()
       }
       await loadItems()
     } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa loại kỹ thuật viên thất bại.'
+      const message = error?.response?.data?.message || 'Xóa nhà cung cấp thất bại.'
       toast.error(message)
     } finally {
       setSubmitting(false)
@@ -167,8 +186,8 @@ function TechSupportTypeManagement() {
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">Quản lý loại kỹ thuật viên</h2>
-            <p className="text-sm text-slate-500">Khai báo các nhóm chuyên môn để gán cho loại thiết bị và tài khoản kỹ thuật viên.</p>
+            <h2 className="text-lg font-semibold text-slate-800">Quản lý nhà cung cấp</h2>
+            <p className="text-sm text-slate-500">Khai báo danh sách nhà cung cấp để gán cho thiết bị khi nhập mới.</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -194,7 +213,7 @@ function TechSupportTypeManagement() {
           <input
             value={filters.keyword}
             onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
-            placeholder="Tìm theo tên loại kỹ thuật viên"
+            placeholder="Tìm theo tên nhà cung cấp"
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
           />
           <button
@@ -218,7 +237,7 @@ function TechSupportTypeManagement() {
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-800">Danh sách loại kỹ thuật viên</h3>
+          <h3 className="text-lg font-semibold text-slate-800">Danh sách nhà cung cấp</h3>
           <p className="text-sm text-slate-500">Tổng: {items.length}</p>
         </div>
 
@@ -233,17 +252,22 @@ function TechSupportTypeManagement() {
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
                   <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
-                    {getSortLabel('name', 'Tên loại kỹ thuật viên')}
+                    {getSortLabel('name', 'Tên nhà cung cấp')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('categoryCount')} className="hover:text-fptOrange">
-                    {getSortLabel('categoryCount', 'Loại thiết bị đang dùng')}
+                  <button type="button" onClick={() => handleSort('phoneNumber')} className="hover:text-fptOrange">
+                    {getSortLabel('phoneNumber', 'Số điện thoại')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('techSupportUserCount')} className="hover:text-fptOrange">
-                    {getSortLabel('techSupportUserCount', 'Tài khoản kỹ thuật viên')}
+                  <button type="button" onClick={() => handleSort('address')} className="hover:text-fptOrange">
+                    {getSortLabel('address', 'Địa chỉ')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('assetCount')} className="hover:text-fptOrange">
+                    {getSortLabel('assetCount', 'Thiết bị đang dùng')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
@@ -252,10 +276,11 @@ function TechSupportTypeManagement() {
             <tbody className="divide-y divide-slate-100">
               {loading &&
                 Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={`tech-type-skeleton-${index}`} className="animate-pulse">
+                  <tr key={`supplier-skeleton-${index}`} className="animate-pulse">
                     <td className="px-3 py-2"><div className="h-4 w-12 rounded bg-slate-200" /></td>
                     <td className="px-3 py-2"><div className="h-4 w-56 rounded bg-slate-200" /></td>
-                    <td className="px-3 py-2"><div className="h-4 w-16 rounded bg-slate-200" /></td>
+                    <td className="px-3 py-2"><div className="h-4 w-28 rounded bg-slate-200" /></td>
+                    <td className="px-3 py-2"><div className="h-4 w-44 rounded bg-slate-200" /></td>
                     <td className="px-3 py-2"><div className="h-4 w-16 rounded bg-slate-200" /></td>
                     <td className="px-3 py-2"><div className="ml-auto h-4 w-24 rounded bg-slate-200" /></td>
                   </tr>
@@ -265,8 +290,9 @@ function TechSupportTypeManagement() {
                   <tr key={item.id}>
                     <td className="px-3 py-2">{item.id}</td>
                     <td className="px-3 py-2">{item.name}</td>
-                    <td className="px-3 py-2">{item.categoryCount}</td>
-                    <td className="px-3 py-2">{item.techSupportUserCount}</td>
+                    <td className="px-3 py-2">{item.phoneNumber || '-'}</td>
+                    <td className="px-3 py-2">{item.address || '-'}</td>
+                    <td className="px-3 py-2">{item.assetCount}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <button
@@ -289,8 +315,8 @@ function TechSupportTypeManagement() {
                 ))}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
-                    Chưa có loại kỹ thuật viên phù hợp.
+                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                    Chưa có nhà cung cấp phù hợp.
                   </td>
                 </tr>
               )}
@@ -328,7 +354,7 @@ function TechSupportTypeManagement() {
           <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-base font-semibold text-slate-800">
-                {isEditing ? `Chỉnh sửa loại kỹ thuật viên #${selectedId}` : 'Thêm mới loại kỹ thuật viên'}
+                {isEditing ? `Chỉnh sửa nhà cung cấp #${selectedId}` : 'Thêm mới nhà cung cấp'}
               </h4>
               <button
                 type="button"
@@ -341,18 +367,48 @@ function TechSupportTypeManagement() {
 
             <div className="grid gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Tên loại kỹ thuật viên</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Tên nhà cung cấp</label>
                 <input
                   value={form.name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Ví dụ: Kỹ thuật viên thiết bị công nghệ cao"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, name: e.target.value }))
+                    setFormErrors((prev) => ({ ...prev, name: '' }))
+                  }}
+                  placeholder="Ví dụ: Công ty thiết bị giáo dục ABC"
+                  className={getFieldClass(Boolean(formErrors.name))}
                 />
+                {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại</label>
+                <input
+                  value={form.phoneNumber}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))
+                    setFormErrors((prev) => ({ ...prev, phoneNumber: '' }))
+                  }}
+                  placeholder="Ví dụ: 0901234567"
+                  className={getFieldClass(Boolean(formErrors.phoneNumber))}
+                />
+                {formErrors.phoneNumber && <p className="mt-1 text-xs text-red-600">{formErrors.phoneNumber}</p>}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Địa chỉ</label>
+                <textarea
+                  value={form.address}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, address: e.target.value }))
+                    setFormErrors((prev) => ({ ...prev, address: '' }))
+                  }}
+                  placeholder="Nhập địa chỉ nhà cung cấp"
+                  rows={3}
+                  className={getFieldClass(Boolean(formErrors.address))}
+                />
+                {formErrors.address && <p className="mt-1 text-xs text-red-600">{formErrors.address}</p>}
               </div>
               {isEditing && (
-                <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:grid-cols-2">
-                  <p>Loại thiết bị đang dùng: {items.find((item) => item.id === selectedId)?.categoryCount || 0}</p>
-                  <p>Tài khoản kỹ thuật viên: {items.find((item) => item.id === selectedId)?.techSupportUserCount || 0}</p>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+                  Thiết bị đang dùng nhà cung cấp này: {items.find((item) => item.id === selectedId)?.assetCount || 0}
                 </div>
               )}
             </div>
@@ -376,4 +432,4 @@ function TechSupportTypeManagement() {
   )
 }
 
-export default TechSupportTypeManagement
+export default SupplierManagement

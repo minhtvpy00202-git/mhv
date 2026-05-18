@@ -2,6 +2,7 @@ package com.poly.mhv.repository;
 
 import com.poly.mhv.entity.Asset;
 import java.util.List;
+import java.time.LocalDate;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,14 +13,17 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     List<Asset> findByStatus(String status);
     List<Asset> findByQaCodeContainingIgnoreCaseOrNameContainingIgnoreCase(String qaCode, String name);
     List<Asset> findByCategoryId(Integer categoryId);
+    long countBySupplierId(Integer supplierId);
     long countByCategoryId(Integer categoryId);
     long countByLocationIdOrHomeLocationId(Integer locationId, Integer homeLocationId);
+    List<Asset> findByWarrantyExpirationDate(LocalDate warrantyExpirationDate);
 
     @Query("""
             select a from Asset a
             join fetch a.location l
             join fetch a.homeLocation hl
             join fetch a.category c
+            left join fetch a.supplier s
             where (:name is null or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)
               and (:categoryId is null or c.id = :categoryId)

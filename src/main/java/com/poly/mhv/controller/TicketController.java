@@ -13,12 +13,18 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +41,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 @Tag(name = "Ticket sửa chữa", description = "API tạo, phân công, xử lý và theo dõi ticket sửa chữa")
 @SecurityRequirement(name = "bearerAuth")
+@Validated
 public class TicketController {
 
     private final TicketService ticketService;
@@ -49,7 +56,7 @@ public class TicketController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Không có quyền tạo ticket")
     })
-    public ResponseEntity<TicketResponse> createTicket(@RequestBody TicketCreateRequest request) {
+    public ResponseEntity<TicketResponse> createTicket(@Valid @RequestBody TicketCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.createTicket(request));
     }
 
@@ -64,11 +71,20 @@ public class TicketController {
     })
     public ResponseEntity<TicketResponse> createTicketMultipart(
             @Parameter(description = "Mã QA của thiết bị cần tạo ticket", example = "AT0007")
-            @RequestParam("assetQaCode") String assetQaCode,
+            @RequestParam("assetQaCode")
+            @NotBlank(message = "Mã QA thiết bị là bắt buộc.")
+            @Size(max = 20, message = "Mã QA thiết bị không được vượt quá 20 ký tự.")
+            String assetQaCode,
             @Parameter(description = "Mô tả sự cố hoặc yêu cầu hỗ trợ", example = "Máy chiếu không lên nguồn, đèn báo nhấp nháy đỏ.")
-            @RequestParam("description") String description,
+            @RequestParam("description")
+            @NotBlank(message = "Mô tả sự cố là bắt buộc.")
+            @Size(min = 10, max = 1000, message = "Mô tả sự cố phải từ 10 đến 1000 ký tự.")
+            String description,
             @Parameter(description = "Mức độ ưu tiên của ticket", example = "HIGH")
-            @RequestParam("priority") String priority,
+            @RequestParam("priority")
+            @NotBlank(message = "Mức độ ưu tiên là bắt buộc.")
+            @Pattern(regexp = "^(LOW|MEDIUM|HIGH)$", message = "Mức độ ưu tiên không hợp lệ.")
+            String priority,
             @Parameter(
                     description = "Ảnh minh họa sự cố đính kèm theo multipart/form-data",
                     schema = @Schema(type = "string", format = "binary")
@@ -96,7 +112,7 @@ public class TicketController {
     public ResponseEntity<TicketResponse> assignTicket(
             @Parameter(description = "ID ticket cần phân công", example = "15")
             @PathVariable Integer id,
-            @RequestBody TicketAssignRequest request
+            @Valid @RequestBody TicketAssignRequest request
     ) {
         return ResponseEntity.ok(ticketService.assignTicket(id, request));
     }
@@ -133,11 +149,11 @@ public class TicketController {
             )
             @RequestParam(required = false) String status,
             @Parameter(description = "Lọc theo ID kỹ thuật viên đang được giao ticket", example = "7")
-            @RequestParam(name = "assignee_id", required = false) Integer assigneeId,
+            @RequestParam(name = "assignee_id", required = false) @Positive(message = "Kỹ thuật viên không hợp lệ.") Integer assigneeId,
             @Parameter(description = "Lọc theo mã QA thiết bị", example = "AT0007")
-            @RequestParam(name = "asset_qa_code", required = false) String assetQaCode,
+            @RequestParam(name = "asset_qa_code", required = false) @Size(max = 20, message = "Mã QA thiết bị không được vượt quá 20 ký tự.") String assetQaCode,
             @Parameter(description = "Lọc theo ID người báo hỏng", example = "12")
-            @RequestParam(name = "reporter_id", required = false) Integer reporterId
+            @RequestParam(name = "reporter_id", required = false) @Positive(message = "Người báo hỏng không hợp lệ.") Integer reporterId
     ) {
         return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode, reporterId));
     }

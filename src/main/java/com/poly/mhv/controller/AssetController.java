@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -43,7 +44,7 @@ public class AssetController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Không có quyền tạo thiết bị")
     })
-    public ResponseEntity<AssetResponse> createAsset(@RequestBody AssetCreateRequest request) {
+    public ResponseEntity<AssetResponse> createAsset(@Valid @RequestBody AssetCreateRequest request) {
         AssetResponse response = assetService.createAsset(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -58,7 +59,7 @@ public class AssetController {
     })
     public ResponseEntity<AssetResponse> updateAsset(
             @PathVariable String qaCode,
-            @RequestBody AssetUpdateRequest request
+            @Valid @RequestBody AssetUpdateRequest request
     ) {
         return ResponseEntity.ok(assetService.updateAsset(qaCode, request));
     }

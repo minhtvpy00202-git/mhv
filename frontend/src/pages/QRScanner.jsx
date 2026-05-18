@@ -3,6 +3,7 @@ import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
+import { parseSpecsToEntries } from '../utils/assetSpecs'
 
 const scannerElementId = 'qa-scanner'
 
@@ -16,6 +17,7 @@ function QRScanner() {
   const [scannedHomeLocationId, setScannedHomeLocationId] = useState(null)
   const [scannedLocationName, setScannedLocationName] = useState('')
   const [scannedHomeLocationName, setScannedHomeLocationName] = useState('')
+  const [scannedSpecs, setScannedSpecs] = useState([])
   const [showActionModal, setShowActionModal] = useState(false)
   const [toLocationId, setToLocationId] = useState('')
   const [locations, setLocations] = useState([])
@@ -78,6 +80,7 @@ function QRScanner() {
       setScannedHomeLocationId(response.data?.homeLocationId || null)
       setScannedLocationName(response.data?.locationName || '')
       setScannedHomeLocationName(response.data?.homeLocationName || '')
+      setScannedSpecs(parseSpecsToEntries(response.data?.specs))
       return true
     } catch {
       setScannedAssetName('')
@@ -85,6 +88,7 @@ function QRScanner() {
       setScannedHomeLocationId(null)
       setScannedLocationName('')
       setScannedHomeLocationName('')
+      setScannedSpecs([])
       toast.error('Mã tài sản không tồn tại')
       return false
     }
@@ -155,6 +159,7 @@ function QRScanner() {
     setScannedHomeLocationId(null)
     setScannedLocationName('')
     setScannedHomeLocationName('')
+    setScannedSpecs([])
     setToLocationId('')
     setLocationQuery('')
     setShowLocationOptions(false)
@@ -229,6 +234,18 @@ function QRScanner() {
             <p className="text-sm text-slate-600">Tên thiết bị: {scannedAssetName || 'Đang tải...'}</p>
             <p className="text-sm text-slate-600">Phòng hiện tại: {scannedLocationName || 'Không xác định'}</p>
             <p className="text-sm text-slate-600">Phòng gốc: {scannedHomeLocationName || 'Không xác định'}</p>
+            {scannedSpecs.length > 0 && (
+              <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                <p className="text-sm font-semibold text-slate-700">Đặc tính kỹ thuật</p>
+                <div className="mt-2 space-y-1 text-sm text-slate-600">
+                  {scannedSpecs.map((entry) => (
+                    <p key={`${entry.name}-${entry.value}`}>
+                      <span className="font-medium text-slate-700">{entry.name}:</span> {entry.value}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {canCheckout && (
               <div className="mt-3 space-y-2">

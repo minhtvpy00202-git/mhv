@@ -10,6 +10,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -52,6 +54,24 @@ public class Asset {
     @JoinColumn(name = "home_location_id", nullable = false)
     @JsonIgnoreProperties({"assets", "usageHistoriesFrom", "usageHistoriesTo"})
     private Location homeLocation;
+
+    @Column(columnDefinition = "NVARCHAR(MAX)")
+    @Nationalized
+    private String specs;
+
+    @Column(name = "purchase_price", precision = 19, scale = 2)
+    private BigDecimal purchasePrice;
+
+    @Column(name = "purchase_date")
+    private LocalDate purchaseDate;
+
+    @Column(name = "warranty_expiration_date")
+    private LocalDate warrantyExpirationDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    @JsonIgnoreProperties({"assets"})
+    private Supplier supplier;
 
     @JsonIgnore
     @OneToMany(mappedBy = "asset")

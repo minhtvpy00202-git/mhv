@@ -43,9 +43,32 @@ function UserManagement() {
     techTypeIds: [],
     status: 'Hoạt động',
   })
+  const [sortConfig, setSortConfig] = useState({ key: 'username', direction: 'asc' })
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
   const isTechSupportRole = form.role === 'TechSupport'
+  const sortedRows = useMemo(() => {
+    const list = [...rows]
+    const { key, direction } = sortConfig
+    list.sort((a, b) => {
+      const aValue = key === 'roleLabel'
+        ? toRoleLabel(a.role)
+        : key === 'techTypeDisplay'
+          ? (a.role === 'TechSupport' ? (a.techTypeNames?.join(', ') || 'Kỹ thuật viên') : '-')
+          : a[key]
+      const bValue = key === 'roleLabel'
+        ? toRoleLabel(b.role)
+        : key === 'techTypeDisplay'
+          ? (b.role === 'TechSupport' ? (b.techTypeNames?.join(', ') || 'Kỹ thuật viên') : '-')
+          : b[key]
+      const av = String(aValue ?? '').toLowerCase()
+      const bv = String(bValue ?? '').toLowerCase()
+      if (av < bv) return direction === 'asc' ? -1 : 1
+      if (av > bv) return direction === 'asc' ? 1 : -1
+      return 0
+    })
+    return list
+  }, [rows, sortConfig])
 
   const loadUsers = async (page = 0, nextFilters = filters) => {
     setLoading(true)
@@ -223,6 +246,18 @@ function UserManagement() {
 
   const currentPage = pageInfo.page + 1
 
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }))
+  }
+
+  const getSortLabel = (key, label) => {
+    if (sortConfig.key !== key) return label
+    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -294,19 +329,47 @@ function UserManagement() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left">Username</th>
-                <th className="px-3 py-2 text-left">Họ tên</th>
-                <th className="px-3 py-2 text-left">Ngày sinh</th>
-                <th className="px-3 py-2 text-left">Số điện thoại</th>
-                <th className="px-3 py-2 text-left">Vai trò</th>
-                <th className="px-3 py-2 text-left">Chuyên môn kỹ thuật</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('username')} className="hover:text-fptOrange">
+                    {getSortLabel('username', 'Username')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('fullName')} className="hover:text-fptOrange">
+                    {getSortLabel('fullName', 'Họ tên')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('birthday')} className="hover:text-fptOrange">
+                    {getSortLabel('birthday', 'Ngày sinh')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('phone')} className="hover:text-fptOrange">
+                    {getSortLabel('phone', 'Số điện thoại')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('roleLabel')} className="hover:text-fptOrange">
+                    {getSortLabel('roleLabel', 'Vai trò')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('techTypeDisplay')} className="hover:text-fptOrange">
+                    {getSortLabel('techTypeDisplay', 'Chuyên môn kỹ thuật')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('status')} className="hover:text-fptOrange">
+                    {getSortLabel('status', 'Trạng thái')}
+                  </button>
+                </th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {!loading &&
-                rows.map((row) => (
+                sortedRows.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100">
                     <td className="px-3 py-2 font-medium">{row.username}</td>
                     <td className="px-3 py-2">{row.fullName || '-'}</td>

@@ -65,6 +65,7 @@ CREATE TABLE categories (
     id INT IDENTITY(1,1) PRIMARY KEY,
     name NVARCHAR(50) NOT NULL,
     code_prefix VARCHAR(10) NOT NULL,
+    spec_templates NVARCHAR(MAX) NULL,
     tech_type_id INT NOT NULL,
     CONSTRAINT UQ_categories_name UNIQUE (name),
     CONSTRAINT UQ_categories_code_prefix UNIQUE (code_prefix),
@@ -73,6 +74,16 @@ CREATE TABLE categories (
 GO
 
 -- 6. Bảng assets
+CREATE TABLE suppliers (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    name NVARCHAR(150) NOT NULL,
+    address NVARCHAR(255) NULL,
+    phone_number VARCHAR(20) NULL,
+    CONSTRAINT UQ_suppliers_name UNIQUE (name)
+);
+GO
+
+-- 7. Bảng assets
 CREATE TABLE assets (
     qa_code VARCHAR(20) PRIMARY KEY,
     name NVARCHAR(100) NOT NULL,
@@ -80,14 +91,20 @@ CREATE TABLE assets (
     location_id INT NOT NULL,
     home_location_id INT NOT NULL,
     status NVARCHAR(20) NOT NULL,
+    specs NVARCHAR(MAX) NULL,
+    purchase_price DECIMAL(19,2) NULL,
+    purchase_date DATE NULL,
+    warranty_expiration_date DATE NULL,
+    supplier_id INT NULL,
     CONSTRAINT CK_assets_status CHECK (status IN (N'Sẵn sàng', N'Đang sử dụng', N'Hỏng', N'Bảo trì', N'Thất lạc')),
     CONSTRAINT FK_assets_category FOREIGN KEY (category_id) REFERENCES categories(id),
     CONSTRAINT FK_assets_location FOREIGN KEY (location_id) REFERENCES locations(id),
-    CONSTRAINT FK_assets_home_location FOREIGN KEY (home_location_id) REFERENCES locations(id)
+    CONSTRAINT FK_assets_home_location FOREIGN KEY (home_location_id) REFERENCES locations(id),
+    CONSTRAINT FK_assets_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 );
 GO
 
--- 7. Bảng usage_histories
+-- 8. Bảng usage_histories
 CREATE TABLE usage_histories (
     id INT IDENTITY(1,1) PRIMARY KEY,
     asset_qa_code VARCHAR(20) NOT NULL,
@@ -104,7 +121,7 @@ CREATE TABLE usage_histories (
 );
 GO
 
--- 8. Bảng tickets (Thay thế maintenance_requests)
+-- 9. Bảng tickets (Thay thế maintenance_requests)
 CREATE TABLE tickets (
     id INT IDENTITY(1,1) PRIMARY KEY,
     asset_qa_code VARCHAR(20) NOT NULL,
@@ -125,7 +142,7 @@ CREATE TABLE tickets (
 );
 GO
 
--- 9. Bảng chat_messages
+-- 10. Bảng chat_messages
 CREATE TABLE chat_messages (
     id INT IDENTITY(1,1) PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -139,7 +156,7 @@ CREATE TABLE chat_messages (
 );
 GO
 
--- 10. Bảng notifications
+-- 11. Bảng notifications
 CREATE TABLE notifications (
     id INT IDENTITY(1,1) PRIMARY KEY,
     event_type VARCHAR(50) NOT NULL,
@@ -155,7 +172,7 @@ CREATE TABLE notifications (
 );
 GO
 
--- 11. Bảng ticket_events
+-- 12. Bảng ticket_events
 CREATE TABLE ticket_events (
     id INT IDENTITY(1,1) PRIMARY KEY,
     ticket_id INT NOT NULL,
@@ -170,7 +187,7 @@ CREATE TABLE ticket_events (
 );
 GO
 
--- 12. Bảng inventory_audits
+-- 13. Bảng inventory_audits
 CREATE TABLE inventory_audits (
     id INT IDENTITY(1,1) PRIMARY KEY,
     location_id INT NOT NULL,

@@ -1,5 +1,7 @@
 package com.poly.mhv.dto.asset;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,5 +21,13 @@ public class AssetResponse {
     private String locationName;
     private Integer homeLocationId;
     private String homeLocationName;
+    private String specs;
+    private BigDecimal purchasePrice;
+    private LocalDate purchaseDate;
+    private LocalDate warrantyExpirationDate;
+    private Integer supplierId;
+    private String supplierName;
+    private String supplierAddress;
+    private String supplierPhoneNumber;
     private String qrCodeBase64;
 }

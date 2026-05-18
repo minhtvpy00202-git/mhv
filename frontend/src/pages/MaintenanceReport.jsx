@@ -5,9 +5,11 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
+import { parseSpecsToEntries } from '../utils/assetSpecs'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { compressImageToBlob } from '../utils/imageProcessing'
 import { getTicketStatusMeta } from '../utils/ticketStatus'
+import { validateMaintenanceTicketForm } from '../utils/validation'
 
 const scannerElementId = 'maintenance-scanner'
 const priorityOptions = [
@@ -28,6 +30,7 @@ function MaintenanceReport() {
   const [assetName, setAssetName] = useState('')
   const [assetLocationName, setAssetLocationName] = useState('')
   const [assetHomeLocationName, setAssetHomeLocationName] = useState('')
+  const [assetSpecs, setAssetSpecs] = useState([])
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('MEDIUM')
   const [imageFile, setImageFile] = useState(null)
@@ -37,6 +40,7 @@ function MaintenanceReport() {
   const [loading, setLoading] = useState(false)
   const [latestTicket, setLatestTicket] = useState(null)
   const [loadingLatestTicket, setLoadingLatestTicket] = useState(false)
+  const [formErrors, setFormErrors] = useState({})
   const processingFallbackTimerRef = useRef(null)
 
   useEffect(() => {
@@ -138,12 +142,15 @@ function MaintenanceReport() {
             setAssetName(response.data?.name || '')
             setAssetLocationName(response.data?.locationName || '')
             setAssetHomeLocationName(response.data?.homeLocationName || '')
+            setAssetSpecs(parseSpecsToEntries(response.data?.specs))
+            setFormErrors({})
             setShowModal(true)
           } catch {
             setAssetQaCode('')
             setAssetName('')
             setAssetLocationName('')
             setAssetHomeLocationName('')
+            setAssetSpecs([])
             toast.error('Mã tài sản không tồn tại')
             startScanner()
           }
@@ -177,9 +184,11 @@ function MaintenanceReport() {
     setAssetName('')
     setAssetLocationName('')
     setAssetHomeLocationName('')
+    setAssetSpecs([])
     setDescription('')
     setPriority('MEDIUM')
     setImageFile(null)
+    setFormErrors({})
     if (imagePreviewUrl) {
       URL.revokeObjectURL(imagePreviewUrl)
     }
@@ -197,6 +206,18 @@ function MaintenanceReport() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    const nextErrors = validateMaintenanceTicketForm({
+      assetQaCode,
+      description,
+      priority,
+      imageFile: file,
+    })
+    if (nextErrors.imageFile) {
+      setFormErrors((prev) => ({ ...prev, imageFile: nextErrors.imageFile }))
+      toast.error(nextErrors.imageFile)
+      return
+    }
+    setFormErrors((prev) => ({ ...prev, imageFile: '' }))
     setProcessingImage(true)
     processingFallbackTimerRef.current = setTimeout(() => {
       setProcessingImage(false)
@@ -229,8 +250,15 @@ function MaintenanceReport() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!assetQaCode || !description) {
-      toast.error('Vui lòng nhập đầy đủ mã QA và mô tả lỗi.')
+    const nextErrors = validateMaintenanceTicketForm({
+      assetQaCode,
+      description,
+      priority,
+      imageFile,
+    })
+    setFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
       return
     }
     setLoading(true)
@@ -405,16 +433,32 @@ function MaintenanceReport() {
               <p className="mt-1"><span className="font-semibold">Tên thiết bị:</span> {assetName || 'Đang tải...'}</p>
               <p className="mt-1"><span className="font-semibold">Phòng hiện tại:</span> {assetLocationName || 'Không xác định'}</p>
               <p className="mt-1"><span className="font-semibold">Phòng gốc:</span> {assetHomeLocationName || 'Không xác định'}</p>
+              {assetSpecs.length > 0 && (
+                <div className="mt-3 rounded-xl bg-white p-3">
+                  <p className="font-semibold text-slate-700">Đặc tính kỹ thuật</p>
+                  <div className="mt-2 space-y-1 text-sm text-slate-600">
+                    {assetSpecs.map((entry) => (
+                      <p key={`${entry.name}-${entry.value}`}>
+                        <span className="font-medium text-slate-700">{entry.name}:</span> {entry.value}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-3">
               <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả lỗi</label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value)
+                  setFormErrors((prev) => ({ ...prev, description: '' }))
+                }}
                 rows={4}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
+                className={`w-full rounded-lg border px-3 py-2 outline-none ring-fptOrange focus:ring-2 ${formErrors.description ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                 placeholder="Mô tả chi tiết tình trạng hỏng"
               />
+              {formErrors.description && <p className="mt-1 text-xs text-red-600">{formErrors.description}</p>}
             </div>
             <div className="mt-3">
               <label className="mb-1 block text-sm font-medium text-slate-700">Mức độ ưu tiên</label>
@@ -434,6 +478,7 @@ function MaintenanceReport() {
                   </button>
                 ))}
               </div>
+              {formErrors.priority && <p className="mt-1 text-xs text-red-600">{formErrors.priority}</p>}
             </div>
             <input
               ref={fileInputRef}
@@ -476,6 +521,7 @@ function MaintenanceReport() {
                 <img src={imagePreviewUrl} alt="error-preview" className="h-32 w-32 rounded-xl border border-slate-200 object-cover" />
               </div>
             )}
+            {formErrors.imageFile && <p className="mt-2 text-xs text-red-600">{formErrors.imageFile}</p>}
             {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button

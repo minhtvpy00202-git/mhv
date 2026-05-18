@@ -17,13 +17,31 @@ function LocationManagement() {
   const [form, setForm] = useState({
     roomName: '',
   })
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' })
 
   const isEditing = Boolean(selectedLocationId)
   const totalPages = Math.max(1, Math.ceil(locations.length / PAGE_SIZE))
+  const sortedLocations = useMemo(() => {
+    const list = [...locations]
+    const { key, direction } = sortConfig
+    list.sort((a, b) => {
+      const aValue = a[key]
+      const bValue = b[key]
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'asc' ? aValue - bValue : bValue - aValue
+      }
+      const av = String(aValue ?? '').toLowerCase()
+      const bv = String(bValue ?? '').toLowerCase()
+      if (av < bv) return direction === 'asc' ? -1 : 1
+      if (av > bv) return direction === 'asc' ? 1 : -1
+      return 0
+    })
+    return list
+  }, [locations, sortConfig])
   const paginatedLocations = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
-    return locations.slice(start, start + PAGE_SIZE)
-  }, [locations, currentPage])
+    return sortedLocations.slice(start, start + PAGE_SIZE)
+  }, [sortedLocations, currentPage])
 
   const loadLocations = async (nextFilters = filters) => {
     setLoading(true)
@@ -137,6 +155,19 @@ function LocationManagement() {
     await loadLocations(nextFilters)
   }
 
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }))
+    setCurrentPage(1)
+  }
+
+  const getSortLabel = (key, label) => {
+    if (sortConfig.key !== key) return label
+    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -201,8 +232,16 @@ function LocationManagement() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">ID</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên phòng / khu vực</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                    {getSortLabel('id', 'ID')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('roomName')} className="hover:text-fptOrange">
+                    {getSortLabel('roomName', 'Tên phòng / khu vực')}
+                  </button>
+                </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>

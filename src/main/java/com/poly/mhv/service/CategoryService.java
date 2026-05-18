@@ -1,5 +1,8 @@
 package com.poly.mhv.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.category.CategoryCreateRequest;
 import com.poly.mhv.dto.category.CategoryResponse;
 import com.poly.mhv.dto.category.CategoryUpdateRequest;
@@ -25,15 +28,18 @@ public class CategoryService {
     private final CategoryRepository categoryRepository;
     private final TechSupportTypeRepository techSupportTypeRepository;
     private final AssetRepository assetRepository;
+    private final ObjectMapper objectMapper;
 
     public CategoryService(
             CategoryRepository categoryRepository,
             TechSupportTypeRepository techSupportTypeRepository,
-            AssetRepository assetRepository
+            AssetRepository assetRepository,
+            ObjectMapper objectMapper
     ) {
         this.categoryRepository = categoryRepository;
         this.techSupportTypeRepository = techSupportTypeRepository;
         this.assetRepository = assetRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +67,7 @@ public class CategoryService {
                 .name(normalizedName)
                 .codePrefix(generatedCodePrefix)
                 .techSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()))
+                .specTemplates(normalizeSpecTemplates(request.getSpecTemplates()))
                 .build();
         return mapToResponse(categoryRepository.save(category));
     }
@@ -75,6 +82,7 @@ public class CategoryService {
 
         category.setName(normalizedName);
         category.setTechSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()));
+        category.setSpecTemplates(normalizeSpecTemplates(request.getSpecTemplates()));
         return mapToResponse(categoryRepository.save(category));
     }
 
@@ -185,6 +193,39 @@ public class CategoryService {
                 .codePrefix(category.getCodePrefix())
                 .techTypeId(category.getTechSupportType().getId())
                 .techTypeName(category.getTechSupportType().getName())
+                .specTemplates(parseSpecTemplates(category.getSpecTemplates()))
                 .build();
+    }
+
+    private String normalizeSpecTemplates(List<String> specTemplates) {
+        List<String> normalizedTemplates = specTemplates == null
+                ? List.of()
+                : specTemplates.stream()
+                .map(template -> template == null ? "" : template.trim())
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        try {
+            return objectMapper.writeValueAsString(normalizedTemplates);
+        } catch (JsonProcessingException ex) {
+            throw new CustomException("Không thể lưu template đặc tính kỹ thuật.");
+        }
+    }
+
+    private List<String> parseSpecTemplates(String specTemplatesJson) {
+        if (!StringUtils.hasText(specTemplatesJson)) {
+            return List.of();
+        }
+        try {
+            List<String> templates = objectMapper.readValue(specTemplatesJson, new TypeReference<List<String>>() {
+            });
+            return templates.stream()
+                    .map(template -> template == null ? "" : template.trim())
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .toList();
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
     }
 }

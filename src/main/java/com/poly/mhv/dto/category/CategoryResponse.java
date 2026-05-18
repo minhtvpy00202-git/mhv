@@ -1,5 +1,6 @@
 package com.poly.mhv.dto.category;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,4 +16,5 @@ public class CategoryResponse {
     private String codePrefix;
     private Integer techTypeId;
     private String techTypeName;
+    private List<String> specTemplates;
 }
