@@ -111,7 +111,8 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public List<AssetResponse> getAllAssets() {
-        return assetRepository.searchForAdmin(null, null, null, null).stream()
+        return assetRepository.findAll().stream()
+                .sorted(Comparator.comparing(Asset::getQaCode))
                 .map(asset -> mapToAssetResponse(asset, false))
                 .toList();
     }
@@ -121,13 +122,19 @@ public class AssetService {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
         String searchKey = normalizeKeyword(normalizedName);
-        return assetRepository.searchForAdmin(null, normalizedStatus, categoryId, locationId).stream()
+        return assetRepository.findAll().stream()
                 .filter(asset -> {
                     if (searchKey == null) {
                         return true;
                     }
                     return normalizeKeyword(asset.getName()).contains(searchKey);
                 })
+                .filter(asset -> normalizedStatus == null || normalizedStatus.equals(asset.getStatus()))
+                .filter(asset -> categoryId == null
+                        || (asset.getCategory() != null && categoryId.equals(asset.getCategory().getId())))
+                .filter(asset -> locationId == null
+                        || (asset.getLocation() != null && locationId.equals(asset.getLocation().getId())))
+                .sorted(Comparator.comparing(Asset::getQaCode))
                 .map(asset -> mapToAssetResponse(asset, false))
                 .toList();
     }

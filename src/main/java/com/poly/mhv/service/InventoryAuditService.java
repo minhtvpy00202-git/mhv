@@ -86,7 +86,23 @@ public class InventoryAuditService {
     @Transactional(readOnly = true)
     public List<InventoryAuditSummaryResponse> getAudits(String status) {
         String normalizedStatus = StringUtils.hasText(status) ? status.trim().toUpperCase() : null;
-        return inventoryAuditRepository.findForAdmin(normalizedStatus).stream()
+        return inventoryAuditRepository.findAll().stream()
+                .filter(audit -> normalizedStatus == null || normalizedStatus.equals(audit.getStatus()))
+                .sorted((left, right) -> {
+                    LocalDateTime rightValue = right.getStartedAt();
+                    LocalDateTime leftValue = left.getStartedAt();
+                    if (leftValue == null && rightValue == null) {
+                        return Integer.compare(right.getId(), left.getId());
+                    }
+                    if (leftValue == null) {
+                        return 1;
+                    }
+                    if (rightValue == null) {
+                        return -1;
+                    }
+                    int compare = rightValue.compareTo(leftValue);
+                    return compare != 0 ? compare : Integer.compare(right.getId(), left.getId());
+                })
                 .map(this::mapSummary)
                 .toList();
     }

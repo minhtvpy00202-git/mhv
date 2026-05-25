@@ -8,7 +8,9 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -33,7 +35,17 @@ public class TechSupportTypeService {
     @Transactional(readOnly = true)
     public List<TechSupportTypeResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return techSupportTypeRepository.searchForAdmin(normalizedKeyword).stream()
+        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
+        return techSupportTypeRepository.findAll().stream()
+                .filter(type -> type.getId() != null && type.getId() > 0)
+                .filter(type -> {
+                    if (searchKey == null) {
+                        return true;
+                    }
+                    String name = type.getName() == null ? "" : type.getName().toLowerCase(Locale.ROOT);
+                    return name.contains(searchKey);
+                })
+                .sorted(Comparator.comparing(TechSupportType::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::mapToResponse)
                 .toList();
     }

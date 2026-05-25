@@ -16,12 +16,14 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 public class ReportService {
@@ -91,13 +93,26 @@ public class ReportService {
     ) throws IOException {
         LocalDateTime startDateTime = startDate == null ? null : startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate == null ? null : endDate.plusDays(1).atStartOfDay().minusNanos(1);
-        List<UsageHistory> histories = usageHistoryRepository.searchForAdmin(
-                assetName == null || assetName.isBlank() ? null : assetName.trim(),
-                borrowedLocationId,
-                userId,
-                startDateTime,
-                endDateTime
-        );
+        String normalizedAssetName = StringUtils.hasText(assetName) ? assetName.trim().toLowerCase(Locale.ROOT) : null;
+        List<UsageHistory> histories = usageHistoryRepository.findAllForAdminOrderByStartTimeDesc().stream()
+                .filter(history -> {
+                    if (!StringUtils.hasText(normalizedAssetName)) {
+                        return true;
+                    }
+                    String assetValue = history.getAsset() == null || history.getAsset().getName() == null
+                            ? ""
+                            : history.getAsset().getName().toLowerCase(Locale.ROOT);
+                    return assetValue.contains(normalizedAssetName);
+                })
+                .filter(history -> borrowedLocationId == null
+                        || (history.getToLocation() != null && borrowedLocationId.equals(history.getToLocation().getId())))
+                .filter(history -> userId == null
+                        || (history.getUser() != null && userId.equals(history.getUser().getId())))
+                .filter(history -> startDateTime == null
+                        || (history.getStartTime() != null && !history.getStartTime().isBefore(startDateTime)))
+                .filter(history -> endDateTime == null
+                        || (history.getStartTime() != null && !history.getStartTime().isAfter(endDateTime)))
+                .toList();
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             XSSFSheet sheet = workbook.createSheet("Lịch sử mượn thiết bị");

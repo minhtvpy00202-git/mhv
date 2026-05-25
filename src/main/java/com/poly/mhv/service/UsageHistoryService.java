@@ -174,13 +174,24 @@ public class UsageHistoryService {
         String normalizedAssetName = StringUtils.hasText(assetName) ? assetName.trim() : null;
         LocalDateTime startDateTime = startDate == null ? null : startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate == null ? null : endDate.plusDays(1).atStartOfDay().minusNanos(1);
-        return usageHistoryRepository.searchForAdmin(
-                        normalizedAssetName,
-                        borrowedLocationId,
-                        userId,
-                        startDateTime,
-                        endDateTime
-                ).stream()
+        return usageHistoryRepository.findAllForAdminOrderByStartTimeDesc().stream()
+                .filter(history -> {
+                    if (!StringUtils.hasText(normalizedAssetName)) {
+                        return true;
+                    }
+                    String assetValue = history.getAsset() == null || history.getAsset().getName() == null
+                            ? ""
+                            : history.getAsset().getName().toLowerCase();
+                    return assetValue.contains(normalizedAssetName.toLowerCase());
+                })
+                .filter(history -> borrowedLocationId == null
+                        || (history.getToLocation() != null && borrowedLocationId.equals(history.getToLocation().getId())))
+                .filter(history -> userId == null
+                        || (history.getUser() != null && userId.equals(history.getUser().getId())))
+                .filter(history -> startDateTime == null
+                        || (history.getStartTime() != null && !history.getStartTime().isBefore(startDateTime)))
+                .filter(history -> endDateTime == null
+                        || (history.getStartTime() != null && !history.getStartTime().isAfter(endDateTime)))
                 .map(this::mapToAdminResponse)
                 .toList();
     }

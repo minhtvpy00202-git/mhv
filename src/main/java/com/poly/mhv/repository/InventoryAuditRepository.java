@@ -12,7 +12,7 @@ public interface InventoryAuditRepository extends JpaRepository<InventoryAudit, 
             select ia from InventoryAudit ia
             join fetch ia.location l
             join fetch ia.createdBy u
-            where (:status is null or ia.status = :status)
+            where (coalesce(:status, '') = '' or ia.status = :status)
             order by ia.startedAt desc, ia.id desc
             """)
     List<InventoryAudit> findForAdmin(@Param("status") String status);

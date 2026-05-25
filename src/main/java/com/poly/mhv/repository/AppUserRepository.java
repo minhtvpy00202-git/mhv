@@ -32,10 +32,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
 
     @Query("""
             SELECT u FROM AppUser u
-            WHERE (:keyword IS NULL OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            WHERE (COALESCE(:keyword, '') = '' OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
                 OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))
-              AND (:role IS NULL OR u.role = :role)
-              AND (:status IS NULL OR u.status = :status)
+              AND (COALESCE(:role, '') = '' OR u.role = :role)
+              AND (COALESCE(:status, '') = '' OR u.status = :status)
             ORDER BY u.id DESC
             """)
     Page<AppUser> searchForAdmin(

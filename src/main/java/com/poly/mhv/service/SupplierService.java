@@ -7,7 +7,9 @@ import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.SupplierRepository;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -26,7 +28,16 @@ public class SupplierService {
     @Transactional(readOnly = true)
     public List<SupplierResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return supplierRepository.searchForAdmin(normalizedKeyword).stream()
+        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
+        return supplierRepository.findAll().stream()
+                .filter(supplier -> {
+                    if (searchKey == null) {
+                        return true;
+                    }
+                    String name = supplier.getName() == null ? "" : supplier.getName().toLowerCase(Locale.ROOT);
+                    return name.contains(searchKey);
+                })
+                .sorted(Comparator.comparing(Supplier::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(this::mapToResponse)
                 .toList();
     }
