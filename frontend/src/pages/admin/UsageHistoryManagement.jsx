@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 const PAGE_SIZE = 10
+
+function getUsageHistorySortValue(history, key) {
+  if (key.includes('Time')) return getServerDateTimeMs(history?.[key])
+  return history?.[key]
+}
 
 function UsageHistoryManagement() {
   const [histories, setHistories] = useState([])
@@ -17,10 +23,15 @@ function UsageHistoryManagement() {
     endDate: '',
   })
   const [showLocationOptions, setShowLocationOptions] = useState(false)
-  const [sortConfig, setSortConfig] = useState({ key: 'startTime', direction: 'desc' })
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const { sortedItems: sortedHistories, handleSort, getSortLabel } = useTableSort(histories, {
+    initialKey: 'startTime',
+    initialDirection: 'desc',
+    getSortValue: getUsageHistorySortValue,
+    onSortChange: () => setCurrentPage(1),
+  })
 
   useEffect(() => {
     const initializePage = async () => {
@@ -48,37 +59,11 @@ function UsageHistoryManagement() {
     location.roomName.toLowerCase().includes(filters.borrowedLocationKeyword.trim().toLowerCase()),
   )
 
-  const sortedHistories = useMemo(() => {
-    const list = [...histories]
-    const { key, direction } = sortConfig
-    list.sort((a, b) => {
-      const av = key.includes('Time') ? getServerDateTimeMs(a[key]) : String(a[key] ?? '').toLowerCase()
-      const bv = key.includes('Time') ? getServerDateTimeMs(b[key]) : String(b[key] ?? '').toLowerCase()
-      if (av < bv) return direction === 'asc' ? -1 : 1
-      if (av > bv) return direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return list
-  }, [histories, sortConfig])
-
   const totalPages = Math.max(1, Math.ceil(sortedHistories.length / PAGE_SIZE))
   const paginatedHistories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedHistories.slice(start, start + PAGE_SIZE)
   }, [sortedHistories, currentPage])
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
-    setCurrentPage(1)
-  }
-
-  const getSortLabel = (key, label) => {
-    if (sortConfig.key !== key) return label
-    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
-  }
 
   const goToFirstPage = () => setCurrentPage(1)
   const goToPrevPage = () => setCurrentPage((prev) => Math.max(1, prev - 1))

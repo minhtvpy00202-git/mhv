@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
 
@@ -17,27 +18,14 @@ function LocationManagement() {
   const [form, setForm] = useState({
     roomName: '',
   })
-  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' })
+  const { sortedItems: sortedLocations, handleSort, getSortLabel } = useTableSort(locations, {
+    initialKey: 'id',
+    initialDirection: 'asc',
+    onSortChange: () => setCurrentPage(1),
+  })
 
   const isEditing = Boolean(selectedLocationId)
-  const totalPages = Math.max(1, Math.ceil(locations.length / PAGE_SIZE))
-  const sortedLocations = useMemo(() => {
-    const list = [...locations]
-    const { key, direction } = sortConfig
-    list.sort((a, b) => {
-      const aValue = a[key]
-      const bValue = b[key]
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return direction === 'asc' ? aValue - bValue : bValue - aValue
-      }
-      const av = String(aValue ?? '').toLowerCase()
-      const bv = String(bValue ?? '').toLowerCase()
-      if (av < bv) return direction === 'asc' ? -1 : 1
-      if (av > bv) return direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return list
-  }, [locations, sortConfig])
+  const totalPages = Math.max(1, Math.ceil(sortedLocations.length / PAGE_SIZE))
   const paginatedLocations = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedLocations.slice(start, start + PAGE_SIZE)
@@ -153,19 +141,6 @@ function LocationManagement() {
     const nextFilters = { keyword: '' }
     setFilters(nextFilters)
     await loadLocations(nextFilters)
-  }
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
-    setCurrentPage(1)
-  }
-
-  const getSortLabel = (key, label) => {
-    if (sortConfig.key !== key) return label
-    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
   }
 
   return (

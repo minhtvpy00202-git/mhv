@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
+import { useTableSort } from '../../hooks/useTableSort'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
 import { validateAssetForm } from '../../utils/validation'
 
@@ -58,7 +59,6 @@ function AssetManagement() {
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [showSupplierOptions, setShowSupplierOptions] = useState(false)
   const [supplierKeyword, setSupplierKeyword] = useState('')
-  const [sortConfig, setSortConfig] = useState({ key: 'qaCode', direction: 'asc' })
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState({
     name: '',
@@ -90,19 +90,11 @@ function AssetManagement() {
     if (!keyword) return suppliers
     return suppliers.filter((supplier) => getSupplierLabel(supplier).toLowerCase().includes(keyword))
   }, [supplierKeyword, suppliers])
-
-  const sortedAssets = useMemo(() => {
-    const list = [...assets]
-    const { key, direction } = sortConfig
-    list.sort((a, b) => {
-      const av = String(a[key] ?? '').toLowerCase()
-      const bv = String(b[key] ?? '').toLowerCase()
-      if (av < bv) return direction === 'asc' ? -1 : 1
-      if (av > bv) return direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return list
-  }, [assets, sortConfig])
+  const { sortedItems: sortedAssets, handleSort, getSortLabel } = useTableSort(assets, {
+    initialKey: 'qaCode',
+    initialDirection: 'asc',
+    onSortChange: () => setCurrentPage(1),
+  })
 
   const totalPages = Math.max(1, Math.ceil(sortedAssets.length / PAGE_SIZE))
   const paginatedAssets = useMemo(() => {
@@ -376,19 +368,6 @@ function AssetManagement() {
     setShowQrModal(false)
     setQrModalQaCode('')
     setQrModalImage('')
-  }
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
-    setCurrentPage(1)
-  }
-
-  const getSortLabel = (key, label) => {
-    if (sortConfig.key !== key) return label
-    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
   }
 
   const goToFirstPage = () => setCurrentPage(1)

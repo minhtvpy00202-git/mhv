@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDate } from '../../utils/datetime'
 
 const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
@@ -12,6 +13,15 @@ function toRoleLabel(role) {
   if (role === 'TechSupport') return 'Kỹ thuật viên'
   return role || '-'
 }
+
+function getUserSortValue(user, key) {
+  if (key === 'roleLabel') return toRoleLabel(user.role)
+  if (key === 'techTypeDisplay') {
+    return user.role === 'TechSupport' ? (user.techTypeNames?.join(', ') || 'Kỹ thuật viên') : '-'
+  }
+  return user?.[key]
+}
+
 const statusOptions = ['Hoạt động', 'Khóa']
 const PAGE_SIZE = 10
 
@@ -43,32 +53,14 @@ function UserManagement() {
     techTypeIds: [],
     status: 'Hoạt động',
   })
-  const [sortConfig, setSortConfig] = useState({ key: 'username', direction: 'asc' })
+  const { sortedItems: sortedRows, handleSort, getSortLabel } = useTableSort(rows, {
+    initialKey: 'username',
+    initialDirection: 'asc',
+    getSortValue: getUserSortValue,
+  })
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
   const isTechSupportRole = form.role === 'TechSupport'
-  const sortedRows = useMemo(() => {
-    const list = [...rows]
-    const { key, direction } = sortConfig
-    list.sort((a, b) => {
-      const aValue = key === 'roleLabel'
-        ? toRoleLabel(a.role)
-        : key === 'techTypeDisplay'
-          ? (a.role === 'TechSupport' ? (a.techTypeNames?.join(', ') || 'Kỹ thuật viên') : '-')
-          : a[key]
-      const bValue = key === 'roleLabel'
-        ? toRoleLabel(b.role)
-        : key === 'techTypeDisplay'
-          ? (b.role === 'TechSupport' ? (b.techTypeNames?.join(', ') || 'Kỹ thuật viên') : '-')
-          : b[key]
-      const av = String(aValue ?? '').toLowerCase()
-      const bv = String(bValue ?? '').toLowerCase()
-      if (av < bv) return direction === 'asc' ? -1 : 1
-      if (av > bv) return direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return list
-  }, [rows, sortConfig])
 
   const loadUsers = async (page = 0, nextFilters = filters) => {
     setLoading(true)
@@ -245,18 +237,6 @@ function UserManagement() {
   }
 
   const currentPage = pageInfo.page + 1
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
-  }
-
-  const getSortLabel = (key, label) => {
-    if (sortConfig.key !== key) return label
-    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
-  }
 
   return (
     <div className="space-y-4">

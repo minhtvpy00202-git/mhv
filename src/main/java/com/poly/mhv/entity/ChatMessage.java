@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
@@ -38,7 +39,7 @@ public class ChatMessage {
     @JsonIgnoreProperties({"usageHistories", "password"})
     private AppUser sender;
 
-    @Column(columnDefinition = "NVARCHAR(MAX)")
+    @Lob
     private String content;
 
     @Column(name = "media_url", length = 1000)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import { useTableSort } from '../../hooks/useTableSort'
 import { normalizeSpecTemplates } from '../../utils/assetSpecs'
 import { validateCategoryForm } from '../../utils/validation'
 
@@ -9,6 +10,11 @@ const PAGE_SIZE = 10
 
 function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
+}
+
+function getCategorySortValue(category, key) {
+  if (key === 'specTemplates') return category.specTemplates?.length ?? 0
+  return category?.[key]
 }
 
 function CategoryManagement() {
@@ -29,31 +35,15 @@ function CategoryManagement() {
     specTemplates: [],
   })
   const [formErrors, setFormErrors] = useState({})
-  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' })
+  const { sortedItems: sortedCategories, handleSort, getSortLabel } = useTableSort(categories, {
+    initialKey: 'id',
+    initialDirection: 'asc',
+    getSortValue: getCategorySortValue,
+    onSortChange: () => setCurrentPage(1),
+  })
 
   const isEditing = Boolean(selectedCategoryId)
-  const totalPages = Math.max(1, Math.ceil(categories.length / PAGE_SIZE))
-  const sortedCategories = useMemo(() => {
-    const list = [...categories]
-    const { key, direction } = sortConfig
-    list.sort((a, b) => {
-      const aValue = key === 'specTemplates'
-        ? (a.specTemplates?.length ?? 0)
-        : a[key]
-      const bValue = key === 'specTemplates'
-        ? (b.specTemplates?.length ?? 0)
-        : b[key]
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return direction === 'asc' ? aValue - bValue : bValue - aValue
-      }
-      const av = String(aValue ?? '').toLowerCase()
-      const bv = String(bValue ?? '').toLowerCase()
-      if (av < bv) return direction === 'asc' ? -1 : 1
-      if (av > bv) return direction === 'asc' ? 1 : -1
-      return 0
-    })
-    return list
-  }, [categories, sortConfig])
+  const totalPages = Math.max(1, Math.ceil(sortedCategories.length / PAGE_SIZE))
   const paginatedCategories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedCategories.slice(start, start + PAGE_SIZE)
@@ -223,19 +213,6 @@ function CategoryManagement() {
       specTemplates: prev.specTemplates.filter((_, itemIndex) => itemIndex !== index),
     }))
     setFormErrors((prev) => ({ ...prev, specTemplates: '' }))
-  }
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
-    }))
-    setCurrentPage(1)
-  }
-
-  const getSortLabel = (key, label) => {
-    if (sortConfig.key !== key) return label
-    return `${label} ${sortConfig.direction === 'asc' ? '▲' : '▼'}`
   }
 
   return (
