@@ -13,7 +13,7 @@ public interface SupplierRepository extends JpaRepository<Supplier, Integer> {
 
     @Query("""
             select s from Supplier s
-            where (:keyword is null or lower(s.name) like lower(concat('%', :keyword, '%')))
+            where (coalesce(:keyword, '') = '' or lower(s.name) like lower(concat('%', :keyword, '%')))
             order by s.name asc
             """)
     List<Supplier> searchForAdmin(@Param("keyword") String keyword);

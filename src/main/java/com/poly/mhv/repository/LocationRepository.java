@@ -13,7 +13,7 @@ public interface LocationRepository extends JpaRepository<Location, Integer> {
 
     @Query("""
             select l from Location l
-            where (:keyword is null or lower(l.roomName) like lower(concat('%', :keyword, '%')))
+            where (coalesce(:keyword, '') = '' or lower(l.roomName) like lower(concat('%', :keyword, '%')))
             order by l.roomName asc
             """)
     List<Location> searchByKeyword(@Param("keyword") String keyword);

@@ -17,7 +17,7 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
     @Query("""
             select c from Category c
             join fetch c.techSupportType t
-            where (:keyword is null or lower(c.name) like lower(concat('%', :keyword, '%')))
+            where (coalesce(:keyword, '') = '' or lower(c.name) like lower(concat('%', :keyword, '%')))
               and (:techTypeId is null or t.id = :techTypeId)
             order by c.name asc
             """)

@@ -41,7 +41,7 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
             join fetch a.homeLocation hl
             join fetch uh.toLocation tl
             join fetch uh.user u
-            where (:assetName is null or lower(a.name) like lower(concat('%', :assetName, '%')))
+            where (coalesce(:assetName, '') = '' or lower(a.name) like lower(concat('%', :assetName, '%')))
               and (:borrowedLocationId is null or tl.id = :borrowedLocationId)
               and (:userId is null or u.id = :userId)
               and (:startDateTime is null or uh.startTime >= :startDateTime)

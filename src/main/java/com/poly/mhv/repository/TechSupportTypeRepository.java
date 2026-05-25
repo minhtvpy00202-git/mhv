@@ -14,7 +14,7 @@ public interface TechSupportTypeRepository extends JpaRepository<TechSupportType
     @Query("""
             select t from TechSupportType t
             where t.id > 0
-              and (:keyword is null or lower(t.name) like lower(concat('%', :keyword, '%')))
+              and (coalesce(:keyword, '') = '' or lower(t.name) like lower(concat('%', :keyword, '%')))
             order by t.name asc
             """)
     List<TechSupportType> searchForAdmin(@Param("keyword") String keyword);

@@ -24,7 +24,7 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             join fetch a.homeLocation hl
             join fetch a.category c
             left join fetch a.supplier s
-            where (:name is null or lower(a.name) like lower(concat('%', :name, '%')))
+            where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)
