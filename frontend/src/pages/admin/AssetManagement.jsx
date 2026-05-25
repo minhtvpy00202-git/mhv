@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -25,6 +25,16 @@ function formatCurrency(value) {
   return `${numericValue.toLocaleString('vi-VN')} VND`
 }
 
+function normalizePurchasePriceInput(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+function formatPurchasePriceInput(value) {
+  const normalizedValue = normalizePurchasePriceInput(value)
+  if (!normalizedValue) return ''
+  return normalizedValue.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
 function formatDate(value) {
   if (!value) return 'Chưa cập nhật'
   return value
@@ -35,6 +45,7 @@ function getFieldClass(hasError) {
 }
 
 function AssetManagement() {
+  const specEntryIdRef = useRef(0)
   const [assets, setAssets] = useState([])
   const [locations, setLocations] = useState([])
   const [categories, setCategories] = useState([])
@@ -104,6 +115,16 @@ function AssetManagement() {
 
   const selectedSpecsEntries = useMemo(() => parseSpecsToEntries(selectedSpecsAsset?.specs), [selectedSpecsAsset])
   const isEditing = formMode === 'update' && Boolean(selectedQaCode)
+
+  const createSpecEntryWithKey = (entry = {}) => {
+    specEntryIdRef.current += 1
+    return {
+      ...entry,
+      clientKey: `spec-${specEntryIdRef.current}`,
+    }
+  }
+
+  const withSpecEntryKeys = (entries = []) => entries.map((entry) => createSpecEntryWithKey(entry))
 
   useEffect(() => {
     const initializePage = async () => {
@@ -291,10 +312,10 @@ function AssetManagement() {
       purchasePrice: asset.purchasePrice ?? '',
       purchaseDate: asset.purchaseDate || '',
       warrantyExpirationDate: asset.warrantyExpirationDate || '',
-      specEntries: mergeSpecEntries(
+      specEntries: withSpecEntryKeys(mergeSpecEntries(
         normalizeSpecTemplates(categoryTemplates),
         parseSpecsToEntries(asset.specs, normalizeSpecTemplates(categoryTemplates)),
-      ),
+      )),
     })
     setFormMode('update')
     setShowFormModal(true)
@@ -305,7 +326,7 @@ function AssetManagement() {
     setForm((prev) => ({
       ...prev,
       categoryId,
-      specEntries: mergeSpecEntries(normalizeSpecTemplates(categoryTemplates), []),
+      specEntries: withSpecEntryKeys(mergeSpecEntries(normalizeSpecTemplates(categoryTemplates), [])),
     }))
     setFormErrors((prev) => ({ ...prev, categoryId: '', specEntries: '' }))
   }
@@ -321,7 +342,7 @@ function AssetManagement() {
   const addCustomSpecEntry = () => {
     setForm((prev) => ({
       ...prev,
-      specEntries: [...prev.specEntries, { name: '', value: '', isCustom: true }],
+      specEntries: [...prev.specEntries, createSpecEntryWithKey({ name: '', value: '', isCustom: true })],
     }))
     setFormErrors((prev) => ({ ...prev, specEntries: '' }))
   }
@@ -547,7 +568,7 @@ function AssetManagement() {
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
                   <button type="button" onClick={() => handleSort('homeLocationName')} className="hover:text-fptOrange">
-                    {getSortLabel('homeLocationName', 'Phòng học')}
+                    {getSortLabel('homeLocationName', 'Vị trí')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
@@ -805,16 +826,15 @@ function AssetManagement() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Giá mua</label>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.purchasePrice}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatPurchasePriceInput(form.purchasePrice)}
                   onChange={(e) => {
-                    setForm((prev) => ({ ...prev, purchasePrice: e.target.value }))
+                    setForm((prev) => ({ ...prev, purchasePrice: normalizePurchasePriceInput(e.target.value) }))
                     setFormErrors((prev) => ({ ...prev, purchasePrice: '' }))
                   }}
                   className={getFieldClass(Boolean(formErrors.purchasePrice))}
-                  placeholder="Nhập giá mua"
+                  placeholder="Nhập giá mua, ví dụ 4.590.000"
                 />
                 {formErrors.purchasePrice && <p className="mt-1 text-xs text-red-600">{formErrors.purchasePrice}</p>}
               </div>
@@ -858,7 +878,7 @@ function AssetManagement() {
                 </div>
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   {form.specEntries.map((entry, index) => (
-                    <div key={`${entry.name || 'spec'}-${index}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+                    <div key={entry.clientKey || `spec-${index}`} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
                       {entry.isCustom ? (
                         <input
                           value={entry.name}
