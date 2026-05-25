@@ -11,7 +11,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "notifications")
@@ -29,11 +28,9 @@ public class Notification {
     private String eventType;
 
     @Column(nullable = false, length = 255)
-    @Nationalized
     private String title;
 
     @Column(nullable = false, length = 500)
-    @Nationalized
     private String message;
 
     @Column(name = "link_path", nullable = false, length = 255)
@@ -46,11 +43,9 @@ public class Notification {
     private String assetQaCode;
 
     @Column(name = "asset_name", length = 255)
-    @Nationalized
     private String assetName;
 
     @Column(name = "detail_json", nullable = false, length = 4000)
-    @Nationalized
     private String detailJson;
 
     @Column(name = "occurred_at", nullable = false)

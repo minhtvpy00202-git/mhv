@@ -14,7 +14,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "ticket_events")
@@ -39,15 +38,12 @@ public class TicketEvent {
     private Integer actorId;
 
     @Column(name = "actor_name", length = 120)
-    @Nationalized
     private String actorName;
 
     @Column(name = "message", nullable = false, length = 500)
-    @Nationalized
     private String message;
 
     @Column(name = "detail_json", length = 4000)
-    @Nationalized
     private String detailJson;
 
     @Column(name = "occurred_at", nullable = false)

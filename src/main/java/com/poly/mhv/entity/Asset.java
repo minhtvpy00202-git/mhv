@@ -19,7 +19,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "assets")
@@ -34,7 +33,6 @@ public class Asset {
     private String qaCode;
 
     @Column(nullable = false, length = 100)
-    @Nationalized
     private String name;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -43,7 +41,6 @@ public class Asset {
     private Category category;
 
     @Column(nullable = false, length = 20)
-    @Nationalized
     private String status;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -57,7 +54,6 @@ public class Asset {
     private Location homeLocation;
 
     @Lob
-    @Nationalized
     private String specs;
 
     @Column(name = "purchase_price", precision = 19, scale = 2)

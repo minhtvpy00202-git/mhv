@@ -14,7 +14,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "inventory_audit_items")
@@ -36,7 +35,6 @@ public class InventoryAuditItem {
     private String assetQaCode;
 
     @Column(name = "asset_name", nullable = false, length = 255)
-    @Nationalized
     private String assetName;
 
     @Column(name = "scanned_at", nullable = false)

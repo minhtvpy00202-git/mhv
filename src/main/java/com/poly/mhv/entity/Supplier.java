@@ -15,7 +15,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "suppliers")
@@ -30,11 +29,9 @@ public class Supplier {
     private Integer id;
 
     @Column(nullable = false, length = 150, unique = true)
-    @Nationalized
     private String name;
 
     @Column(length = 255)
-    @Nationalized
     private String address;
 
     @Column(name = "phone_number", length = 20)

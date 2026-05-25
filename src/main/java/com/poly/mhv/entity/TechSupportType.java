@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "tech_support_types")
@@ -22,6 +21,5 @@ public class TechSupportType {
     private Integer id;
 
     @Column(nullable = false, unique = true, length = 100)
-    @Nationalized
     private String name;
 }
