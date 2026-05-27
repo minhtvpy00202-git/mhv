@@ -40,6 +40,8 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 hl.id,
                 hl.roomName,
                 a.purchasePrice,
+                a.expiryTrackingEnabled,
+                a.expirationDate,
                 a.quantityOnHand,
                 a.minimumStock,
                 a.unit,

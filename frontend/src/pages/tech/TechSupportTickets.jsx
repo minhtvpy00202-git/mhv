@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Check, Eye, History, MessageCircle, Play } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
 import { formatVietnamDateTime } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
@@ -230,8 +232,9 @@ function TechSupportTickets() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <button
-                        type="button"
+                      <ActionIconButton
+                        icon={Eye}
+                        label="Xem ảnh lỗi"
                         onClick={() => {
                           if (!ticket.imageUrl) {
                             toast.info('Ticket này chưa có ảnh lỗi.')
@@ -239,43 +242,38 @@ function TechSupportTickets() {
                           }
                           setPreviewImageUrl(ticket.imageUrl)
                         }}
-                        className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Lỗi
-                      </button>
+                      />
                     </td>
                     <td className="px-3 py-2">{formatVietnamDateTime(ticket.dueDate)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap gap-2">
                         {ticket.status === 'PENDING' && (
-                          <button
-                            type="button"
+                          <ActionIconButton
+                            icon={Play}
+                            label="Nhận xử lý"
+                            variant="primary"
                             onClick={() => handleTakeTicket(ticket.id)}
                             disabled={submittingId === ticket.id}
-                            className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                          >
-                            Nhận xử lý
-                          </button>
+                          />
                         )}
                         {ticket.status === 'IN_PROGRESS' && isMine && (
-                          <button
-                            type="button"
+                          <ActionIconButton
+                            icon={Check}
+                            label="Hoàn tất xử lý"
+                            variant="success"
                             onClick={() => handleResolve(ticket.id)}
                             disabled={submittingId === ticket.id}
-                            className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                          >
-                            Hoàn tất
-                          </button>
+                          />
                         )}
-                        <button
-                          type="button"
+                        <ActionIconButton
+                          icon={MessageCircle}
+                          label="Mở chat ticket"
                           onClick={() => navigate(`/tech/tickets/${ticket.id}`)}
-                          className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Mở chat
-                        </button>
-                        <button
-                          type="button"
+                        />
+                        <ActionIconButton
+                          icon={History}
+                          label="Xem timeline ticket"
+                          variant="violet"
                           onClick={() => {
                             setTimelineTicket({
                               id: ticket.id,
@@ -286,10 +284,7 @@ function TechSupportTickets() {
                             })
                             setShowTimelineModal(true)
                           }}
-                          className="rounded border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
-                        >
-                          Timeline
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>

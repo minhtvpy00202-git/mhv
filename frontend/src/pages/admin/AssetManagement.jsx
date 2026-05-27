@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Boxes, Check, History, Package, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Boxes, Check, Eye, History, Package, PackagePlus, Plus, QrCode, RefreshCw, Search, Send, Trash2, Wrench, X } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useAuth } from '../../context/AuthContext'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
-import { formatVietnamDateTime } from '../../utils/datetime'
+import { formatVietnamDate, formatVietnamDateTime } from '../../utils/datetime'
 import { validateAssetForm, validateSupplierForm } from '../../utils/validation'
 
 const itemizedStatusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
@@ -65,8 +66,7 @@ function formatPurchasePriceInput(value) {
 }
 
 function formatDate(value) {
-  if (!value) return 'Chưa cập nhật'
-  return value
+  return formatVietnamDate(value, 'Chưa cập nhật')
 }
 
 function formatDateTime(value) {
@@ -115,9 +115,72 @@ function getConsumableInventoryState(asset) {
 }
 
 function getStatusBadgeClass(tone) {
+  if (tone === 'slate') return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200'
   if (tone === 'red') return 'bg-red-100 text-red-700 ring-1 ring-red-200'
   if (tone === 'amber') return 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
   return 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
+}
+
+function parseDateOnly(value) {
+  const raw = String(value || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+  const [year, month, day] = raw.split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getConsumableExpiryState(asset) {
+  if (!asset?.expiryTrackingEnabled) {
+    return {
+      label: 'Không quản lý',
+      tone: 'slate',
+      dateLabel: 'Không áp dụng',
+    }
+  }
+  if (!asset?.expirationDate) {
+    return {
+      label: 'Chưa cập nhật',
+      tone: 'amber',
+      dateLabel: 'Chưa cập nhật',
+    }
+  }
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const expirationDate = parseDateOnly(asset.expirationDate)
+  if (!expirationDate) {
+    return {
+      label: 'Chưa cập nhật',
+      tone: 'amber',
+      dateLabel: 'Chưa cập nhật',
+    }
+  }
+  const diffDays = Math.round((expirationDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDays < 0) {
+    return {
+      label: 'Đã hết hạn',
+      tone: 'red',
+      dateLabel: formatDate(asset.expirationDate),
+    }
+  }
+  if (diffDays === 0) {
+    return {
+      label: 'Hết hạn hôm nay',
+      tone: 'red',
+      dateLabel: formatDate(asset.expirationDate),
+    }
+  }
+  if (diffDays <= 30) {
+    return {
+      label: 'Sắp hết hạn',
+      tone: 'amber',
+      dateLabel: formatDate(asset.expirationDate),
+    }
+  }
+  return {
+    label: 'Còn hạn',
+    tone: 'emerald',
+    dateLabel: formatDate(asset.expirationDate),
+  }
 }
 
 function getConsumableRequestStatusMeta(status) {
@@ -183,6 +246,10 @@ function AssetManagement({ restrictToConsumable = false }) {
     quantity: '',
     unitPrice: '',
     supplierId: '',
+    lotCode: '',
+    receivedDate: '',
+    expirationDate: '',
+    note: '',
   })
   const [issueHistoryLoading, setIssueHistoryLoading] = useState(false)
   const [issueHistory, setIssueHistory] = useState([])
@@ -251,6 +318,8 @@ function AssetManagement({ restrictToConsumable = false }) {
     purchasePrice: '',
     purchaseDate: '',
     warrantyExpirationDate: '',
+    expiryTrackingEnabled: false,
+    expirationDate: '',
     quantityOnHand: '',
     minimumStock: '',
     unit: '',
@@ -272,6 +341,10 @@ function AssetManagement({ restrictToConsumable = false }) {
   const formCategoryOptions = useMemo(
     () => categories.filter((category) => categoryMatchesTrackingMode(category, form.trackingMode)),
     [categories, form.trackingMode],
+  )
+  const consumableStorageLocation = useMemo(
+    () => locations.find((location) => String(location?.roomName || '').trim().toLowerCase() === 'kho') || null,
+    [locations],
   )
 
   const filteredSupplierOptions = useMemo(() => {
@@ -484,6 +557,17 @@ function AssetManagement({ restrictToConsumable = false }) {
   }
 
   useEffect(() => {
+    if (!isConsumableForm || !consumableStorageLocation?.id) return
+    const storageLocationId = String(consumableStorageLocation.id)
+    if (String(form.locationId || '') === storageLocationId) return
+    const syncStorageLocationTimer = window.setTimeout(() => {
+      setForm((prev) => ({ ...prev, locationId: storageLocationId }))
+      setFormErrors((prev) => ({ ...prev, locationId: '' }))
+    }, 0)
+    return () => window.clearTimeout(syncStorageLocationTimer)
+  }, [consumableStorageLocation?.id, form.locationId, isConsumableForm])
+
+  useEffect(() => {
     const initializePage = async () => {
       try {
         const response = await axiosClient.get('/api/assets/bootstrap', {
@@ -541,11 +625,13 @@ function AssetManagement({ restrictToConsumable = false }) {
       trackingMode: activeTrackingMode,
       name: '',
       categoryId: '',
-      locationId: '',
+      locationId: activeTrackingMode === 'CONSUMABLE' && consumableStorageLocation?.id ? String(consumableStorageLocation.id) : '',
       supplierId: '',
       purchasePrice: '',
       purchaseDate: '',
       warrantyExpirationDate: '',
+      expiryTrackingEnabled: false,
+      expirationDate: '',
       quantityOnHand: '',
       minimumStock: '',
       unit: '',
@@ -633,6 +719,10 @@ function AssetManagement({ restrictToConsumable = false }) {
       quantity: '',
       unitPrice: '',
       supplierId: '',
+      lotCode: '',
+      receivedDate: '',
+      expirationDate: '',
+      note: '',
     })
   }
 
@@ -703,12 +793,14 @@ function AssetManagement({ restrictToConsumable = false }) {
         trackingMode: form.trackingMode,
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
-        locationId: Number(form.locationId),
+        locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
         status: isConsumableMode(form.trackingMode) ? 'Còn hàng' : 'Sẵn sàng',
         specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
         warrantyExpirationDate: isConsumableMode(form.trackingMode) ? null : (form.warrantyExpirationDate || null),
+        expiryTrackingEnabled: isConsumableMode(form.trackingMode) ? Boolean(form.expiryTrackingEnabled) : null,
+        expirationDate: isConsumableMode(form.trackingMode) && form.expiryTrackingEnabled ? (form.expirationDate || null) : null,
         supplierId: form.supplierId ? Number(form.supplierId) : null,
         quantityOnHand: isConsumableMode(form.trackingMode) ? Number(form.quantityOnHand) : null,
         minimumStock: isConsumableMode(form.trackingMode) ? Number(form.minimumStock) : null,
@@ -750,11 +842,13 @@ function AssetManagement({ restrictToConsumable = false }) {
         trackingMode: form.trackingMode,
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
-        locationId: Number(form.locationId),
+        locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
         specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
         warrantyExpirationDate: isConsumableMode(form.trackingMode) ? null : (form.warrantyExpirationDate || null),
+        expiryTrackingEnabled: isConsumableMode(form.trackingMode) ? Boolean(form.expiryTrackingEnabled) : null,
+        expirationDate: isConsumableMode(form.trackingMode) && form.expiryTrackingEnabled ? (form.expirationDate || null) : null,
         supplierId: form.supplierId ? Number(form.supplierId) : null,
         quantityOnHand: isConsumableMode(form.trackingMode) ? Number(form.quantityOnHand) : null,
         minimumStock: isConsumableMode(form.trackingMode) ? Number(form.minimumStock) : null,
@@ -813,11 +907,15 @@ function AssetManagement({ restrictToConsumable = false }) {
         trackingMode: detail.trackingMode || 'ITEMIZED',
         name: detail.name || asset.name,
         categoryId: String(detail.categoryId || asset.categoryId),
-        locationId: String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId),
+        locationId: isConsumableMode(detail.trackingMode || asset.trackingMode)
+          ? String(consumableStorageLocation?.id || detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId || '')
+          : String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId),
         supplierId: detail.supplierId ? String(detail.supplierId) : '',
         purchasePrice: detail.purchasePrice ?? asset.purchasePrice ?? '',
         purchaseDate: detail.purchaseDate || asset.purchaseDate || '',
         warrantyExpirationDate: detail.warrantyExpirationDate || asset.warrantyExpirationDate || '',
+        expiryTrackingEnabled: Boolean(detail.expiryTrackingEnabled ?? asset.expiryTrackingEnabled),
+        expirationDate: detail.expirationDate || asset.expirationDate || '',
         quantityOnHand: detail.quantityOnHand ?? '',
         minimumStock: detail.minimumStock ?? '',
         unit: detail.unit || '',
@@ -944,6 +1042,10 @@ function AssetManagement({ restrictToConsumable = false }) {
         quantity: '',
         unitPrice: detail?.purchasePrice ? String(detail.purchasePrice) : '',
         supplierId: detail?.supplierId ? String(detail.supplierId) : '',
+        lotCode: '',
+        receivedDate: new Date().toISOString().slice(0, 10),
+        expirationDate: '',
+        note: '',
       })
       setShowReceiveModal(true)
     } catch (error) {
@@ -986,12 +1088,28 @@ function AssetManagement({ restrictToConsumable = false }) {
       toast.error('Vui lòng chọn nhà cung cấp cho lô nhập.')
       return
     }
+    if (!receiveForm.receivedDate) {
+      toast.error('Vui lòng chọn ngày nhập lô.')
+      return
+    }
+    if (selectedReceiveAsset.expiryTrackingEnabled && !receiveForm.expirationDate) {
+      toast.error('Vui lòng chọn hạn sử dụng cho lô nhập này.')
+      return
+    }
+    if (receiveForm.expirationDate && new Date(receiveForm.expirationDate) < new Date(receiveForm.receivedDate)) {
+      toast.error('Hạn sử dụng phải sau hoặc bằng ngày nhập lô.')
+      return
+    }
     setReceiveSubmitting(true)
     try {
       const response = await axiosClient.post(`/api/assets/${selectedReceiveAsset.qaCode}/receipts`, {
         quantity,
         unitPrice,
         supplierId: Number(receiveForm.supplierId),
+        lotCode: receiveForm.lotCode.trim() || null,
+        receivedDate: receiveForm.receivedDate,
+        expirationDate: selectedReceiveAsset.expiryTrackingEnabled ? (receiveForm.expirationDate || null) : null,
+        note: receiveForm.note.trim() || null,
       })
       const updatedDetail = response.data || {}
       setAssetDetailsByQaCode((prev) => ({
@@ -1436,22 +1554,20 @@ function AssetManagement({ restrictToConsumable = false }) {
                             <p className="text-sm text-slate-700">{item.reason}</p>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
+                            <ActionIconButton
+                              icon={Check}
+                              label="Duyệt cấp phát"
+                              variant="success"
+                              className="h-9 w-9"
                               onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
-                              className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
-                            >
-                              <Check size={16} />
-                              Duyệt cấp phát
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <ActionIconButton
+                              icon={X}
+                              label="Từ chối phiếu"
+                              variant="danger"
+                              className="h-9 w-9"
                               onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
-                              className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-                            >
-                              <X size={16} />
-                              Từ chối
-                            </button>
+                            />
                           </div>
                         </div>
                       </div>
@@ -1517,7 +1633,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Danh sách quản lý</p>
                       <h3 className="text-lg font-semibold text-slate-800">Tổng quan kho</h3>
-                      <p className="text-sm text-slate-500">Danh sách vật tư đang được quản lý trong kho với đơn giá trung bình hiện tại.</p>
+                      <p className="text-sm text-slate-500">Danh sách vật tư trong kho với đơn giá trung bình và trạng thái hạn sử dụng nếu mặt hàng có quản lý hạn dùng.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -1629,6 +1745,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                           </th>
                           <th className="px-3 py-2 text-left font-semibold text-slate-600">Ngưỡng báo</th>
                           <th className="px-3 py-2 text-left font-semibold text-slate-600">Đơn giá</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
                           <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
                           <th className="px-3 py-2 text-right font-semibold text-slate-600">Hành động</th>
                         </tr>
@@ -1637,7 +1754,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                         {loading &&
                           Array.from({ length: 6 }).map((_, index) => (
                             <tr key={`skeleton-consumable-${index}`} className="animate-pulse">
-                              {Array.from({ length: 7 }).map((__, cellIndex) => (
+                              {Array.from({ length: 8 }).map((__, cellIndex) => (
                                 <td key={`cell-consumable-${cellIndex}`} className="px-3 py-2">
                                   <div className="h-4 w-24 rounded bg-slate-200" />
                                 </td>
@@ -1647,6 +1764,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                         {!loading &&
                           assets.map((asset) => {
                             const stockState = getConsumableInventoryState(asset)
+                            const expiryState = getConsumableExpiryState(asset)
                             return (
                               <tr key={asset.qaCode} className="hover:bg-slate-50/70">
                                 <td className="px-3 py-3">
@@ -1658,42 +1776,46 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 <td className="px-3 py-3">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</td>
                                 <td className="px-3 py-3">{formatCurrency(asset.purchasePrice)}</td>
                                 <td className="px-3 py-3">
+                                  <div className="flex flex-col gap-1">
+                                    <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
+                                      {expiryState.label}
+                                    </span>
+                                    <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3">
                                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
                                     {stockState.label}
                                   </span>
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex justify-end gap-2">
-                                    <button
-                                      type="button"
+                                    <ActionIconButton
+                                      icon={PackagePlus}
+                                      label="Nhập hàng"
+                                      variant="info"
                                       onClick={() => handleOpenReceiveModal(asset)}
-                                      className="rounded-md border border-sky-300 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
-                                    >
-                                      Nhập hàng
-                                    </button>
+                                    />
                                     {!isConsumableManager && (
-                                      <button
-                                        type="button"
+                                      <ActionIconButton
+                                        icon={Send}
+                                        label="Cấp phát"
+                                        variant="success"
                                         onClick={() => handleOpenIssueModal(asset)}
-                                        className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                                      >
-                                        Cấp phát
-                                      </button>
+                                      />
                                     )}
-                                    <button
-                                      type="button"
+                                    <ActionIconButton
+                                      icon={Wrench}
+                                      label="Sửa vật tư"
+                                      variant="primary"
                                       onClick={() => handleSelectAsset(asset)}
-                                      className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                                    >
-                                      Sửa
-                                    </button>
-                                    <button
-                                      type="button"
+                                    />
+                                    <ActionIconButton
+                                      icon={Trash2}
+                                      label="Xóa vật tư"
+                                      variant="danger"
                                       onClick={() => handleDeleteAsset(asset.qaCode)}
-                                      className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                                    >
-                                      Xóa
-                                    </button>
+                                    />
                                   </div>
                                 </td>
                               </tr>
@@ -1701,7 +1823,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                           })}
                         {!loading && assets.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
+                            <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
                               Chưa có vật tư tiêu hao phù hợp.
                             </td>
                           </tr>
@@ -1844,6 +1966,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Tồn tại phòng</th>
                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Đã cấp</th>
                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Đã dùng</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
                             <th className="px-3 py-2 text-left font-semibold text-slate-600">Hành động</th>
                           </tr>
                         </thead>
@@ -1851,7 +1974,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                           {locationOverviewLoading &&
                             Array.from({ length: 5 }).map((_, index) => (
                               <tr key={`room-stock-skeleton-${index}`} className="animate-pulse">
-                                {Array.from({ length: 7 }).map((__, cellIndex) => (
+                                {Array.from({ length: 8 }).map((__, cellIndex) => (
                                   <td key={`room-stock-cell-${cellIndex}`} className="px-3 py-3">
                                     <div className="h-4 w-24 rounded bg-slate-200" />
                                   </td>
@@ -1860,54 +1983,65 @@ function AssetManagement({ restrictToConsumable = false }) {
                             ))}
                           {!locationOverviewLoading &&
                             (locationOverview?.stocks || []).map((stock) => (
-                              <tr key={`${stock.assetQaCode}-${stock.locationId}`} className="hover:bg-slate-50/70">
-                                <td className="px-3 py-3">
-                                  <div className="font-medium text-slate-700">{stock.assetName}</div>
-                                  <div className="text-xs text-slate-500">{stock.categoryName}</div>
-                                </td>
-                                <td className="px-3 py-3">{stock.unit || 'đơn vị'}</td>
-                                <td className="px-3 py-3">
-                                  <div>{formatDateTime(stock.lastIssuedAt)}</div>
-                                  <div className="text-xs text-slate-500">{getActorName(stock)}</div>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div
-                                    className={`inline-flex min-w-[72px] justify-end rounded-md px-2 py-1 font-semibold ${
-                                      stock.quantityRemaining <= 0
-                                        ? 'bg-red-100 text-red-700'
-                                        : stock.quantityRemaining <= Math.max(1, Math.floor(stock.quantityIssued * 0.2))
-                                          ? 'bg-amber-100 text-amber-700'
-                                          : 'bg-emerald-100 text-emerald-700'
-                                    }`}
-                                  >
-                                    {stock.quantityRemaining}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">{stock.quantityIssued}</td>
-                                <td className="px-3 py-3">{stock.quantityConsumed}</td>
-                                <td className="px-3 py-3">
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenConsumableRequestModal(stock.assetQaCode)}
-                                      className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                                    >
-                                      Yêu cầu cấp phát
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenStockAdjustModal(stock)}
-                                      className="rounded-md border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
-                                    >
-                                      Cập nhật còn lại
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
+                              (() => {
+                                const expiryState = getConsumableExpiryState(stock)
+                                return (
+                                  <tr key={`${stock.assetQaCode}-${stock.locationId}`} className="hover:bg-slate-50/70">
+                                    <td className="px-3 py-3">
+                                      <div className="font-medium text-slate-700">{stock.assetName}</div>
+                                      <div className="text-xs text-slate-500">{stock.categoryName}</div>
+                                    </td>
+                                    <td className="px-3 py-3">{stock.unit || 'đơn vị'}</td>
+                                    <td className="px-3 py-3">
+                                      <div>{formatDateTime(stock.lastIssuedAt)}</div>
+                                      <div className="text-xs text-slate-500">{getActorName(stock)}</div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div
+                                        className={`inline-flex min-w-[72px] justify-end rounded-md px-2 py-1 font-semibold ${
+                                          stock.quantityRemaining <= 0
+                                            ? 'bg-red-100 text-red-700'
+                                            : stock.quantityRemaining <= Math.max(1, Math.floor(stock.quantityIssued * 0.2))
+                                              ? 'bg-amber-100 text-amber-700'
+                                              : 'bg-emerald-100 text-emerald-700'
+                                        }`}
+                                      >
+                                        {stock.quantityRemaining}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">{stock.quantityIssued}</td>
+                                    <td className="px-3 py-3">{stock.quantityConsumed}</td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex flex-col gap-1">
+                                        <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
+                                          {expiryState.label}
+                                        </span>
+                                        <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3">
+                                      <div className="flex gap-2">
+                                        <ActionIconButton
+                                          icon={Package}
+                                          label="Tạo yêu cầu cấp phát"
+                                          variant="primary"
+                                          onClick={() => handleOpenConsumableRequestModal(stock.assetQaCode)}
+                                        />
+                                        <ActionIconButton
+                                          icon={RefreshCw}
+                                          label="Cập nhật số lượng còn lại"
+                                          variant="warning"
+                                          onClick={() => handleOpenStockAdjustModal(stock)}
+                                        />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              })()
                             ))}
                           {!locationOverviewLoading && selectedOverviewLocationId && (locationOverview?.stocks || []).length === 0 && (
                             <tr>
-                              <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500">
+                              <td colSpan={8} className="px-3 py-10 text-center text-sm text-slate-500">
                                 Phòng này chưa có vật tư tiêu hao được cấp phát.
                               </td>
                             </tr>
@@ -1988,22 +2122,20 @@ function AssetManagement({ restrictToConsumable = false }) {
                           )}
                           {isAdmin && String(item.status || '').toUpperCase() === 'PENDING' && (
                             <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
+                              <ActionIconButton
+                                icon={Check}
+                                label="Duyệt cấp phát"
+                                variant="success"
+                                className="h-8 w-8"
                                 onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                              >
-                                <Check size={14} />
-                                Duyệt cấp phát
-                              </button>
-                              <button
-                                type="button"
+                              />
+                              <ActionIconButton
+                                icon={X}
+                                label="Từ chối phiếu"
+                                variant="danger"
+                                className="h-8 w-8"
                                 onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
-                                className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
-                              >
-                                <X size={14} />
-                                Từ chối
-                              </button>
+                              />
                             </div>
                           )}
                         </div>
@@ -2190,8 +2322,10 @@ function AssetManagement({ restrictToConsumable = false }) {
                         <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>
                         <td className="px-3 py-2">{asset.status}</td>
                         <td className="px-3 py-2">
-                          <button
-                            type="button"
+                          <ActionIconButton
+                            icon={Eye}
+                            label="Xem đặc tính kỹ thuật"
+                            variant="violet"
                             onClick={async () => {
                               try {
                                 const detail = await fetchAssetDetail(asset.qaCode)
@@ -2202,14 +2336,13 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 toast.error(message)
                               }
                             }}
-                            className="rounded-md border border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
-                          >
-                            Xem
-                          </button>
+                          />
                         </td>
                         <td className="px-3 py-2">
-                          <button
-                            type="button"
+                          <ActionIconButton
+                            icon={Search}
+                            label="Xem nguồn gốc tài sản"
+                            variant="warning"
                             onClick={async () => {
                               try {
                                 const detail = await fetchAssetDetail(asset.qaCode)
@@ -2220,45 +2353,38 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 toast.error(message)
                               }
                             }}
-                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
-                          >
-                            Xem
-                          </button>
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
+                            <ActionIconButton
+                              icon={QrCode}
+                              label="Xem mã QR"
+                              variant="success"
                               onClick={() => handleOpenQrModal(asset.qaCode)}
                               disabled={qrModalLoading}
-                              className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                            >
-                              QR
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <ActionIconButton
+                              icon={History}
+                              label="Xem timeline sửa chữa"
+                              variant="violet"
                               onClick={() => {
                                 setTimelineAsset(asset)
                                 setShowTimelineModal(true)
                               }}
-                              className="rounded-md border border-violet-300 px-2 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
-                            >
-                              Timeline
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <ActionIconButton
+                              icon={Wrench}
+                              label="Sửa tài sản"
+                              variant="primary"
                               onClick={() => handleSelectAsset(asset)}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                            >
-                              Sửa
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <ActionIconButton
+                              icon={Trash2}
+                              label="Xóa tài sản"
+                              variant="danger"
                               onClick={() => handleDeleteAsset(asset.qaCode)}
-                              className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                            >
-                              Xóa
-                            </button>
+                            />
                           </div>
                         </td>
                       </tr>
@@ -2367,20 +2493,34 @@ function AssetManagement({ restrictToConsumable = false }) {
                 <select
                   value={form.locationId}
                   onChange={(e) => {
+                    if (isConsumableForm) return
                     setForm((prev) => ({ ...prev, locationId: e.target.value }))
                     setFormErrors((prev) => ({ ...prev, locationId: '' }))
                   }}
-                  className={getFieldClass(Boolean(formErrors.locationId))}
+                  disabled={isConsumableForm}
+                  className={`${getFieldClass(Boolean(formErrors.locationId))} ${isConsumableForm ? 'cursor-not-allowed bg-slate-100 text-slate-600' : ''}`}
                 >
-                  <option value="">{isConsumableForm ? 'Chọn kho' : 'Chọn phòng'}</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.roomName}
+                  {isConsumableForm ? (
+                    <option value={consumableStorageLocation?.id || ''}>
+                      {consumableStorageLocation?.roomName || 'Chưa tìm thấy phòng Kho'}
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="">Chọn phòng</option>
+                      {locations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.roomName}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
                 {formErrors.locationId && <p className="mt-1 text-xs text-red-600">{formErrors.locationId}</p>}
-                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">Vật tư mới nhập luôn được ghi nhận về kho này trước khi cấp phát cho các phòng.</p>}
+                {isConsumableForm && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Vật tư tiêu hao luôn được ghi nhận về phòng `Kho` trước khi cấp phát, nên không thể thay đổi kho lưu trữ tại đây.
+                  </p>
+                )}
               </div>
               {isConsumableForm && (
                 <>
@@ -2394,10 +2534,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                         setForm((prev) => ({ ...prev, quantityOnHand: e.target.value }))
                         setFormErrors((prev) => ({ ...prev, quantityOnHand: '' }))
                       }}
-                      className={getFieldClass(Boolean(formErrors.quantityOnHand))}
+                      disabled={isEditing}
+                      className={`${getFieldClass(Boolean(formErrors.quantityOnHand))} ${isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
                       placeholder="Ví dụ: 500"
                     />
                     {formErrors.quantityOnHand && <p className="mt-1 text-xs text-red-600">{formErrors.quantityOnHand}</p>}
+                    {isEditing && <p className="mt-1 text-xs text-slate-500">Tồn kho tổng được quản lý theo từng lô nhập, vui lòng dùng `Nhập hàng` để tăng tồn.</p>}
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Ngưỡng cảnh báo tồn</label>
@@ -2426,6 +2568,62 @@ function AssetManagement({ restrictToConsumable = false }) {
                       placeholder="Ví dụ: cây, hộp, ram"
                     />
                     {formErrors.unit && <p className="mt-1 text-xs text-red-600">{formErrors.unit}</p>}
+                  </div>
+                  <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">Quản lý hạn sử dụng</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Bật cho các mặt hàng như thực phẩm, thuốc thang hoặc các vật tư cần theo dõi ngày hết hạn theo từng lô nhập.
+                        </p>
+                      </div>
+                      <label className="inline-flex items-center gap-3 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.expiryTrackingEnabled)}
+                          onChange={(e) => {
+                            const enabled = e.target.checked
+                            setForm((prev) => ({
+                              ...prev,
+                              expiryTrackingEnabled: enabled,
+                              expirationDate: enabled ? prev.expirationDate : '',
+                            }))
+                            setFormErrors((prev) => ({ ...prev, expirationDate: '' }))
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                        />
+                        <span>{form.expiryTrackingEnabled ? 'Có quản lý hạn dùng' : 'Không quản lý hạn dùng'}</span>
+                      </label>
+                    </div>
+                    {form.expiryTrackingEnabled ? (
+                      <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-slate-700">
+                            {formMode === 'edit' ? 'Lô gần hết hạn hiện tại' : 'Hạn dùng lô khởi tạo ban đầu'}
+                          </label>
+                          <input
+                            type="date"
+                            value={form.expirationDate}
+                            onChange={(e) => {
+                              setForm((prev) => ({ ...prev, expirationDate: e.target.value }))
+                              setFormErrors((prev) => ({ ...prev, expirationDate: '' }))
+                            }}
+                            disabled={formMode === 'edit'}
+                            className={getFieldClass(Boolean(formErrors.expirationDate))}
+                          />
+                          {formErrors.expirationDate && <p className="mt-1 text-xs text-red-600">{formErrors.expirationDate}</p>}
+                        </div>
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-500">
+                          {formMode === 'edit'
+                            ? 'Mặt hàng này đang quản lý hạn dùng theo từng lô. Muốn cập nhật hạn mới, hãy dùng chức năng Nhập hàng để tạo lô mới hoặc xử lý các lô tồn hiện có.'
+                            : 'Khi tạo mới có tồn đầu kỳ, ngày này sẽ được lưu cho lô khởi tạo ban đầu. Các lần nhập hàng sau sẽ có hạn dùng riêng cho từng lô.'}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-500">
+                        Nếu tắt, vật tư này vẫn quản lý tồn kho bình thường nhưng không hiển thị cột cảnh báo hạn sử dụng.
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -2497,11 +2695,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                     setForm((prev) => ({ ...prev, purchasePrice: normalizePurchasePriceInput(e.target.value) }))
                     setFormErrors((prev) => ({ ...prev, purchasePrice: '' }))
                   }}
-                  className={getFieldClass(Boolean(formErrors.purchasePrice))}
+                  disabled={isConsumableForm && isEditing}
+                  className={`${getFieldClass(Boolean(formErrors.purchasePrice))} ${isConsumableForm && isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
                   placeholder={isConsumableForm ? 'Nhập đơn giá 1 đơn vị, ví dụ 12.000' : 'Nhập giá mua, ví dụ 4.590.000'}
                 />
                 {formErrors.purchasePrice && <p className="mt-1 text-xs text-red-600">{formErrors.purchasePrice}</p>}
-                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">Đây là đơn giá của 1 đơn vị sản phẩm.</p>}
+                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">{isEditing ? 'Đơn giá trung bình hiện tại được tổng hợp từ các lô nhập và không sửa trực tiếp tại đây.' : 'Đây là đơn giá của 1 đơn vị sản phẩm.'}</p>}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Ngày nhập kho ban đầu' : 'Ngày mua'}</label>
@@ -2512,7 +2711,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                     setForm((prev) => ({ ...prev, purchaseDate: e.target.value }))
                     setFormErrors((prev) => ({ ...prev, purchaseDate: '', warrantyExpirationDate: '' }))
                   }}
-                  className={getFieldClass(Boolean(formErrors.purchaseDate))}
+                  disabled={isConsumableForm && isEditing}
+                  className={`${getFieldClass(Boolean(formErrors.purchaseDate))} ${isConsumableForm && isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
                 />
                 {formErrors.purchaseDate && <p className="mt-1 text-xs text-red-600">{formErrors.purchaseDate}</p>}
               </div>
@@ -2843,13 +3043,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                               <div className="text-xs text-slate-500">{getActorName(stock)}</div>
                             </td>
                             <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
+                              <ActionIconButton
+                                icon={RefreshCw}
+                                label="Cập nhật số lượng còn lại"
+                                variant="warning"
                                 onClick={() => handleOpenStockAdjustModal(stock)}
-                                className="rounded-md border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
-                              >
-                                Cập nhật còn lại
-                              </button>
+                              />
                             </td>
                           </tr>
                         ))}
@@ -2906,7 +3105,7 @@ function AssetManagement({ restrictToConsumable = false }) {
 
       {showReceiveModal && selectedReceiveAsset && (
         <div className="fixed inset-0 z-[57] flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Nhập hàng vật tư</h4>
@@ -2927,43 +3126,105 @@ function AssetManagement({ restrictToConsumable = false }) {
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
                 <p>Kho hiện tại: {selectedReceiveAsset.homeLocationName || selectedReceiveAsset.locationName || 'Chưa cập nhật'}</p>
                 <p>Đơn giá trung bình hiện tại: {formatCurrency(selectedReceiveAsset.purchasePrice)}</p>
+                <p>Quản lý hạn dùng theo lô: {selectedReceiveAsset.expiryTrackingEnabled ? 'Có' : 'Không'}</p>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng nhập</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={receiveForm.quantity}
-                  onChange={(e) => setReceiveForm((prev) => ({ ...prev, quantity: e.target.value }))}
-                  className={getFieldClass(false)}
-                  placeholder={`Ví dụ: 100 ${selectedReceiveAsset.unit || ''}`}
-                />
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng nhập</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={receiveForm.quantity}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                    className={getFieldClass(false)}
+                    placeholder={`Ví dụ: 100 ${selectedReceiveAsset.unit || ''}`}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Đơn giá lô nhập</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatPurchasePriceInput(receiveForm.unitPrice)}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, unitPrice: normalizePurchasePriceInput(e.target.value) }))}
+                    className={getFieldClass(false)}
+                    placeholder="Ví dụ: 12.000"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Mã lô</label>
+                  <input
+                    value={receiveForm.lotCode}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, lotCode: e.target.value }))}
+                    className={getFieldClass(false)}
+                    placeholder="Ví dụ: LOT-202605"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Ngày nhập lô</label>
+                  <input
+                    type="date"
+                    value={receiveForm.receivedDate}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, receivedDate: e.target.value }))}
+                    className={getFieldClass(false)}
+                  />
+                </div>
+                {selectedReceiveAsset.expiryTrackingEnabled && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Hạn sử dụng của lô</label>
+                    <input
+                      type="date"
+                      value={receiveForm.expirationDate}
+                      onChange={(e) => setReceiveForm((prev) => ({ ...prev, expirationDate: e.target.value }))}
+                      className={getFieldClass(false)}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nhà cung cấp</label>
+                  <select
+                    value={receiveForm.supplierId}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, supplierId: e.target.value }))}
+                    className={getFieldClass(false)}
+                  >
+                    <option value="">Chọn nhà cung cấp</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {getSupplierLabel(supplier)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Ghi chú lô nhập</label>
+                  <textarea
+                    rows={3}
+                    value={receiveForm.note}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, note: e.target.value }))}
+                    className={getFieldClass(false)}
+                    placeholder="Ví dụ: Lô nhập cho tủ thuốc phòng y tế"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Đơn giá lô nhập</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={formatPurchasePriceInput(receiveForm.unitPrice)}
-                  onChange={(e) => setReceiveForm((prev) => ({ ...prev, unitPrice: normalizePurchasePriceInput(e.target.value) }))}
-                  className={getFieldClass(false)}
-                  placeholder="Ví dụ: 12.000"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Nhà cung cấp</label>
-                <select
-                  value={receiveForm.supplierId}
-                  onChange={(e) => setReceiveForm((prev) => ({ ...prev, supplierId: e.target.value }))}
-                  className={getFieldClass(false)}
-                >
-                  <option value="">Chọn nhà cung cấp</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {getSupplierLabel(supplier)}
-                    </option>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-sm font-semibold text-slate-800">Các lô đang có</p>
+                <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
+                  {(selectedReceiveAsset.receiptLots || []).length === 0 && (
+                    <p className="text-sm text-slate-500">Chưa có lô nhập nào được ghi nhận.</p>
+                  )}
+                  {(selectedReceiveAsset.receiptLots || []).map((lot) => (
+                    <div key={lot.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium text-slate-800">{lot.lotCode || `Lô #${lot.id}`}</p>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).tone)}`}>
+                          {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).label}
+                        </span>
+                      </div>
+                      <p className="mt-1">Còn lại: {lot.quantityRemaining ?? 0} / {lot.quantityReceived ?? 0} {selectedReceiveAsset.unit || ''}</p>
+                      <p>Ngày nhập: {formatDate(lot.receivedDate)} | Hạn dùng: {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).dateLabel}</p>
+                    </div>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
@@ -2983,7 +3244,7 @@ function AssetManagement({ restrictToConsumable = false }) {
 
       {showConsumableRequestModal && (
         <div className="fixed inset-0 z-[57] flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Yêu cầu cấp phát vật tư</h4>
@@ -3328,6 +3589,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                   <p><span className="font-semibold">Số lượng tồn:</span> {selectedOriginAsset.quantityOnHand ?? 0}</p>
                   <p><span className="font-semibold">Ngưỡng cảnh báo tồn:</span> {selectedOriginAsset.minimumStock ?? 0}</p>
                   <p><span className="font-semibold">Đơn vị tính:</span> {selectedOriginAsset.unit || 'Chưa cập nhật'}</p>
+                  <p><span className="font-semibold">Quản lý hạn sử dụng:</span> {selectedOriginAsset.expiryTrackingEnabled ? 'Có' : 'Không'}</p>
+                  <p><span className="font-semibold">Hạn sử dụng:</span> {selectedOriginAsset.expiryTrackingEnabled ? formatDate(selectedOriginAsset.expirationDate) : 'Không áp dụng'}</p>
                 </>
               )}
               {!isConsumableMode(selectedOriginAsset.trackingMode) && (
@@ -3337,6 +3600,40 @@ function AssetManagement({ restrictToConsumable = false }) {
               <p><span className="font-semibold">Số điện thoại NCC:</span> {selectedOriginAsset.supplierPhoneNumber || 'Chưa cập nhật'}</p>
               <p><span className="font-semibold">Địa chỉ NCC:</span> {selectedOriginAsset.supplierAddress || 'Chưa cập nhật'}</p>
             </div>
+            {isConsumableMode(selectedOriginAsset.trackingMode) && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h5 className="text-sm font-semibold text-slate-800">Chi tiết các lô nhập</h5>
+                    <p className="text-xs text-slate-500">Hiển thị từng lô để theo dõi số lượng còn lại và hạn sử dụng riêng biệt.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                    {(selectedOriginAsset.receiptLots || []).length} lô
+                  </span>
+                </div>
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {(selectedOriginAsset.receiptLots || []).length === 0 && (
+                    <p className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+                      Chưa có dữ liệu lô nhập cho vật tư này.
+                    </p>
+                  )}
+                  {(selectedOriginAsset.receiptLots || []).map((lot) => (
+                    <div key={lot.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium text-slate-800">{lot.lotCode || `Lô #${lot.id}`}</p>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedOriginAsset.expiryTrackingEnabled }).tone)}`}>
+                          {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedOriginAsset.expiryTrackingEnabled }).label}
+                        </span>
+                      </div>
+                      <p className="mt-1">Số lượng: {lot.quantityRemaining ?? 0} / {lot.quantityReceived ?? 0} {selectedOriginAsset.unit || ''}</p>
+                      <p>Ngày nhập: {formatDate(lot.receivedDate)} | Hạn dùng: {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedOriginAsset.expiryTrackingEnabled }).dateLabel}</p>
+                      <p>Đơn giá lô: {formatCurrency(lot.unitPrice)} | NCC: {lot.supplierName || 'Chưa cập nhật'}</p>
+                      {lot.note && <p className="mt-1 text-slate-500">{lot.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

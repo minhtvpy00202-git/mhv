@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Check, Eye } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
@@ -226,8 +228,9 @@ function TicketManagement() {
                     <p className="line-clamp-3 whitespace-pre-wrap text-slate-700">{ticket.description || '-'}</p>
                   </td>
                   <td className="px-3 py-2">
-                    <button
-                      type="button"
+                    <ActionIconButton
+                      icon={Eye}
+                      label="Xem ảnh lỗi"
                       onClick={() => {
                         if (!ticket.imageUrl) {
                           toast.info('Ticket này chưa có ảnh lỗi.')
@@ -235,10 +238,7 @@ function TicketManagement() {
                         }
                         setPreviewImageUrl(ticket.imageUrl)
                       }}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      Xem ảnh
-                    </button>
+                    />
                   </td>
                   <td className="px-3 py-2">{formatVietnamDateTime(ticket.createdAt)}</td>
                   <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
@@ -275,14 +275,13 @@ function TicketManagement() {
                           ))}
                         </select>
                         )}
-                        <button
-                          type="button"
+                        <ActionIconButton
+                          icon={Check}
+                          label="Gán kỹ thuật viên"
+                          variant="primary"
                           onClick={() => handleAssign(ticket.id)}
                           disabled={submittingId === ticket.id}
-                          className="rounded bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                        >
-                          Gán
-                        </button>
+                        />
                       </div>
                     ) : (
                       <p className="text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>

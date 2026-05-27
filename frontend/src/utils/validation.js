@@ -37,10 +37,10 @@ export function validateAssetForm(form) {
   if (!isPositiveNumber(form?.categoryId)) {
     errors.categoryId = 'Vui lòng chọn loại thiết bị hợp lệ.'
   }
-  if (!isPositiveNumber(form?.locationId)) {
-    errors.locationId = 'Vui lòng chọn phòng gốc hợp lệ.'
-  }
   if (isConsumable) {
+    if (!isPositiveNumber(form?.locationId)) {
+      errors.locationId = 'Chưa cấu hình được kho lưu trữ mặc định.'
+    }
     if (!isNonNegativeNumber(form?.quantityOnHand)) {
       errors.quantityOnHand = 'Số lượng tồn không được âm.'
     }
@@ -50,7 +50,16 @@ export function validateAssetForm(form) {
     if (String(form?.unit || '').trim().length < 1 || String(form?.unit || '').trim().length > 50) {
       errors.unit = 'Đơn vị tính là bắt buộc và tối đa 50 ký tự.'
     }
+    if (Boolean(form?.expiryTrackingEnabled) && !form?.expirationDate) {
+      errors.expirationDate = 'Vui lòng chọn hạn sử dụng cho vật tư này.'
+    }
+    if (form?.purchaseDate && form?.expirationDate && new Date(form.expirationDate) < new Date(form.purchaseDate)) {
+      errors.expirationDate = 'Hạn sử dụng phải sau hoặc bằng ngày nhập kho ban đầu.'
+    }
   } else {
+    if (!isPositiveNumber(form?.locationId)) {
+      errors.locationId = 'Vui lòng chọn phòng gốc hợp lệ.'
+    }
     if (!isPositiveNumber(form?.supplierId)) {
       errors.supplierId = 'Vui lòng chọn nhà cung cấp từ danh sách.'
     }

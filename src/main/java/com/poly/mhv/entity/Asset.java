@@ -68,6 +68,12 @@ public class Asset {
     @Column(name = "warranty_expiration_date")
     private LocalDate warrantyExpirationDate;
 
+    @Column(name = "expiry_tracking_enabled")
+    private Boolean expiryTrackingEnabled;
+
+    @Column(name = "expiration_date")
+    private LocalDate expirationDate;
+
     @Column(name = "quantity_on_hand")
     private Integer quantityOnHand;
 

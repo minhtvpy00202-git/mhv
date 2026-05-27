@@ -1,6 +1,7 @@
 package com.poly.mhv.dto.asset;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,6 +24,8 @@ public class ConsumableLocationStockResponse {
     private Integer quantityRemaining;
     private Integer quantityConsumed;
     private String unit;
+    private Boolean expiryTrackingEnabled;
+    private LocalDate expirationDate;
     private BigDecimal unitPrice;
     private BigDecimal remainingValue;
     private LocalDateTime lastIssuedAt;

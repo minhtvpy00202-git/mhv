@@ -45,6 +45,10 @@ public class AssetUpdateRequest {
     @PastOrPresent(message = "Ngày mua không được ở tương lai.")
     private LocalDate purchaseDate;
 
+    private Boolean expiryTrackingEnabled;
+
+    private LocalDate expirationDate;
+
     private LocalDate warrantyExpirationDate;
 
     @Positive(message = "Nhà cung cấp không hợp lệ.")

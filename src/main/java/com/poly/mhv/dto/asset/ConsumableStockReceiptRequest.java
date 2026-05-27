@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,4 +27,13 @@ public class ConsumableStockReceiptRequest {
     @NotNull(message = "Nhà cung cấp là bắt buộc.")
     @Positive(message = "Nhà cung cấp không hợp lệ.")
     private Integer supplierId;
+
+    private String lotCode;
+
+    @NotNull(message = "Ngày nhập là bắt buộc.")
+    private LocalDate receivedDate;
+
+    private LocalDate expirationDate;
+
+    private String note;
 }

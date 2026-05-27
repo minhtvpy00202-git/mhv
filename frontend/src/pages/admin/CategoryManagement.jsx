@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Eye, Trash2, Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useTableSort } from '../../hooks/useTableSort'
 import { normalizeSpecTemplates } from '../../utils/assetSpecs'
 import { validateCategoryForm } from '../../utils/validation'
@@ -404,16 +406,16 @@ function CategoryManagement() {
                             </span>
                           ))}
                           {category.specTemplateCount > 3 && (
-                            <button
-                              type="button"
+                            <ActionIconButton
+                              icon={Eye}
+                              label="Xem mẫu thông số"
+                              variant="violet"
+                              className="h-7 w-7"
                               onClick={() => {
                                 setSelectedCategoryForSpecs(category)
                                 setShowSpecsPreviewModal(true)
                               }}
-                              className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                            >
-                              Xem thêm
-                            </button>
+                            />
                           )}
                         </div>
                       ) : (
@@ -422,20 +424,18 @@ function CategoryManagement() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
+                        <ActionIconButton
+                          icon={Wrench}
+                          label="Sửa loại thiết bị"
+                          variant="primary"
                           onClick={() => handleSelectCategory(category)}
-                          className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
+                        />
+                        <ActionIconButton
+                          icon={Trash2}
+                          label="Xóa loại thiết bị"
+                          variant="danger"
                           onClick={() => handleDelete(category.id)}
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          Xóa
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>

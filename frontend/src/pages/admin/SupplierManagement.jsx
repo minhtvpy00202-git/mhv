@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Trash2, Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useTableSort } from '../../hooks/useTableSort'
 import { validateSupplierForm } from '../../utils/validation'
 
@@ -270,20 +272,18 @@ function SupplierManagement() {
                     <td className="px-3 py-2">{item.assetCount}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
+                        <ActionIconButton
+                          icon={Wrench}
+                          label="Sửa nhà cung cấp"
+                          variant="primary"
                           onClick={() => handleSelect(item)}
-                          className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
+                        />
+                        <ActionIconButton
+                          icon={Trash2}
+                          label="Xóa nhà cung cấp"
+                          variant="danger"
                           onClick={() => handleDelete(item.id)}
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          Xóa
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>

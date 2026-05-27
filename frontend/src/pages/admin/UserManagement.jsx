@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDate } from '../../utils/datetime'
 
@@ -367,13 +369,12 @@ function UserManagement() {
                     </td>
                     <td className="px-3 py-2">{row.status}</td>
                     <td className="px-3 py-2">
-                      <button
-                        type="button"
+                      <ActionIconButton
+                        icon={Wrench}
+                        label="Chọn để chỉnh sửa tài khoản"
+                        variant="primary"
                         onClick={() => handleSelect(row)}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Chọn
-                      </button>
+                      />
                     </td>
                   </tr>
                 ))}

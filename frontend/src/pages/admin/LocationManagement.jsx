@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Trash2, Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
@@ -242,20 +244,18 @@ function LocationManagement() {
                     <td className="px-3 py-2">{location.roomName}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
+                        <ActionIconButton
+                          icon={Wrench}
+                          label="Sửa phòng"
+                          variant="primary"
                           onClick={() => handleSelectLocation(location)}
-                          className="rounded-md border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          type="button"
+                        />
+                        <ActionIconButton
+                          icon={Trash2}
+                          label="Xóa phòng"
+                          variant="danger"
                           onClick={() => handleDelete(location.id)}
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          Xóa
-                        </button>
+                        />
                       </div>
                     </td>
                   </tr>
