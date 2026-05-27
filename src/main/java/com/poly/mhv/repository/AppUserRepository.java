@@ -44,4 +44,19 @@ public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
             @Param("status") String status,
             Pageable pageable
     );
+
+    @Query("""
+            select distinct u from AppUser u
+            left join fetch u.techSupportTypes
+            where u.id in :ids
+            """)
+    List<AppUser> findAllWithTechSupportTypesByIdIn(@Param("ids") List<Integer> ids);
+
+    @Query("""
+            select t.id, count(distinct u.id) from AppUser u
+            join u.techSupportTypes t
+            where t.id in :techTypeIds
+            group by t.id
+            """)
+    List<Object[]> countUsersByTechSupportTypeIds(@Param("techTypeIds") List<Integer> techTypeIds);
 }

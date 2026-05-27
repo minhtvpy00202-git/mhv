@@ -8,9 +8,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -35,16 +33,7 @@ public class LocationService {
     @Transactional(readOnly = true)
     public List<LocationResponse> getAllLocations(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
-        return locationRepository.findAll().stream()
-                .filter(location -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    String roomName = location.getRoomName() == null ? "" : location.getRoomName().toLowerCase(Locale.ROOT);
-                    return roomName.contains(searchKey);
-                })
-                .sorted(Comparator.comparing(Location::getRoomName, String.CASE_INSENSITIVE_ORDER))
+        return locationRepository.searchByKeyword(normalizedKeyword).stream()
                 .map(this::mapToResponse)
                 .toList();
     }

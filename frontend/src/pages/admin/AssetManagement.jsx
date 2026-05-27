@@ -3,12 +3,21 @@ import { Trash2 } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
-import { useTableSort } from '../../hooks/useTableSort'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
 import { validateAssetForm } from '../../utils/validation'
 
 const statusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
 const PAGE_SIZE = 10
+const defaultPageInfo = {
+  page: 0,
+  size: PAGE_SIZE,
+  totalPages: 1,
+  totalItems: 0,
+}
+const defaultSortState = {
+  key: 'qaCode',
+  direction: 'asc',
+}
 
 function getCategoryLabel(category) {
   return category?.description || category?.name || ''
@@ -70,7 +79,8 @@ function AssetManagement() {
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [showSupplierOptions, setShowSupplierOptions] = useState(false)
   const [supplierKeyword, setSupplierKeyword] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [pageInfo, setPageInfo] = useState(defaultPageInfo)
+  const [sortState, setSortState] = useState(defaultSortState)
   const [filters, setFilters] = useState({
     name: '',
     status: '',
@@ -101,17 +111,6 @@ function AssetManagement() {
     if (!keyword) return suppliers
     return suppliers.filter((supplier) => getSupplierLabel(supplier).toLowerCase().includes(keyword))
   }, [supplierKeyword, suppliers])
-  const { sortedItems: sortedAssets, handleSort, getSortLabel } = useTableSort(assets, {
-    initialKey: 'qaCode',
-    initialDirection: 'asc',
-    onSortChange: () => setCurrentPage(1),
-  })
-
-  const totalPages = Math.max(1, Math.ceil(sortedAssets.length / PAGE_SIZE))
-  const paginatedAssets = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return sortedAssets.slice(start, start + PAGE_SIZE)
-  }, [sortedAssets, currentPage])
 
   const selectedSpecsEntries = useMemo(() => parseSpecsToEntries(selectedSpecsAsset?.specs), [selectedSpecsAsset])
   const isEditing = formMode === 'update' && Boolean(selectedQaCode)
@@ -129,17 +128,27 @@ function AssetManagement() {
   useEffect(() => {
     const initializePage = async () => {
       try {
-        const [assetRes, locationRes, categoryRes, supplierRes] = await Promise.all([
-          axiosClient.get('/api/assets'),
-          axiosClient.get('/api/locations'),
-          axiosClient.get('/api/categories'),
-          axiosClient.get('/api/suppliers'),
-        ])
-        setAssets(assetRes.data || [])
-        setLocations(locationRes.data || [])
-        setCategories(categoryRes.data || [])
-        setSuppliers(supplierRes.data || [])
-        setCurrentPage(1)
+        const response = await axiosClient.get('/api/assets/bootstrap', {
+          params: {
+            page: 0,
+            size: PAGE_SIZE,
+            sortKey: defaultSortState.key,
+            sortDirection: defaultSortState.direction,
+          },
+        })
+        const data = response.data || {}
+        const assetPage = data.assets || {}
+        setAssets(assetPage.items || [])
+        setPageInfo({
+          page: assetPage.page ?? 0,
+          size: assetPage.size ?? PAGE_SIZE,
+          totalPages: assetPage.totalPages || 1,
+          totalItems: assetPage.totalItems || 0,
+        })
+        setLocations(data.locations || [])
+        setCategories(data.categories || [])
+        setSuppliers(data.suppliers || [])
+        setSortState(defaultSortState)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không thể tải dữ liệu trang thiết bị.'
         toast.error(message)
@@ -150,17 +159,34 @@ function AssetManagement() {
     initializePage()
   }, [])
 
-  const loadAssets = async (nextFilters = filters) => {
+  const buildAssetQueryParams = (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
+    const params = {
+      page,
+      size: pageInfo.size || PAGE_SIZE,
+      sortKey: nextSort.key,
+      sortDirection: nextSort.direction,
+    }
+    if (nextFilters.name.trim()) params.name = nextFilters.name.trim()
+    if (nextFilters.status) params.status = nextFilters.status
+    if (nextFilters.categoryId) params.categoryId = Number(nextFilters.categoryId)
+    if (nextFilters.locationId) params.locationId = Number(nextFilters.locationId)
+    return params
+  }
+
+  const loadAssets = async (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
     setLoading(true)
     try {
-      const params = {}
-      if (nextFilters.name.trim()) params.name = nextFilters.name.trim()
-      if (nextFilters.status) params.status = nextFilters.status
-      if (nextFilters.categoryId) params.categoryId = Number(nextFilters.categoryId)
-      if (nextFilters.locationId) params.locationId = Number(nextFilters.locationId)
-      const response = await axiosClient.get('/api/assets', { params })
-      setAssets(response.data || [])
-      setCurrentPage(1)
+      const response = await axiosClient.get('/api/assets', {
+        params: buildAssetQueryParams(page, nextFilters, nextSort),
+      })
+      const data = response.data || {}
+      setAssets(data.items || [])
+      setPageInfo({
+        page: data.page ?? 0,
+        size: data.size ?? pageInfo.size ?? PAGE_SIZE,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || 0,
+      })
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể tải danh sách thiết bị.'
       toast.error(message)
@@ -239,7 +265,7 @@ function AssetManagement() {
       }
       toast.success(`Thêm thiết bị thành công. Mã mới: ${response.data?.qaCode || 'đã tự sinh'}.`)
       closeFormModal()
-      await loadAssets()
+      await loadAssets(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm thiết bị thất bại.'
       toast.error(message)
@@ -270,7 +296,7 @@ function AssetManagement() {
       })
       toast.success('Cập nhật thiết bị thành công.')
       closeFormModal()
-      await loadAssets()
+      await loadAssets(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Cập nhật thiết bị thất bại.'
       toast.error(message)
@@ -290,7 +316,7 @@ function AssetManagement() {
       if (qaCode === selectedQaCode) {
         resetForm()
       }
-      await loadAssets()
+      await loadAssets(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Xóa thiết bị thất bại.'
       toast.error(message)
@@ -356,13 +382,13 @@ function AssetManagement() {
   }
 
   const handleSearch = async () => {
-    await loadAssets()
+    await loadAssets(0)
   }
 
   const handleResetFilters = async () => {
     const reset = { name: '', status: '', categoryId: '', locationId: '', categoryKeyword: '' }
     setFilters(reset)
-    await loadAssets(reset)
+    await loadAssets(0, reset)
   }
 
   const handleOpenQrModal = async (qaCode) => {
@@ -391,10 +417,26 @@ function AssetManagement() {
     setQrModalImage('')
   }
 
-  const goToFirstPage = () => setCurrentPage(1)
-  const goToPrevPage = () => setCurrentPage((prev) => Math.max(1, prev - 1))
-  const goToNextPage = () => setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-  const goToLastPage = () => setCurrentPage(totalPages)
+  const handleSort = async (key) => {
+    const nextSort = {
+      key,
+      direction: sortState.key === key && sortState.direction === 'asc' ? 'desc' : 'asc',
+    }
+    setSortState(nextSort)
+    await loadAssets(0, filters, nextSort)
+  }
+
+  const getSortLabel = (key, label) => {
+    if (sortState.key !== key) return label
+    return `${label} ${sortState.direction === 'asc' ? '▲' : '▼'}`
+  }
+
+  const currentPage = pageInfo.page + 1
+  const totalPages = Math.max(1, pageInfo.totalPages)
+  const goToFirstPage = async () => loadAssets(0)
+  const goToPrevPage = async () => loadAssets(Math.max(0, pageInfo.page - 1))
+  const goToNextPage = async () => loadAssets(Math.min(totalPages - 1, pageInfo.page + 1))
+  const goToLastPage = async () => loadAssets(Math.max(0, totalPages - 1))
 
   return (
     <div className="space-y-4">
@@ -544,7 +586,7 @@ function AssetManagement() {
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-800">Danh sách thiết bị</h2>
-          <p className="text-sm text-slate-500">Tổng: {assets.length}</p>
+          <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -593,7 +635,7 @@ function AssetManagement() {
                   </tr>
                 ))}
               {!loading &&
-                paginatedAssets.map((asset) => (
+                assets.map((asset) => (
                   <tr key={asset.qaCode}>
                     <td className="px-3 py-2">{asset.qaCode}</td>
                     <td className="px-3 py-2">{asset.name}</td>
@@ -673,7 +715,7 @@ function AssetManagement() {
           </table>
         </div>
 
-        {!loading && assets.length > 0 && (
+        {!loading && pageInfo.totalItems > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
             {currentPage >= 3 && (
               <button type="button" onClick={goToFirstPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">

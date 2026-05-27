@@ -1,13 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-import { useTableSort } from '../../hooks/useTableSort'
-import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
+import { formatVietnamDateTime } from '../../utils/datetime'
 const PAGE_SIZE = 10
-
-function getUsageHistorySortValue(history, key) {
-  if (key.includes('Time')) return getServerDateTimeMs(history?.[key])
-  return history?.[key]
+const defaultPageInfo = {
+  page: 0,
+  size: PAGE_SIZE,
+  totalPages: 1,
+  totalItems: 0,
+}
+const defaultSortState = {
+  key: 'startTime',
+  direction: 'desc',
 }
 
 function UsageHistoryManagement() {
@@ -25,26 +29,35 @@ function UsageHistoryManagement() {
   const [showLocationOptions, setShowLocationOptions] = useState(false)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const { sortedItems: sortedHistories, handleSort, getSortLabel } = useTableSort(histories, {
-    initialKey: 'startTime',
-    initialDirection: 'desc',
-    getSortValue: getUsageHistorySortValue,
-    onSortChange: () => setCurrentPage(1),
-  })
+  const [pageInfo, setPageInfo] = useState(defaultPageInfo)
+  const [sortState, setSortState] = useState(defaultSortState)
 
   useEffect(() => {
     const initializePage = async () => {
       try {
         const [historyRes, locationRes, userRes] = await Promise.all([
-          axiosClient.get('/api/usage/history'),
+          axiosClient.get('/api/usage/history', {
+            params: {
+              page: 0,
+              size: PAGE_SIZE,
+              sortKey: defaultSortState.key,
+              sortDirection: defaultSortState.direction,
+            },
+          }),
           axiosClient.get('/api/locations'),
           axiosClient.get('/api/users/borrowers'),
         ])
-        setHistories(historyRes.data || [])
+        const historyData = historyRes.data || {}
+        setHistories(historyData.items || [])
+        setPageInfo({
+          page: historyData.page ?? 0,
+          size: historyData.size ?? PAGE_SIZE,
+          totalPages: historyData.totalPages || 1,
+          totalItems: historyData.totalItems || 0,
+        })
         setLocations(locationRes.data || [])
         setUsers(userRes.data || [])
-        setCurrentPage(1)
+        setSortState(defaultSortState)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không thể tải dữ liệu lịch sử mượn.'
         toast.error(message)
@@ -59,29 +72,35 @@ function UsageHistoryManagement() {
     location.roomName.toLowerCase().includes(filters.borrowedLocationKeyword.trim().toLowerCase()),
   )
 
-  const totalPages = Math.max(1, Math.ceil(sortedHistories.length / PAGE_SIZE))
-  const paginatedHistories = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return sortedHistories.slice(start, start + PAGE_SIZE)
-  }, [sortedHistories, currentPage])
+  const buildHistoryQueryParams = (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
+    const params = {
+      page,
+      size: pageInfo.size || PAGE_SIZE,
+      sortKey: nextSort.key,
+      sortDirection: nextSort.direction,
+    }
+    if (nextFilters.assetName.trim()) params.assetName = nextFilters.assetName.trim()
+    if (nextFilters.borrowedLocationId) params.borrowedLocationId = Number(nextFilters.borrowedLocationId)
+    if (nextFilters.userId) params.userId = Number(nextFilters.userId)
+    if (nextFilters.startDate) params.startDate = nextFilters.startDate
+    if (nextFilters.endDate) params.endDate = nextFilters.endDate
+    return params
+  }
 
-  const goToFirstPage = () => setCurrentPage(1)
-  const goToPrevPage = () => setCurrentPage((prev) => Math.max(1, prev - 1))
-  const goToNextPage = () => setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-  const goToLastPage = () => setCurrentPage(totalPages)
-
-  const loadHistories = async (nextFilters = filters) => {
+  const loadHistories = async (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
     setLoading(true)
     try {
-      const params = {}
-      if (nextFilters.assetName.trim()) params.assetName = nextFilters.assetName.trim()
-      if (nextFilters.borrowedLocationId) params.borrowedLocationId = Number(nextFilters.borrowedLocationId)
-      if (nextFilters.userId) params.userId = Number(nextFilters.userId)
-      if (nextFilters.startDate) params.startDate = nextFilters.startDate
-      if (nextFilters.endDate) params.endDate = nextFilters.endDate
-      const response = await axiosClient.get('/api/usage/history', { params })
-      setHistories(response.data || [])
-      setCurrentPage(1)
+      const response = await axiosClient.get('/api/usage/history', {
+        params: buildHistoryQueryParams(page, nextFilters, nextSort),
+      })
+      const data = response.data || {}
+      setHistories(data.items || [])
+      setPageInfo({
+        page: data.page ?? 0,
+        size: data.size ?? pageInfo.size ?? PAGE_SIZE,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || 0,
+      })
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể lọc lịch sử mượn thiết bị.'
       toast.error(message)
@@ -100,8 +119,29 @@ function UsageHistoryManagement() {
       endDate: '',
     }
     setFilters(reset)
-    await loadHistories(reset)
+    await loadHistories(0, reset)
   }
+
+  const handleSort = async (key) => {
+    const nextSort = {
+      key,
+      direction: sortState.key === key && sortState.direction === 'asc' ? 'desc' : 'asc',
+    }
+    setSortState(nextSort)
+    await loadHistories(0, filters, nextSort)
+  }
+
+  const getSortLabel = (key, label) => {
+    if (sortState.key !== key) return label
+    return `${label} ${sortState.direction === 'asc' ? '▲' : '▼'}`
+  }
+
+  const currentPage = pageInfo.page + 1
+  const totalPages = Math.max(1, pageInfo.totalPages)
+  const goToFirstPage = async () => loadHistories(0)
+  const goToPrevPage = async () => loadHistories(Math.max(0, pageInfo.page - 1))
+  const goToNextPage = async () => loadHistories(Math.min(totalPages - 1, pageInfo.page + 1))
+  const goToLastPage = async () => loadHistories(Math.max(0, totalPages - 1))
 
   const handleExportExcel = async () => {
     setExporting(true)
@@ -221,7 +261,7 @@ function UsageHistoryManagement() {
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
         <button
           type="button"
-          onClick={() => loadHistories()}
+          onClick={() => loadHistories(0)}
           disabled={loading}
           className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
         >
@@ -296,9 +336,9 @@ function UsageHistoryManagement() {
                 </tr>
               ))}
             {!loading &&
-              paginatedHistories.map((history, index) => (
+              histories.map((history, index) => (
                 <tr key={history.id}>
-                  <td className="px-3 py-2">{(currentPage - 1) * PAGE_SIZE + index + 1}</td>
+                  <td className="px-3 py-2">{pageInfo.page * pageInfo.size + index + 1}</td>
                   <td className="px-3 py-2">{history.assetQaCode}</td>
                   <td className="px-3 py-2">{history.assetName}</td>
                   <td className="px-3 py-2">{history.homeLocationName}</td>
@@ -311,7 +351,7 @@ function UsageHistoryManagement() {
           </tbody>
         </table>
       </div>
-      {!loading && (
+      {!loading && pageInfo.totalItems > 0 && (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
           {currentPage >= 3 && (
             <button type="button" onClick={goToFirstPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">

@@ -5,6 +5,18 @@ import axiosClient from '../../api/axiosClient'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
+const PAGE_SIZE = 10
+const defaultPageInfo = {
+  page: 0,
+  size: PAGE_SIZE,
+  totalPages: 1,
+  totalItems: 0,
+}
+const defaultStats = {
+  pending: 0,
+  inProgress: 0,
+  resolved: 0,
+}
 
 function toVietnamesePriority(priority) {
   if (priority === 'HIGH') return 'Cao'
@@ -31,6 +43,8 @@ function TicketManagement() {
   const [loading, setLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState(null)
   const [techSupports, setTechSupports] = useState([])
+  const [pageInfo, setPageInfo] = useState(defaultPageInfo)
+  const [stats, setStats] = useState(defaultStats)
   const [filters, setFilters] = useState({
     status: '',
     assigneeId: '',
@@ -45,27 +59,46 @@ function TicketManagement() {
 
   const loadTechSupports = async () => {
     try {
-      const response = await axiosClient.get('/api/users', {
-        params: { page: 0, size: 100, role: 'TechSupport' },
-      })
-      setTechSupports(response.data?.items || [])
+      const response = await axiosClient.get('/api/users/tech-supports')
+      setTechSupports(response.data || [])
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách kỹ thuật viên.'
       toast.error(message)
     }
   }
 
-  const loadTickets = async (nextFilters = filters) => {
+  const buildTicketQueryParams = (page = pageInfo.page, nextFilters = filters) => {
+    const params = {
+      page,
+      size: pageInfo.size || PAGE_SIZE,
+    }
+    if (nextFilters.status) params.status = nextFilters.status
+    if (nextFilters.assigneeId) params.assignee_id = Number(nextFilters.assigneeId)
+    return params
+  }
+
+  const loadTickets = async (page = pageInfo.page, nextFilters = filters) => {
     setLoading(true)
     try {
-      const params = {}
-      if (nextFilters.status) params.status = nextFilters.status
-      if (nextFilters.assigneeId) params.assignee_id = Number(nextFilters.assigneeId)
-      const response = await axiosClient.get('/api/tickets', { params })
-      const data = response.data || []
-      setTickets(data)
+      const response = await axiosClient.get('/api/tickets/admin', {
+        params: buildTicketQueryParams(page, nextFilters),
+      })
+      const data = response.data || {}
+      const items = data.items || []
+      setTickets(items)
+      setPageInfo({
+        page: data.page ?? 0,
+        size: data.size ?? pageInfo.size ?? PAGE_SIZE,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || 0,
+      })
+      setStats({
+        pending: data.pendingCount || 0,
+        inProgress: data.inProgressCount || 0,
+        resolved: data.resolvedCount || 0,
+      })
       setAssignDraft(
-        data.reduce((acc, item) => ({
+        items.reduce((acc, item) => ({
           ...acc,
           [item.id]: item.assigneeId ? String(item.assigneeId) : '',
         }), {}),
@@ -83,12 +116,6 @@ function TicketManagement() {
     loadTickets()
   }, [])
 
-  const stats = useMemo(() => ({
-    pending: tickets.filter((ticket) => ticket.status === 'PENDING').length,
-    inProgress: tickets.filter((ticket) => ticket.status === 'IN_PROGRESS').length,
-    resolved: tickets.filter((ticket) => ticket.status === 'RESOLVED').length,
-  }), [tickets])
-
   const handleAssign = async (ticketId) => {
     const assigneeId = assignDraft[ticketId]
     if (!assigneeId) {
@@ -101,7 +128,7 @@ function TicketManagement() {
         assignee_id: Number(assigneeId),
       })
       toast.success(`Đã gán ticket #${ticketId} cho kỹ thuật viên.`)
-      await loadTickets()
+      await loadTickets(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Gán kỹ thuật viên thất bại.'
       toast.error(message)
@@ -150,7 +177,7 @@ function TicketManagement() {
           </select>
           <button
             type="button"
-            onClick={() => loadTickets(filters)}
+            onClick={() => loadTickets(0, filters)}
             className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
           >
             Lọc ticket
@@ -160,7 +187,7 @@ function TicketManagement() {
             onClick={async () => {
               const reset = { status: '', assigneeId: '' }
               setFilters(reset)
-              await loadTickets(reset)
+              await loadTickets(0, reset)
             }}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
@@ -266,6 +293,47 @@ function TicketManagement() {
           </table>
           {loading && <p className="px-3 py-3 text-sm text-slate-500">Đang tải ticket...</p>}
         </div>
+        {!loading && pageInfo.totalItems > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+            <p>
+              Trang {pageInfo.page + 1} / {Math.max(1, pageInfo.totalPages)} • Tổng {pageInfo.totalItems} ticket
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => loadTickets(0)}
+                disabled={pageInfo.page <= 0}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Đầu
+              </button>
+              <button
+                type="button"
+                onClick={() => loadTickets(Math.max(0, pageInfo.page - 1))}
+                disabled={pageInfo.page <= 0}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Trước
+              </button>
+              <button
+                type="button"
+                onClick={() => loadTickets(Math.min(pageInfo.totalPages - 1, pageInfo.page + 1))}
+                disabled={pageInfo.page >= pageInfo.totalPages - 1}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Sau
+              </button>
+              <button
+                type="button"
+                onClick={() => loadTickets(Math.max(0, pageInfo.totalPages - 1))}
+                disabled={pageInfo.page >= pageInfo.totalPages - 1}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Cuối
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )

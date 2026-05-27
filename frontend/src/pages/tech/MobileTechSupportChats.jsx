@@ -42,7 +42,6 @@ function MobileTechSupportChats() {
   const filteredTickets = useMemo(() => {
     const normalized = keyword.trim().toLowerCase()
     return tickets
-      .filter((ticket) => Number(ticket.assigneeId) === Number(user?.userId))
       .filter((ticket) => {
         if (!normalized) return true
         const searchable = `${ticket.id} ${ticket.assetQaCode || ''} ${ticket.assetName || ''} ${ticket.reporterName || ''} ${ticket.description || ''}`.toLowerCase()
@@ -53,7 +52,7 @@ function MobileTechSupportChats() {
         const rightScore = right.status === 'IN_PROGRESS' ? 0 : right.status === 'PENDING' ? 1 : 2
         return leftScore - rightScore
       })
-  }, [keyword, tickets, user?.userId])
+  }, [keyword, tickets])
 
   return (
     <section className="space-y-3">

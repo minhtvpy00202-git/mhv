@@ -40,16 +40,10 @@ function AssetRepairTimelineModal({ assetQaCode, assetName, open, onClose }) {
     const loadTimeline = async () => {
       setLoading(true)
       try {
-        try {
-          const response = await axiosClient.get('/api/tickets', {
-            params: { asset_qa_code: assetQaCode },
-          })
-          setTimeline(response.data || [])
-        } catch {
-          const fallback = await axiosClient.get('/api/tickets')
-          const filtered = (fallback.data || []).filter((item) => item.assetQaCode === assetQaCode)
-          setTimeline(filtered)
-        }
+        const response = await axiosClient.get('/api/tickets', {
+          params: { asset_qa_code: assetQaCode },
+        })
+        setTimeline(response.data || [])
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được timeline sửa chữa.'
         toast.error(message)

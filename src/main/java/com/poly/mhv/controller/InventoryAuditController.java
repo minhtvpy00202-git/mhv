@@ -2,10 +2,13 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.inventory.InventoryAuditCreateRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditDetailResponse;
+import com.poly.mhv.dto.inventory.InventoryAuditManagementBootstrapResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditScanRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditScanResultResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditSummaryResponse;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.service.InventoryAuditService;
+import com.poly.mhv.service.LocationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -30,9 +33,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class InventoryAuditController {
 
     private final InventoryAuditService inventoryAuditService;
+    private final LocationService locationService;
 
-    public InventoryAuditController(InventoryAuditService inventoryAuditService) {
+    public InventoryAuditController(InventoryAuditService inventoryAuditService, LocationService locationService) {
         this.inventoryAuditService = inventoryAuditService;
+        this.locationService = locationService;
     }
 
     @PostMapping
@@ -54,8 +59,30 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
     @PreAuthorize("hasRole('Admin')")
-    public ResponseEntity<List<InventoryAuditSummaryResponse>> getAudits(@RequestParam(required = false) String status) {
-        return ResponseEntity.ok(inventoryAuditService.getAudits(status));
+    public ResponseEntity<PagedResponse<InventoryAuditSummaryResponse>> getAudits(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(inventoryAuditService.getAudits(page, size, status));
+    }
+
+    @GetMapping("/bootstrap")
+    @Operation(summary = "Tải dữ liệu khởi tạo kiểm kê", description = "Trả về trang đầu danh sách phiên kiểm kê cùng danh sách phòng.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy dữ liệu khởi tạo kiểm kê thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    @PreAuthorize("hasRole('Admin')")
+    public ResponseEntity<InventoryAuditManagementBootstrapResponse> getInventoryAuditBootstrap(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(new InventoryAuditManagementBootstrapResponse(
+                inventoryAuditService.getAudits(page, size, status),
+                locationService.getAllLocations(null)
+        ));
     }
 
     @GetMapping("/active")

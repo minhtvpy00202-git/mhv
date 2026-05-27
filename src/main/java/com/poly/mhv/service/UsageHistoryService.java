@@ -2,6 +2,7 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.dto.usage.CheckinRequest;
 import com.poly.mhv.dto.usage.CheckoutRequest;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.dto.usage.UsageHistoryAdminResponse;
 import com.poly.mhv.dto.usage.UsageHistoryResponse;
 import com.poly.mhv.entity.AppUser;
@@ -18,6 +19,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -151,11 +155,6 @@ public class UsageHistoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<UsageHistoryAdminResponse> getAllForAdmin() {
-        return searchForAdmin(null, null, null, null, null);
-    }
-
-    @Transactional(readOnly = true)
     public List<UsageHistoryAdminResponse> getMyHistory() {
         AppUser actor = getCurrentUser();
         return usageHistoryRepository.findByUserIdForHistory(actor.getId()).stream()
@@ -164,36 +163,42 @@ public class UsageHistoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<UsageHistoryAdminResponse> searchForAdmin(
+    public PagedResponse<UsageHistoryAdminResponse> searchForAdmin(
+            int page,
+            int size,
             String assetName,
             Integer borrowedLocationId,
             Integer userId,
             LocalDate startDate,
-            LocalDate endDate
+            LocalDate endDate,
+            String sortKey,
+            String sortDirection
     ) {
         String normalizedAssetName = StringUtils.hasText(assetName) ? assetName.trim() : null;
         LocalDateTime startDateTime = startDate == null ? null : startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate == null ? null : endDate.plusDays(1).atStartOfDay().minusNanos(1);
-        return usageHistoryRepository.findAllForAdminOrderByStartTimeDesc().stream()
-                .filter(history -> {
-                    if (!StringUtils.hasText(normalizedAssetName)) {
-                        return true;
-                    }
-                    String assetValue = history.getAsset() == null || history.getAsset().getName() == null
-                            ? ""
-                            : history.getAsset().getName().toLowerCase();
-                    return assetValue.contains(normalizedAssetName.toLowerCase());
-                })
-                .filter(history -> borrowedLocationId == null
-                        || (history.getToLocation() != null && borrowedLocationId.equals(history.getToLocation().getId())))
-                .filter(history -> userId == null
-                        || (history.getUser() != null && userId.equals(history.getUser().getId())))
-                .filter(history -> startDateTime == null
-                        || (history.getStartTime() != null && !history.getStartTime().isBefore(startDateTime)))
-                .filter(history -> endDateTime == null
-                        || (history.getStartTime() != null && !history.getStartTime().isAfter(endDateTime)))
-                .map(this::mapToAdminResponse)
-                .toList();
+        PageRequest pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.max(1, Math.min(size, 100)),
+                buildSort(sortKey, sortDirection)
+        );
+        Page<UsageHistory> historyPage = usageHistoryRepository.searchForAdmin(
+                normalizedAssetName,
+                borrowedLocationId,
+                userId,
+                startDateTime,
+                endDateTime,
+                pageable
+        );
+        return new PagedResponse<>(
+                historyPage.getContent().stream()
+                        .map(this::mapToAdminResponse)
+                        .toList(),
+                historyPage.getNumber(),
+                historyPage.getSize(),
+                Math.max(1, historyPage.getTotalPages()),
+                historyPage.getTotalElements()
+        );
     }
 
     private void validateCheckoutRequest(CheckoutRequest request) {
@@ -253,6 +258,20 @@ public class UsageHistoryService {
                 .endTime(usageHistory.getEndTime())
                 .username(usageHistory.getUser().getUsername())
                 .build();
+    }
+
+    private Sort buildSort(String sortKey, String sortDirection) {
+        String normalizedSortKey = StringUtils.hasText(sortKey) ? sortKey.trim() : "startTime";
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDirection) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return switch (normalizedSortKey) {
+            case "assetQaCode" -> Sort.by(direction, "asset.qaCode").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "assetName" -> Sort.by(direction, "asset.name").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "homeLocationName" -> Sort.by(direction, "asset.homeLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "borrowedLocationName" -> Sort.by(direction, "toLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "endTime" -> Sort.by(direction, "endTime").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "username" -> Sort.by(direction, "user.username").and(Sort.by(Sort.Direction.DESC, "id"));
+            default -> Sort.by(direction, "startTime").and(Sort.by(Sort.Direction.DESC, "id"));
+        };
     }
 
     private AppUser getCurrentUser() {

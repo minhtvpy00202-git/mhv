@@ -37,6 +37,19 @@ function formatMinutes(minutes) {
   return remainMinutes > 0 ? `${hours}g ${remainMinutes}p` : `${hours}g`
 }
 
+function getWorkspaceTickets(pendingRows, myRows) {
+  const byId = new Map()
+  ;[...(pendingRows || []), ...(myRows || [])].forEach((ticket) => {
+    byId.set(ticket.id, ticket)
+  })
+  return [...byId.values()].sort((left, right) => {
+    const leftPriority = left.status === 'PENDING' ? 0 : left.status === 'IN_PROGRESS' ? 1 : 2
+    const rightPriority = right.status === 'PENDING' ? 0 : right.status === 'IN_PROGRESS' ? 1 : 2
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority
+    return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+  })
+}
+
 function MobileTechSupportTickets() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -52,10 +65,11 @@ function MobileTechSupportTickets() {
   const loadTickets = async () => {
     setLoading(true)
     try {
-      const response = await axiosClient.get('/api/tickets')
-      const data = (response.data || []).filter(
-        (item) => Number(item.assigneeId) === Number(user?.userId) || item.status === 'PENDING',
-      )
+      const [pendingRes, myRes] = await Promise.all([
+        axiosClient.get('/api/tickets', { params: { status: 'PENDING' } }),
+        axiosClient.get('/api/tickets', { params: { assignee_id: user?.userId } }),
+      ])
+      const data = getWorkspaceTickets(pendingRes.data || [], myRes.data || [])
       setTickets(data)
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách ticket hỗ trợ.'

@@ -3,6 +3,7 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.maintenance.MaintenanceHistoryResponse;
 import com.poly.mhv.dto.maintenance.MaintenanceReportRequest;
 import com.poly.mhv.dto.maintenance.MaintenanceReportResponse;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.Ticket;
@@ -11,6 +12,9 @@ import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketRepository;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -63,16 +67,37 @@ public class MaintenanceService {
     @Transactional(readOnly = true)
     public List<MaintenanceHistoryResponse> getMyHistory() {
         AppUser actor = currentUserProvider.getCurrentUser();
-        return ticketRepository.findByReporterIdOrderByCreatedAtDesc(actor.getId()).stream()
+        return ticketRepository.findMaintenanceHistoryByReporterId(actor.getId()).stream()
                 .map(this::mapToHistoryResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<MaintenanceHistoryResponse> getAllForAdminHistory() {
-        return ticketRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(this::mapToHistoryResponse)
-                .toList();
+    public PagedResponse<MaintenanceHistoryResponse> getAllForAdminHistory(int page, int size) {
+        Page<Ticket> ticketPage = ticketRepository.findForMaintenanceHistory(
+                PageRequest.of(
+                        Math.max(0, page),
+                        Math.max(1, Math.min(size, 100)),
+                        Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"))
+                )
+        );
+        return new PagedResponse<>(
+                ticketPage.getContent().stream()
+                        .map(this::mapToHistoryResponse)
+                        .toList(),
+                ticketPage.getNumber(),
+                ticketPage.getSize(),
+                Math.max(1, ticketPage.getTotalPages()),
+                ticketPage.getTotalElements()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TicketResponse getLatestReportedTicket() {
+        AppUser actor = currentUserProvider.getCurrentUser();
+        Ticket ticket = ticketRepository.findFirstByReporterIdOrderByCreatedAtDescIdDesc(actor.getId())
+                .orElse(null);
+        return ticket == null ? null : ticketService.getTicketById(ticket.getId());
     }
 
     private void validateRequest(MaintenanceReportRequest request) {

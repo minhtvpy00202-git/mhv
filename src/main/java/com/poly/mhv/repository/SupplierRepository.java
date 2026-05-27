@@ -17,4 +17,13 @@ public interface SupplierRepository extends JpaRepository<Supplier, Integer> {
             order by s.name asc
             """)
     List<Supplier> searchForAdmin(@Param("keyword") String keyword);
+
+    @Query("""
+            select s.id, count(a)
+            from Supplier s
+            left join s.assets a
+            where s.id in :supplierIds
+            group by s.id
+            """)
+    List<Object[]> countAssetsBySupplierIds(@Param("supplierIds") List<Integer> supplierIds);
 }

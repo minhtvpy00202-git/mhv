@@ -54,6 +54,7 @@ function TechSupportLayout() {
     if (!contactTickets.length) return
     const allowedTicketIds = new Set((contactTickets || []).map((item) => Number(item.id)))
     const loadFeed = async () => {
+      if (document.hidden) return
       try {
         const response = await axiosClient.get('/api/notifications')
         const filteredItems = (response.data?.items || [])
@@ -76,6 +77,7 @@ function TechSupportLayout() {
 
   useEffect(() => {
     const loadContactTickets = async () => {
+      if (document.hidden) return
       try {
         const response = await axiosClient.get('/api/tickets', {
           params: { assignee_id: user?.userId },

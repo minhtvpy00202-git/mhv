@@ -2,6 +2,7 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
+import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.dto.ticket.TicketTimelineEventResponse;
 import com.poly.mhv.service.TicketEventService;
@@ -156,6 +157,38 @@ public class TicketController {
             @RequestParam(name = "reporter_id", required = false) @Positive(message = "Người báo hỏng không hợp lệ.") Integer reporterId
     ) {
         return ResponseEntity.ok(ticketService.getTickets(status, assigneeId, assetQaCode, reporterId));
+    }
+
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Lấy danh sách ticket cho admin", description = "Phân trang danh sách ticket dành cho điều phối admin.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy danh sách ticket admin thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được truy cập")
+    })
+    public ResponseEntity<TicketPageResponse> getAdminTickets(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(name = "assignee_id", required = false) @Positive(message = "Kỹ thuật viên không hợp lệ.") Integer assigneeId,
+            @RequestParam(name = "asset_qa_code", required = false) @Size(max = 20, message = "Mã QA thiết bị không được vượt quá 20 ký tự.") String assetQaCode,
+            @RequestParam(name = "reporter_id", required = false) @Positive(message = "Người báo hỏng không hợp lệ.") Integer reporterId
+    ) {
+        return ResponseEntity.ok(ticketService.getAdminTickets(page, size, status, assigneeId, assetQaCode, reporterId));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('Admin','NhanVien','TechSupport')")
+    @Operation(summary = "Lấy chi tiết ticket", description = "Lấy thông tin chi tiết của một ticket theo id.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy chi tiết ticket thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền truy cập"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
+    })
+    public ResponseEntity<TicketResponse> getTicketById(@PathVariable Integer id) {
+        return ResponseEntity.ok(ticketService.getTicketById(id));
     }
 
     @GetMapping("/{id}/timeline")

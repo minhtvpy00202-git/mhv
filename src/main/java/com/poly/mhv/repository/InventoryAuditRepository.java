@@ -3,6 +3,9 @@ package com.poly.mhv.repository;
 import com.poly.mhv.entity.InventoryAudit;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +19,13 @@ public interface InventoryAuditRepository extends JpaRepository<InventoryAudit, 
             order by ia.startedAt desc, ia.id desc
             """)
     List<InventoryAudit> findForAdmin(@Param("status") String status);
+
+    @EntityGraph(attributePaths = {"location", "createdBy"})
+    @Query("""
+            select ia from InventoryAudit ia
+            where (coalesce(:status, '') = '' or ia.status = :status)
+            """)
+    Page<InventoryAudit> findForAdminPage(@Param("status") String status, Pageable pageable);
 
     @Query("""
             select ia from InventoryAudit ia

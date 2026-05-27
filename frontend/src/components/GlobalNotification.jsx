@@ -12,6 +12,10 @@ function GlobalNotification() {
   const seenNotificationIdsRef = useRef(new Set())
   const audioContextRef = useRef(null)
 
+  const requestNotificationFeedRefresh = () => {
+    window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
+  }
+
   const playSound = () => {
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext
@@ -72,6 +76,7 @@ function GlobalNotification() {
       const type = payload?.type || ''
       const message = payload?.message || 'Có cập nhật sự cố mới.'
       showToastByType(type, message)
+      requestNotificationFeedRefresh()
     })
     return () => unsubscribe()
   }, [connected, isAuthenticated, subscribe, user?.role])
@@ -82,6 +87,7 @@ function GlobalNotification() {
       const type = payload?.type || ''
       const message = payload?.message || 'Có cập nhật sự cố mới.'
       showToastByType(type, message)
+      requestNotificationFeedRefresh()
     })
     return () => unsubscribe()
   }, [connected, isAuthenticated, subscribe, user?.role, user?.userId])
@@ -140,11 +146,19 @@ function GlobalNotification() {
           const message = item.message || 'Có thông báo mới.'
           showToastByType(type, message)
         })
+        if (newItems.length > 0) {
+          requestNotificationFeedRefresh()
+        }
       } catch {}
     }
 
     syncNotifications()
-    const timer = setInterval(syncNotifications, 10000)
+    if (connected) {
+      return () => {
+        mounted = false
+      }
+    }
+    const timer = setInterval(syncNotifications, 15000)
     return () => {
       mounted = false
       clearInterval(timer)

@@ -32,8 +32,8 @@ function TicketDetail() {
     const loadTicket = async () => {
       setLoading(true)
       try {
-        const response = await axiosClient.get('/api/tickets')
-        const found = (response.data || []).find((item) => Number(item.id) === Number(ticketId))
+        const response = await axiosClient.get(`/api/tickets/${ticketId}`)
+        const found = response.data || null
         if (!mounted) return
         if (!found) {
           toast.error('Không tìm thấy ticket.')

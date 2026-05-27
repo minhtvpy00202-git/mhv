@@ -3,6 +3,7 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.notification.RealtimeNotificationResponse;
+import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
@@ -12,10 +13,12 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -24,6 +27,9 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 @RequiredArgsConstructor
 public class TicketService {
+
+    private static final Sort DEFAULT_TICKET_SORT = Sort.by(Sort.Direction.DESC, "createdAt")
+            .and(Sort.by(Sort.Direction.DESC, "id"));
 
     private final TicketRepository ticketRepository;
     private final AssetRepository assetRepository;
@@ -132,7 +138,7 @@ public class TicketService {
             throw new CustomException("assignee_id là bắt buộc.");
         }
 
-        Ticket ticket = ticketRepository.findById(ticketId)
+        Ticket ticket = ticketRepository.findDetailById(ticketId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
         if (!"PENDING".equals(ticket.getStatus())) {
             throw new CustomException("Chỉ ticket ở trạng thái PENDING mới được gán kỹ thuật viên.");
@@ -216,7 +222,7 @@ public class TicketService {
             throw new CustomException("id ticket là bắt buộc.");
         }
 
-        Ticket ticket = ticketRepository.findById(ticketId)
+        Ticket ticket = ticketRepository.findDetailById(ticketId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
         if ("RESOLVED".equals(ticket.getStatus())) {
             throw new CustomException("Ticket đã được xử lý trước đó.");
@@ -275,6 +281,71 @@ public class TicketService {
 
     @Transactional(readOnly = true)
     public List<TicketResponse> getTickets(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {
+        TicketFilter normalizedFilter = normalizeFilter(status, assigneeId, assetQaCode, reporterId);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        return ticketRepository.searchForListing(
+                        normalizedFilter.status(),
+                        normalizedFilter.assigneeId(),
+                        normalizedFilter.assetQaCode(),
+                        normalizedFilter.reporterId(),
+                        DEFAULT_TICKET_SORT
+                ).stream()
+                .filter(ticket -> canAccessTicket(actor, ticket))
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public TicketPageResponse getAdminTickets(
+            int page,
+            int size,
+            String status,
+            Integer assigneeId,
+            String assetQaCode,
+            Integer reporterId
+    ) {
+        TicketFilter normalizedFilter = normalizeFilter(status, assigneeId, assetQaCode, reporterId);
+        Page<Ticket> ticketPage = ticketRepository.searchForAdmin(
+                normalizedFilter.status(),
+                normalizedFilter.assigneeId(),
+                normalizedFilter.assetQaCode(),
+                normalizedFilter.reporterId(),
+                PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)), DEFAULT_TICKET_SORT)
+        );
+        Map<String, Long> statusCounts = ticketRepository.countByStatusForAdmin(
+                        normalizedFilter.status(),
+                        normalizedFilter.assigneeId(),
+                        normalizedFilter.assetQaCode(),
+                        normalizedFilter.reporterId()
+                ).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]
+                ));
+        return TicketPageResponse.builder()
+                .items(ticketPage.getContent().stream().map(this::mapToResponse).toList())
+                .page(ticketPage.getNumber())
+                .size(ticketPage.getSize())
+                .totalPages(Math.max(1, ticketPage.getTotalPages()))
+                .totalItems(ticketPage.getTotalElements())
+                .pendingCount(statusCounts.getOrDefault("PENDING", 0L))
+                .inProgressCount(statusCounts.getOrDefault("IN_PROGRESS", 0L))
+                .resolvedCount(statusCounts.getOrDefault("RESOLVED", 0L))
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public TicketResponse getTicketById(Integer ticketId) {
+        Ticket ticket = ticketRepository.findDetailById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        AppUser actor = currentUserProvider.getCurrentUser();
+        if (!canAccessTicket(actor, ticket)) {
+            throw new CustomException("Bạn không có quyền truy cập ticket này.");
+        }
+        return mapToResponse(ticket);
+    }
+
+    private TicketFilter normalizeFilter(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {
         String normalizedStatus = null;
         if (StringUtils.hasText(status)) {
             normalizedStatus = status.trim().toUpperCase();
@@ -283,39 +354,7 @@ public class TicketService {
             }
         }
         String normalizedAssetQaCode = StringUtils.hasText(assetQaCode) ? assetQaCode.trim() : null;
-
-        AppUser actor = currentUserProvider.getCurrentUser();
-        List<Ticket> tickets;
-        if (normalizedAssetQaCode != null) {
-            tickets = ticketRepository.findByAssetQaCodeOrderByCreatedAtDesc(normalizedAssetQaCode);
-        } else if (normalizedStatus != null && assigneeId != null) {
-            tickets = ticketRepository.findByStatusAndAssigneeId(normalizedStatus, assigneeId);
-        } else if (reporterId != null && normalizedStatus == null && assigneeId == null) {
-            tickets = ticketRepository.findByReporterIdOrderByCreatedAtDesc(reporterId);
-        } else if (normalizedStatus != null) {
-            tickets = ticketRepository.findByStatus(normalizedStatus);
-        } else if (assigneeId != null) {
-            tickets = ticketRepository.findByAssigneeId(assigneeId);
-        } else {
-            tickets = ticketRepository.findAll();
-        }
-        return tickets.stream()
-                .filter(ticket -> normalizedAssetQaCode == null || normalizedAssetQaCode.equals(ticket.getAsset().getQaCode()))
-                .filter(ticket -> reporterId == null || reporterId.equals(ticket.getReporter().getId()))
-                .filter(ticket -> {
-                    if (!"TechSupport".equals(actor.getRole())) {
-                        return true;
-                    }
-                    Integer ticketTechTypeId = getAssetTechTypeId(ticket.getAsset());
-                    if (ticketTechTypeId <= 0) {
-                        return ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
-                    }
-                    return userHasTechSupportType(actor, ticketTechTypeId)
-                            || (ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId()));
-                })
-                .sorted(Comparator.comparing(Ticket::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
-                .map(this::mapToResponse)
-                .toList();
+        return new TicketFilter(normalizedStatus, assigneeId, normalizedAssetQaCode, reporterId);
     }
 
     private LocalDateTime calculateDueDate(String priority, LocalDateTime createdAt) {
@@ -387,6 +426,18 @@ public class TicketService {
         return false;
     }
 
+    private boolean canAccessTicket(AppUser actor, Ticket ticket) {
+        if (!"TechSupport".equals(actor.getRole())) {
+            return true;
+        }
+        Integer ticketTechTypeId = getAssetTechTypeId(ticket.getAsset());
+        if (ticketTechTypeId <= 0) {
+            return ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
+        }
+        return userHasTechSupportType(actor, ticketTechTypeId)
+                || (ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId()));
+    }
+
     private String toVietnameseStatus(String status) {
         if ("PENDING".equals(status)) return "Mới báo hỏng";
         if ("IN_PROGRESS".equals(status)) return "Đang xử lý";
@@ -441,5 +492,8 @@ public class TicketService {
             case "TechSupport" -> "Kỹ thuật viên";
             default -> "Người dùng";
         };
+    }
+
+    private record TicketFilter(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {
     }
 }

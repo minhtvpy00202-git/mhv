@@ -7,9 +7,9 @@ import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.SupplierRepository;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -28,17 +28,10 @@ public class SupplierService {
     @Transactional(readOnly = true)
     public List<SupplierResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
-        return supplierRepository.findAll().stream()
-                .filter(supplier -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    String name = supplier.getName() == null ? "" : supplier.getName().toLowerCase(Locale.ROOT);
-                    return name.contains(searchKey);
-                })
-                .sorted(Comparator.comparing(Supplier::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(this::mapToResponse)
+        List<Supplier> suppliers = supplierRepository.searchForAdmin(normalizedKeyword);
+        Map<Integer, Long> assetCountsBySupplierId = buildAssetCountMap(suppliers);
+        return suppliers.stream()
+                .map(supplier -> mapToResponse(supplier, assetCountsBySupplierId))
                 .toList();
     }
 
@@ -116,13 +109,34 @@ public class SupplierService {
         return normalizedPhoneNumber;
     }
 
+    private Map<Integer, Long> buildAssetCountMap(List<Supplier> suppliers) {
+        List<Integer> supplierIds = suppliers.stream()
+                .map(Supplier::getId)
+                .toList();
+        if (supplierIds.isEmpty()) {
+            return Map.of();
+        }
+        return supplierRepository.countAssetsBySupplierIds(supplierIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (Integer) row[0],
+                        row -> (Long) row[1]
+                ));
+    }
+
     private SupplierResponse mapToResponse(Supplier supplier) {
+        return mapToResponse(
+                supplier,
+                Map.of(supplier.getId(), assetRepository.countBySupplierId(supplier.getId()))
+        );
+    }
+
+    private SupplierResponse mapToResponse(Supplier supplier, Map<Integer, Long> assetCountsBySupplierId) {
         return SupplierResponse.builder()
                 .id(supplier.getId())
                 .name(supplier.getName())
                 .address(supplier.getAddress())
                 .phoneNumber(supplier.getPhoneNumber())
-                .assetCount(assetRepository.countBySupplierId(supplier.getId()))
+                .assetCount(assetCountsBySupplierId.getOrDefault(supplier.getId(), 0L))
                 .build();
     }
 }

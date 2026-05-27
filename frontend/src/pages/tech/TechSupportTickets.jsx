@@ -23,6 +23,19 @@ function toVietnameseStatus(status) {
   return status
 }
 
+function getWorkspaceTickets(pendingRows, myRows) {
+  const byId = new Map()
+  ;[...(pendingRows || []), ...(myRows || [])].forEach((ticket) => {
+    byId.set(ticket.id, ticket)
+  })
+  return [...byId.values()].sort((left, right) => {
+    const leftPriority = left.status === 'PENDING' ? 0 : left.status === 'IN_PROGRESS' ? 1 : 2
+    const rightPriority = right.status === 'PENDING' ? 0 : right.status === 'IN_PROGRESS' ? 1 : 2
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority
+    return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
+  })
+}
+
 function TechSupportTickets() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -39,14 +52,24 @@ function TechSupportTickets() {
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
     try {
-      const params = {}
-      if (nextStatus) {
-        params.status = nextStatus
+      let data = []
+      if (nextStatus === 'PENDING') {
+        const response = await axiosClient.get('/api/tickets', {
+          params: { status: 'PENDING' },
+        })
+        data = response.data || []
+      } else if (nextStatus === 'IN_PROGRESS' || nextStatus === 'RESOLVED') {
+        const response = await axiosClient.get('/api/tickets', {
+          params: { status: nextStatus, assignee_id: user?.userId },
+        })
+        data = response.data || []
+      } else {
+        const [pendingRes, myRes] = await Promise.all([
+          axiosClient.get('/api/tickets', { params: { status: 'PENDING' } }),
+          axiosClient.get('/api/tickets', { params: { assignee_id: user?.userId } }),
+        ])
+        data = getWorkspaceTickets(pendingRes.data || [], myRes.data || [])
       }
-      const response = await axiosClient.get('/api/tickets', { params })
-      const data = (response.data || []).filter(
-        (item) => Number(item.assigneeId) === Number(user?.userId) || item.status === 'PENDING',
-      )
       setTickets(data)
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được ticket hỗ trợ.'

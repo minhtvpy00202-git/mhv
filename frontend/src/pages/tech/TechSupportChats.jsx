@@ -16,7 +16,7 @@ function TechSupportChats() {
         const response = await axiosClient.get('/api/tickets', {
           params: { status: 'PENDING' },
         })
-        const items = (response.data || []).filter((item) => !item.assigneeId)
+        const items = response.data || []
         setTickets(items)
         if (items.length > 0) {
           setTicketId(String(items[0].id))

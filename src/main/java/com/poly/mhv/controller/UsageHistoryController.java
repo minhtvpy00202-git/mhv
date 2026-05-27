@@ -2,6 +2,7 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.usage.CheckinRequest;
 import com.poly.mhv.dto.usage.CheckoutRequest;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.dto.usage.UsageHistoryAdminResponse;
 import com.poly.mhv.dto.usage.UsageHistoryResponse;
 import com.poly.mhv.service.UsageHistoryService;
@@ -61,14 +62,28 @@ public class UsageHistoryController {
             @ApiResponse(responseCode = "200", description = "Lấy lịch sử mượn trả thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<List<UsageHistoryAdminResponse>> getHistoryForAdmin(
+    public ResponseEntity<PagedResponse<UsageHistoryAdminResponse>> getHistoryForAdmin(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String assetName,
             @RequestParam(required = false) Integer borrowedLocationId,
             @RequestParam(required = false) Integer userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) String sortKey,
+            @RequestParam(required = false) String sortDirection
     ) {
-        return ResponseEntity.ok(usageHistoryService.searchForAdmin(assetName, borrowedLocationId, userId, startDate, endDate));
+        return ResponseEntity.ok(usageHistoryService.searchForAdmin(
+                page,
+                size,
+                assetName,
+                borrowedLocationId,
+                userId,
+                startDate,
+                endDate,
+                sortKey,
+                sortDirection
+        ));
     }
 
     @GetMapping("/history/me")

@@ -3,6 +3,14 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { formatVietnamDateTime } from '../../utils/datetime'
 
+const PAGE_SIZE = 10
+const defaultPageInfo = {
+  page: 0,
+  size: PAGE_SIZE,
+  totalPages: 1,
+  totalItems: 0,
+}
+
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
   const [audits, setAudits] = useState([])
@@ -10,18 +18,26 @@ function InventoryAuditManagement() {
   const [form, setForm] = useState({ locationId: '', notes: '' })
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [pageInfo, setPageInfo] = useState(defaultPageInfo)
 
   const sortedAudits = useMemo(() => [...audits], [audits])
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (page = 0) => {
     setLoading(true)
     try {
-      const [locationRes, auditRes] = await Promise.all([
-        axiosClient.get('/api/locations'),
-        axiosClient.get('/api/inventory-audits'),
-      ])
-      setLocations(locationRes.data || [])
-      setAudits(auditRes.data || [])
+      const response = await axiosClient.get('/api/inventory-audits/bootstrap', {
+        params: { page, size: pageInfo.size || PAGE_SIZE },
+      })
+      const data = response.data || {}
+      const auditPage = data.audits || {}
+      setLocations(data.locations || [])
+      setAudits(auditPage.items || [])
+      setPageInfo({
+        page: auditPage.page ?? 0,
+        size: auditPage.size ?? PAGE_SIZE,
+        totalPages: auditPage.totalPages || 1,
+        totalItems: auditPage.totalItems || 0,
+      })
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể tải dữ liệu kiểm kê.'
       toast.error(message)
@@ -57,7 +73,7 @@ function InventoryAuditManagement() {
       })
       toast.success('Tạo phiên kiểm kê thành công.')
       setForm({ locationId: '', notes: '' })
-      await loadInitialData()
+      await loadInitialData(0)
       await loadAuditDetail(response.data.id)
     } catch (error) {
       const message = error?.response?.data?.message || 'Tạo phiên kiểm kê thất bại.'
@@ -72,7 +88,7 @@ function InventoryAuditManagement() {
     try {
       const response = await axiosClient.post(`/api/inventory-audits/${selectedAudit.summary.id}/complete`)
       setSelectedAudit(response.data)
-      await loadInitialData()
+      await loadInitialData(pageInfo.page)
       toast.success('Hoàn thành kiểm kê thành công.')
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể hoàn thành kiểm kê.'
@@ -160,7 +176,10 @@ function InventoryAuditManagement() {
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-base font-semibold text-slate-800">Danh sách phiên kiểm kê</h3>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-slate-800">Danh sách phiên kiểm kê</h3>
+          <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
@@ -204,6 +223,47 @@ function InventoryAuditManagement() {
             </tbody>
           </table>
         </div>
+        {!loading && pageInfo.totalItems > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+            <p>
+              Trang {pageInfo.page + 1} / {Math.max(1, pageInfo.totalPages)}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => loadInitialData(0)}
+                disabled={pageInfo.page <= 0}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Đầu
+              </button>
+              <button
+                type="button"
+                onClick={() => loadInitialData(Math.max(0, pageInfo.page - 1))}
+                disabled={pageInfo.page <= 0}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Trước
+              </button>
+              <button
+                type="button"
+                onClick={() => loadInitialData(Math.min(pageInfo.totalPages - 1, pageInfo.page + 1))}
+                disabled={pageInfo.page >= pageInfo.totalPages - 1}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Sau
+              </button>
+              <button
+                type="button"
+                onClick={() => loadInitialData(Math.max(0, pageInfo.totalPages - 1))}
+                disabled={pageInfo.page >= pageInfo.totalPages - 1}
+                className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
+              >
+                Cuối
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {selectedAudit && (

@@ -15,7 +15,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -51,6 +51,18 @@ function AdminLayout() {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true })
 
+  const loadFeed = useCallback(async (suppressError = false) => {
+    try {
+      const response = await axiosClient.get('/api/notifications')
+      setNotifications(response.data?.items || [])
+      setUnreadCount(response.data?.unreadCount || 0)
+    } catch (error) {
+      if (suppressError) return
+      const message = error?.response?.data?.message || 'Không tải được thông báo.'
+      toast.error(message)
+    }
+  }, [])
+
   useEffect(() => {
     if (
       location.pathname.startsWith('/admin/assets')
@@ -64,20 +76,13 @@ function AdminLayout() {
   }, [location.pathname])
 
   useEffect(() => {
-    const loadFeed = async () => {
-      try {
-        const response = await axiosClient.get('/api/notifications')
-        setNotifications(response.data?.items || [])
-        setUnreadCount(response.data?.unreadCount || 0)
-      } catch (error) {
-        const message = error?.response?.data?.message || 'Không tải được thông báo.'
-        toast.error(message)
-      }
+    const handleRefresh = () => {
+      loadFeed(true)
     }
     loadFeed()
-    const timer = setInterval(loadFeed, 20000)
-    return () => clearInterval(timer)
-  }, [])
+    window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+  }, [loadFeed])
 
   const handleOpenNotification = async (notification) => {
     try {
@@ -86,6 +91,7 @@ function AdminLayout() {
       setNotifications((prev) =>
         prev.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item)),
       )
+      window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
     } catch {}
     setShowNotificationDropdown(false)
     navigate(notification.linkPath)
@@ -97,6 +103,7 @@ function AdminLayout() {
     } catch {}
     setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
     setUnreadCount(0)
+    window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
   }
 
   return (
@@ -179,7 +186,13 @@ function AdminLayout() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowNotificationDropdown((prev) => !prev)}
+                onClick={() => {
+                  const nextValue = !showNotificationDropdown
+                  setShowNotificationDropdown(nextValue)
+                  if (nextValue) {
+                    loadFeed(true)
+                  }
+                }}
                 className="relative inline-flex items-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50"
               >
                 <Bell size={18} />

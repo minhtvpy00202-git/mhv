@@ -45,18 +45,7 @@ public class CategoryService {
     @Transactional(readOnly = true)
     public List<CategoryResponse> getAllCategories(String keyword, Integer techTypeId) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
-        return categoryRepository.findAll().stream()
-                .filter(category -> techTypeId == null
-                        || (category.getTechSupportType() != null && techTypeId.equals(category.getTechSupportType().getId())))
-                .filter(category -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    String name = category.getName() == null ? "" : category.getName().toLowerCase(Locale.ROOT);
-                    return name.contains(searchKey);
-                })
-                .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getName(), right.getName()))
+        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId).stream()
                 .map(this::mapToResponse)
                 .toList();
     }

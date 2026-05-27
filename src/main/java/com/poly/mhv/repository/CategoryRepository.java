@@ -29,4 +29,12 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
             where c.id = :id
             """)
     Optional<Category> findDetailById(@Param("id") Integer id);
+
+    @Query("""
+            select c.techSupportType.id, count(c)
+            from Category c
+            where c.techSupportType.id in :techTypeIds
+            group by c.techSupportType.id
+            """)
+    List<Object[]> countByTechSupportTypeIds(@Param("techTypeIds") List<Integer> techTypeIds);
 }

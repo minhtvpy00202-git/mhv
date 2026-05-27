@@ -46,6 +46,18 @@ public class UserController {
         return ResponseEntity.ok(userService.getBorrowers());
     }
 
+    @GetMapping("/tech-supports")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Lấy danh sách kỹ thuật viên", description = "Lấy toàn bộ tài khoản kỹ thuật viên để điều phối ticket.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy danh sách kỹ thuật viên thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép truy cập")
+    })
+    public ResponseEntity<List<UserAdminResponse>> getTechSupportUsers() {
+        return ResponseEntity.ok(userService.getTechSupportUsers());
+    }
+
     @GetMapping
     @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Lấy danh sách tài khoản", description = "Phân trang và lọc tài khoản theo từ khóa, vai trò, trạng thái.")

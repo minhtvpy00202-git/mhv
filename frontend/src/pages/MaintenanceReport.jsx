@@ -84,22 +84,14 @@ function MaintenanceReport() {
     const loadLatestTicket = async () => {
       setLoadingLatestTicket(true)
       try {
-        const response = await axiosClient.get('/api/tickets', {
-          params: { reporter_id: user.userId },
-        })
+        const response = await axiosClient.get('/api/maintenance/latest-ticket/me')
         if (!mounted) return
-        const rows = Array.isArray(response.data) ? response.data : []
-        const [latest] = [...rows].sort((left, right) => {
-          const leftTime = new Date(left.createdAt || 0).getTime()
-          const rightTime = new Date(right.createdAt || 0).getTime()
-          if (rightTime !== leftTime) return rightTime - leftTime
-          return Number(right.id || 0) - Number(left.id || 0)
-        })
-        setLatestTicket(latest || null)
+        setLatestTicket(response.data || null)
       } catch (error) {
         if (!mounted) return
         const message = error?.response?.data?.message || 'Không tải được ticket gần nhất.'
         toast.error(message)
+        setLatestTicket(null)
       } finally {
         if (mounted) {
           setLoadingLatestTicket(false)

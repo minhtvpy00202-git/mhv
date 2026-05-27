@@ -12,10 +12,12 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -105,37 +107,48 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    public List<UserAdminResponse> getTechSupportUsers() {
+        List<AppUser> techSupportUsers = appUserRepository.findByRole("TechSupport");
+        List<Integer> userIds = techSupportUsers.stream()
+                .map(AppUser::getId)
+                .toList();
+        Map<Integer, AppUser> usersById = userIds.isEmpty()
+                ? Map.of()
+                : appUserRepository.findAllWithTechSupportTypesByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(AppUser::getId, Function.identity()));
+        return techSupportUsers.stream()
+                .map(user -> mapToResponse(usersById.getOrDefault(user.getId(), user)))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public UserPageResponse getUsers(int page, int size, String keyword, String role, String status) {
         int normalizedPage = Math.max(0, page);
         int normalizedSize = Math.max(1, Math.min(size, 100));
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         String normalizedRole = normalizeRoleValue(role);
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
-        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
-        List<AppUser> filtered = appUserRepository.findAll().stream()
-                .filter(user -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    String usernameValue = user.getUsername() == null ? "" : user.getUsername().toLowerCase(Locale.ROOT);
-                    String fullNameValue = user.getFullName() == null ? "" : user.getFullName().toLowerCase(Locale.ROOT);
-                    return usernameValue.contains(searchKey) || fullNameValue.contains(searchKey);
-                })
-                .filter(user -> normalizedRole == null || normalizedRole.equals(user.getRole()))
-                .filter(user -> normalizedStatus == null || normalizedStatus.equals(user.getStatus()))
-                .sorted(Comparator.comparing(AppUser::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+        Page<AppUser> userPage = appUserRepository.searchForAdmin(
+                normalizedKeyword,
+                normalizedRole,
+                normalizedStatus,
+                PageRequest.of(normalizedPage, normalizedSize)
+        );
+        List<Integer> userIds = userPage.getContent().stream()
+                .map(AppUser::getId)
                 .toList();
-        int totalItems = filtered.size();
-        int totalPages = Math.max(1, (int) Math.ceil((double) totalItems / normalizedSize));
-        int fromIndex = Math.min(normalizedPage * normalizedSize, totalItems);
-        int toIndex = Math.min(fromIndex + normalizedSize, totalItems);
-        List<AppUser> pageItems = filtered.subList(fromIndex, toIndex);
+        Map<Integer, AppUser> usersById = userIds.isEmpty()
+                ? Map.of()
+                : appUserRepository.findAllWithTechSupportTypesByIdIn(userIds).stream()
+                        .collect(Collectors.toMap(AppUser::getId, Function.identity()));
         return UserPageResponse.builder()
-                .items(pageItems.stream().map(this::mapToResponse).toList())
-                .page(normalizedPage)
-                .size(normalizedSize)
-                .totalPages(totalPages)
-                .totalItems(totalItems)
+                .items(userPage.getContent().stream()
+                        .map(user -> mapToResponse(usersById.getOrDefault(user.getId(), user)))
+                        .toList())
+                .page(userPage.getNumber())
+                .size(userPage.getSize())
+                .totalPages(Math.max(1, userPage.getTotalPages()))
+                .totalItems(userPage.getTotalElements())
                 .build();
     }
 

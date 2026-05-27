@@ -4,6 +4,9 @@ import com.poly.mhv.entity.UsageHistory;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -35,25 +38,25 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
             """)
     List<UsageHistory> findAllForAdminOrderByStartTimeDesc();
 
+    @EntityGraph(attributePaths = {"asset", "asset.homeLocation", "toLocation", "user"})
     @Query("""
             select uh from UsageHistory uh
-            join fetch uh.asset a
-            join fetch a.homeLocation hl
-            join fetch uh.toLocation tl
-            join fetch uh.user u
+            join uh.asset a
+            join uh.toLocation tl
+            join uh.user u
             where (coalesce(:assetName, '') = '' or lower(a.name) like lower(concat('%', :assetName, '%')))
               and (:borrowedLocationId is null or tl.id = :borrowedLocationId)
               and (:userId is null or u.id = :userId)
               and (:startDateTime is null or uh.startTime >= :startDateTime)
               and (:endDateTime is null or uh.startTime <= :endDateTime)
-            order by uh.startTime desc, uh.id desc
             """)
-    List<UsageHistory> searchForAdmin(
+    Page<UsageHistory> searchForAdmin(
             @Param("assetName") String assetName,
             @Param("borrowedLocationId") Integer borrowedLocationId,
             @Param("userId") Integer userId,
             @Param("startDateTime") LocalDateTime startDateTime,
-            @Param("endDateTime") LocalDateTime endDateTime
+            @Param("endDateTime") LocalDateTime endDateTime,
+            Pageable pageable
     );
 
     @Query("""

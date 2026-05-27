@@ -3,6 +3,8 @@ package com.poly.mhv.controller;
 import com.poly.mhv.dto.maintenance.MaintenanceHistoryResponse;
 import com.poly.mhv.dto.maintenance.MaintenanceReportRequest;
 import com.poly.mhv.dto.maintenance.MaintenanceReportResponse;
+import com.poly.mhv.dto.common.PagedResponse;
+import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.service.MaintenanceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -94,7 +96,21 @@ public class MaintenanceController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép truy cập")
     })
-    public ResponseEntity<List<MaintenanceHistoryResponse>> getHistoryForAdmin() {
-        return ResponseEntity.ok(maintenanceService.getAllForAdminHistory());
+    public ResponseEntity<PagedResponse<MaintenanceHistoryResponse>> getHistoryForAdmin(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ResponseEntity.ok(maintenanceService.getAllForAdminHistory(page, size));
+    }
+
+    @GetMapping("/latest-ticket/me")
+    @Operation(summary = "Lấy ticket báo hỏng gần nhất của tôi", description = "Trả về ticket gần nhất do người dùng hiện tại tạo.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy ticket gần nhất thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Chưa có ticket")
+    })
+    public ResponseEntity<TicketResponse> getLatestReportedTicket() {
+        return ResponseEntity.ok(maintenanceService.getLatestReportedTicket());
     }
 }

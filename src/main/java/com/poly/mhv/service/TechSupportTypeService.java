@@ -8,9 +8,9 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -35,18 +35,11 @@ public class TechSupportTypeService {
     @Transactional(readOnly = true)
     public List<TechSupportTypeResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        String searchKey = normalizedKeyword == null ? null : normalizedKeyword.toLowerCase(Locale.ROOT);
-        return techSupportTypeRepository.findAll().stream()
-                .filter(type -> type.getId() != null && type.getId() > 0)
-                .filter(type -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    String name = type.getName() == null ? "" : type.getName().toLowerCase(Locale.ROOT);
-                    return name.contains(searchKey);
-                })
-                .sorted(Comparator.comparing(TechSupportType::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(this::mapToResponse)
+        List<TechSupportType> techSupportTypes = techSupportTypeRepository.searchForAdmin(normalizedKeyword);
+        Map<Integer, Long> categoryCountsByTechTypeId = buildCategoryCountMap(techSupportTypes);
+        Map<Integer, Long> userCountsByTechTypeId = buildUserCountMap(techSupportTypes);
+        return techSupportTypes.stream()
+                .map(type -> mapToResponse(type, categoryCountsByTechTypeId, userCountsByTechTypeId))
                 .toList();
     }
 
@@ -111,12 +104,52 @@ public class TechSupportTypeService {
         return normalizedName;
     }
 
+    private Map<Integer, Long> buildCategoryCountMap(List<TechSupportType> techSupportTypes) {
+        List<Integer> techTypeIds = techSupportTypes.stream()
+                .map(TechSupportType::getId)
+                .toList();
+        if (techTypeIds.isEmpty()) {
+            return Map.of();
+        }
+        return categoryRepository.countByTechSupportTypeIds(techTypeIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (Integer) row[0],
+                        row -> (Long) row[1]
+                ));
+    }
+
+    private Map<Integer, Long> buildUserCountMap(List<TechSupportType> techSupportTypes) {
+        List<Integer> techTypeIds = techSupportTypes.stream()
+                .map(TechSupportType::getId)
+                .toList();
+        if (techTypeIds.isEmpty()) {
+            return Map.of();
+        }
+        return appUserRepository.countUsersByTechSupportTypeIds(techTypeIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (Integer) row[0],
+                        row -> (Long) row[1]
+                ));
+    }
+
     private TechSupportTypeResponse mapToResponse(TechSupportType techSupportType) {
+        return mapToResponse(
+                techSupportType,
+                Map.of(techSupportType.getId(), categoryRepository.countByTechSupportTypeId(techSupportType.getId())),
+                Map.of(techSupportType.getId(), appUserRepository.countUsersByTechSupportTypeId(techSupportType.getId()))
+        );
+    }
+
+    private TechSupportTypeResponse mapToResponse(
+            TechSupportType techSupportType,
+            Map<Integer, Long> categoryCountsByTechTypeId,
+            Map<Integer, Long> userCountsByTechTypeId
+    ) {
         return TechSupportTypeResponse.builder()
                 .id(techSupportType.getId())
                 .name(techSupportType.getName())
-                .categoryCount(categoryRepository.countByTechSupportTypeId(techSupportType.getId()))
-                .techSupportUserCount(appUserRepository.countUsersByTechSupportTypeId(techSupportType.getId()))
+                .categoryCount(categoryCountsByTechTypeId.getOrDefault(techSupportType.getId(), 0L))
+                .techSupportUserCount(userCountsByTechTypeId.getOrDefault(techSupportType.getId(), 0L))
                 .build();
     }
 }

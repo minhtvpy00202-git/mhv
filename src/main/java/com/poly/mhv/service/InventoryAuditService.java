@@ -7,6 +7,7 @@ import com.poly.mhv.dto.inventory.InventoryAuditMissingResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditScanRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditScanResultResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditSummaryResponse;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.InventoryAudit;
@@ -22,7 +23,14 @@ import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -75,7 +83,7 @@ public class InventoryAuditService {
                 .startedAt(LocalDateTime.now())
                 .status("OPEN")
                 .notes(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
-                .expectedCount(0)
+                .expectedCount((int) assetRepository.countByHomeLocationId(request.getLocationId()))
                 .scannedCount(0)
                 .missingCount(0)
                 .build();
@@ -84,32 +92,30 @@ public class InventoryAuditService {
     }
 
     @Transactional(readOnly = true)
-    public List<InventoryAuditSummaryResponse> getAudits(String status) {
+    public PagedResponse<InventoryAuditSummaryResponse> getAudits(int page, int size, String status) {
         String normalizedStatus = StringUtils.hasText(status) ? status.trim().toUpperCase() : null;
-        return inventoryAuditRepository.findAll().stream()
-                .filter(audit -> normalizedStatus == null || normalizedStatus.equals(audit.getStatus()))
-                .sorted((left, right) -> {
-                    LocalDateTime rightValue = right.getStartedAt();
-                    LocalDateTime leftValue = left.getStartedAt();
-                    if (leftValue == null && rightValue == null) {
-                        return Integer.compare(right.getId(), left.getId());
-                    }
-                    if (leftValue == null) {
-                        return 1;
-                    }
-                    if (rightValue == null) {
-                        return -1;
-                    }
-                    int compare = rightValue.compareTo(leftValue);
-                    return compare != 0 ? compare : Integer.compare(right.getId(), left.getId());
-                })
-                .map(this::mapSummary)
-                .toList();
+        Page<InventoryAudit> auditPage = inventoryAuditRepository.findForAdminPage(
+                normalizedStatus,
+                PageRequest.of(
+                        Math.max(0, page),
+                        Math.max(1, Math.min(size, 100)),
+                        Sort.by(Sort.Direction.DESC, "startedAt").and(Sort.by(Sort.Direction.DESC, "id"))
+                )
+        );
+        return new PagedResponse<>(
+                auditPage.getContent().stream().map(this::mapSummary).toList(),
+                auditPage.getNumber(),
+                auditPage.getSize(),
+                Math.max(1, auditPage.getTotalPages()),
+                auditPage.getTotalElements()
+        );
     }
 
     @Transactional(readOnly = true)
     public List<InventoryAuditSummaryResponse> getActiveAudits() {
-        return getAudits("OPEN");
+        return inventoryAuditRepository.findForAdmin("OPEN").stream()
+                .map(this::mapSummary)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -124,9 +130,18 @@ public class InventoryAuditService {
     public InventoryAuditDetailResponse getDetail(Integer auditId) {
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));
-        List<InventoryAuditItemResponse> scannedItems = inventoryAuditItemRepository.findByAuditIdOrderByScannedAtDesc(auditId).stream()
+        List<InventoryAuditItem> auditItems = inventoryAuditItemRepository.findByAuditIdOrderByScannedAtDesc(auditId);
+        List<String> qaCodes = auditItems.stream()
+                .map(InventoryAuditItem::getAssetQaCode)
+                .distinct()
+                .toList();
+        Map<String, Asset> assetsByQaCode = qaCodes.isEmpty()
+                ? Map.of()
+                : assetRepository.findAllDetailsByQaCodeIn(qaCodes).stream()
+                        .collect(Collectors.toMap(Asset::getQaCode, asset -> asset));
+        List<InventoryAuditItemResponse> scannedItems = auditItems.stream()
                 .map(item -> {
-                    Asset scannedAsset = assetRepository.findById(item.getAssetQaCode()).orElse(null);
+                    Asset scannedAsset = assetsByQaCode.get(item.getAssetQaCode());
                     return InventoryAuditItemResponse.builder()
                             .assetQaCode(item.getAssetQaCode())
                             .assetName(item.getAssetName())
@@ -184,8 +199,10 @@ public class InventoryAuditService {
                 .build();
         inventoryAuditItemRepository.save(item);
 
-        int scannedCount = (int) inventoryAuditItemRepository.countByAuditId(auditId);
-        int expectedCount = assetRepository.findByHomeLocationId(audit.getLocation().getId()).size();
+        int scannedCount = (audit.getScannedCount() == null ? 0 : audit.getScannedCount()) + 1;
+        int expectedCount = audit.getExpectedCount() != null
+                ? audit.getExpectedCount()
+                : (int) assetRepository.countByHomeLocationId(audit.getLocation().getId());
         audit.setScannedCount(scannedCount);
         audit.setExpectedCount(expectedCount);
         inventoryAuditRepository.save(audit);
@@ -209,26 +226,28 @@ public class InventoryAuditService {
             throw new CustomException("Phiên kiểm kê đã được hoàn thành.");
         }
         List<Asset> expectedAssets = assetRepository.findByHomeLocationId(audit.getLocation().getId());
-        java.util.Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(auditId).stream()
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(auditId).stream()
+                .collect(Collectors.toSet());
 
         inventoryAuditMissingRepository.deleteByAuditId(auditId);
-        int missingCount = 0;
+        List<InventoryAuditMissing> missingItems = new ArrayList<>();
+        List<Asset> missingAssets = new ArrayList<>();
         for (Asset asset : expectedAssets) {
             if (!scannedQaCodes.contains(asset.getQaCode())) {
-                InventoryAuditMissing missing = InventoryAuditMissing.builder()
+                missingItems.add(InventoryAuditMissing.builder()
                         .audit(audit)
                         .assetQaCode(asset.getQaCode())
                         .assetName(asset.getName())
                         .locationName(asset.getHomeLocation().getRoomName())
                         .resolutionStatus("PENDING")
-                        .build();
-                inventoryAuditMissingRepository.save(missing);
+                        .build());
                 asset.setStatus("Thất lạc");
-                assetRepository.save(asset);
-                missingCount++;
+                missingAssets.add(asset);
             }
         }
+        inventoryAuditMissingRepository.saveAll(missingItems);
+        assetRepository.saveAll(missingAssets);
+        int missingCount = missingItems.size();
 
         audit.setExpectedCount(expectedAssets.size());
         audit.setScannedCount(scannedQaCodes.size());

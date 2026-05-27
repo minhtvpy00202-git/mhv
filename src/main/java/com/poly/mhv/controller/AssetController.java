@@ -1,16 +1,20 @@
 package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.asset.AssetCreateRequest;
+import com.poly.mhv.dto.asset.AssetManagementBootstrapResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
+import com.poly.mhv.dto.common.PagedResponse;
+import com.poly.mhv.service.CategoryService;
+import com.poly.mhv.service.LocationService;
 import com.poly.mhv.service.AssetService;
+import com.poly.mhv.service.SupplierService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,9 +35,20 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssetController {
 
     private final AssetService assetService;
+    private final CategoryService categoryService;
+    private final LocationService locationService;
+    private final SupplierService supplierService;
 
-    public AssetController(AssetService assetService) {
+    public AssetController(
+            AssetService assetService,
+            CategoryService categoryService,
+            LocationService locationService,
+            SupplierService supplierService
+    ) {
         this.assetService = assetService;
+        this.categoryService = categoryService;
+        this.locationService = locationService;
+        this.supplierService = supplierService;
     }
 
     @PostMapping
@@ -77,21 +92,55 @@ public class AssetController {
     }
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách thiết bị", description = "Lấy toàn bộ thiết bị hoặc lọc theo tên, trạng thái, loại thiết bị và phòng.")
+    @Operation(summary = "Lấy danh sách thiết bị", description = "Phân trang và lọc thiết bị theo tên, trạng thái, loại thiết bị, phòng và sắp xếp.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách thiết bị thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<List<AssetResponse>> getAllAssets(
+    public ResponseEntity<PagedResponse<AssetResponse>> getAllAssets(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Integer categoryId,
-            @RequestParam(required = false) Integer locationId
+            @RequestParam(required = false) Integer locationId,
+            @RequestParam(required = false) String sortKey,
+            @RequestParam(required = false) String sortDirection
     ) {
-        if (name == null && status == null && categoryId == null && locationId == null) {
-            return ResponseEntity.ok(assetService.getAllAssets());
-        }
-        return ResponseEntity.ok(assetService.searchAssets(name, status, categoryId, locationId));
+        return ResponseEntity.ok(assetService.getAssets(
+                page,
+                size,
+                name,
+                status,
+                categoryId,
+                locationId,
+                sortKey,
+                sortDirection
+        ));
+    }
+
+    @GetMapping("/bootstrap")
+    @Operation(summary = "Tải dữ liệu khởi tạo quản lý thiết bị", description = "Trả về trang dữ liệu thiết bị đầu tiên cùng danh mục phòng, loại thiết bị và nhà cung cấp.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy dữ liệu khởi tạo thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<AssetManagementBootstrapResponse> getAssetManagementBootstrap(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer locationId,
+            @RequestParam(required = false) String sortKey,
+            @RequestParam(required = false) String sortDirection
+    ) {
+        return ResponseEntity.ok(new AssetManagementBootstrapResponse(
+                assetService.getAssets(page, size, name, status, categoryId, locationId, sortKey, sortDirection),
+                locationService.getAllLocations(null),
+                categoryService.getAllCategories(null, null),
+                supplierService.getAll(null)
+        ));
     }
 
     @GetMapping("/{qaCode}")

@@ -6,10 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.asset.AssetCreateRequest;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
-import com.poly.mhv.entity.Asset;
+import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.Category;
-import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.AppUser;
+import com.poly.mhv.entity.Asset;
+import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
@@ -19,13 +20,13 @@ import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
-import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -110,38 +111,44 @@ public class AssetService {
     }
 
     @Transactional(readOnly = true)
-    public List<AssetResponse> getAllAssets() {
-        return assetRepository.findAll().stream()
-                .sorted(Comparator.comparing(Asset::getQaCode))
-                .map(asset -> mapToAssetResponse(asset, false))
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<AssetResponse> searchAssets(String name, String status, Integer categoryId, Integer locationId) {
+    public PagedResponse<AssetResponse> getAssets(
+            int page,
+            int size,
+            String name,
+            String status,
+            Integer categoryId,
+            Integer locationId,
+            String sortKey,
+            String sortDirection
+    ) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
-        String searchKey = normalizeKeyword(normalizedName);
-        return assetRepository.findAll().stream()
-                .filter(asset -> {
-                    if (searchKey == null) {
-                        return true;
-                    }
-                    return normalizeKeyword(asset.getName()).contains(searchKey);
-                })
-                .filter(asset -> normalizedStatus == null || normalizedStatus.equals(asset.getStatus()))
-                .filter(asset -> categoryId == null
-                        || (asset.getCategory() != null && categoryId.equals(asset.getCategory().getId())))
-                .filter(asset -> locationId == null
-                        || (asset.getLocation() != null && locationId.equals(asset.getLocation().getId())))
-                .sorted(Comparator.comparing(Asset::getQaCode))
-                .map(asset -> mapToAssetResponse(asset, false))
-                .toList();
+        PageRequest pageable = PageRequest.of(
+                Math.max(0, page),
+                Math.max(1, Math.min(size, 100)),
+                buildSort(sortKey, sortDirection)
+        );
+        Page<Asset> assetPage = assetRepository.searchForAdmin(
+                normalizedName,
+                normalizedStatus,
+                categoryId,
+                locationId,
+                pageable
+        );
+        return new PagedResponse<>(
+                assetPage.getContent().stream()
+                        .map(asset -> mapToAssetResponse(asset, false))
+                        .toList(),
+                assetPage.getNumber(),
+                assetPage.getSize(),
+                Math.max(1, assetPage.getTotalPages()),
+                assetPage.getTotalElements()
+        );
     }
 
     @Transactional(readOnly = true)
     public AssetResponse getAssetByQaCode(String qaCode) {
-        Asset asset = assetRepository.findById(qaCode)
+        Asset asset = assetRepository.findDetailByQaCode(qaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
         return mapToAssetResponse(asset, true);
     }
@@ -275,26 +282,23 @@ public class AssetService {
         return category == null ? null : category.getName();
     }
 
-    private String normalizeKeyword(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .replace('đ', 'd')
-                .replace('Đ', 'D');
-        return normalized.toLowerCase(Locale.ROOT);
+    private Sort buildSort(String sortKey, String sortDirection) {
+        String normalizedSortKey = StringUtils.hasText(sortKey) ? sortKey.trim() : "qaCode";
+        Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
+        return switch (normalizedSortKey) {
+            case "name" -> Sort.by(direction, "name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
+            case "category" -> Sort.by(direction, "category.name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
+            case "status" -> Sort.by(direction, "status").and(Sort.by(Sort.Direction.ASC, "qaCode"));
+            case "homeLocationName" -> Sort.by(direction, "homeLocation.roomName").and(Sort.by(Sort.Direction.ASC, "qaCode"));
+            default -> Sort.by(direction, "qaCode");
+        };
     }
 
     private String generateQaCode(Category category) {
         String prefix = normalizeCodePrefix(category.getCodePrefix());
-        int currentMax = assetRepository.findByCategoryId(category.getId()).stream()
-                .map(Asset::getQaCode)
-                .filter(StringUtils::hasText)
-                .filter(qaCode -> qaCode.startsWith(prefix))
+        int currentMax = assetRepository.findMaxQaCodeByCategoryIdAndPrefix(category.getId(), prefix)
                 .map(qaCode -> extractNumericSuffix(qaCode, prefix))
                 .filter(number -> number > 0)
-                .max(Comparator.naturalOrder())
                 .orElse(0);
 
         int nextNumber = currentMax + 1;

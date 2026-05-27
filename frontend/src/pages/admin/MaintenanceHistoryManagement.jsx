@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -6,6 +6,12 @@ import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
 const PAGE_SIZE = 10
+const defaultPageInfo = {
+  page: 0,
+  size: PAGE_SIZE,
+  totalPages: 1,
+  totalItems: 0,
+}
 
 function getRowKey(item) {
   return `${item.id}-${item.assetQaCode}-${item.reportTime}`
@@ -15,16 +21,23 @@ function MaintenanceHistoryManagement() {
   const navigate = useNavigate()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
 
-  const loadData = async () => {
+  const loadData = async (page = pageInfo.page) => {
     setLoading(true)
     try {
-      const response = await axiosClient.get('/api/maintenance/history')
-      const data = response.data || []
-      setRows(data)
-      setCurrentPage(1)
+      const response = await axiosClient.get('/api/maintenance/history', {
+        params: { page, size: pageInfo.size || PAGE_SIZE },
+      })
+      const data = response.data || {}
+      setRows(data.items || [])
+      setPageInfo({
+        page: data.page ?? 0,
+        size: data.size ?? PAGE_SIZE,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || 0,
+      })
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được lịch sử báo hỏng.'
       toast.error(message)
@@ -37,16 +50,12 @@ function MaintenanceHistoryManagement() {
     loadData()
   }, [])
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE
-    return rows.slice(start, start + PAGE_SIZE)
-  }, [rows, currentPage])
-
   const handleOpenTicketChat = async (item) => {
     try {
-      const response = await axiosClient.get('/api/tickets')
-      const matchedTickets = (response.data || []).filter((ticket) => ticket.assetQaCode === item.assetQaCode)
+      const response = await axiosClient.get('/api/tickets', {
+        params: { asset_qa_code: item.assetQaCode },
+      })
+      const matchedTickets = response.data || []
       if (matchedTickets.length === 0) {
         toast.info(`Chưa có ticket sự cố cho thiết bị ${item.assetQaCode}.`)
         return
@@ -92,7 +101,7 @@ function MaintenanceHistoryManagement() {
             </thead>
             <tbody>
               {!loading &&
-                paginatedRows.map((item) => {
+                rows.map((item) => {
                   const rowKey = getRowKey(item)
                   return (
                   <tr key={rowKey} className="border-t border-slate-100 align-top">
@@ -141,7 +150,7 @@ function MaintenanceHistoryManagement() {
                     </td>
                   </tr>
                 )})}
-              {!loading && paginatedRows.length === 0 && (
+              {!loading && rows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-3 text-center text-slate-500">
                     Chưa có dữ liệu báo hỏng.
@@ -155,37 +164,37 @@ function MaintenanceHistoryManagement() {
 
         <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
           <p>
-            Trang {currentPage} / {totalPages} • Tổng {rows.length} bản ghi
+            Trang {pageInfo.page + 1} / {Math.max(1, pageInfo.totalPages)} • Tổng {pageInfo.totalItems} bản ghi
           </p>
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage <= 1}
+              onClick={() => loadData(0)}
+              disabled={pageInfo.page <= 0}
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
             >
               Đầu
             </button>
             <button
               type="button"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage <= 1}
+              onClick={() => loadData(Math.max(0, pageInfo.page - 1))}
+              disabled={pageInfo.page <= 0}
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
             >
               Trước
             </button>
             <button
               type="button"
-              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage >= totalPages}
+              onClick={() => loadData(Math.min(pageInfo.totalPages - 1, pageInfo.page + 1))}
+              disabled={pageInfo.page >= pageInfo.totalPages - 1}
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
             >
               Sau
             </button>
             <button
               type="button"
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage >= totalPages}
+              onClick={() => loadData(Math.max(0, pageInfo.totalPages - 1))}
+              disabled={pageInfo.page >= pageInfo.totalPages - 1}
               className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50"
             >
               Cuối
