@@ -28,7 +28,7 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     @Query("""
             select a from Asset a
             join a.location l
-            join a.homeLocation hl
+            left join a.homeLocation hl
             join a.category c
             where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)

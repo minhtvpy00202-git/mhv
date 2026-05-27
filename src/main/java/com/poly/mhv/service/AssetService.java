@@ -256,6 +256,7 @@ public class AssetService {
             String qrContent = "{\"qa_code\":\"" + asset.getQaCode() + "\"}";
             qrCodeBase64 = qrCodeGenerator.generateBase64QrCode(qrContent);
         }
+        Location effectiveHomeLocation = asset.getHomeLocation() != null ? asset.getHomeLocation() : asset.getLocation();
         return AssetResponse.builder()
                 .qaCode(asset.getQaCode())
                 .name(asset.getName())
@@ -264,8 +265,8 @@ public class AssetService {
                 .status(asset.getStatus())
                 .locationId(asset.getLocation().getId())
                 .locationName(asset.getLocation().getRoomName())
-                .homeLocationId(asset.getHomeLocation().getId())
-                .homeLocationName(asset.getHomeLocation().getRoomName())
+                .homeLocationId(effectiveHomeLocation != null ? effectiveHomeLocation.getId() : null)
+                .homeLocationName(effectiveHomeLocation != null ? effectiveHomeLocation.getRoomName() : null)
                 .specs(asset.getSpecs())
                 .purchasePrice(asset.getPurchasePrice())
                 .purchaseDate(asset.getPurchaseDate())
