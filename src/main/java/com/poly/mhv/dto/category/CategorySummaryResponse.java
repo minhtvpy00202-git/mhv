@@ -15,4 +15,5 @@ public class CategorySummaryResponse {
     private String codePrefix;
     private Integer techTypeId;
     private String techTypeName;
+    private boolean specTemplatesConfigured;
 }

@@ -4,7 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
-import { validateAssetForm } from '../../utils/validation'
+import { validateAssetForm, validateSupplierForm } from '../../utils/validation'
 
 const statusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
 const PAGE_SIZE = 10
@@ -80,6 +80,10 @@ function AssetManagement() {
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
   const [showSupplierOptions, setShowSupplierOptions] = useState(false)
   const [supplierKeyword, setSupplierKeyword] = useState('')
+  const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false)
+  const [creatingSupplier, setCreatingSupplier] = useState(false)
+  const [supplierForm, setSupplierForm] = useState({ name: '', address: '', phoneNumber: '' })
+  const [supplierFormErrors, setSupplierFormErrors] = useState({})
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [sortState, setSortState] = useState(defaultSortState)
   const [filters, setFilters] = useState({
@@ -244,6 +248,16 @@ function AssetManagement() {
     })
   }
 
+  const resetSupplierForm = () => {
+    setSupplierForm({ name: '', address: '', phoneNumber: '' })
+    setSupplierFormErrors({})
+  }
+
+  const closeSupplierCreateModal = () => {
+    setShowSupplierCreateModal(false)
+    resetSupplierForm()
+  }
+
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
@@ -389,10 +403,7 @@ function AssetManagement() {
         purchasePrice: detail.purchasePrice ?? asset.purchasePrice ?? '',
         purchaseDate: detail.purchaseDate || asset.purchaseDate || '',
         warrantyExpirationDate: detail.warrantyExpirationDate || asset.warrantyExpirationDate || '',
-        specEntries: withSpecEntryKeys(mergeSpecEntries(
-          categoryTemplates,
-          parseSpecsToEntries(detail.specs, categoryTemplates),
-        )),
+        specEntries: withSpecEntryKeys(parseSpecsToEntries(detail.specs, categoryTemplates)),
       })
       setFormMode('update')
       setShowFormModal(true)
@@ -439,6 +450,37 @@ function AssetManagement() {
       specEntries: prev.specEntries.filter((_, entryIndex) => entryIndex !== index),
     }))
     setFormErrors((prev) => ({ ...prev, specEntries: '' }))
+  }
+
+  const handleCreateSupplierInline = async () => {
+    const nextErrors = validateSupplierForm(supplierForm)
+    setSupplierFormErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0])
+      return
+    }
+
+    setCreatingSupplier(true)
+    try {
+      const response = await axiosClient.post('/api/suppliers', {
+        name: supplierForm.name.trim(),
+        address: supplierForm.address.trim(),
+        phoneNumber: supplierForm.phoneNumber.trim(),
+      })
+      const createdSupplier = response.data
+      setSuppliers((prev) => [...prev, createdSupplier].sort((a, b) => getSupplierLabel(a).localeCompare(getSupplierLabel(b), 'vi')))
+      setForm((prev) => ({ ...prev, supplierId: String(createdSupplier.id) }))
+      setSupplierKeyword(getSupplierLabel(createdSupplier))
+      setShowSupplierOptions(false)
+      setFormErrors((prev) => ({ ...prev, supplierId: '' }))
+      toast.success('Đã thêm nhà cung cấp mới.')
+      closeSupplierCreateModal()
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể thêm nhà cung cấp mới.'
+      toast.error(message)
+    } finally {
+      setCreatingSupplier(false)
+    }
   }
 
   const handleSearch = async () => {
@@ -723,9 +765,15 @@ function AssetManagement() {
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedOriginAsset(asset)
-                          setShowOriginModal(true)
+                        onClick={async () => {
+                          try {
+                            const detail = await fetchAssetDetail(asset.qaCode)
+                            setSelectedOriginAsset(detail)
+                            setShowOriginModal(true)
+                          } catch (error) {
+                            const message = error?.response?.data?.message || 'Không thể tải nguồn gốc tài sản của thiết bị.'
+                            toast.error(message)
+                          }
                         }}
                         className="rounded-md border border-amber-300 px-2 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
                       >
@@ -889,7 +937,21 @@ function AssetManagement() {
                 {formErrors.locationId && <p className="mt-1 text-xs text-red-600">{formErrors.locationId}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Nhà cung cấp</label>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label className="block text-sm font-medium text-slate-700">Nhà cung cấp</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetSupplierForm()
+                      setShowSupplierCreateModal(true)
+                    }}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                    title="Thêm nhà cung cấp mới"
+                    aria-label="Thêm nhà cung cấp mới"
+                  >
+                    +
+                  </button>
+                </div>
                 <div className="relative">
                   <input
                     value={supplierKeyword}
@@ -981,7 +1043,7 @@ function AssetManagement() {
                     onClick={addCustomSpecEntry}
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    Thêm custom
+                    Thêm thông số kỹ thuật tuỳ chỉnh
                   </button>
                 </div>
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1067,6 +1129,77 @@ function AssetManagement() {
             </div>
             <div className="flex justify-center">
               <img src={qrModalImage} alt={`QR ${qrModalQaCode}`} className="h-[300px] w-[300px] rounded border border-slate-200" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSupplierCreateModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-base font-semibold text-slate-800">Thêm mới nhà cung cấp</h4>
+              <button
+                type="button"
+                onClick={closeSupplierCreateModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Tên nhà cung cấp</label>
+                <input
+                  value={supplierForm.name}
+                  onChange={(e) => {
+                    setSupplierForm((prev) => ({ ...prev, name: e.target.value }))
+                    setSupplierFormErrors((prev) => ({ ...prev, name: '' }))
+                  }}
+                  placeholder="Ví dụ: Công ty thiết bị giáo dục ABC"
+                  className={getFieldClass(Boolean(supplierFormErrors.name))}
+                />
+                {supplierFormErrors.name && <p className="mt-1 text-xs text-red-600">{supplierFormErrors.name}</p>}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại</label>
+                <input
+                  value={supplierForm.phoneNumber}
+                  onChange={(e) => {
+                    setSupplierForm((prev) => ({ ...prev, phoneNumber: e.target.value }))
+                    setSupplierFormErrors((prev) => ({ ...prev, phoneNumber: '' }))
+                  }}
+                  placeholder="Ví dụ: 0901234567"
+                  className={getFieldClass(Boolean(supplierFormErrors.phoneNumber))}
+                />
+                {supplierFormErrors.phoneNumber && <p className="mt-1 text-xs text-red-600">{supplierFormErrors.phoneNumber}</p>}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Địa chỉ</label>
+                <textarea
+                  value={supplierForm.address}
+                  onChange={(e) => {
+                    setSupplierForm((prev) => ({ ...prev, address: e.target.value }))
+                    setSupplierFormErrors((prev) => ({ ...prev, address: '' }))
+                  }}
+                  placeholder="Nhập địa chỉ nhà cung cấp"
+                  rows={3}
+                  className={getFieldClass(Boolean(supplierFormErrors.address))}
+                />
+                {supplierFormErrors.address && <p className="mt-1 text-xs text-red-600">{supplierFormErrors.address}</p>}
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateSupplierInline}
+                disabled={creatingSupplier}
+                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                Lưu nhà cung cấp
+              </button>
             </div>
           </div>
         </div>

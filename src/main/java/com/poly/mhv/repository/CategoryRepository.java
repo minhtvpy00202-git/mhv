@@ -22,7 +22,11 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
                 c.name,
                 c.codePrefix,
                 t.id,
-                t.name
+                t.name,
+                case
+                    when c.specTemplates is null or c.specTemplates = '[]' then false
+                    else true
+                end
             )
             from Category c
             join c.techSupportType t

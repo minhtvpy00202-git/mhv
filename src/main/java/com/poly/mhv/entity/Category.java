@@ -7,7 +7,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
@@ -36,8 +35,7 @@ public class Category {
     @Column(name = "code_prefix", nullable = false, unique = true, length = 10)
     private String codePrefix;
 
-    @Lob
-    @Column(name = "spec_templates")
+    @Column(name = "spec_templates", columnDefinition = "TEXT")
     private String specTemplates;
 
     @ManyToOne

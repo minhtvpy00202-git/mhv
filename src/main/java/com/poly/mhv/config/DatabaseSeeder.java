@@ -7,11 +7,14 @@ import com.poly.mhv.repository.AppUserRepository;
 import java.util.ArrayList;
 import java.util.Map;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class DatabaseSeeder implements CommandLineRunner {
 
     private final AppUserRepository appUserRepository;

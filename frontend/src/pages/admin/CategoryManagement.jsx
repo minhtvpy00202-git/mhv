@@ -13,7 +13,7 @@ function getFieldClass(hasError) {
 }
 
 function getCategorySortValue(category, key) {
-  if (key === 'specTemplates') return category.specTemplates?.length ?? 0
+  if (key === 'specTemplatesConfigured') return category.specTemplatesConfigured ? 1 : 0
   return category?.[key]
 }
 
@@ -321,8 +321,8 @@ function CategoryManagement() {
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('specTemplates')} className="hover:text-fptOrange">
-                    {getSortLabel('specTemplates', 'Template specs')}
+                  <button type="button" onClick={() => handleSort('specTemplatesConfigured')} className="hover:text-fptOrange">
+                    {getSortLabel('specTemplatesConfigured', 'Mẫu thông số kỹ thuật')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
@@ -361,9 +361,7 @@ function CategoryManagement() {
                       <span className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700">{category.codePrefix || '-'}</span>
                     </td>
                     <td className="px-3 py-2">{category.techTypeName || '-'}</td>
-                    <td className="px-3 py-2">
-                      <span className="text-xs text-slate-500">Mở sửa để xem chi tiết</span>
-                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">Mở sửa để xem chi tiết</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <button
