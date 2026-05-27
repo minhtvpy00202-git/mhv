@@ -11,7 +11,6 @@ import {
   PackageSearch,
   Tags,
   Ticket,
-  TriangleAlert,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -37,8 +36,7 @@ const menuItems = [
   },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
-  { to: '/admin/maintenance-history', label: 'Lịch sử báo hỏng', icon: TriangleAlert },
-  { to: '/admin/tickets', label: 'Điều phối ticket', icon: Ticket },
+  { to: '/admin/tickets', label: 'Điều phối ticket sửa chữa', icon: Ticket },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
 ]
 

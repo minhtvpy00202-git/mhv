@@ -49,6 +49,12 @@ function formatDate(value) {
   return value
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
 }
@@ -496,8 +502,15 @@ function AssetManagement() {
   const handleOpenQrModal = async (qaCode) => {
     setQrModalLoading(true)
     try {
-      const response = await axiosClient.get(`/api/assets/${qaCode}/qr`)
-      const qrCodeBase64 = response.data?.qrCodeBase64
+      let qrCodeBase64 = ''
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await axiosClient.get(`/api/assets/${qaCode}/qr`)
+        qrCodeBase64 = String(response.data?.qrCodeBase64 || '').trim()
+        if (qrCodeBase64) break
+        if (attempt === 0) {
+          await sleep(300)
+        }
+      }
       if (!qrCodeBase64) {
         toast.error('Không lấy được mã QR của thiết bị này.')
         return
@@ -881,11 +894,6 @@ function AssetManagement() {
                     disabled
                     className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-600"
                   />
-                </div>
-              )}
-              {!isEditing && (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600 md:col-span-2">
-                  Mã QA sẽ được hệ thống tự sinh sau khi bạn chọn loại thiết bị và lưu bản ghi mới.
                 </div>
               )}
               <div>

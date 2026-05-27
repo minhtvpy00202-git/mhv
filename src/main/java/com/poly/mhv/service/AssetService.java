@@ -169,16 +169,18 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public Map<String, String> getAssetQrByQaCode(String qaCode) {
-        CachedAssetQr cacheSnapshot = assetQrCache.get(qaCode);
-        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
-            return Map.of("qaCode", qaCode, "qrCodeBase64", cacheSnapshot.qrCodeBase64());
+        String normalizedQaCode = qaCode == null ? null : qaCode.trim();
+        if (!StringUtils.hasText(normalizedQaCode)) {
+            throw new CustomException("Mã tài sản không hợp lệ.");
         }
-        Asset asset = assetRepository.findById(qaCode)
+        CachedAssetQr cacheSnapshot = assetQrCache.get(normalizedQaCode);
+        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
+            return Map.of("qaCode", normalizedQaCode, "qrCodeBase64", cacheSnapshot.qrCodeBase64());
+        }
+        Asset asset = assetRepository.findById(normalizedQaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
-        String qrContent = "{\"qa_code\":\"" + asset.getQaCode() + "\"}";
-        String qrCodeBase64 = qrCodeGenerator.generateBase64QrCode(qrContent);
-        assetQrCache.put(qaCode, new CachedAssetQr(qrCodeBase64, System.currentTimeMillis() + ASSET_QR_CACHE_TTL_MS));
-        return Map.of("qaCode", qaCode, "qrCodeBase64", qrCodeBase64);
+        String qrCodeBase64 = generateAndCacheAssetQr(asset);
+        return Map.of("qaCode", normalizedQaCode, "qrCodeBase64", qrCodeBase64);
     }
 
     @Transactional
@@ -316,6 +318,30 @@ public class AssetService {
         }
         assetDetailCache.remove(qaCode);
         assetQrCache.remove(qaCode);
+    }
+
+    private String generateAndCacheAssetQr(Asset asset) {
+        String qrContent = "{\"qa_code\":\"" + asset.getQaCode() + "\"}";
+        CustomException lastException = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                String qrCodeBase64 = qrCodeGenerator.generateBase64QrCode(qrContent);
+                if (StringUtils.hasText(qrCodeBase64)) {
+                    assetQrCache.put(
+                            asset.getQaCode(),
+                            new CachedAssetQr(qrCodeBase64, System.currentTimeMillis() + ASSET_QR_CACHE_TTL_MS)
+                    );
+                    return qrCodeBase64;
+                }
+            } catch (CustomException ex) {
+                lastException = ex;
+            }
+            assetQrCache.remove(asset.getQaCode());
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
+        throw new CustomException("Không thể sinh mã QR cho thiết bị.");
     }
 
     private AssetResponse mapToAssetListResponse(AssetAdminListItemResponse item) {

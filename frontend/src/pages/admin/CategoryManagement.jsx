@@ -13,8 +13,12 @@ function getFieldClass(hasError) {
 }
 
 function getCategorySortValue(category, key) {
-  if (key === 'specTemplatesConfigured') return category.specTemplatesConfigured ? 1 : 0
+  if (key === 'specTemplateCount') return category.specTemplateCount || 0
   return category?.[key]
+}
+
+function getSpecTemplatesPreview(specTemplates = [], limit = 3) {
+  return specTemplates.slice(0, limit)
 }
 
 function CategoryManagement() {
@@ -22,6 +26,8 @@ function CategoryManagement() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
+  const [showSpecsPreviewModal, setShowSpecsPreviewModal] = useState(false)
+  const [selectedCategoryForSpecs, setSelectedCategoryForSpecs] = useState(null)
   const [selectedCategoryId, setSelectedCategoryId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [techSupportTypeOptions, setTechSupportTypeOptions] = useState([])
@@ -96,6 +102,11 @@ function CategoryManagement() {
     resetForm()
   }
 
+  const closeSpecsPreviewModal = () => {
+    setShowSpecsPreviewModal(false)
+    setSelectedCategoryForSpecs(null)
+  }
+
   const openCreateModal = () => {
     resetForm()
     setShowFormModal(true)
@@ -132,7 +143,7 @@ function CategoryManagement() {
         techTypeId: Number(form.techTypeId),
         specTemplates: normalizeSpecTemplates(form.specTemplates),
       })
-      toast.success(`Thêm loại thiết bị thành công. Prefix: ${response.data?.codePrefix || 'đã tự sinh'}.`)
+      toast.success('Thêm loại thiết bị thành công.')
       closeFormModal()
       await loadCategories()
     } catch (error) {
@@ -311,18 +322,13 @@ function CategoryManagement() {
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('codePrefix')} className="hover:text-fptOrange">
-                    {getSortLabel('codePrefix', 'Code Prefix')}
-                  </button>
-                </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
                   <button type="button" onClick={() => handleSort('techTypeName')} className="hover:text-fptOrange">
                     {getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('specTemplatesConfigured')} className="hover:text-fptOrange">
-                    {getSortLabel('specTemplatesConfigured', 'Mẫu thông số kỹ thuật')}
+                  <button type="button" onClick={() => handleSort('specTemplateCount')} className="hover:text-fptOrange">
+                    {getSortLabel('specTemplateCount', 'Mẫu thông số kỹ thuật')}
                   </button>
                 </th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
@@ -337,9 +343,6 @@ function CategoryManagement() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="h-4 w-48 rounded bg-slate-200" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="h-4 w-20 rounded bg-slate-200" />
                     </td>
                     <td className="px-3 py-2">
                       <div className="h-4 w-56 rounded bg-slate-200" />
@@ -357,11 +360,35 @@ function CategoryManagement() {
                   <tr key={category.id}>
                     <td className="px-3 py-2">{category.id}</td>
                     <td className="px-3 py-2">{category.name}</td>
-                    <td className="px-3 py-2">
-                      <span className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700">{category.codePrefix || '-'}</span>
-                    </td>
                     <td className="px-3 py-2">{category.techTypeName || '-'}</td>
-                    <td className="px-3 py-2 text-xs text-slate-500">Mở sửa để xem chi tiết</td>
+                    <td className="px-3 py-2">
+                      {category.specTemplateCount > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {getSpecTemplatesPreview(category.specTemplates).map((template) => (
+                            <span
+                              key={`${category.id}-${template}`}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
+                            >
+                              {template}
+                            </span>
+                          ))}
+                          {category.specTemplateCount > 3 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategoryForSpecs(category)
+                                setShowSpecsPreviewModal(true)
+                              }}
+                              className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                            >
+                              Xem thêm
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">Chưa cấu hình</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">
                         <button
@@ -384,7 +411,7 @@ function CategoryManagement() {
                 ))}
               {!loading && categories.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có loại thiết bị phù hợp.
                   </td>
                 </tr>
@@ -435,21 +462,6 @@ function CategoryManagement() {
             </div>
 
             <div className="grid gap-3">
-              {!isEditing && (
-                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-sm text-slate-600">
-                  Code prefix sẽ được backend tự sinh khi bạn lưu loại thiết bị mới.
-                </div>
-              )}
-              {isEditing && (
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Code Prefix</label>
-                  <input
-                    value={categories.find((item) => item.id === selectedCategoryId)?.codePrefix || ''}
-                    disabled
-                    className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                  />
-                </div>
-              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Tên loại thiết bị</label>
                 <input
@@ -484,13 +496,13 @@ function CategoryManagement() {
               </div>
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <label className="block text-sm font-medium text-slate-700">Template đặc tính kỹ thuật</label>
+                  <label className="block text-sm font-medium text-slate-700">Mẫu thông số kỹ thuật</label>
                   <button
                     type="button"
                     onClick={addSpecTemplate}
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    Thêm template
+                    Thêm mẫu
                   </button>
                 </div>
                 <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -512,7 +524,7 @@ function CategoryManagement() {
                     </div>
                   ))}
                   {form.specTemplates.length === 0 && (
-                    <p className="text-sm text-slate-500">Chưa có template. Bạn có thể thêm các đặc tính như RAM, CPU, GPU...</p>
+                    <p className="text-sm text-slate-500">Chưa có mẫu thông số. Bạn có thể thêm các thuộc tính như RAM, CPU, GPU...</p>
                   )}
                 </div>
                 {formErrors.specTemplates && <p className="mt-1 text-xs text-red-600">{formErrors.specTemplates}</p>}
@@ -530,6 +542,35 @@ function CategoryManagement() {
               >
                 {isEditing ? 'Lưu chỉnh sửa' : 'Thêm mới'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSpecsPreviewModal && selectedCategoryForSpecs && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-base font-semibold text-slate-800">
+                Mẫu thông số kỹ thuật - {selectedCategoryForSpecs.name}
+              </h4>
+              <button
+                type="button"
+                onClick={closeSpecsPreviewModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedCategoryForSpecs.specTemplates.map((template) => (
+                <span
+                  key={`${selectedCategoryForSpecs.id}-${template}`}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700"
+                >
+                  {template}
+                </span>
+              ))}
             </div>
           </div>
         </div>

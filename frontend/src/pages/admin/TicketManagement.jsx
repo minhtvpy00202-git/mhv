@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
+import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
 const PAGE_SIZE = 10
@@ -45,6 +45,7 @@ function TicketManagement() {
   const [techSupports, setTechSupports] = useState([])
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [stats, setStats] = useState(defaultStats)
+  const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [filters, setFilters] = useState({
     status: '',
     assigneeId: '',
@@ -140,8 +141,8 @@ function TicketManagement() {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">Điều phối Ticket sự cố</h2>
-        <p className="mt-1 text-sm text-slate-600">Admin theo dõi ticket, gán kỹ thuật viên và truy cập chat theo ngữ cảnh.</p>
+        <h2 className="text-lg font-semibold text-slate-800">Điều phối ticket sửa chữa</h2>
+        <p className="mt-1 text-sm text-slate-600">Theo dõi ticket báo hỏng, xem nhanh thông tin sự cố và gán kỹ thuật viên phụ trách.</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Chờ tiếp nhận: {stats.pending}</div>
           <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Đang xử lý: {stats.inProgress}</div>
@@ -196,20 +197,21 @@ function TicketManagement() {
         </div>
 
         <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-[1500px] text-sm">
+          <table className="min-w-[1600px] text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left">Ticket</th>
                 <th className="px-3 py-2 text-left">Mã thiết bị</th>
                 <th className="px-3 py-2 text-left">Tên thiết bị</th>
                 <th className="px-3 py-2 text-left">Phòng</th>
-                <th className="px-3 py-2 text-left">Loại thiết bị</th>
                 <th className="px-3 py-2 text-left">Người báo</th>
+                <th className="px-3 py-2 text-left">Sự cố</th>
+                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
+                <th className="px-3 py-2 text-left">Ngày báo</th>
                 <th className="px-3 py-2 text-left">Ưu tiên</th>
                 <th className="px-3 py-2 text-left">Trạng thái</th>
                 <th className="px-3 py-2 text-left">KTV phụ trách</th>
                 <th className="px-3 py-2 text-left">Hạn sửa chữa</th>
-                <th className="px-3 py-2 text-left">Chat</th>
               </tr>
             </thead>
             <tbody>
@@ -219,8 +221,26 @@ function TicketManagement() {
                   <td className="px-3 py-2">{ticket.assetQaCode}</td>
                   <td className="px-3 py-2">{ticket.assetName || '-'}</td>
                   <td className="px-3 py-2">{ticket.assetLocationName || '-'}</td>
-                  <td className="px-3 py-2">{ticket.assetCategoryName || '-'}</td>
                   <td className="px-3 py-2">{ticket.reporterName || `#${ticket.reporterId}`}</td>
+                  <td className="max-w-xs px-3 py-2">
+                    <p className="line-clamp-3 whitespace-pre-wrap text-slate-700">{ticket.description || '-'}</p>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!ticket.imageUrl) {
+                          toast.info('Ticket này chưa có ảnh lỗi.')
+                          return
+                        }
+                        setPreviewImageUrl(ticket.imageUrl)
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Xem ảnh
+                    </button>
+                  </td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(ticket.createdAt)}</td>
                   <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
                   <td className="px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -272,19 +292,11 @@ function TicketManagement() {
                     <p>{formatVietnamDateTime(ticket.dueDate)}</p>
                     {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
                   </td>
-                  <td className="px-3 py-2">
-                    <Link
-                      to={`/admin/tickets/${ticket.id}`}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      Mở chat
-                    </Link>
-                  </td>
                 </tr>
               ))}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={12} className="px-3 py-3 text-center text-slate-500">
                     Không có ticket phù hợp.
                   </td>
                 </tr>
@@ -335,6 +347,21 @@ function TicketManagement() {
           </div>
         )}
       </section>
+
+      {previewImageUrl && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+          <div className="rounded-2xl bg-white p-4 shadow-xl">
+            <img src={resolveBackendMediaUrl(previewImageUrl)} alt="ticket-error-preview" className="max-h-[70vh] max-w-[80vw] rounded-lg object-contain" />
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl('')}
+              className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 package com.poly.mhv.repository;
 
 import com.poly.mhv.dto.category.CategoryOptionResponse;
-import com.poly.mhv.dto.category.CategorySummaryResponse;
+import com.poly.mhv.dto.category.CategorySummaryRow;
 import com.poly.mhv.entity.Category;
 import java.util.List;
 import java.util.Optional;
@@ -17,16 +17,12 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
     long countByTechSupportTypeId(Integer techTypeId);
 
     @Query("""
-            select new com.poly.mhv.dto.category.CategorySummaryResponse(
+            select new com.poly.mhv.dto.category.CategorySummaryRow(
                 c.id,
                 c.name,
-                c.codePrefix,
                 t.id,
                 t.name,
-                case
-                    when c.specTemplates is null or c.specTemplates = '[]' then false
-                    else true
-                end
+                c.specTemplates
             )
             from Category c
             join c.techSupportType t
@@ -34,7 +30,7 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
               and (:techTypeId is null or t.id = :techTypeId)
             order by c.name asc
             """)
-    List<CategorySummaryResponse> searchForAdmin(@Param("keyword") String keyword, @Param("techTypeId") Integer techTypeId);
+    List<CategorySummaryRow> searchForAdmin(@Param("keyword") String keyword, @Param("techTypeId") Integer techTypeId);
 
     @Query("""
             select new com.poly.mhv.dto.category.CategoryOptionResponse(

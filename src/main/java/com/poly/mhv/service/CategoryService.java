@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.category.CategoryCreateRequest;
 import com.poly.mhv.dto.category.CategoryOptionResponse;
 import com.poly.mhv.dto.category.CategoryResponse;
+import com.poly.mhv.dto.category.CategorySummaryRow;
 import com.poly.mhv.dto.category.CategorySummaryResponse;
 import com.poly.mhv.dto.category.CategoryUpdateRequest;
 import com.poly.mhv.entity.Category;
@@ -51,7 +52,9 @@ public class CategoryService {
     @Transactional(readOnly = true)
     public List<CategorySummaryResponse> getAllCategories(String keyword, Integer techTypeId) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId);
+        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId).stream()
+                .map(this::mapToSummaryResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -221,6 +224,18 @@ public class CategoryService {
                 .techTypeId(category.getTechSupportType().getId())
                 .techTypeName(category.getTechSupportType().getName())
                 .specTemplates(parseSpecTemplates(category.getSpecTemplates()))
+                .build();
+    }
+
+    private CategorySummaryResponse mapToSummaryResponse(CategorySummaryRow row) {
+        List<String> specTemplates = parseSpecTemplates(row.getSpecTemplatesJson());
+        return CategorySummaryResponse.builder()
+                .id(row.getId())
+                .name(row.getName())
+                .techTypeId(row.getTechTypeId())
+                .techTypeName(row.getTechTypeName())
+                .specTemplates(specTemplates)
+                .specTemplateCount(specTemplates.size())
                 .build();
     }
 

@@ -238,6 +238,24 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     }
   }, [ticketId])
 
+  const scheduleSyncAfterSend = useCallback(() => {
+    if (postSendSyncTimerRef.current) {
+      clearTimeout(postSendSyncTimerRef.current)
+    }
+    postSendSyncTimerRef.current = window.setTimeout(() => {
+      void syncMessages({ silent: true })
+    }, 1200)
+  }, [syncMessages])
+
+  const scheduleSyncAfterRealtimeMedia = useCallback(() => {
+    if (postSendSyncTimerRef.current) {
+      clearTimeout(postSendSyncTimerRef.current)
+    }
+    postSendSyncTimerRef.current = window.setTimeout(() => {
+      void syncMessages({ silent: true })
+    }, 2200)
+  }, [syncMessages])
+
   useEffect(() => {
     void syncMessages()
   }, [syncMessages])
@@ -285,24 +303,6 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
       })),
     [messages, user?.userId],
   )
-
-  const scheduleSyncAfterSend = useCallback(() => {
-    if (postSendSyncTimerRef.current) {
-      clearTimeout(postSendSyncTimerRef.current)
-    }
-    postSendSyncTimerRef.current = window.setTimeout(() => {
-      void syncMessages({ silent: true })
-    }, 1200)
-  }, [syncMessages])
-
-  const scheduleSyncAfterRealtimeMedia = useCallback(() => {
-    if (postSendSyncTimerRef.current) {
-      clearTimeout(postSendSyncTimerRef.current)
-    }
-    postSendSyncTimerRef.current = window.setTimeout(() => {
-      void syncMessages({ silent: true })
-    }, 2200)
-  }, [syncMessages])
 
   const sendFallbackMessage = useCallback(async (payload) => {
     const response = await axiosClient.post(`/api/tickets/${ticketId}/chats`, {
