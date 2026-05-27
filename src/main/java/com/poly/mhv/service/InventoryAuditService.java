@@ -83,7 +83,7 @@ public class InventoryAuditService {
                 .startedAt(LocalDateTime.now())
                 .status("OPEN")
                 .notes(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
-                .expectedCount((int) assetRepository.countByHomeLocationId(request.getLocationId()))
+                .expectedCount((int) assetRepository.countByHomeLocationIdAndTrackingMode(request.getLocationId(), "ITEMIZED"))
                 .scannedCount(0)
                 .missingCount(0)
                 .build();
@@ -182,6 +182,9 @@ public class InventoryAuditService {
         String qaCode = request.getAssetQaCode().trim();
         Asset asset = assetRepository.findById(qaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
+        if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
+            throw new CustomException("Vật tư tiêu hao không thuộc phạm vi kiểm kê từng thiết bị.");
+        }
         if (!asset.getHomeLocation().getId().equals(audit.getLocation().getId())) {
             throw new CustomException("Tài sản này thuộc " + asset.getHomeLocation().getRoomName());
         }
@@ -202,7 +205,7 @@ public class InventoryAuditService {
         int scannedCount = (audit.getScannedCount() == null ? 0 : audit.getScannedCount()) + 1;
         int expectedCount = audit.getExpectedCount() != null
                 ? audit.getExpectedCount()
-                : (int) assetRepository.countByHomeLocationId(audit.getLocation().getId());
+                : (int) assetRepository.countByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
         audit.setScannedCount(scannedCount);
         audit.setExpectedCount(expectedCount);
         inventoryAuditRepository.save(audit);
@@ -225,7 +228,7 @@ public class InventoryAuditService {
         if (!"OPEN".equals(audit.getStatus())) {
             throw new CustomException("Phiên kiểm kê đã được hoàn thành.");
         }
-        List<Asset> expectedAssets = assetRepository.findByHomeLocationId(audit.getLocation().getId());
+        List<Asset> expectedAssets = assetRepository.findByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
         Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(auditId).stream()
                 .collect(Collectors.toSet());
 

@@ -14,6 +14,7 @@ public class CategoryResponse {
     private Integer id;
     private String name;
     private String codePrefix;
+    private String categoryKind;
     private Integer techTypeId;
     private String techTypeName;
     private List<String> specTemplates;

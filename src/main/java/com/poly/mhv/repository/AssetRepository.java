@@ -24,10 +24,13 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     long countByCategoryId(Integer categoryId);
     long countByLocationIdOrHomeLocationId(Integer locationId, Integer homeLocationId);
     List<Asset> findByWarrantyExpirationDate(LocalDate warrantyExpirationDate);
+    long countByHomeLocationIdAndTrackingMode(Integer homeLocationId, String trackingMode);
+    List<Asset> findByHomeLocationIdAndTrackingMode(Integer homeLocationId, String trackingMode);
 
     @Query("""
             select new com.poly.mhv.dto.asset.AssetAdminListItemResponse(
                 a.qaCode,
+                a.trackingMode,
                 a.name,
                 c.id,
                 c.name,
@@ -36,6 +39,9 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 l.roomName,
                 hl.id,
                 hl.roomName,
+                a.quantityOnHand,
+                a.minimumStock,
+                a.unit,
                 s.id,
                 s.name
             )
@@ -46,12 +52,14 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             left join a.supplier s
             where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)
+              and (:trackingMode is null or a.trackingMode = :trackingMode)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)
             """)
     Page<AssetAdminListItemResponse> searchForAdmin(
             @Param("name") String name,
             @Param("status") String status,
+            @Param("trackingMode") String trackingMode,
             @Param("categoryId") Integer categoryId,
             @Param("locationId") Integer locationId,
             Pageable pageable
@@ -72,9 +80,9 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             """)
     Optional<String> findMaxQaCodeByCategoryIdAndPrefix(@Param("categoryId") Integer categoryId, @Param("prefix") String prefix);
 
-    @Query("select count(a) from Asset a")
+    @Query("select count(a) from Asset a where a.trackingMode = 'ITEMIZED'")
     long countAllAssets();
-    @Query("select count(a) from Asset a where a.status = :status")
+    @Query("select count(a) from Asset a where a.trackingMode = 'ITEMIZED' and a.status = :status")
     long countByStatusValue(@Param("status") String status);
     @Query("select a from Asset a join fetch a.location l join fetch a.category c order by l.id asc, a.qaCode asc")
     List<Asset> findAllForExportOrderByLocation();

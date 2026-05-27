@@ -67,6 +67,9 @@ public class TicketService {
 
         Asset asset = assetRepository.findById(request.getAssetQaCode().trim())
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với asset_qa_code đã cung cấp."));
+        if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
+            throw new CustomException("Vật tư tiêu hao không hỗ trợ báo hỏng và tạo ticket.");
+        }
         AppUser reporter = currentUserProvider.getCurrentUser();
         LocalDateTime createdAt = LocalDateTime.now();
 

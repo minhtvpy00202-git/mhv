@@ -4,6 +4,8 @@ import com.poly.mhv.dto.asset.AssetCreateRequest;
 import com.poly.mhv.dto.asset.AssetManagementBootstrapResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
+import com.poly.mhv.dto.asset.ConsumableIssueRequest;
+import com.poly.mhv.dto.asset.ConsumableIssueResponse;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.service.CategoryService;
 import com.poly.mhv.service.LocationService;
@@ -15,6 +17,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -102,6 +105,7 @@ public class AssetController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
             @RequestParam(required = false) String sortKey,
@@ -112,6 +116,7 @@ public class AssetController {
                 size,
                 name,
                 status,
+                trackingMode,
                 categoryId,
                 locationId,
                 sortKey,
@@ -130,17 +135,33 @@ public class AssetController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
             @RequestParam(required = false) String sortKey,
             @RequestParam(required = false) String sortDirection
     ) {
         return ResponseEntity.ok(new AssetManagementBootstrapResponse(
-                assetService.getAssets(page, size, name, status, categoryId, locationId, sortKey, sortDirection),
+                assetService.getAssets(page, size, name, status, trackingMode, categoryId, locationId, sortKey, sortDirection),
                 locationService.getAllLocations(null),
                 categoryService.getCategoryOptions(),
                 supplierService.getAll(null)
         ));
+    }
+
+    @PostMapping("/{qaCode}/issues")
+    @Operation(summary = "Cấp phát vật tư tiêu hao", description = "Giảm tồn kho và lưu lịch sử cấp phát cho vật tư tiêu hao.")
+    public ResponseEntity<ConsumableIssueResponse> issueConsumable(
+            @PathVariable String qaCode,
+            @Valid @RequestBody ConsumableIssueRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.issueConsumable(qaCode, request));
+    }
+
+    @GetMapping("/{qaCode}/issues")
+    @Operation(summary = "Lấy lịch sử cấp phát vật tư", description = "Trả về các lần cấp phát của vật tư tiêu hao theo mã QA.")
+    public ResponseEntity<List<ConsumableIssueResponse>> getConsumableIssueHistory(@PathVariable String qaCode) {
+        return ResponseEntity.ok(assetService.getConsumableIssueHistory(qaCode));
     }
 
     @GetMapping("/{qaCode}")

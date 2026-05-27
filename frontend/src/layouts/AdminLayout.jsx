@@ -31,7 +31,7 @@ const menuItems = [
       { to: '/admin/suppliers', label: 'Quản lý nhà cung cấp', icon: PackageSearch },
       { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
       { to: '/admin/tech-support-types', label: 'Quản lý loại kỹ thuật viên', icon: Wrench },
-      { to: '/admin/locations', label: 'Quản lý phòng', icon: MapPin },
+      { to: '/admin/locations', label: 'Quản lý phòng - khu vực', icon: MapPin },
     ],
   },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },

@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class CategorySummaryResponse {
     private Integer id;
     private String name;
+    private String categoryKind;
     private Integer techTypeId;
     private String techTypeName;
     private List<String> specTemplates;

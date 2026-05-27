@@ -29,6 +29,8 @@ import org.springframework.util.StringUtils;
 public class CategoryService {
 
     private static final long CATEGORY_OPTIONS_CACHE_TTL_MS = 60_000L;
+    private static final String CATEGORY_KIND_ITEMIZED = "ITEMIZED";
+    private static final String CATEGORY_KIND_CONSUMABLE = "CONSUMABLE";
 
     private final CategoryRepository categoryRepository;
     private final TechSupportTypeRepository techSupportTypeRepository;
@@ -82,11 +84,13 @@ public class CategoryService {
             throw new CustomException("Tên loại thiết bị đã tồn tại.");
         }
         String generatedCodePrefix = generateCodePrefix(normalizedName);
+        String categoryKind = normalizeCategoryKind(request.getCategoryKind());
 
         Category category = Category.builder()
                 .name(normalizedName)
                 .codePrefix(generatedCodePrefix)
-                .techSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()))
+                .categoryKind(categoryKind)
+                .techSupportType(resolveTechSupportType(request.getTechTypeId(), categoryKind))
                 .specTemplates(normalizeSpecTemplates(request.getSpecTemplates()))
                 .build();
         CategoryResponse response = mapToResponse(categoryRepository.save(category));
@@ -101,9 +105,12 @@ public class CategoryService {
         if (categoryRepository.existsByNameIgnoreCaseAndIdNot(normalizedName, id)) {
             throw new CustomException("Tên loại thiết bị đã tồn tại.");
         }
+        String categoryKind = normalizeCategoryKind(request.getCategoryKind());
+        validateCategoryKindChange(category, categoryKind);
 
         category.setName(normalizedName);
-        category.setTechSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()));
+        category.setCategoryKind(categoryKind);
+        category.setTechSupportType(resolveTechSupportType(request.getTechTypeId(), categoryKind));
         category.setSpecTemplates(normalizeSpecTemplates(request.getSpecTemplates()));
         CategoryResponse response = mapToResponse(categoryRepository.save(category));
         invalidateCategoryOptionsCache();
@@ -136,12 +143,44 @@ public class CategoryService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy nhóm kỹ thuật với id: " + techTypeId));
     }
 
+    private TechSupportType resolveTechSupportType(Integer techTypeId, String categoryKind) {
+        if (CATEGORY_KIND_CONSUMABLE.equals(categoryKind)) {
+            return null;
+        }
+        if (techTypeId == null || techTypeId <= 0) {
+            throw new CustomException("Nhóm kỹ thuật phụ trách là bắt buộc cho loại đơn chiếc.");
+        }
+        return getTechSupportTypeOrThrow(techTypeId);
+    }
+
     private String normalizeName(String name) {
         String normalizedName = name == null ? null : name.trim();
         if (!StringUtils.hasText(normalizedName)) {
             throw new CustomException("Tên loại thiết bị là bắt buộc.");
         }
         return normalizedName;
+    }
+
+    private String normalizeCategoryKind(String categoryKind) {
+        if (!StringUtils.hasText(categoryKind)) {
+            return CATEGORY_KIND_ITEMIZED;
+        }
+        String normalized = categoryKind.trim().toUpperCase(Locale.ROOT);
+        if (!CATEGORY_KIND_ITEMIZED.equals(normalized) && !CATEGORY_KIND_CONSUMABLE.equals(normalized)) {
+            throw new CustomException("Loại category không hợp lệ.");
+        }
+        return normalized;
+    }
+
+    private void validateCategoryKindChange(Category category, String nextCategoryKind) {
+        String currentCategoryKind = normalizeCategoryKind(category.getCategoryKind());
+        if (currentCategoryKind.equals(nextCategoryKind)) {
+            return;
+        }
+        long linkedAssets = assetRepository.countByCategoryId(category.getId());
+        if (linkedAssets > 0) {
+            throw new CustomException("Không thể đổi loại category khi đã có tài sản sử dụng category này.");
+        }
     }
 
     private String generateCodePrefix(String categoryName) {
@@ -217,12 +256,14 @@ public class CategoryService {
     }
 
     private CategoryResponse mapToResponse(Category category) {
+        TechSupportType techSupportType = category.getTechSupportType();
         return CategoryResponse.builder()
                 .id(category.getId())
                 .name(category.getName())
                 .codePrefix(category.getCodePrefix())
-                .techTypeId(category.getTechSupportType().getId())
-                .techTypeName(category.getTechSupportType().getName())
+                .categoryKind(normalizeCategoryKind(category.getCategoryKind()))
+                .techTypeId(techSupportType != null ? techSupportType.getId() : null)
+                .techTypeName(techSupportType != null ? techSupportType.getName() : null)
                 .specTemplates(parseSpecTemplates(category.getSpecTemplates()))
                 .build();
     }
@@ -232,6 +273,7 @@ public class CategoryService {
         return CategorySummaryResponse.builder()
                 .id(row.getId())
                 .name(row.getName())
+                .categoryKind(normalizeCategoryKind(row.getCategoryKind()))
                 .techTypeId(row.getTechTypeId())
                 .techTypeName(row.getTechTypeName())
                 .specTemplates(specTemplates)

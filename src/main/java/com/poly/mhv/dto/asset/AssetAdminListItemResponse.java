@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class AssetAdminListItemResponse {
     private String qaCode;
+    private String trackingMode;
     private String name;
     private Integer categoryId;
     private String categoryName;
@@ -19,6 +20,9 @@ public class AssetAdminListItemResponse {
     private String locationName;
     private Integer homeLocationId;
     private String homeLocationName;
+    private Integer quantityOnHand;
+    private Integer minimumStock;
+    private String unit;
     private Integer supplierId;
     private String supplierName;
 }

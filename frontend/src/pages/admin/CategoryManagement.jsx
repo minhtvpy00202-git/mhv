@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
@@ -7,6 +7,10 @@ import { normalizeSpecTemplates } from '../../utils/assetSpecs'
 import { validateCategoryForm } from '../../utils/validation'
 
 const PAGE_SIZE = 10
+const categoryKindOptions = [
+  { value: 'ITEMIZED', label: 'Tài sản cố định' },
+  { value: 'CONSUMABLE', label: 'Vật tư tiêu hao (quản lý theo số lượng)' },
+]
 
 function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
@@ -15,6 +19,16 @@ function getFieldClass(hasError) {
 function getCategorySortValue(category, key) {
   if (key === 'specTemplateCount') return category.specTemplateCount || 0
   return category?.[key]
+}
+
+function getCategoryKindLabel(value) {
+  return String(value || 'ITEMIZED').trim().toUpperCase() === 'CONSUMABLE'
+    ? 'Vật tư tiêu hao'
+    : 'Tài sản cố định'
+}
+
+function isConsumableCategory(value) {
+  return String(value || 'ITEMIZED').trim().toUpperCase() === 'CONSUMABLE'
 }
 
 function getSpecTemplatesPreview(specTemplates = [], limit = 3) {
@@ -37,6 +51,7 @@ function CategoryManagement() {
   })
   const [form, setForm] = useState({
     name: '',
+    categoryKind: 'ITEMIZED',
     techTypeId: '',
     specTemplates: [],
   })
@@ -55,7 +70,7 @@ function CategoryManagement() {
     return sortedCategories.slice(start, start + PAGE_SIZE)
   }, [sortedCategories, currentPage])
 
-  const loadCategories = async (nextFilters = filters) => {
+  const loadCategories = useCallback(async (nextFilters = filters) => {
     setLoading(true)
     try {
       const params = {}
@@ -70,14 +85,9 @@ function CategoryManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
-  useEffect(() => {
-    loadCategories()
-    loadTechSupportTypes()
-  }, [])
-
-  const loadTechSupportTypes = async () => {
+  const loadTechSupportTypes = useCallback(async () => {
     try {
       const options = await fetchTechSupportTypeOptions()
       setTechSupportTypeOptions(options)
@@ -85,13 +95,22 @@ function CategoryManagement() {
       const message = error?.response?.data?.message || 'Không thể tải danh sách loại kỹ thuật viên.'
       toast.error(message)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      void loadCategories()
+      void loadTechSupportTypes()
+    }, 0)
+    return () => window.clearTimeout(timerId)
+  }, [loadCategories, loadTechSupportTypes])
 
   const resetForm = () => {
     setSelectedCategoryId(null)
     setFormErrors({})
     setForm({
       name: '',
+      categoryKind: 'ITEMIZED',
       techTypeId: '',
       specTemplates: [],
     })
@@ -119,6 +138,7 @@ function CategoryManagement() {
       setSelectedCategoryId(category.id)
       setForm({
         name: detail.name || category.name || '',
+        categoryKind: detail.categoryKind || category.categoryKind || 'ITEMIZED',
         techTypeId: String(detail.techTypeId || category.techTypeId || ''),
         specTemplates: normalizeSpecTemplates(detail.specTemplates),
       })
@@ -138,9 +158,10 @@ function CategoryManagement() {
     }
     setSubmitting(true)
     try {
-      const response = await axiosClient.post('/api/categories', {
+      await axiosClient.post('/api/categories', {
         name: form.name.trim(),
-        techTypeId: Number(form.techTypeId),
+        categoryKind: form.categoryKind,
+        techTypeId: isConsumableCategory(form.categoryKind) ? null : Number(form.techTypeId),
         specTemplates: normalizeSpecTemplates(form.specTemplates),
       })
       toast.success('Thêm loại thiết bị thành công.')
@@ -166,7 +187,8 @@ function CategoryManagement() {
     try {
       await axiosClient.put(`/api/categories/${selectedCategoryId}`, {
         name: form.name.trim(),
-        techTypeId: Number(form.techTypeId),
+        categoryKind: form.categoryKind,
+        techTypeId: isConsumableCategory(form.categoryKind) ? null : Number(form.techTypeId),
         specTemplates: normalizeSpecTemplates(form.specTemplates),
       })
       toast.success('Cập nhật loại thiết bị thành công.')
@@ -239,7 +261,7 @@ function CategoryManagement() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-slate-800">Quản lý loại thiết bị</h2>
-            <p className="text-sm text-slate-500">Khai báo nhóm loại để phân luồng kỹ thuật và gán cho thiết bị.</p>
+            <p className="text-sm text-slate-500">Khai báo loại tài sản cho tài sản cố định và vật tư tiêu hao.</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -322,6 +344,11 @@ function CategoryManagement() {
                   </button>
                 </th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('categoryKind')} className="hover:text-fptOrange">
+                    {getSortLabel('categoryKind', 'Cách quản lý')}
+                  </button>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">
                   <button type="button" onClick={() => handleSort('techTypeName')} className="hover:text-fptOrange">
                     {getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}
                   </button>
@@ -345,6 +372,9 @@ function CategoryManagement() {
                       <div className="h-4 w-48 rounded bg-slate-200" />
                     </td>
                     <td className="px-3 py-2">
+                      <div className="h-4 w-40 rounded bg-slate-200" />
+                    </td>
+                    <td className="px-3 py-2">
                       <div className="h-4 w-56 rounded bg-slate-200" />
                     </td>
                     <td className="px-3 py-2">
@@ -360,6 +390,7 @@ function CategoryManagement() {
                   <tr key={category.id}>
                     <td className="px-3 py-2">{category.id}</td>
                     <td className="px-3 py-2">{category.name}</td>
+                    <td className="px-3 py-2">{getCategoryKindLabel(category.categoryKind)}</td>
                     <td className="px-3 py-2">{category.techTypeName || '-'}</td>
                     <td className="px-3 py-2">
                       {category.specTemplateCount > 0 ? (
@@ -411,7 +442,7 @@ function CategoryManagement() {
                 ))}
               {!loading && categories.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có loại thiết bị phù hợp.
                   </td>
                 </tr>
@@ -476,6 +507,29 @@ function CategoryManagement() {
                 {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
               </div>
               <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Cách quản lý</label>
+                <select
+                  value={form.categoryKind}
+                  onChange={(e) => {
+                    const nextCategoryKind = e.target.value
+                    setForm((prev) => ({
+                      ...prev,
+                      categoryKind: nextCategoryKind,
+                      techTypeId: nextCategoryKind === 'CONSUMABLE' ? '' : prev.techTypeId,
+                    }))
+                    setFormErrors((prev) => ({ ...prev, categoryKind: '', techTypeId: '' }))
+                  }}
+                  className={getFieldClass(Boolean(formErrors.categoryKind))}
+                >
+                  {categoryKindOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {formErrors.categoryKind && <p className="mt-1 text-xs text-red-600">{formErrors.categoryKind}</p>}
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Nhóm kỹ thuật phụ trách</label>
                 <select
                   value={form.techTypeId}
@@ -483,15 +537,19 @@ function CategoryManagement() {
                     setForm((prev) => ({ ...prev, techTypeId: e.target.value }))
                     setFormErrors((prev) => ({ ...prev, techTypeId: '' }))
                   }}
+                  disabled={isConsumableCategory(form.categoryKind)}
                   className={getFieldClass(Boolean(formErrors.techTypeId))}
                 >
-                  <option value="">Chọn nhóm kỹ thuật</option>
+                  <option value="">{isConsumableCategory(form.categoryKind) ? 'Không áp dụng cho vật tư tiêu hao' : 'Chọn nhóm kỹ thuật'}</option>
                   {techSupportTypeOptions.map((item) => (
                     <option key={item.techTypeId} value={item.techTypeId}>
                       {item.label}
                     </option>
                   ))}
                 </select>
+                {isConsumableCategory(form.categoryKind) && (
+                  <p className="mt-1 text-xs text-slate-500">Category tiêu hao không cần gán nhóm kỹ thuật viên.</p>
+                )}
                 {formErrors.techTypeId && <p className="mt-1 text-xs text-red-600">{formErrors.techTypeId}</p>}
               </div>
               <div>

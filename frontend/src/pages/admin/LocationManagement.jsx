@@ -148,7 +148,7 @@ function LocationManagement() {
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800">Quản lý phòng</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Quản lý phòng - khu vực</h2>
             <p className="text-sm text-slate-500">Theo dõi phòng học hoặc khu vực lưu trữ thiết bị trong hệ thống.</p>
           </div>
           <div className="flex gap-2">

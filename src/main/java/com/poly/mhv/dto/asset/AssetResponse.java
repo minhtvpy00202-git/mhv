@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class AssetResponse {
     private String qaCode;
+    private String trackingMode;
     private String name;
     private Integer categoryId;
     private String category;
@@ -25,6 +26,9 @@ public class AssetResponse {
     private BigDecimal purchasePrice;
     private LocalDate purchaseDate;
     private LocalDate warrantyExpirationDate;
+    private Integer quantityOnHand;
+    private Integer minimumStock;
+    private String unit;
     private Integer supplierId;
     private String supplierName;
     private String supplierAddress;

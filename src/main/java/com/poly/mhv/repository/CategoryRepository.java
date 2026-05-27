@@ -20,12 +20,13 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
             select new com.poly.mhv.dto.category.CategorySummaryRow(
                 c.id,
                 c.name,
+                c.categoryKind,
                 t.id,
                 t.name,
                 c.specTemplates
             )
             from Category c
-            join c.techSupportType t
+            left join c.techSupportType t
             where (coalesce(:keyword, '') = '' or lower(c.name) like lower(concat('%', :keyword, '%')))
               and (:techTypeId is null or t.id = :techTypeId)
             order by c.name asc
@@ -36,7 +37,8 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
             select new com.poly.mhv.dto.category.CategoryOptionResponse(
                 c.id,
                 c.name,
-                c.codePrefix
+                c.codePrefix,
+                c.categoryKind
             )
             from Category c
             order by c.name asc
@@ -51,7 +53,7 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
 
     @Query("""
             select c from Category c
-            join fetch c.techSupportType
+            left join fetch c.techSupportType
             where c.id = :id
             """)
     Optional<Category> findDetailById(@Param("id") Integer id);

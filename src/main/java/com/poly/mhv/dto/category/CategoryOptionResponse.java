@@ -13,4 +13,5 @@ public class CategoryOptionResponse {
     private Integer id;
     private String name;
     private String codePrefix;
+    private String categoryKind;
 }

@@ -60,7 +60,10 @@ public class ReportService {
             createCell(headerRow, 1, "Tên thiết bị");
             createCell(headerRow, 2, "Loại");
             createCell(headerRow, 3, "Phòng học");
-            createCell(headerRow, 4, "Trạng thái");
+            createCell(headerRow, 4, "Kiểu theo dõi");
+            createCell(headerRow, 5, "Trạng thái");
+            createCell(headerRow, 6, "Số lượng tồn");
+            createCell(headerRow, 7, "Đơn vị tính");
 
             int rowNum = 1;
             for (Asset asset : assets) {
@@ -69,14 +72,15 @@ public class ReportService {
                 createCell(row, 1, asset.getName());
                 createCell(row, 2, getCategoryDisplayName(asset.getCategory()));
                 createCell(row, 3, asset.getLocation().getRoomName());
-                createCell(row, 4, asset.getStatus());
+                createCell(row, 4, "CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode()) ? "Tiêu hao" : "Đơn chiếc");
+                createCell(row, 5, asset.getStatus());
+                createCell(row, 6, asset.getQuantityOnHand() == null ? "" : String.valueOf(asset.getQuantityOnHand()));
+                createCell(row, 7, asset.getUnit());
             }
 
-            sheet.autoSizeColumn(0);
-            sheet.autoSizeColumn(1);
-            sheet.autoSizeColumn(2);
-            sheet.autoSizeColumn(3);
-            sheet.autoSizeColumn(4);
+            for (int i = 0; i <= 7; i++) {
+                sheet.autoSizeColumn(i);
+            }
 
             workbook.write(outputStream);
             return outputStream.toByteArray();

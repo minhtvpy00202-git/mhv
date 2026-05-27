@@ -38,8 +38,12 @@ public class Category {
     @Column(name = "spec_templates", columnDefinition = "TEXT")
     private String specTemplates;
 
+    @Column(name = "category_kind", length = 20)
+    @Builder.Default
+    private String categoryKind = "ITEMIZED";
+
     @ManyToOne
-    @JoinColumn(name = "tech_type_id", nullable = false)
+    @JoinColumn(name = "tech_type_id")
     private TechSupportType techSupportType;
 
     @JsonIgnore

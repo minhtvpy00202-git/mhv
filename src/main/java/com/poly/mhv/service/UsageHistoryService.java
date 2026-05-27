@@ -217,6 +217,9 @@ public class UsageHistoryService {
     }
 
     private void validateAssetForCheckout(Asset asset) {
+        if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
+            throw new CustomException("Vật tư tiêu hao không hỗ trợ mượn/trả.");
+        }
         if ("Sẵn sàng".equals(asset.getStatus())) {
             return;
         }

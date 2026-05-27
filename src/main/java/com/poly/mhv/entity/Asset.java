@@ -42,6 +42,10 @@ public class Asset {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "tracking_mode", length = 20)
+    @Builder.Default
+    private String trackingMode = "ITEMIZED";
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "location_id", nullable = false)
     @JsonIgnoreProperties({"assets", "usageHistoriesFrom", "usageHistoriesTo"})
@@ -64,6 +68,15 @@ public class Asset {
     @Column(name = "warranty_expiration_date")
     private LocalDate warrantyExpirationDate;
 
+    @Column(name = "quantity_on_hand")
+    private Integer quantityOnHand;
+
+    @Column(name = "minimum_stock")
+    private Integer minimumStock;
+
+    @Column(length = 50)
+    private String unit;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id")
     @JsonIgnoreProperties({"assets"})
@@ -73,4 +86,9 @@ public class Asset {
     @OneToMany(mappedBy = "asset")
     @Builder.Default
     private List<UsageHistory> usageHistories = new ArrayList<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "asset")
+    @Builder.Default
+    private List<ConsumableIssue> consumableIssues = new ArrayList<>();
 }
