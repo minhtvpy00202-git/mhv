@@ -1,5 +1,6 @@
 package com.poly.mhv.dto.asset;
 
+import java.math.BigDecimal;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,7 @@ public class AssetAdminListItemResponse {
     private String locationName;
     private Integer homeLocationId;
     private String homeLocationName;
+    private BigDecimal purchasePrice;
     private Integer quantityOnHand;
     private Integer minimumStock;
     private String unit;

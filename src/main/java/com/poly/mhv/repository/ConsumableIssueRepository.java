@@ -9,4 +9,7 @@ public interface ConsumableIssueRepository extends JpaRepository<ConsumableIssue
 
     @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
     List<ConsumableIssue> findByAssetQaCodeOrderByIssuedAtDescIdDesc(String assetQaCode);
+
+    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
+    List<ConsumableIssue> findByIssuedToLocationIdOrderByIssuedAtDescIdDesc(Integer issuedToLocationId);
 }

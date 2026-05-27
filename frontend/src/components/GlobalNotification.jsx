@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
@@ -35,7 +35,9 @@ function GlobalNotification() {
       gainNode.connect(ctx.destination)
       oscillator.start()
       oscillator.stop(ctx.currentTime + 0.2)
-    } catch {}
+    } catch {
+      // Ignore sound failures on unsupported browsers.
+    }
   }
 
   const showBrowserNotification = (title, body) => {
@@ -49,7 +51,7 @@ function GlobalNotification() {
     }
   }
 
-  const showToastByType = (type, message) => {
+  const showToastByType = useCallback((type, message) => {
     if (user?.role === 'TechSupport' && type !== 'TICKET_CREATED') {
       return
     }
@@ -65,10 +67,10 @@ function GlobalNotification() {
       toast.success(message, { icon: '✅', autoClose: 5000 })
       return
     }
-    if (user?.role === 'Admin') {
+    if (user?.role === 'Admin' || user?.role === 'ConsumableManager') {
       toast(message, { icon: '🔔', autoClose: 5000 })
     }
-  }
+  }, [user?.role])
 
   useEffect(() => {
     if (!isAuthenticated || !connected) return undefined
@@ -112,7 +114,7 @@ function GlobalNotification() {
           ...payload,
           ticketPath: user.role === 'TechSupport'
             ? getTechSupportTicketPath(ticketId)
-            : user.role === 'Admin'
+            : user.role === 'Admin' || user.role === 'ConsumableManager'
               ? `/admin/tickets/${ticketId}`
               : `/mobile/tickets/${ticketId}`,
         },
@@ -123,7 +125,7 @@ function GlobalNotification() {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
-    if (user?.role === 'Admin') return undefined
+    if (user?.role === 'Admin' || user?.role === 'ConsumableManager') return undefined
     let mounted = true
     const syncNotifications = async () => {
       if (document.hidden) return
@@ -151,7 +153,9 @@ function GlobalNotification() {
         if (newItems.length > 0) {
           requestNotificationFeedRefresh()
         }
-      } catch {}
+      } catch {
+        // Ignore background sync failures for notifications.
+      }
     }
 
     if (connected) {

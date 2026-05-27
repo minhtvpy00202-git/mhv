@@ -5,11 +5,12 @@ import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDate } from '../../utils/datetime'
 
-const roleOptions = ['Admin', 'NhanVien', 'TechSupport']
+const roleOptions = ['Admin', 'NhanVien', 'ConsumableManager', 'TechSupport']
 
 function toRoleLabel(role) {
   if (role === 'Admin') return 'Quản trị viên'
   if (role === 'NhanVien') return 'Nhân viên'
+  if (role === 'ConsumableManager') return 'Nhân viên quản lý cấp phát vật tư'
   if (role === 'TechSupport') return 'Kỹ thuật viên'
   return role || '-'
 }
@@ -89,11 +90,6 @@ function UserManagement() {
     }
   }
 
-  useEffect(() => {
-    loadUsers(0)
-    loadTechSupportTypes()
-  }, [])
-
   const loadTechSupportTypes = async () => {
     try {
       const options = await fetchTechSupportTypeOptions()
@@ -103,6 +99,14 @@ function UserManagement() {
       toast.error(message)
     }
   }
+
+  useEffect(() => {
+    const bootstrapTimer = window.setTimeout(() => {
+      void loadUsers(0)
+      void loadTechSupportTypes()
+    }, 0)
+    return () => window.clearTimeout(bootstrapTimer)
+  }, [])
 
   const resetForm = () => {
     setSelectedUserId(null)

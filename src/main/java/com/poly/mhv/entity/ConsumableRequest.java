@@ -10,7 +10,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,12 +17,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "consumable_issues")
+@Table(name = "consumable_requests")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ConsumableIssue {
+public class ConsumableRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,24 +34,35 @@ public class ConsumableIssue {
     private Asset asset;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_to_location_id", nullable = false)
+    @JoinColumn(name = "location_id", nullable = false)
     @JsonIgnoreProperties({"assets"})
-    private Location issuedToLocation;
+    private Location location;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_by_user_id", nullable = false)
+    @JoinColumn(name = "requested_by_user_id", nullable = false)
     @JsonIgnoreProperties({"techSupportTypes"})
-    private AppUser issuedBy;
+    private AppUser requestedBy;
 
-    @Column(nullable = false)
-    private Integer quantity;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "resolved_by_user_id")
+    @JsonIgnoreProperties({"techSupportTypes"})
+    private AppUser resolvedBy;
 
-    @Column(name = "unit_price", precision = 19, scale = 2)
-    private BigDecimal unitPrice;
+    @Column(name = "quantity_requested", nullable = false)
+    private Integer quantityRequested;
 
-    @Column(columnDefinition = "TEXT")
-    private String note;
+    @Column(name = "reason", columnDefinition = "TEXT", nullable = false)
+    private String reason;
 
-    @Column(name = "issued_at", nullable = false)
-    private LocalDateTime issuedAt;
+    @Column(name = "status", nullable = false, length = 30)
+    private String status;
+
+    @Column(name = "decision_note", columnDefinition = "TEXT")
+    private String decisionNote;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
 }

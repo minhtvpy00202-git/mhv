@@ -352,6 +352,9 @@ public class UserService {
         if ("nhanvien".equalsIgnoreCase(normalizedRole)) {
             return "NhanVien";
         }
+        if ("consumablemanager".equalsIgnoreCase(normalizedRole) || "quanlycapphat".equalsIgnoreCase(normalizedRole)) {
+            return "ConsumableManager";
+        }
         if ("techsupport".equalsIgnoreCase(normalizedRole)) {
             return "TechSupport";
         }

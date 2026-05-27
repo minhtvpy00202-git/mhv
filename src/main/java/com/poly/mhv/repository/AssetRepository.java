@@ -39,6 +39,7 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 l.roomName,
                 hl.id,
                 hl.roomName,
+                a.purchasePrice,
                 a.quantityOnHand,
                 a.minimumStock,
                 a.unit,
@@ -51,7 +52,20 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             join a.category c
             left join a.supplier s
             where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
-              and (:status is null or a.status = :status)
+              and (
+                    :status is null
+                    or (
+                        a.trackingMode = 'CONSUMABLE'
+                        and (
+                            (:status = 'Còn hàng' and coalesce(a.quantityOnHand, 0) > coalesce(a.minimumStock, 0))
+                            or (:status = 'Cần nhập' and coalesce(a.quantityOnHand, 0) <= coalesce(a.minimumStock, 0))
+                        )
+                    )
+                    or (
+                        a.trackingMode <> 'CONSUMABLE'
+                        and a.status = :status
+                    )
+              )
               and (:trackingMode is null or a.trackingMode = :trackingMode)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)

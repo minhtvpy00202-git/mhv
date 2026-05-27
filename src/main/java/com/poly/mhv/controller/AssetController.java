@@ -4,8 +4,15 @@ import com.poly.mhv.dto.asset.AssetCreateRequest;
 import com.poly.mhv.dto.asset.AssetManagementBootstrapResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
+import com.poly.mhv.dto.asset.ConsumableLocationOverviewResponse;
+import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
+import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
+import com.poly.mhv.dto.asset.ConsumableRequestResponse;
+import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.service.CategoryService;
 import com.poly.mhv.service.LocationService;
@@ -21,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -158,10 +166,78 @@ public class AssetController {
         return ResponseEntity.status(HttpStatus.CREATED).body(assetService.issueConsumable(qaCode, request));
     }
 
+    @PostMapping("/{qaCode}/receipts")
+    @Operation(summary = "Nhập hàng vật tư tiêu hao", description = "Tăng tồn kho vật tư, cập nhật nhà cung cấp và tính lại đơn giá trung bình.")
+    public ResponseEntity<AssetResponse> receiveConsumableStock(
+            @PathVariable String qaCode,
+            @Valid @RequestBody ConsumableStockReceiptRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.receiveConsumableStock(qaCode, request));
+    }
+
     @GetMapping("/{qaCode}/issues")
     @Operation(summary = "Lấy lịch sử cấp phát vật tư", description = "Trả về các lần cấp phát của vật tư tiêu hao theo mã QA.")
     public ResponseEntity<List<ConsumableIssueResponse>> getConsumableIssueHistory(@PathVariable String qaCode) {
         return ResponseEntity.ok(assetService.getConsumableIssueHistory(qaCode));
+    }
+
+    @GetMapping("/{qaCode}/location-stocks")
+    @Operation(summary = "Lấy tồn theo phòng của vật tư", description = "Trả về tổng số đã cấp và số lượng còn lại của vật tư tiêu hao theo từng phòng.")
+    public ResponseEntity<List<ConsumableLocationStockResponse>> getConsumableLocationStocks(@PathVariable String qaCode) {
+        return ResponseEntity.ok(assetService.getConsumableLocationStocks(qaCode));
+    }
+
+    @GetMapping("/locations/{locationId}/consumables")
+    @Operation(summary = "Tổng hợp vật tư theo phòng", description = "Trả về các vật tư đã cấp phát cho phòng cùng lịch sử cấp phát theo phòng.")
+    public ResponseEntity<ConsumableLocationOverviewResponse> getConsumableLocationOverview(@PathVariable Integer locationId) {
+        return ResponseEntity.ok(assetService.getConsumableLocationOverview(locationId));
+    }
+
+    @GetMapping("/consumable-requests")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Lấy danh sách phiếu yêu cầu cấp phát", description = "Admin lấy toàn bộ hoặc lọc theo trạng thái các phiếu yêu cầu cấp phát vật tư tiêu hao.")
+    public ResponseEntity<List<ConsumableRequestResponse>> getConsumableRequests(@RequestParam(required = false) String status) {
+        return ResponseEntity.ok(assetService.getConsumableRequests(status));
+    }
+
+    @PostMapping("/locations/{locationId}/consumable-requests")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Tạo yêu cầu cấp phát vật tư", description = "Người dùng tạo yêu cầu cấp phát vật tư tiêu hao cho một phòng.")
+    public ResponseEntity<ConsumableRequestResponse> createConsumableRequest(
+            @PathVariable Integer locationId,
+            @Valid @RequestBody ConsumableRequestCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.createConsumableRequest(locationId, request));
+    }
+
+    @PostMapping("/consumable-requests/{requestId}/approve")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Duyệt cấp phát phiếu yêu cầu", description = "Admin duyệt phiếu yêu cầu và ghi nhận luôn việc cấp phát vật tư vào tồn kho/phòng.")
+    public ResponseEntity<ConsumableRequestResponse> approveConsumableRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody(required = false) ConsumableRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(assetService.approveConsumableRequest(requestId, request));
+    }
+
+    @PostMapping("/consumable-requests/{requestId}/reject")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Từ chối phiếu yêu cầu cấp phát", description = "Admin từ chối phiếu yêu cầu cấp phát vật tư tiêu hao.")
+    public ResponseEntity<ConsumableRequestResponse> rejectConsumableRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody ConsumableRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(assetService.rejectConsumableRequest(requestId, request));
+    }
+
+    @PutMapping("/{qaCode}/location-stocks/{locationId}")
+    @Operation(summary = "Cập nhật số lượng còn lại tại phòng", description = "Điều chỉnh số lượng vật tư tiêu hao còn lại tại một phòng sau thời gian sử dụng.")
+    public ResponseEntity<ConsumableLocationStockResponse> updateConsumableLocationRemaining(
+            @PathVariable String qaCode,
+            @PathVariable Integer locationId,
+            @Valid @RequestBody ConsumableLocationRemainingUpdateRequest request
+    ) {
+        return ResponseEntity.ok(assetService.updateConsumableLocationRemaining(qaCode, locationId, request));
     }
 
     @GetMapping("/{qaCode}")

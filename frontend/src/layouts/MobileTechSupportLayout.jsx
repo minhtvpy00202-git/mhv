@@ -102,8 +102,8 @@ function MobileTechSupportLayout() {
   }
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md bg-slate-50">
-      <header className="sticky top-0 z-10 flex items-center justify-between bg-blue-700 px-4 py-3 text-white shadow">
+    <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-blue-200 bg-blue-700 px-4 py-3 text-white shadow">
         <div>
           <h1 className="text-sm font-medium text-white/85">Kỹ thuật viên hiện trường</h1>
           <p className="text-base font-semibold">{user?.fullName || user?.username || 'TechSupport'}</p>
@@ -176,9 +176,9 @@ function MobileTechSupportLayout() {
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4">
+      <main className="px-4 pb-24 pt-5">
         {showInstallPrompt && (
-          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-700">Cài app lên màn hình chính để nhận việc và chat nhanh hơn.</p>
             <button
               type="button"
@@ -192,7 +192,7 @@ function MobileTechSupportLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white">
+      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)]">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}

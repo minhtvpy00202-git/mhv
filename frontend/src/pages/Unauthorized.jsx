@@ -7,6 +7,8 @@ function Unauthorized() {
   const { user } = useAuth()
   const homePath = user?.role === 'Admin'
     ? '/admin/dashboard'
+    : user?.role === 'ConsumableManager'
+      ? '/supply/consumables'
     : user?.role === 'TechSupport'
       ? getTechSupportHomePath()
       : '/mobile/home'

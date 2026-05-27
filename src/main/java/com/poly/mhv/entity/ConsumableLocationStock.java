@@ -18,12 +18,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "consumable_issues")
+@Table(name = "consumable_location_stocks")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ConsumableIssue {
+public class ConsumableLocationStock {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,24 +35,30 @@ public class ConsumableIssue {
     private Asset asset;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_to_location_id", nullable = false)
+    @JoinColumn(name = "location_id", nullable = false)
     @JsonIgnoreProperties({"assets"})
-    private Location issuedToLocation;
+    private Location location;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_by_user_id", nullable = false)
-    @JsonIgnoreProperties({"techSupportTypes"})
-    private AppUser issuedBy;
+    @Column(name = "quantity_issued", nullable = false)
+    private Integer quantityIssued;
 
-    @Column(nullable = false)
-    private Integer quantity;
+    @Column(name = "quantity_remaining", nullable = false)
+    private Integer quantityRemaining;
 
     @Column(name = "unit_price", precision = 19, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column(columnDefinition = "TEXT")
-    private String note;
+    @Column(name = "last_issued_at")
+    private LocalDateTime lastIssuedAt;
 
-    @Column(name = "issued_at", nullable = false)
-    private LocalDateTime issuedAt;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "last_updated_by_user_id")
+    @JsonIgnoreProperties({"techSupportTypes"})
+    private AppUser lastUpdatedBy;
+
+    @Column(name = "last_updated_at")
+    private LocalDateTime lastUpdatedAt;
+
+    @Column(name = "last_note", columnDefinition = "TEXT")
+    private String lastNote;
 }

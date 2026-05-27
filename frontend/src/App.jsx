@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import GlobalNotification from './components/GlobalNotification'
 import { useAuth } from './context/AuthContext'
 import AdminLayout from './layouts/AdminLayout'
+import ConsumableManagerLayout from './layouts/ConsumableManagerLayout'
 import MobileLayout from './layouts/MobileLayout'
 import MobileTechSupportLayout from './layouts/MobileTechSupportLayout'
 import TechSupportLayout from './layouts/TechSupportLayout'
@@ -58,6 +59,9 @@ function RootRedirect() {
   }
   if (user?.role === 'TechSupport') {
     return <Navigate to={getTechSupportHomePath()} replace />
+  }
+  if (user?.role === 'ConsumableManager') {
+    return <Navigate to="/supply/consumables" replace />
   }
   return <Navigate to="/mobile/home" replace />
 }
@@ -142,6 +146,19 @@ function App() {
           <Route path="/admin/notifications/:id" element={<NotificationDetail />} />
           <Route path="/admin/tickets" element={<TicketManagement />} />
           <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
+        </Route>
+
+        <Route
+          element={(
+            <ProtectedRoute>
+              <RoleRoute allowRoles={['ConsumableManager']}>
+                <ConsumableManagerLayout />
+              </RoleRoute>
+            </ProtectedRoute>
+          )}
+        >
+          <Route path="/supply/consumables" element={<AssetManagement restrictToConsumable />} />
+          <Route path="/supply/notifications/:id" element={<NotificationDetail />} />
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState } from 'react'
 
 const AuthContext = createContext(null)
@@ -7,6 +8,7 @@ const normalizeRole = (role) => {
   const value = String(role).trim().toLowerCase()
   if (value === 'admin') return 'Admin'
   if (value === 'nhanvien') return 'NhanVien'
+  if (value === 'consumablemanager' || value === 'quanlycapphat') return 'ConsumableManager'
   if (value === 'techsupport' || value === 'techsup') return 'TechSupport'
   return role
 }

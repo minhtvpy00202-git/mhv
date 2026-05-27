@@ -1,5 +1,6 @@
 package com.poly.mhv.dto.asset;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,6 +19,7 @@ public class ConsumableIssueResponse {
     private String issuedToLocationName;
     private Integer quantity;
     private String unit;
+    private BigDecimal unitPrice;
     private String note;
     private Integer issuedByUserId;
     private String issuedByUsername;

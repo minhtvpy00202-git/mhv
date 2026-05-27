@@ -5,8 +5,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.asset.AssetCreateRequest;
 import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
+import com.poly.mhv.dto.asset.ConsumableLocationOverviewResponse;
+import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
+import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
+import com.poly.mhv.dto.asset.ConsumableRequestResponse;
+import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
 import com.poly.mhv.dto.common.PagedResponse;
@@ -14,6 +21,8 @@ import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.ConsumableIssue;
+import com.poly.mhv.entity.ConsumableLocationStock;
+import com.poly.mhv.entity.ConsumableRequest;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
@@ -21,10 +30,14 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.ConsumableIssueRepository;
+import com.poly.mhv.repository.ConsumableLocationStockRepository;
+import com.poly.mhv.repository.ConsumableRequestRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.util.List;
@@ -55,6 +68,8 @@ public class AssetService {
     private final AppUserRepository appUserRepository;
     private final CategoryRepository categoryRepository;
     private final ConsumableIssueRepository consumableIssueRepository;
+    private final ConsumableLocationStockRepository consumableLocationStockRepository;
+    private final ConsumableRequestRepository consumableRequestRepository;
     private final LocationRepository locationRepository;
     private final SupplierRepository supplierRepository;
     private final QRCodeGenerator qrCodeGenerator;
@@ -68,6 +83,8 @@ public class AssetService {
             AppUserRepository appUserRepository,
             CategoryRepository categoryRepository,
             ConsumableIssueRepository consumableIssueRepository,
+            ConsumableLocationStockRepository consumableLocationStockRepository,
+            ConsumableRequestRepository consumableRequestRepository,
             LocationRepository locationRepository,
             SupplierRepository supplierRepository,
             QRCodeGenerator qrCodeGenerator,
@@ -78,6 +95,8 @@ public class AssetService {
         this.appUserRepository = appUserRepository;
         this.categoryRepository = categoryRepository;
         this.consumableIssueRepository = consumableIssueRepository;
+        this.consumableLocationStockRepository = consumableLocationStockRepository;
+        this.consumableRequestRepository = consumableRequestRepository;
         this.locationRepository = locationRepository;
         this.supplierRepository = supplierRepository;
         this.qrCodeGenerator = qrCodeGenerator;
@@ -329,6 +348,8 @@ public class AssetService {
         Location issuedToLocation = locationRepository.findById(request.getIssuedToLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng nhận với id: " + request.getIssuedToLocationId()));
         AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        BigDecimal unitPrice = updatedUnitPrice(asset);
 
         asset.setQuantityOnHand(currentQuantity - request.getQuantity());
         asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
@@ -339,10 +360,12 @@ public class AssetService {
                 .issuedToLocation(issuedToLocation)
                 .issuedBy(actor)
                 .quantity(request.getQuantity())
+                .unitPrice(unitPrice)
                 .note(StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null)
-                .issuedAt(LocalDateTime.now())
+                .issuedAt(now)
                 .build();
         ConsumableIssue savedIssue = consumableIssueRepository.save(issue);
+        upsertConsumableLocationStock(updated, issuedToLocation, request.getQuantity(), unitPrice, now, actor, request.getNote());
         invalidateAssetCaches(updated.getQaCode());
 
         String actorDisplayName = getActorDisplayName(actor);
@@ -367,6 +390,61 @@ public class AssetService {
         return mapToConsumableIssueResponse(savedIssue);
     }
 
+    @Transactional
+    public AssetResponse receiveConsumableStock(String qaCode, ConsumableStockReceiptRequest request) {
+        if (request == null) {
+            throw new CustomException("Dữ liệu nhập hàng không được để trống.");
+        }
+        Asset asset = assetRepository.findDetailByQaCode(qaCode)
+                .orElseThrow(() -> new CustomException("Không tìm thấy tài sản với mã: " + qaCode));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ nhập hàng theo lô.");
+        }
+
+        int receiptQuantity = safePositiveInteger(request.getQuantity(), "Số lượng nhập phải lớn hơn 0.");
+        if (request.getUnitPrice() == null || request.getUnitPrice().signum() <= 0) {
+            throw new CustomException("Đơn giá nhập phải lớn hơn 0.");
+        }
+        Supplier supplier = getSupplierOrThrow(request.getSupplierId());
+        int currentQuantity = safeInteger(asset.getQuantityOnHand());
+        int nextQuantity = currentQuantity + receiptQuantity;
+        BigDecimal averageUnitPrice = calculateAverageUnitPrice(
+                asset.getPurchasePrice(),
+                currentQuantity,
+                request.getUnitPrice(),
+                receiptQuantity
+        );
+
+        asset.setQuantityOnHand(nextQuantity);
+        asset.setPurchasePrice(averageUnitPrice);
+        asset.setSupplier(supplier);
+        asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
+        Asset updated = assetRepository.save(asset);
+        invalidateAssetCaches(updated.getQaCode());
+
+        AppUser actor = getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CONSUMABLE_RECEIVED",
+                "Nhập hàng vật tư",
+                actorDisplayName + " đã nhập thêm " + receiptQuantity + " " + safeUnit(updated)
+                        + " " + updated.getName() + " về kho " + updated.getHomeLocation().getRoomName() + ".",
+                actor.getUsername(),
+                updated.getQaCode(),
+                updated.getName(),
+                Map.of(
+                        "Vật tư", updated.getQaCode() + " - " + updated.getName(),
+                        "Số lượng nhập", receiptQuantity,
+                        "Đơn giá lô nhập", request.getUnitPrice(),
+                        "Đơn giá trung bình", averageUnitPrice,
+                        "Nhà cung cấp", supplier.getName(),
+                        "Tồn sau nhập", nextQuantity + " " + safeUnit(updated),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
+        return mapToAssetResponse(updated, false, true);
+    }
+
     @Transactional(readOnly = true)
     public List<ConsumableIssueResponse> getConsumableIssueHistory(String qaCode) {
         Asset asset = assetRepository.findById(qaCode)
@@ -377,6 +455,243 @@ public class AssetService {
         return consumableIssueRepository.findByAssetQaCodeOrderByIssuedAtDescIdDesc(qaCode).stream()
                 .map(this::mapToConsumableIssueResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsumableLocationStockResponse> getConsumableLocationStocks(String qaCode) {
+        Asset asset = assetRepository.findById(qaCode)
+                .orElseThrow(() -> new CustomException("Không tìm thấy tài sản với mã: " + qaCode));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Tài sản này không có tồn theo phòng.");
+        }
+        return consumableLocationStockRepository.findByAssetQaCodeOrderByLocationRoomNameAsc(qaCode).stream()
+                .map(this::mapToConsumableLocationStockResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ConsumableLocationOverviewResponse getConsumableLocationOverview(Integer locationId) {
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + locationId));
+        return ConsumableLocationOverviewResponse.builder()
+                .locationId(location.getId())
+                .locationName(location.getRoomName())
+                .stocks(consumableLocationStockRepository.findByLocationIdOrderByAssetNameAsc(locationId).stream()
+                        .map(this::mapToConsumableLocationStockResponse)
+                        .toList())
+                .issueHistory(consumableIssueRepository.findByIssuedToLocationIdOrderByIssuedAtDescIdDesc(locationId).stream()
+                        .map(this::mapToConsumableIssueResponse)
+                        .toList())
+                .requestHistory(consumableRequestRepository.findByLocationIdOrderByCreatedAtDescIdDesc(locationId).stream()
+                        .map(this::mapToConsumableRequestResponse)
+                        .toList())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsumableRequestResponse> getConsumableRequests(String status) {
+        List<ConsumableRequest> requests = StringUtils.hasText(status)
+                ? consumableRequestRepository.findByStatusOrderByCreatedAtDescIdDesc(status.trim().toUpperCase())
+                : consumableRequestRepository.findAllByOrderByCreatedAtDescIdDesc();
+        return requests.stream()
+                .map(this::mapToConsumableRequestResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ConsumableRequestResponse createConsumableRequest(Integer locationId, ConsumableRequestCreateRequest request) {
+        if (request == null) {
+            throw new CustomException("Dữ liệu yêu cầu cấp phát không được để trống.");
+        }
+        if (!StringUtils.hasText(request.getAssetQaCode())) {
+            throw new CustomException("Mã vật tư là bắt buộc.");
+        }
+        if (request.getQuantityRequested() == null || request.getQuantityRequested() <= 0) {
+            throw new CustomException("Số lượng yêu cầu phải lớn hơn 0.");
+        }
+        if (!StringUtils.hasText(request.getReason())) {
+            throw new CustomException("Lý do cấp phát là bắt buộc.");
+        }
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + locationId));
+        Asset asset = assetRepository.findDetailByQaCode(request.getAssetQaCode().trim())
+                .orElseThrow(() -> new CustomException("Không tìm thấy vật tư với mã: " + request.getAssetQaCode()));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ yêu cầu cấp phát.");
+        }
+        AppUser requester = getCurrentUser();
+        ConsumableRequest consumableRequest = ConsumableRequest.builder()
+                .asset(asset)
+                .location(location)
+                .requestedBy(requester)
+                .quantityRequested(request.getQuantityRequested())
+                .reason(request.getReason().trim())
+                .status("PENDING")
+                .createdAt(LocalDateTime.now())
+                .build();
+        ConsumableRequest savedRequest = consumableRequestRepository.save(consumableRequest);
+        notificationService.createNotification(
+                "CONSUMABLE_REQUEST_CREATED",
+                "Có yêu cầu cấp phát vật tư mới",
+                getActorDisplayName(requester) + " vừa tạo yêu cầu cấp phát cho phòng " + location.getRoomName() + ".",
+                requester.getUsername(),
+                asset.getQaCode(),
+                asset.getName(),
+                Map.of(
+                        "Vật tư", asset.getQaCode() + " - " + asset.getName(),
+                        "Phòng yêu cầu", location.getRoomName(),
+                        "Số lượng yêu cầu", request.getQuantityRequested(),
+                        "Lý do", request.getReason().trim(),
+                        "Người yêu cầu", getActorDisplayName(requester)
+                )
+        );
+        return mapToConsumableRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableRequestResponse approveConsumableRequest(Long requestId, ConsumableRequestDecisionRequest request) {
+        ConsumableRequest consumableRequest = consumableRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phiếu yêu cầu cấp phát."));
+        if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
+            throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
+        }
+        Asset asset = assetRepository.findDetailByQaCode(consumableRequest.getAsset().getQaCode())
+                .orElseThrow(() -> new CustomException("Không tìm thấy vật tư yêu cầu cấp phát."));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Phiếu này không áp dụng cho vật tư tiêu hao.");
+        }
+        int currentQuantity = safeInteger(asset.getQuantityOnHand());
+        if (currentQuantity < safeInteger(consumableRequest.getQuantityRequested())) {
+            throw new CustomException("Số lượng tồn không đủ để duyệt cấp phát phiếu này.");
+        }
+
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        BigDecimal unitPrice = updatedUnitPrice(asset);
+        String decisionNote = request != null && StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null;
+
+        asset.setQuantityOnHand(currentQuantity - consumableRequest.getQuantityRequested());
+        asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
+        Asset updated = assetRepository.save(asset);
+
+        ConsumableIssue issue = ConsumableIssue.builder()
+                .asset(updated)
+                .issuedToLocation(consumableRequest.getLocation())
+                .issuedBy(actor)
+                .quantity(consumableRequest.getQuantityRequested())
+                .unitPrice(unitPrice)
+                .note(buildConsumableRequestIssueNote(consumableRequest, decisionNote))
+                .issuedAt(now)
+                .build();
+        consumableIssueRepository.save(issue);
+        upsertConsumableLocationStock(
+                updated,
+                consumableRequest.getLocation(),
+                consumableRequest.getQuantityRequested(),
+                unitPrice,
+                now,
+                actor,
+                buildConsumableRequestIssueNote(consumableRequest, decisionNote)
+        );
+
+        consumableRequest.setStatus("APPROVED");
+        consumableRequest.setDecisionNote(decisionNote);
+        consumableRequest.setResolvedAt(now);
+        consumableRequest.setResolvedBy(actor);
+        ConsumableRequest savedRequest = consumableRequestRepository.save(consumableRequest);
+        invalidateAssetCaches(updated.getQaCode());
+
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CONSUMABLE_REQUEST_APPROVED",
+                "Phiếu yêu cầu cấp phát đã được duyệt",
+                actorDisplayName + " đã duyệt cấp phát " + consumableRequest.getQuantityRequested() + " " + safeUnit(updated)
+                        + " " + updated.getName() + " cho phòng " + consumableRequest.getLocation().getRoomName() + ".",
+                actor.getUsername(),
+                updated.getQaCode(),
+                updated.getName(),
+                Map.of(
+                        "Phiếu yêu cầu", "#" + consumableRequest.getId(),
+                        "Vật tư", updated.getQaCode() + " - " + updated.getName(),
+                        "Phòng nhận", consumableRequest.getLocation().getRoomName(),
+                        "Số lượng cấp phát", consumableRequest.getQuantityRequested(),
+                        "Người duyệt", actorDisplayName,
+                        "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
+                )
+        );
+        notifyLowStockIfNeeded(updated, actor);
+        return mapToConsumableRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableRequestResponse rejectConsumableRequest(Long requestId, ConsumableRequestDecisionRequest request) {
+        ConsumableRequest consumableRequest = consumableRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phiếu yêu cầu cấp phát."));
+        if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
+            throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
+        }
+        if (request == null || !StringUtils.hasText(request.getNote())) {
+            throw new CustomException("Vui lòng nhập lý do từ chối phiếu yêu cầu.");
+        }
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        String decisionNote = request.getNote().trim();
+
+        consumableRequest.setStatus("REJECTED");
+        consumableRequest.setDecisionNote(decisionNote);
+        consumableRequest.setResolvedAt(now);
+        consumableRequest.setResolvedBy(actor);
+        ConsumableRequest savedRequest = consumableRequestRepository.save(consumableRequest);
+
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CONSUMABLE_REQUEST_REJECTED",
+                "Phiếu yêu cầu cấp phát bị từ chối",
+                actorDisplayName + " đã từ chối phiếu yêu cầu cấp phát vật tư " + consumableRequest.getAsset().getName() + ".",
+                actor.getUsername(),
+                consumableRequest.getAsset().getQaCode(),
+                consumableRequest.getAsset().getName(),
+                Map.of(
+                        "Phiếu yêu cầu", "#" + consumableRequest.getId(),
+                        "Vật tư", consumableRequest.getAsset().getQaCode() + " - " + consumableRequest.getAsset().getName(),
+                        "Phòng nhận", consumableRequest.getLocation().getRoomName(),
+                        "Số lượng yêu cầu", consumableRequest.getQuantityRequested(),
+                        "Người duyệt", actorDisplayName,
+                        "Lý do từ chối", decisionNote
+                )
+        );
+        return mapToConsumableRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableLocationStockResponse updateConsumableLocationRemaining(
+            String qaCode,
+            Integer locationId,
+            ConsumableLocationRemainingUpdateRequest request
+    ) {
+        Asset asset = assetRepository.findById(qaCode)
+                .orElseThrow(() -> new CustomException("Không tìm thấy tài sản với mã: " + qaCode));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Tài sản này không quản lý tồn theo phòng.");
+        }
+        ConsumableLocationStock stock = consumableLocationStockRepository.findFirstByAssetQaCodeAndLocationId(qaCode, locationId)
+                .orElseThrow(() -> new CustomException("Chưa có dữ liệu cấp phát cho vật tư này tại phòng đã chọn."));
+        int nextRemaining = safeInteger(request.getQuantityRemaining());
+        int quantityIssued = safeInteger(stock.getQuantityIssued());
+        if (nextRemaining > quantityIssued) {
+            throw new CustomException("Số lượng còn lại không được lớn hơn tổng số lượng đã cấp cho phòng này.");
+        }
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        stock.setQuantityRemaining(nextRemaining);
+        stock.setLastUpdatedAt(now);
+        stock.setLastUpdatedBy(actor);
+        stock.setLastNote(StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null);
+        if (stock.getUnitPrice() == null) {
+            stock.setUnitPrice(updatedUnitPrice(asset));
+        }
+        ConsumableLocationStock savedStock = consumableLocationStockRepository.save(stock);
+        return mapToConsumableLocationStockResponse(savedStock);
     }
 
     @Transactional
@@ -415,13 +730,14 @@ public class AssetService {
             qrCodeBase64 = qrCodeGenerator.generateBase64QrCode(qrContent);
         }
         Location effectiveHomeLocation = asset.getHomeLocation() != null ? asset.getHomeLocation() : asset.getLocation();
+        String normalizedTrackingMode = normalizeTrackingMode(asset.getTrackingMode());
         return AssetResponse.builder()
                 .qaCode(asset.getQaCode())
-                .trackingMode(normalizeTrackingMode(asset.getTrackingMode()))
+                .trackingMode(normalizedTrackingMode)
                 .name(asset.getName())
                 .categoryId(asset.getCategory().getId())
                 .category(getCategoryDisplayName(asset.getCategory()))
-                .status(asset.getStatus())
+                .status(isConsumableMode(normalizedTrackingMode) ? computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()) : asset.getStatus())
                 .locationId(asset.getLocation().getId())
                 .locationName(asset.getLocation().getRoomName())
                 .homeLocationId(effectiveHomeLocation != null ? effectiveHomeLocation.getId() : null)
@@ -474,17 +790,19 @@ public class AssetService {
     }
 
     private AssetResponse mapToAssetListResponse(AssetAdminListItemResponse item) {
+        String normalizedTrackingMode = normalizeTrackingMode(item.getTrackingMode());
         return AssetResponse.builder()
                 .qaCode(item.getQaCode())
-                .trackingMode(normalizeTrackingMode(item.getTrackingMode()))
+                .trackingMode(normalizedTrackingMode)
                 .name(item.getName())
                 .categoryId(item.getCategoryId())
                 .category(item.getCategoryName())
-                .status(item.getStatus())
+                .status(isConsumableMode(normalizedTrackingMode) ? computeConsumableStatus(item.getQuantityOnHand(), item.getMinimumStock()) : item.getStatus())
                 .locationId(item.getLocationId())
                 .locationName(item.getLocationName())
                 .homeLocationId(item.getHomeLocationId())
                 .homeLocationName(item.getHomeLocationName())
+                .purchasePrice(item.getPurchasePrice())
                 .quantityOnHand(item.getQuantityOnHand())
                 .minimumStock(item.getMinimumStock())
                 .unit(item.getUnit())
@@ -681,17 +999,21 @@ public class AssetService {
     private String computeConsumableStatus(Integer quantityOnHand, Integer minimumStock) {
         int safeQuantity = safeInteger(quantityOnHand);
         int safeMinimum = safeInteger(minimumStock);
-        if (safeQuantity <= 0) {
-            return "Hết hàng";
-        }
         if (safeQuantity <= safeMinimum) {
-            return "Sắp hết";
+            return "Cần nhập";
         }
         return "Còn hàng";
     }
 
     private int safeInteger(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int safePositiveInteger(Integer value, String message) {
+        if (value == null || value <= 0) {
+            throw new CustomException(message);
+        }
+        return value;
     }
 
     private String normalizeUnit(String unit) {
@@ -706,6 +1028,89 @@ public class AssetService {
         return StringUtils.hasText(asset.getUnit()) ? asset.getUnit() : "đơn vị";
     }
 
+    private BigDecimal updatedUnitPrice(Asset asset) {
+        return asset != null ? asset.getPurchasePrice() : null;
+    }
+
+    private BigDecimal calculateAverageUnitPrice(
+            BigDecimal currentAveragePrice,
+            int currentQuantity,
+            BigDecimal receiptUnitPrice,
+            int receiptQuantity
+    ) {
+        if (receiptUnitPrice == null || receiptUnitPrice.signum() <= 0 || receiptQuantity <= 0) {
+            return currentAveragePrice;
+        }
+        if (currentQuantity <= 0 || currentAveragePrice == null || currentAveragePrice.signum() <= 0) {
+            return receiptUnitPrice.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal currentValue = currentAveragePrice.multiply(BigDecimal.valueOf(currentQuantity));
+        BigDecimal receiptValue = receiptUnitPrice.multiply(BigDecimal.valueOf(receiptQuantity));
+        int totalQuantity = currentQuantity + receiptQuantity;
+        if (totalQuantity <= 0) {
+            return receiptUnitPrice.setScale(2, RoundingMode.HALF_UP);
+        }
+        return currentValue.add(receiptValue)
+                .divide(BigDecimal.valueOf(totalQuantity), 2, RoundingMode.HALF_UP);
+    }
+
+    private void upsertConsumableLocationStock(
+            Asset asset,
+            Location location,
+            Integer issuedQuantity,
+            BigDecimal unitPrice,
+            LocalDateTime issuedAt,
+            AppUser actor,
+            String note
+    ) {
+        ConsumableLocationStock stock = consumableLocationStockRepository
+                .findFirstByAssetQaCodeAndLocationId(asset.getQaCode(), location.getId())
+                .orElseGet(() -> ConsumableLocationStock.builder()
+                        .asset(asset)
+                        .location(location)
+                        .quantityIssued(0)
+                        .quantityRemaining(0)
+                        .build());
+        int quantity = safeInteger(issuedQuantity);
+        stock.setQuantityIssued(safeInteger(stock.getQuantityIssued()) + quantity);
+        stock.setQuantityRemaining(safeInteger(stock.getQuantityRemaining()) + quantity);
+        stock.setUnitPrice(unitPrice);
+        stock.setLastIssuedAt(issuedAt);
+        stock.setLastUpdatedAt(issuedAt);
+        stock.setLastUpdatedBy(actor);
+        stock.setLastNote(StringUtils.hasText(note) ? note.trim() : null);
+        consumableLocationStockRepository.save(stock);
+    }
+
+    private ConsumableLocationStockResponse mapToConsumableLocationStockResponse(ConsumableLocationStock stock) {
+        int quantityIssued = safeInteger(stock.getQuantityIssued());
+        int quantityRemaining = safeInteger(stock.getQuantityRemaining());
+        BigDecimal unitPrice = stock.getUnitPrice();
+        BigDecimal remainingValue = unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(quantityRemaining));
+        AppUser lastUpdatedBy = stock.getLastUpdatedBy();
+        return ConsumableLocationStockResponse.builder()
+                .id(stock.getId())
+                .assetQaCode(stock.getAsset().getQaCode())
+                .assetName(stock.getAsset().getName())
+                .categoryId(stock.getAsset().getCategory() != null ? stock.getAsset().getCategory().getId() : null)
+                .categoryName(getCategoryDisplayName(stock.getAsset().getCategory()))
+                .locationId(stock.getLocation().getId())
+                .locationName(stock.getLocation().getRoomName())
+                .quantityIssued(quantityIssued)
+                .quantityRemaining(quantityRemaining)
+                .quantityConsumed(Math.max(0, quantityIssued - quantityRemaining))
+                .unit(stock.getAsset().getUnit())
+                .unitPrice(unitPrice)
+                .remainingValue(remainingValue)
+                .lastIssuedAt(stock.getLastIssuedAt())
+                .lastUpdatedAt(stock.getLastUpdatedAt())
+                .lastUpdatedByUserId(lastUpdatedBy != null ? lastUpdatedBy.getId() : null)
+                .lastUpdatedByUsername(lastUpdatedBy != null ? lastUpdatedBy.getUsername() : null)
+                .lastUpdatedByFullName(lastUpdatedBy != null ? lastUpdatedBy.getFullName() : null)
+                .lastNote(stock.getLastNote())
+                .build();
+    }
+
     private void notifyLowStockIfNeeded(Asset asset, AppUser actor) {
         if (!isConsumableMode(asset.getTrackingMode())) {
             return;
@@ -717,7 +1122,7 @@ public class AssetService {
         }
         notificationService.createNotification(
                 "CONSUMABLE_LOW_STOCK",
-                quantityOnHand <= 0 ? "Vật tư đã hết hàng" : "Vật tư sắp hết",
+                "Vật tư cần nhập thêm",
                 asset.getName() + " hiện còn " + quantityOnHand + " " + safeUnit(asset)
                         + " tại kho/phòng " + asset.getHomeLocation().getRoomName() + ".",
                 actor != null ? actor.getUsername() : "system",
@@ -742,12 +1147,48 @@ public class AssetService {
                 .issuedToLocationName(issue.getIssuedToLocation().getRoomName())
                 .quantity(issue.getQuantity())
                 .unit(issue.getAsset().getUnit())
+                .unitPrice(issue.getUnitPrice())
                 .note(issue.getNote())
                 .issuedByUserId(issue.getIssuedBy().getId())
                 .issuedByUsername(issue.getIssuedBy().getUsername())
                 .issuedByFullName(issue.getIssuedBy().getFullName())
                 .issuedAt(issue.getIssuedAt())
                 .build();
+    }
+
+    private ConsumableRequestResponse mapToConsumableRequestResponse(ConsumableRequest request) {
+        AppUser requestedBy = request.getRequestedBy();
+        AppUser resolvedBy = request.getResolvedBy();
+        return ConsumableRequestResponse.builder()
+                .id(request.getId())
+                .assetQaCode(request.getAsset().getQaCode())
+                .assetName(request.getAsset().getName())
+                .locationId(request.getLocation().getId())
+                .locationName(request.getLocation().getRoomName())
+                .quantityRequested(request.getQuantityRequested())
+                .unit(request.getAsset().getUnit())
+                .reason(request.getReason())
+                .status(request.getStatus())
+                .decisionNote(request.getDecisionNote())
+                .createdAt(request.getCreatedAt())
+                .resolvedAt(request.getResolvedAt())
+                .requestedByUserId(requestedBy != null ? requestedBy.getId() : null)
+                .requestedByUsername(requestedBy != null ? requestedBy.getUsername() : null)
+                .requestedByFullName(requestedBy != null ? requestedBy.getFullName() : null)
+                .resolvedByUserId(resolvedBy != null ? resolvedBy.getId() : null)
+                .resolvedByUsername(resolvedBy != null ? resolvedBy.getUsername() : null)
+                .resolvedByFullName(resolvedBy != null ? resolvedBy.getFullName() : null)
+                .build();
+    }
+
+    private String buildConsumableRequestIssueNote(ConsumableRequest request, String decisionNote) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Cấp phát theo phiếu yêu cầu #").append(request.getId())
+                .append(". Lý do: ").append(request.getReason());
+        if (StringUtils.hasText(decisionNote)) {
+            builder.append(" Ghi chú duyệt: ").append(decisionNote.trim());
+        }
+        return builder.toString();
     }
 
     private String normalizeSpecs(String specs) {

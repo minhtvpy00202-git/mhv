@@ -14,7 +14,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -48,6 +48,7 @@ function AdminLayout() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true })
+  const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
     try {
@@ -69,20 +70,38 @@ function AdminLayout() {
       || location.pathname.startsWith('/admin/tech-support-types')
       || location.pathname.startsWith('/admin/locations')
     ) {
-      setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))
+      const syncMenuTimer = window.setTimeout(() => {
+        setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))
+      }, 0)
+      return () => window.clearTimeout(syncMenuTimer)
     }
+    return undefined
   }, [location.pathname])
 
   useEffect(() => {
+    const bootstrapTimer = window.setTimeout(() => {
+      void loadFeed()
+    }, 0)
     const handleRefresh = () => {
-      loadFeed(true)
+      void loadFeed(true)
     }
-    loadFeed()
     window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
-    return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => {
+      window.clearTimeout(bootstrapTimer)
+      window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+    }
   }, [loadFeed])
 
   const handleOpenNotification = async (notification) => {
+    await markNotificationAsRead(notification)
+    setShowNotificationDropdown(false)
+    navigate(notification.linkPath)
+  }
+
+  const markNotificationAsRead = useCallback(async (notification) => {
+    if (!notification?.id || notification.isRead) return
+    if (readingNotificationIdsRef.current.has(notification.id)) return
+    readingNotificationIdsRef.current.add(notification.id)
     try {
       await axiosClient.post(`/api/notifications/${notification.id}/read`)
       setUnreadCount((prev) => (prev > 0 ? prev - 1 : 0))
@@ -90,15 +109,19 @@ function AdminLayout() {
         prev.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item)),
       )
       window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
-    } catch {}
-    setShowNotificationDropdown(false)
-    navigate(notification.linkPath)
-  }
+    } catch {
+      // Ignore hover mark-as-read failures and keep the dropdown usable.
+    } finally {
+      readingNotificationIdsRef.current.delete(notification.id)
+    }
+  }, [])
 
   const handleMarkAllRead = async () => {
     try {
       await axiosClient.post('/api/notifications/read-all')
-    } catch {}
+    } catch {
+      // Ignore mark-all-read failures and keep local UI responsive.
+    }
     setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
     setUnreadCount(0)
     window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
@@ -106,11 +129,11 @@ function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-slate-100">
-      <aside className="hidden w-64 flex-col bg-white p-4 shadow md:flex">
-        <div className="rounded-lg bg-fptOrange px-4 py-3 text-white">
+      <aside className="hidden w-72 flex-col border-r border-slate-200 bg-slate-50/80 p-4 md:flex">
+        <div className="rounded-2xl bg-fptOrange px-4 py-4 text-white shadow-sm ring-1 ring-orange-200">
           <h1 className="text-lg font-semibold">FPT Admin</h1>
         </div>
-        <nav className="mt-4 space-y-2">
+        <nav className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
           {menuItems.map((item) => {
             if (!item.children) {
               const Icon = item.icon
@@ -151,21 +174,24 @@ function AdminLayout() {
                 </button>
 
                 {isExpanded && (
-                  <div className="space-y-1 pl-4">
-                    {item.children.map(({ to, label, icon: Icon }) => (
-                      <NavLink
-                        key={to}
-                        to={to}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                            isActive ? 'bg-orange-50 font-semibold text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
-                          }`
-                        }
-                      >
-                        <Icon size={16} />
-                        <span>{label}</span>
-                      </NavLink>
-                    ))}
+                  <div className="space-y-1 border-l border-slate-200 pl-4">
+                    {item.children.map((child) => {
+                      const ChildIcon = child.icon
+                      return (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                              isActive ? 'bg-orange-50 font-semibold text-fptOrangeDark' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange'
+                            }`
+                          }
+                        >
+                          <ChildIcon size={16} />
+                          <span>{child.label}</span>
+                        </NavLink>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -175,7 +201,7 @@ function AdminLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between bg-white px-4 py-3 shadow-sm md:px-6">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur md:px-6">
           <div>
             <p className="text-sm text-slate-500">Quản trị viên</p>
             <p className="font-semibold text-slate-800">{user?.fullName || user?.username || 'Admin'}</p>
@@ -220,6 +246,9 @@ function AdminLayout() {
                       <button
                         key={notification.id}
                         type="button"
+                        onMouseEnter={() => {
+                          void markNotificationAsRead(notification)
+                        }}
                         onClick={() => handleOpenNotification(notification)}
                         className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-orange-50 ${
                           notification.isRead ? 'text-slate-600' : 'font-semibold text-slate-800'
@@ -244,7 +273,7 @@ function AdminLayout() {
             </button>
           </div>
         </header>
-        <main className="min-w-0 p-4 md:p-6">
+        <main className="min-w-0 p-5 md:p-6">
           <Outlet />
         </main>
       </div>
