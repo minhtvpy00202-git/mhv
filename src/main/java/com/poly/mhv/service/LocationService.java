@@ -16,9 +16,13 @@ import org.springframework.util.StringUtils;
 @Service
 public class LocationService {
 
+    private static final long LOCATION_CACHE_TTL_MS = 60_000L;
+
     private final LocationRepository locationRepository;
     private final AssetRepository assetRepository;
     private final UsageHistoryRepository usageHistoryRepository;
+    private volatile List<LocationResponse> cachedAllLocations;
+    private volatile long cachedAllLocationsExpiresAt;
 
     public LocationService(
             LocationRepository locationRepository,
@@ -33,9 +37,21 @@ public class LocationService {
     @Transactional(readOnly = true)
     public List<LocationResponse> getAllLocations(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return locationRepository.searchByKeyword(normalizedKeyword).stream()
+        long now = System.currentTimeMillis();
+        if (normalizedKeyword == null) {
+            List<LocationResponse> cacheSnapshot = cachedAllLocations;
+            if (cacheSnapshot != null && cachedAllLocationsExpiresAt > now) {
+                return cacheSnapshot;
+            }
+        }
+        List<LocationResponse> items = locationRepository.searchByKeyword(normalizedKeyword).stream()
                 .map(this::mapToResponse)
                 .toList();
+        if (normalizedKeyword == null) {
+            cachedAllLocations = items;
+            cachedAllLocationsExpiresAt = now + LOCATION_CACHE_TTL_MS;
+        }
+        return items;
     }
 
     @Transactional(readOnly = true)
@@ -53,7 +69,9 @@ public class LocationService {
         Location location = Location.builder()
                 .roomName(normalizedRoomName)
                 .build();
-        return mapToResponse(locationRepository.save(location));
+        LocationResponse response = mapToResponse(locationRepository.save(location));
+        invalidateLocationCache();
+        return response;
     }
 
     @Transactional
@@ -65,7 +83,9 @@ public class LocationService {
         }
 
         location.setRoomName(normalizedRoomName);
-        return mapToResponse(locationRepository.save(location));
+        LocationResponse response = mapToResponse(locationRepository.save(location));
+        invalidateLocationCache();
+        return response;
     }
 
     @Transactional
@@ -82,6 +102,12 @@ public class LocationService {
         }
 
         locationRepository.delete(location);
+        invalidateLocationCache();
+    }
+
+    private void invalidateLocationCache() {
+        cachedAllLocations = null;
+        cachedAllLocationsExpiresAt = 0L;
     }
 
     private Location getLocationOrThrow(Integer id) {

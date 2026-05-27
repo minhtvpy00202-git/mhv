@@ -123,8 +123,10 @@ function GlobalNotification() {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
+    if (user?.role === 'Admin') return undefined
     let mounted = true
     const syncNotifications = async () => {
+      if (document.hidden) return
       try {
         const response = await axiosClient.get('/api/notifications', {
           params: { page: 0, size: 20 },
@@ -152,13 +154,13 @@ function GlobalNotification() {
       } catch {}
     }
 
-    syncNotifications()
     if (connected) {
       return () => {
         mounted = false
       }
     }
-    const timer = setInterval(syncNotifications, 15000)
+    syncNotifications()
+    const timer = setInterval(syncNotifications, 60000)
     return () => {
       mounted = false
       clearInterval(timer)

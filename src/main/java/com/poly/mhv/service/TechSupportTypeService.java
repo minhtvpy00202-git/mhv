@@ -1,6 +1,7 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeCreateRequest;
+import com.poly.mhv.dto.techsupporttype.TechSupportTypeOptionResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeUpdateRequest;
 import com.poly.mhv.entity.TechSupportType;
@@ -10,7 +11,6 @@ import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.TechSupportTypeRepository;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -35,11 +35,17 @@ public class TechSupportTypeService {
     @Transactional(readOnly = true)
     public List<TechSupportTypeResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        List<TechSupportType> techSupportTypes = techSupportTypeRepository.searchForAdmin(normalizedKeyword);
-        Map<Integer, Long> categoryCountsByTechTypeId = buildCategoryCountMap(techSupportTypes);
-        Map<Integer, Long> userCountsByTechTypeId = buildUserCountMap(techSupportTypes);
-        return techSupportTypes.stream()
-                .map(type -> mapToResponse(type, categoryCountsByTechTypeId, userCountsByTechTypeId))
+        return techSupportTypeRepository.searchSummaryForAdmin(normalizedKeyword);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TechSupportTypeOptionResponse> getOptions(String keyword) {
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        return techSupportTypeRepository.searchForAdmin(normalizedKeyword).stream()
+                .map(type -> TechSupportTypeOptionResponse.builder()
+                        .id(type.getId())
+                        .name(type.getName())
+                        .build())
                 .toList();
     }
 
@@ -102,34 +108,6 @@ public class TechSupportTypeService {
             throw new CustomException("Tên loại kỹ thuật viên là bắt buộc.");
         }
         return normalizedName;
-    }
-
-    private Map<Integer, Long> buildCategoryCountMap(List<TechSupportType> techSupportTypes) {
-        List<Integer> techTypeIds = techSupportTypes.stream()
-                .map(TechSupportType::getId)
-                .toList();
-        if (techTypeIds.isEmpty()) {
-            return Map.of();
-        }
-        return categoryRepository.countByTechSupportTypeIds(techTypeIds).stream()
-                .collect(Collectors.toMap(
-                        row -> (Integer) row[0],
-                        row -> (Long) row[1]
-                ));
-    }
-
-    private Map<Integer, Long> buildUserCountMap(List<TechSupportType> techSupportTypes) {
-        List<Integer> techTypeIds = techSupportTypes.stream()
-                .map(TechSupportType::getId)
-                .toList();
-        if (techTypeIds.isEmpty()) {
-            return Map.of();
-        }
-        return appUserRepository.countUsersByTechSupportTypeIds(techTypeIds).stream()
-                .collect(Collectors.toMap(
-                        row -> (Integer) row[0],
-                        row -> (Long) row[1]
-                ));
     }
 
     private TechSupportTypeResponse mapToResponse(TechSupportType techSupportType) {

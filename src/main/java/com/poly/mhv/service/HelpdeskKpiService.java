@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,10 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class HelpdeskKpiService {
 
+    private static final long KPI_CACHE_TTL_MS = 30_000L;
+
     private final TicketRepository ticketRepository;
     private final AppUserRepository appUserRepository;
     private final TicketEventRepository ticketEventRepository;
     private final CurrentUserProvider currentUserProvider;
+    private volatile CachedHelpdeskKpi adminCache;
+    private final Map<Integer, CachedHelpdeskKpi> technicianCache = new ConcurrentHashMap<>();
 
     @Transactional(readOnly = true)
     public HelpdeskKpiResponse getAdminKpis() {
@@ -35,7 +40,11 @@ public class HelpdeskKpiService {
         if (!"Admin".equals(actor.getRole())) {
             throw new CustomException("Chỉ admin mới được xem KPI toàn hệ thống.");
         }
-        List<Ticket> tickets = ticketRepository.findAll();
+        CachedHelpdeskKpi cacheSnapshot = adminCache;
+        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
+            return cacheSnapshot.response();
+        }
+        List<Ticket> tickets = ticketRepository.findAllForKpi();
         List<AppUser> technicians = appUserRepository.findByRole("TechSupport").stream()
                 .sorted(Comparator.comparing(this::getActorDisplayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -47,7 +56,7 @@ public class HelpdeskKpiService {
         long overdueTicketCount = countOverdueActiveTickets(tickets);
         FirstResponseMetrics firstResponseMetrics = buildFirstResponseMetrics(tickets);
 
-        return HelpdeskKpiResponse.builder()
+        HelpdeskKpiResponse response = HelpdeskKpiResponse.builder()
                 .scope("ADMIN")
                 .newTicketCount(newTicketCount)
                 .resolvedTicketCount(resolvedTicketCount)
@@ -67,6 +76,8 @@ public class HelpdeskKpiService {
                                 .toList()
                 )
                 .build();
+        adminCache = new CachedHelpdeskKpi(response, System.currentTimeMillis() + KPI_CACHE_TTL_MS);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +86,11 @@ public class HelpdeskKpiService {
         if (!"TechSupport".equals(technician.getRole())) {
             throw new CustomException("Chỉ kỹ thuật viên mới được xem KPI cá nhân.");
         }
-        List<Ticket> tickets = ticketRepository.findAll();
+        CachedHelpdeskKpi cacheSnapshot = technicianCache.get(technician.getId());
+        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
+            return cacheSnapshot.response();
+        }
+        List<Ticket> tickets = ticketRepository.findAllForKpi();
         List<Ticket> myAssignedTickets = tickets.stream()
                 .filter(ticket -> ticket.getAssignee() != null && technician.getId().equals(ticket.getAssignee().getId()))
                 .toList();
@@ -92,7 +107,7 @@ public class HelpdeskKpiService {
 
         TechnicianTicketKpiResponse myRow = mapTechnicianKpi(technician, tickets, firstResponseMetrics.averageMinutesByTechnician());
 
-        return HelpdeskKpiResponse.builder()
+        HelpdeskKpiResponse response = HelpdeskKpiResponse.builder()
                 .scope("TECHNICIAN")
                 .technicianId(technician.getId())
                 .technicianName(getActorDisplayName(technician))
@@ -106,6 +121,8 @@ public class HelpdeskKpiService {
                 .averageFirstResponseMinutes(firstResponseMetrics.averageMinutesByTechnician().getOrDefault(technician.getId(), 0L))
                 .ticketsByTechnician(List.of(myRow))
                 .build();
+        technicianCache.put(technician.getId(), new CachedHelpdeskKpi(response, System.currentTimeMillis() + KPI_CACHE_TTL_MS));
+        return response;
     }
 
     private TechnicianTicketKpiResponse mapTechnicianKpi(
@@ -312,6 +329,12 @@ public class HelpdeskKpiService {
 
         java.util.stream.Stream<FirstResponseSample> stream() {
             return sample == null ? java.util.stream.Stream.empty() : java.util.stream.Stream.of(sample);
+        }
+    }
+
+    private record CachedHelpdeskKpi(HelpdeskKpiResponse response, long expiresAt) {
+        private boolean isExpired() {
+            return expiresAt <= System.currentTimeMillis();
         }
     }
 }

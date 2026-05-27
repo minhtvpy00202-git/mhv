@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.asset.AssetCreateRequest;
+import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
 import com.poly.mhv.dto.common.PagedResponse;
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -36,6 +38,9 @@ import org.springframework.util.StringUtils;
 @Service
 public class AssetService {
 
+    private static final long ASSET_DETAIL_CACHE_TTL_MS = 60_000L;
+    private static final long ASSET_QR_CACHE_TTL_MS = 300_000L;
+
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
     private final CategoryRepository categoryRepository;
@@ -44,6 +49,8 @@ public class AssetService {
     private final QRCodeGenerator qrCodeGenerator;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
+    private final Map<String, CachedAssetResponse> assetDetailCache = new ConcurrentHashMap<>();
+    private final Map<String, CachedAssetQr> assetQrCache = new ConcurrentHashMap<>();
 
     public AssetService(
             AssetRepository assetRepository,
@@ -89,6 +96,7 @@ public class AssetService {
                 .supplier(supplier)
                 .build();
         Asset saved = assetRepository.save(asset);
+        invalidateAssetCaches(saved.getQaCode());
         AppUser actor = getCurrentUser();
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
@@ -107,7 +115,7 @@ public class AssetService {
                         "Người thực hiện", actorDisplayName
                 )
         );
-        return mapToAssetResponse(saved, true);
+        return mapToAssetResponse(saved, true, true);
     }
 
     @Transactional(readOnly = true)
@@ -128,7 +136,7 @@ public class AssetService {
                 Math.max(1, Math.min(size, 100)),
                 buildSort(sortKey, sortDirection)
         );
-        Page<Asset> assetPage = assetRepository.searchForAdmin(
+        Page<AssetAdminListItemResponse> assetPage = assetRepository.searchForAdmin(
                 normalizedName,
                 normalizedStatus,
                 categoryId,
@@ -137,7 +145,7 @@ public class AssetService {
         );
         return new PagedResponse<>(
                 assetPage.getContent().stream()
-                        .map(asset -> mapToAssetResponse(asset, false))
+                        .map(this::mapToAssetListResponse)
                         .toList(),
                 assetPage.getNumber(),
                 assetPage.getSize(),
@@ -148,9 +156,29 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public AssetResponse getAssetByQaCode(String qaCode) {
+        CachedAssetResponse cacheSnapshot = assetDetailCache.get(qaCode);
+        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
+            return cacheSnapshot.response();
+        }
         Asset asset = assetRepository.findDetailByQaCode(qaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
-        return mapToAssetResponse(asset, true);
+        AssetResponse response = mapToAssetResponse(asset, false, true);
+        assetDetailCache.put(qaCode, new CachedAssetResponse(response, System.currentTimeMillis() + ASSET_DETAIL_CACHE_TTL_MS));
+        return response;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, String> getAssetQrByQaCode(String qaCode) {
+        CachedAssetQr cacheSnapshot = assetQrCache.get(qaCode);
+        if (cacheSnapshot != null && !cacheSnapshot.isExpired()) {
+            return Map.of("qaCode", qaCode, "qrCodeBase64", cacheSnapshot.qrCodeBase64());
+        }
+        Asset asset = assetRepository.findById(qaCode)
+                .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
+        String qrContent = "{\"qa_code\":\"" + asset.getQaCode() + "\"}";
+        String qrCodeBase64 = qrCodeGenerator.generateBase64QrCode(qrContent);
+        assetQrCache.put(qaCode, new CachedAssetQr(qrCodeBase64, System.currentTimeMillis() + ASSET_QR_CACHE_TTL_MS));
+        return Map.of("qaCode", qaCode, "qrCodeBase64", qrCodeBase64);
     }
 
     @Transactional
@@ -219,7 +247,9 @@ public class AssetService {
                         Map.entry("Người thực hiện", actorDisplayName)
                 )
         );
-        return mapToAssetResponse(updated, false);
+        AssetResponse response = mapToAssetResponse(updated, false, true);
+        invalidateAssetCaches(updated.getQaCode());
+        return response;
     }
 
     @Transactional
@@ -230,6 +260,7 @@ public class AssetService {
         String categoryName = getCategoryDisplayName(asset.getCategory());
         String homeLocationName = asset.getHomeLocation().getRoomName();
         assetRepository.delete(asset);
+        invalidateAssetCaches(qaCode);
         AppUser actor = getCurrentUser();
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
@@ -250,7 +281,7 @@ public class AssetService {
         );
     }
 
-    private AssetResponse mapToAssetResponse(Asset asset, boolean includeQrCode) {
+    private AssetResponse mapToAssetResponse(Asset asset, boolean includeQrCode, boolean includeSpecs) {
         String qrCodeBase64 = null;
         if (includeQrCode) {
             String qrContent = "{\"qa_code\":\"" + asset.getQaCode() + "\"}";
@@ -267,7 +298,7 @@ public class AssetService {
                 .locationName(asset.getLocation().getRoomName())
                 .homeLocationId(effectiveHomeLocation != null ? effectiveHomeLocation.getId() : null)
                 .homeLocationName(effectiveHomeLocation != null ? effectiveHomeLocation.getRoomName() : null)
-                .specs(asset.getSpecs())
+                .specs(includeSpecs ? asset.getSpecs() : null)
                 .purchasePrice(asset.getPurchasePrice())
                 .purchaseDate(asset.getPurchaseDate())
                 .warrantyExpirationDate(asset.getWarrantyExpirationDate())
@@ -276,6 +307,30 @@ public class AssetService {
                 .supplierAddress(asset.getSupplier() != null ? asset.getSupplier().getAddress() : null)
                 .supplierPhoneNumber(asset.getSupplier() != null ? asset.getSupplier().getPhoneNumber() : null)
                 .qrCodeBase64(qrCodeBase64)
+                .build();
+    }
+
+    private void invalidateAssetCaches(String qaCode) {
+        if (!StringUtils.hasText(qaCode)) {
+            return;
+        }
+        assetDetailCache.remove(qaCode);
+        assetQrCache.remove(qaCode);
+    }
+
+    private AssetResponse mapToAssetListResponse(AssetAdminListItemResponse item) {
+        return AssetResponse.builder()
+                .qaCode(item.getQaCode())
+                .name(item.getName())
+                .categoryId(item.getCategoryId())
+                .category(item.getCategoryName())
+                .status(item.getStatus())
+                .locationId(item.getLocationId())
+                .locationName(item.getLocationName())
+                .homeLocationId(item.getHomeLocationId())
+                .homeLocationName(item.getHomeLocationName())
+                .supplierId(item.getSupplierId())
+                .supplierName(item.getSupplierName())
                 .build();
     }
 
@@ -434,5 +489,17 @@ public class AssetService {
             case "TechSupport" -> "Kỹ thuật viên";
             default -> "Người dùng";
         };
+    }
+
+    private record CachedAssetResponse(AssetResponse response, long expiresAt) {
+        private boolean isExpired() {
+            return expiresAt <= System.currentTimeMillis();
+        }
+    }
+
+    private record CachedAssetQr(String qrCodeBase64, long expiresAt) {
+        private boolean isExpired() {
+            return expiresAt <= System.currentTimeMillis();
+        }
     }
 }

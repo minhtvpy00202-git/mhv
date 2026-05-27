@@ -130,4 +130,8 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    @EntityGraph(attributePaths = {"asset", "asset.category", "asset.category.techSupportType", "assignee"})
+    @Query("select t from Ticket t")
+    List<Ticket> findAllForKpi();
 }

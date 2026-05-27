@@ -1,7 +1,9 @@
 package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.category.CategoryCreateRequest;
+import com.poly.mhv.dto.category.CategoryOptionResponse;
 import com.poly.mhv.dto.category.CategoryResponse;
+import com.poly.mhv.dto.category.CategorySummaryResponse;
 import com.poly.mhv.dto.category.CategoryUpdateRequest;
 import com.poly.mhv.service.CategoryService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,11 +44,21 @@ public class CategoryController {
             @ApiResponse(responseCode = "200", description = "Lấy danh sách loại thiết bị thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<List<CategoryResponse>> getAllCategories(
+    public ResponseEntity<List<CategorySummaryResponse>> getAllCategories(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer techTypeId
     ) {
         return ResponseEntity.ok(categoryService.getAllCategories(keyword, techTypeId));
+    }
+
+    @GetMapping("/options")
+    @Operation(summary = "Lấy danh sách loại thiết bị gọn", description = "Trả về danh sách nhẹ phục vụ dropdown và form chọn loại thiết bị.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy danh sách loại thiết bị gọn thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<List<CategoryOptionResponse>> getCategoryOptions() {
+        return ResponseEntity.ok(categoryService.getCategoryOptions());
     }
 
     @GetMapping("/{id}")

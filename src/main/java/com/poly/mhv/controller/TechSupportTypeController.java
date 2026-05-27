@@ -1,6 +1,7 @@
 package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeCreateRequest;
+import com.poly.mhv.dto.techsupporttype.TechSupportTypeOptionResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeUpdateRequest;
 import com.poly.mhv.service.TechSupportTypeService;
@@ -47,6 +48,17 @@ public class TechSupportTypeController {
     })
     public ResponseEntity<List<TechSupportTypeResponse>> getAll(@RequestParam(required = false) String keyword) {
         return ResponseEntity.ok(techSupportTypeService.getAll(keyword));
+    }
+
+    @GetMapping("/options")
+    @Operation(summary = "Lấy danh sách loại kỹ thuật viên gọn", description = "Trả về danh sách nhẹ chỉ gồm id và tên để dùng cho dropdown.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy danh sách loại kỹ thuật viên gọn thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
+    })
+    public ResponseEntity<List<TechSupportTypeOptionResponse>> getOptions(@RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(techSupportTypeService.getOptions(keyword));
     }
 
     @GetMapping("/{id}")

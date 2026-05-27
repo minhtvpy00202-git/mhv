@@ -1,5 +1,6 @@
 package com.poly.mhv.repository;
 
+import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
 import com.poly.mhv.entity.Asset;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,18 +25,31 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     long countByLocationIdOrHomeLocationId(Integer locationId, Integer homeLocationId);
     List<Asset> findByWarrantyExpirationDate(LocalDate warrantyExpirationDate);
 
-    @EntityGraph(attributePaths = {"location", "homeLocation", "category", "supplier"})
     @Query("""
-            select a from Asset a
+            select new com.poly.mhv.dto.asset.AssetAdminListItemResponse(
+                a.qaCode,
+                a.name,
+                c.id,
+                c.name,
+                a.status,
+                l.id,
+                l.roomName,
+                hl.id,
+                hl.roomName,
+                s.id,
+                s.name
+            )
+            from Asset a
             join a.location l
             left join a.homeLocation hl
             join a.category c
+            left join a.supplier s
             where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
               and (:status is null or a.status = :status)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)
             """)
-    Page<Asset> searchForAdmin(
+    Page<AssetAdminListItemResponse> searchForAdmin(
             @Param("name") String name,
             @Param("status") String status,
             @Param("categoryId") Integer categoryId,

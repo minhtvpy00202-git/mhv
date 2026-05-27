@@ -1,6 +1,7 @@
 package com.poly.mhv.config;
 
 import com.poly.mhv.security.jwt.JwtUtils;
+import com.poly.mhv.security.services.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
@@ -55,8 +56,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     }
 
                     String username = jwtUtils.getUserNameFromJwtToken(token);
-                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-                    if (!jwtUtils.validateJwtToken(token, userDetails)) {
+                    UserDetails userDetails = buildUserDetailsFromToken(token, username);
+                    if (!jwtUtils.validateJwtToken(token)) {
                         throw new IllegalArgumentException("JWT token không hợp lệ.");
                     }
 
@@ -69,6 +70,24 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
                 return message;
+            }
+
+            private UserDetails buildUserDetailsFromToken(String token, String username) {
+                Integer userId = jwtUtils.getUserIdFromJwtToken(token);
+                String role = jwtUtils.getRoleFromJwtToken(token);
+                String status = jwtUtils.getStatusFromJwtToken(token);
+                if (userId != null && role != null && status != null) {
+                    return UserDetailsImpl.fromJwtClaims(
+                            userId,
+                            username,
+                            jwtUtils.getFullNameFromJwtToken(token),
+                            role,
+                            status,
+                            jwtUtils.getTechTypeIdsFromJwtToken(token),
+                            jwtUtils.getTechTypeNamesFromJwtToken(token)
+                    );
+                }
+                return userDetailsService.loadUserByUsername(username);
             }
 
             private String extractToken(StompHeaderAccessor accessor) {

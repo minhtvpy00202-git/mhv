@@ -58,6 +58,7 @@ function AssetManagement() {
   const [assets, setAssets] = useState([])
   const [locations, setLocations] = useState([])
   const [categories, setCategories] = useState([])
+  const [categoryDetailsById, setCategoryDetailsById] = useState({})
   const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
@@ -99,6 +100,7 @@ function AssetManagement() {
     specEntries: [],
   })
   const [formErrors, setFormErrors] = useState({})
+  const [assetDetailsByQaCode, setAssetDetailsByQaCode] = useState({})
 
   const filteredCategoryOptions = useMemo(() => {
     const keyword = filters.categoryKeyword.trim().toLowerCase()
@@ -125,6 +127,34 @@ function AssetManagement() {
 
   const withSpecEntryKeys = (entries = []) => entries.map((entry) => createSpecEntryWithKey(entry))
 
+  const getCategorySpecTemplates = async (categoryId) => {
+    const normalizedCategoryId = Number(categoryId)
+    if (!normalizedCategoryId) return []
+    const cachedDetail = categoryDetailsById[normalizedCategoryId]
+    if (cachedDetail) {
+      return normalizeSpecTemplates(cachedDetail.specTemplates)
+    }
+    const response = await axiosClient.get(`/api/categories/${normalizedCategoryId}`)
+    const detail = response.data || {}
+    setCategoryDetailsById((prev) => ({
+      ...prev,
+      [normalizedCategoryId]: detail,
+    }))
+    return normalizeSpecTemplates(detail.specTemplates)
+  }
+
+  const fetchAssetDetail = async (qaCode) => {
+    const cachedDetail = assetDetailsByQaCode[qaCode]
+    if (cachedDetail) return cachedDetail
+    const response = await axiosClient.get(`/api/assets/${qaCode}`)
+    const detail = response.data || {}
+    setAssetDetailsByQaCode((prev) => ({
+      ...prev,
+      [qaCode]: detail,
+    }))
+    return detail
+  }
+
   useEffect(() => {
     const initializePage = async () => {
       try {
@@ -147,6 +177,8 @@ function AssetManagement() {
         })
         setLocations(data.locations || [])
         setCategories(data.categories || [])
+        setCategoryDetailsById({})
+        setAssetDetailsByQaCode({})
         setSuppliers(data.suppliers || [])
         setSortState(defaultSortState)
       } catch (error) {
@@ -264,6 +296,12 @@ function AssetManagement() {
         setQrImage('')
       }
       toast.success(`Thêm thiết bị thành công. Mã mới: ${response.data?.qaCode || 'đã tự sinh'}.`)
+      if (response.data?.qaCode) {
+        setAssetDetailsByQaCode((prev) => ({
+          ...prev,
+          [response.data.qaCode]: response.data,
+        }))
+      }
       closeFormModal()
       await loadAssets(pageInfo.page)
     } catch (error) {
@@ -284,7 +322,7 @@ function AssetManagement() {
     }
     setSubmitting(true)
     try {
-      await axiosClient.put(`/api/assets/${selectedQaCode}`, {
+      const response = await axiosClient.put(`/api/assets/${selectedQaCode}`, {
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(form.locationId),
@@ -295,6 +333,12 @@ function AssetManagement() {
         supplierId: Number(form.supplierId),
       })
       toast.success('Cập nhật thiết bị thành công.')
+      if (response.data?.qaCode) {
+        setAssetDetailsByQaCode((prev) => ({
+          ...prev,
+          [response.data.qaCode]: response.data,
+        }))
+      }
       closeFormModal()
       await loadAssets(pageInfo.page)
     } catch (error) {
@@ -316,6 +360,11 @@ function AssetManagement() {
       if (qaCode === selectedQaCode) {
         resetForm()
       }
+      setAssetDetailsByQaCode((prev) => {
+        const next = { ...prev }
+        delete next[qaCode]
+        return next
+      })
       await loadAssets(pageInfo.page)
     } catch (error) {
       const message = error?.response?.data?.message || 'Xóa thiết bị thất bại.'
@@ -325,36 +374,47 @@ function AssetManagement() {
     }
   }
 
-  const handleSelectAsset = (asset) => {
-    const categoryTemplates = categories.find((category) => category.id === asset.categoryId)?.specTemplates || []
-    setSelectedQaCode(asset.qaCode)
-    setQrImage('')
-    setSupplierKeyword(asset.supplierName || '')
-    setForm({
-      name: asset.name,
-      categoryId: String(asset.categoryId),
-      locationId: String(asset.homeLocationId || asset.locationId),
-      supplierId: asset.supplierId ? String(asset.supplierId) : '',
-      purchasePrice: asset.purchasePrice ?? '',
-      purchaseDate: asset.purchaseDate || '',
-      warrantyExpirationDate: asset.warrantyExpirationDate || '',
-      specEntries: withSpecEntryKeys(mergeSpecEntries(
-        normalizeSpecTemplates(categoryTemplates),
-        parseSpecsToEntries(asset.specs, normalizeSpecTemplates(categoryTemplates)),
-      )),
-    })
-    setFormMode('update')
-    setShowFormModal(true)
+  const handleSelectAsset = async (asset) => {
+    try {
+      const detail = await fetchAssetDetail(asset.qaCode)
+      const categoryTemplates = await getCategorySpecTemplates(detail.categoryId || asset.categoryId)
+      setSelectedQaCode(asset.qaCode)
+      setQrImage('')
+      setSupplierKeyword(detail.supplierName || asset.supplierName || '')
+      setForm({
+        name: detail.name || asset.name,
+        categoryId: String(detail.categoryId || asset.categoryId),
+        locationId: String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId),
+        supplierId: detail.supplierId ? String(detail.supplierId) : '',
+        purchasePrice: detail.purchasePrice ?? asset.purchasePrice ?? '',
+        purchaseDate: detail.purchaseDate || asset.purchaseDate || '',
+        warrantyExpirationDate: detail.warrantyExpirationDate || asset.warrantyExpirationDate || '',
+        specEntries: withSpecEntryKeys(mergeSpecEntries(
+          categoryTemplates,
+          parseSpecsToEntries(detail.specs, categoryTemplates),
+        )),
+      })
+      setFormMode('update')
+      setShowFormModal(true)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải template đặc tính kỹ thuật của loại thiết bị.'
+      toast.error(message)
+    }
   }
 
-  const handleCategoryChange = (categoryId) => {
-    const categoryTemplates = categories.find((category) => String(category.id) === String(categoryId))?.specTemplates || []
-    setForm((prev) => ({
-      ...prev,
-      categoryId,
-      specEntries: withSpecEntryKeys(mergeSpecEntries(normalizeSpecTemplates(categoryTemplates), [])),
-    }))
-    setFormErrors((prev) => ({ ...prev, categoryId: '', specEntries: '' }))
+  const handleCategoryChange = async (categoryId) => {
+    try {
+      const categoryTemplates = await getCategorySpecTemplates(categoryId)
+      setForm((prev) => ({
+        ...prev,
+        categoryId,
+        specEntries: withSpecEntryKeys(mergeSpecEntries(categoryTemplates, [])),
+      }))
+      setFormErrors((prev) => ({ ...prev, categoryId: '', specEntries: '' }))
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải template đặc tính kỹ thuật của loại thiết bị.'
+      toast.error(message)
+    }
   }
 
   const updateSpecEntry = (index, field, value) => {
@@ -394,7 +454,7 @@ function AssetManagement() {
   const handleOpenQrModal = async (qaCode) => {
     setQrModalLoading(true)
     try {
-      const response = await axiosClient.get(`/api/assets/${qaCode}`)
+      const response = await axiosClient.get(`/api/assets/${qaCode}/qr`)
       const qrCodeBase64 = response.data?.qrCodeBase64
       if (!qrCodeBase64) {
         toast.error('Không lấy được mã QR của thiết bị này.')
@@ -645,9 +705,15 @@ function AssetManagement() {
                     <td className="px-3 py-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedSpecsAsset(asset)
-                          setShowSpecsModal(true)
+                        onClick={async () => {
+                          try {
+                            const detail = await fetchAssetDetail(asset.qaCode)
+                            setSelectedSpecsAsset(detail)
+                            setShowSpecsModal(true)
+                          } catch (error) {
+                            const message = error?.response?.data?.message || 'Không thể tải đặc tính kỹ thuật của thiết bị.'
+                            toast.error(message)
+                          }
                         }}
                         className="rounded-md border border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
                       >

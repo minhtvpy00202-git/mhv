@@ -138,7 +138,7 @@ public class AssetController {
         return ResponseEntity.ok(new AssetManagementBootstrapResponse(
                 assetService.getAssets(page, size, name, status, categoryId, locationId, sortKey, sortDirection),
                 locationService.getAllLocations(null),
-                categoryService.getAllCategories(null, null),
+                categoryService.getCategoryOptions(),
                 supplierService.getAll(null)
         ));
     }
@@ -152,5 +152,16 @@ public class AssetController {
     })
     public ResponseEntity<AssetResponse> getAssetByQaCode(@PathVariable String qaCode) {
         return ResponseEntity.ok(assetService.getAssetByQaCode(qaCode));
+    }
+
+    @GetMapping("/{qaCode}/qr")
+    @Operation(summary = "Lấy mã QR của thiết bị", description = "Sinh hoặc lấy cache ảnh QR base64 của thiết bị theo mã QA.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy mã QR thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy thiết bị")
+    })
+    public ResponseEntity<Map<String, String>> getAssetQrByQaCode(@PathVariable String qaCode) {
+        return ResponseEntity.ok(assetService.getAssetQrByQaCode(qaCode));
     }
 }

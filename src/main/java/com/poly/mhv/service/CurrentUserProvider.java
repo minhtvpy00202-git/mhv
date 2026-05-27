@@ -22,6 +22,9 @@ public class CurrentUserProvider {
         }
         Object principal = authentication.getPrincipal();
         if (principal instanceof UserDetailsImpl userDetails) {
+            if (userDetails.getAppUser() != null) {
+                return userDetails.getAppUser();
+            }
             return appUserRepository.findById(userDetails.getId())
                     .orElseThrow(() -> new CustomException("Không tìm thấy người dùng đăng nhập."));
         }

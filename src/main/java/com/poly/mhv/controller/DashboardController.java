@@ -1,5 +1,6 @@
 package com.poly.mhv.controller;
 
+import com.poly.mhv.dto.dashboard.AdminDashboardBootstrapResponse;
 import com.poly.mhv.dto.dashboard.DashboardSummaryResponse;
 import com.poly.mhv.dto.dashboard.HelpdeskKpiResponse;
 import com.poly.mhv.dto.dashboard.SmartSuggestionResponse;
@@ -37,6 +38,18 @@ public class DashboardController {
     })
     public ResponseEntity<DashboardSummaryResponse> getSummary() {
         return ResponseEntity.ok(dashboardService.getSummary());
+    }
+
+    @GetMapping("/bootstrap")
+    @Operation(summary = "Tải dữ liệu dashboard admin", description = "Trả về số liệu tổng quan, gợi ý thông minh và KPI helpdesk trong một request.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy dữ liệu dashboard admin thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền xem dashboard admin")
+    })
+    public ResponseEntity<AdminDashboardBootstrapResponse> getAdminBootstrap() {
+        HelpdeskKpiResponse helpdeskKpis = helpdeskKpiService.getAdminKpis();
+        return ResponseEntity.ok(dashboardService.getAdminBootstrap(helpdeskKpis));
     }
 
     @GetMapping("/smart-suggestions")

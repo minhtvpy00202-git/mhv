@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.category.CategoryCreateRequest;
+import com.poly.mhv.dto.category.CategoryOptionResponse;
 import com.poly.mhv.dto.category.CategoryResponse;
+import com.poly.mhv.dto.category.CategorySummaryResponse;
 import com.poly.mhv.dto.category.CategoryUpdateRequest;
 import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.TechSupportType;
@@ -25,10 +27,14 @@ import org.springframework.util.StringUtils;
 @Service
 public class CategoryService {
 
+    private static final long CATEGORY_OPTIONS_CACHE_TTL_MS = 60_000L;
+
     private final CategoryRepository categoryRepository;
     private final TechSupportTypeRepository techSupportTypeRepository;
     private final AssetRepository assetRepository;
     private final ObjectMapper objectMapper;
+    private volatile List<CategoryOptionResponse> cachedCategoryOptions;
+    private volatile long cachedCategoryOptionsExpiresAt;
 
     public CategoryService(
             CategoryRepository categoryRepository,
@@ -43,11 +49,22 @@ public class CategoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<CategoryResponse> getAllCategories(String keyword, Integer techTypeId) {
+    public List<CategorySummaryResponse> getAllCategories(String keyword, Integer techTypeId) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId).stream()
-                .map(this::mapToResponse)
-                .toList();
+        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoryOptionResponse> getCategoryOptions() {
+        long now = System.currentTimeMillis();
+        List<CategoryOptionResponse> cacheSnapshot = cachedCategoryOptions;
+        if (cacheSnapshot != null && cachedCategoryOptionsExpiresAt > now) {
+            return cacheSnapshot;
+        }
+        List<CategoryOptionResponse> items = categoryRepository.findAllOptions();
+        cachedCategoryOptions = items;
+        cachedCategoryOptionsExpiresAt = now + CATEGORY_OPTIONS_CACHE_TTL_MS;
+        return items;
     }
 
     @Transactional(readOnly = true)
@@ -69,7 +86,9 @@ public class CategoryService {
                 .techSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()))
                 .specTemplates(normalizeSpecTemplates(request.getSpecTemplates()))
                 .build();
-        return mapToResponse(categoryRepository.save(category));
+        CategoryResponse response = mapToResponse(categoryRepository.save(category));
+        invalidateCategoryOptionsCache();
+        return response;
     }
 
     @Transactional
@@ -83,7 +102,9 @@ public class CategoryService {
         category.setName(normalizedName);
         category.setTechSupportType(getTechSupportTypeOrThrow(request.getTechTypeId()));
         category.setSpecTemplates(normalizeSpecTemplates(request.getSpecTemplates()));
-        return mapToResponse(categoryRepository.save(category));
+        CategoryResponse response = mapToResponse(categoryRepository.save(category));
+        invalidateCategoryOptionsCache();
+        return response;
     }
 
     @Transactional
@@ -94,6 +115,12 @@ public class CategoryService {
             throw new CustomException("Không thể xóa loại thiết bị đang được gán cho " + linkedAssets + " thiết bị.");
         }
         categoryRepository.delete(category);
+        invalidateCategoryOptionsCache();
+    }
+
+    private void invalidateCategoryOptionsCache() {
+        cachedCategoryOptions = null;
+        cachedCategoryOptionsExpiresAt = 0L;
     }
 
     private Category getCategoryOrThrow(Integer id) {

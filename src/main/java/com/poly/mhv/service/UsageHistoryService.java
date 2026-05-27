@@ -182,7 +182,7 @@ public class UsageHistoryService {
                 Math.max(1, Math.min(size, 100)),
                 buildSort(sortKey, sortDirection)
         );
-        Page<UsageHistory> historyPage = usageHistoryRepository.searchForAdmin(
+        Page<UsageHistory> historyPage = usageHistoryRepository.searchForAdminDynamic(
                 normalizedAssetName,
                 borrowedLocationId,
                 userId,

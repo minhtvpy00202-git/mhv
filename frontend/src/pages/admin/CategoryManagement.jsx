@@ -101,14 +101,21 @@ function CategoryManagement() {
     setShowFormModal(true)
   }
 
-  const handleSelectCategory = (category) => {
-    setSelectedCategoryId(category.id)
-    setForm({
-      name: category.name || '',
-      techTypeId: String(category.techTypeId || ''),
-      specTemplates: normalizeSpecTemplates(category.specTemplates),
-    })
-    setShowFormModal(true)
+  const handleSelectCategory = async (category) => {
+    try {
+      const response = await axiosClient.get(`/api/categories/${category.id}`)
+      const detail = response.data || {}
+      setSelectedCategoryId(category.id)
+      setForm({
+        name: detail.name || category.name || '',
+        techTypeId: String(detail.techTypeId || category.techTypeId || ''),
+        specTemplates: normalizeSpecTemplates(detail.specTemplates),
+      })
+      setShowFormModal(true)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải chi tiết loại thiết bị.'
+      toast.error(message)
+    }
   }
 
   const handleCreate = async () => {
@@ -355,19 +362,7 @@ function CategoryManagement() {
                     </td>
                     <td className="px-3 py-2">{category.techTypeName || '-'}</td>
                     <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1">
-                        {(category.specTemplates || []).slice(0, 3).map((template) => (
-                          <span key={template} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                            {template}
-                          </span>
-                        ))}
-                        {(category.specTemplates || []).length > 3 && (
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                            +{(category.specTemplates || []).length - 3}
-                          </span>
-                        )}
-                        {(category.specTemplates || []).length === 0 && <span>-</span>}
-                      </div>
+                      <span className="text-xs text-slate-500">Mở sửa để xem chi tiết</span>
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-2">

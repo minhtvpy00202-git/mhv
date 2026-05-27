@@ -7,9 +7,9 @@ import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,10 +25,15 @@ public class JwtUtils {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
         return Jwts.builder()
-                .setSubject(userPrincipal.getUsername())
+                .subject(userPrincipal.getUsername())
+                .claim("id", userPrincipal.getId())
+                .claim("fullName", userPrincipal.getFullName())
                 .claim("role", userPrincipal.getRole())
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
+                .claim("status", userPrincipal.getStatus())
+                .claim("techTypeIds", userPrincipal.getTechTypeIds())
+                .claim("techTypeNames", userPrincipal.getTechTypeNames())
+                .issuedAt(now)
+                .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -37,9 +42,47 @@ public class JwtUtils {
         return getClaims(token).getSubject();
     }
 
-    public boolean validateJwtToken(String authToken, UserDetails userDetails) {
-        String username = getUserNameFromJwtToken(authToken);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(authToken);
+    public Integer getUserIdFromJwtToken(String token) {
+        return getClaims(token).get("id", Integer.class);
+    }
+
+    public String getRoleFromJwtToken(String token) {
+        return getClaims(token).get("role", String.class);
+    }
+
+    public String getFullNameFromJwtToken(String token) {
+        return getClaims(token).get("fullName", String.class);
+    }
+
+    public String getStatusFromJwtToken(String token) {
+        return getClaims(token).get("status", String.class);
+    }
+
+    public List<Integer> getTechTypeIdsFromJwtToken(String token) {
+        Object value = getClaims(token).get("techTypeIds");
+        if (!(value instanceof List<?> rawList)) {
+            return List.of();
+        }
+        return rawList.stream()
+                .filter(item -> item instanceof Number)
+                .map(item -> ((Number) item).intValue())
+                .toList();
+    }
+
+    public List<String> getTechTypeNamesFromJwtToken(String token) {
+        Object value = getClaims(token).get("techTypeNames");
+        if (!(value instanceof List<?> rawList)) {
+            return List.of();
+        }
+        return rawList.stream()
+                .filter(item -> item != null)
+                .map(String::valueOf)
+                .toList();
+    }
+
+    public boolean validateJwtToken(String authToken) {
+        getClaims(authToken);
+        return !isTokenExpired(authToken);
     }
 
     private Claims getClaims(String token) {

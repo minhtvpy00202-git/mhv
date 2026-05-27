@@ -17,8 +17,12 @@ import org.springframework.util.StringUtils;
 @Service
 public class SupplierService {
 
+    private static final long SUPPLIER_CACHE_TTL_MS = 60_000L;
+
     private final SupplierRepository supplierRepository;
     private final AssetRepository assetRepository;
+    private volatile List<SupplierResponse> cachedAllSuppliers;
+    private volatile long cachedAllSuppliersExpiresAt;
 
     public SupplierService(SupplierRepository supplierRepository, AssetRepository assetRepository) {
         this.supplierRepository = supplierRepository;
@@ -28,11 +32,23 @@ public class SupplierService {
     @Transactional(readOnly = true)
     public List<SupplierResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        long now = System.currentTimeMillis();
+        if (normalizedKeyword == null) {
+            List<SupplierResponse> cacheSnapshot = cachedAllSuppliers;
+            if (cacheSnapshot != null && cachedAllSuppliersExpiresAt > now) {
+                return cacheSnapshot;
+            }
+        }
         List<Supplier> suppliers = supplierRepository.searchForAdmin(normalizedKeyword);
         Map<Integer, Long> assetCountsBySupplierId = buildAssetCountMap(suppliers);
-        return suppliers.stream()
+        List<SupplierResponse> items = suppliers.stream()
                 .map(supplier -> mapToResponse(supplier, assetCountsBySupplierId))
                 .toList();
+        if (normalizedKeyword == null) {
+            cachedAllSuppliers = items;
+            cachedAllSuppliersExpiresAt = now + SUPPLIER_CACHE_TTL_MS;
+        }
+        return items;
     }
 
     @Transactional(readOnly = true)
@@ -51,7 +67,9 @@ public class SupplierService {
                 .address(normalizeAddress(request.getAddress()))
                 .phoneNumber(normalizePhoneNumber(request.getPhoneNumber()))
                 .build();
-        return mapToResponse(supplierRepository.save(supplier));
+        SupplierResponse response = mapToResponse(supplierRepository.save(supplier));
+        invalidateSupplierCache();
+        return response;
     }
 
     @Transactional
@@ -64,7 +82,9 @@ public class SupplierService {
         supplier.setName(normalizedName);
         supplier.setAddress(normalizeAddress(request.getAddress()));
         supplier.setPhoneNumber(normalizePhoneNumber(request.getPhoneNumber()));
-        return mapToResponse(supplierRepository.save(supplier));
+        SupplierResponse response = mapToResponse(supplierRepository.save(supplier));
+        invalidateSupplierCache();
+        return response;
     }
 
     @Transactional
@@ -75,6 +95,12 @@ public class SupplierService {
             throw new CustomException("Không thể xóa nhà cung cấp đang được gán cho " + linkedAssets + " thiết bị.");
         }
         supplierRepository.delete(supplier);
+        invalidateSupplierCache();
+    }
+
+    private void invalidateSupplierCache() {
+        cachedAllSuppliers = null;
+        cachedAllSuppliersExpiresAt = 0L;
     }
 
     private Supplier getSupplierOrThrow(Integer id) {

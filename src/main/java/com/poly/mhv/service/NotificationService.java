@@ -9,14 +9,19 @@ import com.poly.mhv.repository.NotificationRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationService {
 
+    private static final long FEED_CACHE_TTL_MS = 30_000L;
+
     private final NotificationRepository notificationRepository;
     private final AdminAlertSseService adminAlertSseService;
+    private volatile NotificationFeedResponse cachedFeed;
+    private volatile long cachedFeedExpiresAt;
 
     public NotificationService(NotificationRepository notificationRepository, AdminAlertSseService adminAlertSseService) {
         this.notificationRepository = notificationRepository;
@@ -50,6 +55,7 @@ public class NotificationService {
             Notification saved = notificationRepository.save(notification);
             saved.setLinkPath("/admin/notifications/" + saved.getId());
             notificationRepository.save(saved);
+            invalidateFeedCache();
             adminAlertSseService.notifyNotificationAlert(saved.getEventType(), saved.getTitle(), saved.getMessage());
         } catch (Exception ex) {
             throw new CustomException("Không thể tạo thông báo hệ thống.");
@@ -58,13 +64,19 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public NotificationFeedResponse getFeed() {
-        List<NotificationItemResponse> items = notificationRepository.findTop50ByOrderByOccurredAtDescIdDesc().stream()
-                .map(this::mapToItem)
-                .toList();
-        return NotificationFeedResponse.builder()
+        long now = System.currentTimeMillis();
+        NotificationFeedResponse cacheSnapshot = cachedFeed;
+        if (cacheSnapshot != null && cachedFeedExpiresAt > now) {
+            return cacheSnapshot;
+        }
+        List<NotificationItemResponse> items = notificationRepository.findTop50FeedItems(PageRequest.of(0, 50));
+        NotificationFeedResponse response = NotificationFeedResponse.builder()
                 .unreadCount(notificationRepository.countByIsReadFalse())
                 .items(items)
                 .build();
+        cachedFeed = response;
+        cachedFeedExpiresAt = now + FEED_CACHE_TTL_MS;
+        return response;
     }
 
     @Transactional
@@ -74,6 +86,7 @@ public class NotificationService {
         if (!Boolean.TRUE.equals(notification.getIsRead())) {
             notification.setIsRead(true);
             notificationRepository.save(notification);
+            invalidateFeedCache();
         }
         return mapToDetail(notification);
     }
@@ -85,25 +98,19 @@ public class NotificationService {
         if (!Boolean.TRUE.equals(notification.getIsRead())) {
             notification.setIsRead(true);
             notificationRepository.save(notification);
+            invalidateFeedCache();
         }
     }
 
     @Transactional
     public void markAllAsRead() {
         notificationRepository.markAllAsRead();
+        invalidateFeedCache();
     }
 
-    private NotificationItemResponse mapToItem(Notification notification) {
-        return NotificationItemResponse.builder()
-                .id(notification.getId())
-                .eventType(notification.getEventType())
-                .title(notification.getTitle())
-                .message(notification.getMessage())
-                .assetName(notification.getAssetName())
-                .linkPath(notification.getLinkPath())
-                .occurredAt(notification.getOccurredAt())
-                .isRead(notification.getIsRead())
-                .build();
+    private void invalidateFeedCache() {
+        cachedFeed = null;
+        cachedFeedExpiresAt = 0L;
     }
 
     private NotificationDetailResponse mapToDetail(Notification notification) {

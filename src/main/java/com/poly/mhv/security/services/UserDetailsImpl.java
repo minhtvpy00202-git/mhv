@@ -14,6 +14,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 @AllArgsConstructor
 public class UserDetailsImpl implements UserDetails {
 
+    private AppUser appUser;
     private Integer id;
     private String username;
     private String fullName;
@@ -36,6 +37,7 @@ public class UserDetailsImpl implements UserDetails {
         List<Integer> techTypeIds = effectiveTechSupportTypes.stream().map(TechSupportType::getId).toList();
         List<String> techTypeNames = effectiveTechSupportTypes.stream().map(TechSupportType::getName).toList();
         return new UserDetailsImpl(
+                appUser,
                 appUser.getId(),
                 appUser.getUsername(),
                 appUser.getFullName(),
@@ -44,6 +46,48 @@ public class UserDetailsImpl implements UserDetails {
                 appUser.getStatus(),
                 techTypeIds,
                 techTypeNames,
+                List.of(new SimpleGrantedAuthority(authorityRole))
+        );
+    }
+
+    public static UserDetailsImpl fromJwtClaims(
+            Integer id,
+            String username,
+            String fullName,
+            String role,
+            String status,
+            List<Integer> techTypeIds,
+            List<String> techTypeNames
+    ) {
+        List<Integer> safeTechTypeIds = techTypeIds == null ? List.of() : techTypeIds.stream().filter(idValue -> idValue != null && idValue > 0).toList();
+        List<String> safeTechTypeNames = techTypeNames == null ? List.of() : techTypeNames.stream().filter(name -> name != null && !name.isBlank()).toList();
+        String authorityRole = role != null && role.startsWith("ROLE_")
+                ? role
+                : "ROLE_" + role;
+        List<TechSupportType> techSupportTypes = java.util.stream.IntStream.range(0, Math.min(safeTechTypeIds.size(), safeTechTypeNames.size()))
+                .mapToObj(index -> TechSupportType.builder()
+                        .id(safeTechTypeIds.get(index))
+                        .name(safeTechTypeNames.get(index))
+                        .build())
+                .toList();
+        AppUser appUser = AppUser.builder()
+                .id(id)
+                .username(username)
+                .fullName(fullName)
+                .role(role)
+                .status(status)
+                .techSupportTypes(techSupportTypes)
+                .build();
+        return new UserDetailsImpl(
+                appUser,
+                id,
+                username,
+                fullName,
+                null,
+                role,
+                status,
+                safeTechTypeIds,
+                safeTechTypeNames,
                 List.of(new SimpleGrantedAuthority(authorityRole))
         );
     }

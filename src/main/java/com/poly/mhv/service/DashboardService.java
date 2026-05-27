@@ -1,6 +1,8 @@
 package com.poly.mhv.service;
 
+import com.poly.mhv.dto.dashboard.AdminDashboardBootstrapResponse;
 import com.poly.mhv.dto.dashboard.DashboardSummaryResponse;
+import com.poly.mhv.dto.dashboard.HelpdeskKpiResponse;
 import com.poly.mhv.dto.dashboard.SmartSuggestionResponse;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
@@ -16,9 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DashboardService {
 
+    private static final long DASHBOARD_CACHE_TTL_MS = 30_000L;
+
     private final AssetRepository assetRepository;
     private final TicketRepository ticketRepository;
     private final UsageHistoryRepository usageHistoryRepository;
+    private volatile DashboardSummaryResponse cachedSummary;
+    private volatile long cachedSummaryExpiresAt;
+    private volatile SmartSuggestionResponse cachedSuggestions;
+    private volatile long cachedSuggestionsExpiresAt;
 
     public DashboardService(
             AssetRepository assetRepository,
@@ -32,17 +40,30 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardSummaryResponse getSummary() {
-        return DashboardSummaryResponse.builder()
+        long now = System.currentTimeMillis();
+        DashboardSummaryResponse cacheSnapshot = cachedSummary;
+        if (cacheSnapshot != null && cachedSummaryExpiresAt > now) {
+            return cacheSnapshot;
+        }
+        DashboardSummaryResponse response = DashboardSummaryResponse.builder()
                 .totalAssets(assetRepository.countAllAssets())
                 .inUseAssets(assetRepository.countByStatusValue("Đang sử dụng"))
                 .brokenAssets(assetRepository.countByStatusValue("Hỏng"))
                 .maintenanceAssets(assetRepository.countByStatusValue("Bảo trì"))
                 .availableAssets(assetRepository.countByStatusValue("Sẵn sàng"))
                 .build();
+        cachedSummary = response;
+        cachedSummaryExpiresAt = now + DASHBOARD_CACHE_TTL_MS;
+        return response;
     }
 
     @Transactional(readOnly = true)
     public SmartSuggestionResponse getSmartSuggestions() {
+        long now = System.currentTimeMillis();
+        SmartSuggestionResponse cacheSnapshot = cachedSuggestions;
+        if (cacheSnapshot != null && cachedSuggestionsExpiresAt > now) {
+            return cacheSnapshot;
+        }
         LocalDate today = LocalDate.now();
         LocalDateTime start = today.withDayOfMonth(1).atStartOfDay();
         LocalDateTime end = today.plusDays(1).atStartOfDay().minusNanos(1);
@@ -82,8 +103,20 @@ public class DashboardService {
             suggestions = List.of("Chưa có thiết bị nào vượt ngưỡng cảnh báo trong tháng này.");
         }
 
-        return SmartSuggestionResponse.builder()
+        SmartSuggestionResponse response = SmartSuggestionResponse.builder()
                 .suggestions(suggestions)
+                .build();
+        cachedSuggestions = response;
+        cachedSuggestionsExpiresAt = now + DASHBOARD_CACHE_TTL_MS;
+        return response;
+    }
+
+    @Transactional(readOnly = true)
+    public AdminDashboardBootstrapResponse getAdminBootstrap(HelpdeskKpiResponse helpdeskKpis) {
+        return AdminDashboardBootstrapResponse.builder()
+                .summary(getSummary())
+                .smartSuggestions(getSmartSuggestions())
+                .helpdeskKpis(helpdeskKpis)
                 .build();
     }
 }

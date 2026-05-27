@@ -3,41 +3,73 @@ import { toast } from 'react-toastify'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import axiosClient from '../../api/axiosClient'
 import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
+import { getSessionCache, setSessionCache } from '../../utils/sessionCache'
 
 const chartColors = ['#22c55e', '#3b82f6', '#ef4444', '#f59e0b']
+const DASHBOARD_CACHE_TTL_MS = 30_000
+const SUMMARY_CACHE_KEY = 'mhv-admin-dashboard-summary'
+const SUGGESTIONS_CACHE_KEY = 'mhv-admin-dashboard-suggestions'
+const HELPDESK_CACHE_KEY = 'mhv-admin-dashboard-helpdesk'
 
 function Dashboard() {
+  const cachedSummary = getSessionCache(SUMMARY_CACHE_KEY)
+  const cachedSuggestions = getSessionCache(SUGGESTIONS_CACHE_KEY)
+  const cachedHelpdeskKpis = getSessionCache(HELPDESK_CACHE_KEY)
   const [summary, setSummary] = useState({
-    totalAssets: 0,
-    inUseAssets: 0,
-    brokenAssets: 0,
-    maintenanceAssets: 0,
-    availableAssets: 0,
+    totalAssets: cachedSummary?.totalAssets || 0,
+    inUseAssets: cachedSummary?.inUseAssets || 0,
+    brokenAssets: cachedSummary?.brokenAssets || 0,
+    maintenanceAssets: cachedSummary?.maintenanceAssets || 0,
+    availableAssets: cachedSummary?.availableAssets || 0,
   })
-  const [suggestions, setSuggestions] = useState([])
-  const [helpdeskKpis, setHelpdeskKpis] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [suggestions, setSuggestions] = useState(cachedSuggestions || [])
+  const [helpdeskKpis, setHelpdeskKpis] = useState(cachedHelpdeskKpis || null)
+  const [summaryLoading, setSummaryLoading] = useState(!cachedSummary)
+  const [suggestionsLoading, setSuggestionsLoading] = useState(!cachedSuggestions)
+  const [helpdeskLoading, setHelpdeskLoading] = useState(!cachedHelpdeskKpis)
 
   useEffect(() => {
-    const fetchSummary = async () => {
+    let mounted = true
+
+    const fetchDashboard = async () => {
       try {
-        const [summaryResponse, suggestionResponse, helpdeskResponse] = await Promise.all([
-          axiosClient.get('/api/dashboard/summary'),
-          axiosClient.get('/api/dashboard/smart-suggestions'),
-          axiosClient.get('/api/dashboard/helpdesk-kpis/admin'),
-        ])
-        setSummary(summaryResponse.data)
-        setSuggestions(suggestionResponse.data?.suggestions || [])
-        setHelpdeskKpis(helpdeskResponse.data)
+        const response = await axiosClient.get('/api/dashboard/bootstrap')
+        if (!mounted) return
+        const nextSummary = response.data?.summary || {
+          totalAssets: 0,
+          inUseAssets: 0,
+          brokenAssets: 0,
+          maintenanceAssets: 0,
+          availableAssets: 0,
+        }
+        const nextSuggestions = response.data?.smartSuggestions?.suggestions || []
+        const nextHelpdeskKpis = response.data?.helpdeskKpis || null
+
+        setSummary(nextSummary)
+        setSuggestions(nextSuggestions)
+        setHelpdeskKpis(nextHelpdeskKpis)
+        setSessionCache(SUMMARY_CACHE_KEY, nextSummary, DASHBOARD_CACHE_TTL_MS)
+        setSessionCache(SUGGESTIONS_CACHE_KEY, nextSuggestions, DASHBOARD_CACHE_TTL_MS)
+        setSessionCache(HELPDESK_CACHE_KEY, nextHelpdeskKpis, DASHBOARD_CACHE_TTL_MS)
       } catch (error) {
-        const message = error?.response?.data?.message || 'Không thể tải dữ liệu dashboard.'
-        toast.error(message)
+        if (!cachedSummary && !cachedSuggestions && !cachedHelpdeskKpis) {
+          const message = error?.response?.data?.message || 'Không thể tải dữ liệu dashboard.'
+          toast.error(message)
+        }
       } finally {
-        setLoading(false)
+        if (mounted) {
+          setSummaryLoading(false)
+          setHelpdeskLoading(false)
+          setHelpdeskLoading(false)
+        }
       }
     }
-    fetchSummary()
-  }, [])
+
+    fetchDashboard()
+    return () => {
+      mounted = false
+    }
+  }, [cachedHelpdeskKpis, cachedSuggestions, cachedSummary])
 
   const chartData = useMemo(
     () => [
@@ -57,7 +89,7 @@ function Dashboard() {
     { label: 'Bảo trì', value: summary.maintenanceAssets },
   ]
 
-  if (loading) {
+  if (summaryLoading && suggestionsLoading && helpdeskLoading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -113,6 +145,9 @@ function Dashboard() {
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Gợi ý thông minh</h2>
         <div className="mt-3 space-y-2">
+          {suggestionsLoading && suggestions.length === 0 && (
+            <p className="text-sm text-slate-500">Đang tải gợi ý...</p>
+          )}
           {suggestions.map((text, index) => (
             <p key={`${index}-${text}`} className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm text-slate-700">
               {text}
@@ -125,7 +160,7 @@ function Dashboard() {
         title="Helpdesk KPI"
         subtitle="Các KPI cho hệ thống ticket hỗ trợ và bảo trì."
         summary={helpdeskKpis}
-        loading={loading}
+        loading={helpdeskLoading}
       />
     </div>
   )

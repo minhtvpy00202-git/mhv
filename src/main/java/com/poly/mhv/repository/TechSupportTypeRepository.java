@@ -1,5 +1,6 @@
 package com.poly.mhv.repository;
 
+import com.poly.mhv.dto.techsupporttype.TechSupportTypeResponse;
 import com.poly.mhv.entity.TechSupportType;
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,20 @@ public interface TechSupportTypeRepository extends JpaRepository<TechSupportType
             order by t.name asc
             """)
     List<TechSupportType> searchForAdmin(@Param("keyword") String keyword);
+
+    @Query("""
+            select new com.poly.mhv.dto.techsupporttype.TechSupportTypeResponse(
+                t.id,
+                t.name,
+                (select count(c) from Category c where c.techSupportType.id = t.id),
+                (select count(distinct u.id) from AppUser u join u.techSupportTypes utt where utt.id = t.id)
+            )
+            from TechSupportType t
+            where t.id > 0
+              and (coalesce(:keyword, '') = '' or lower(t.name) like lower(concat('%', :keyword, '%')))
+            order by t.name asc
+            """)
+    List<TechSupportTypeResponse> searchSummaryForAdmin(@Param("keyword") String keyword);
 
     @Query("""
             select t from TechSupportType t

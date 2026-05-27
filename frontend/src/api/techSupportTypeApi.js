@@ -6,7 +6,8 @@ export async function fetchTechSupportTypes(params = {}) {
 }
 
 export async function fetchTechSupportTypeOptions() {
-  const items = await fetchTechSupportTypes()
+  const response = await axiosClient.get('/api/tech-support-types/options')
+  const items = response.data || []
   return items.map((item) => ({
     techTypeId: item.id,
     label: item.name,
