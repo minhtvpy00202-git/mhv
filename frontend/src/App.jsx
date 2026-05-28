@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import GlobalNotification from './components/GlobalNotification'
 import { useAuth } from './context/AuthContext'
@@ -7,33 +8,34 @@ import MobileLayout from './layouts/MobileLayout'
 import MobileTechSupportLayout from './layouts/MobileTechSupportLayout'
 import TechSupportLayout from './layouts/TechSupportLayout'
 import Home from './pages/Home'
-import InventoryAuditScanner from './pages/InventoryAuditScanner'
 import Login from './pages/Login'
-import MaintenanceReport from './pages/MaintenanceReport'
-import MobileChatDetail from './pages/MobileChatDetail'
-import MobileChats from './pages/MobileChats'
-import QRScanner from './pages/QRScanner'
 import Register from './pages/Register'
 import TicketDetail from './pages/TicketDetail'
-import TicketSatisfactionReview from './pages/TicketSatisfactionReview'
 import Unauthorized from './pages/Unauthorized'
-import AssetManagement from './pages/admin/AssetManagement'
-import CategoryManagement from './pages/admin/CategoryManagement'
-import Dashboard from './pages/admin/Dashboard'
-import InventoryAuditManagement from './pages/admin/InventoryAuditManagement'
-import LocationManagement from './pages/admin/LocationManagement'
-import NotificationDetail from './pages/admin/NotificationDetail'
-import SupplierManagement from './pages/admin/SupplierManagement'
-import TechSupportTypeManagement from './pages/admin/TechSupportTypeManagement'
-import TicketManagement from './pages/admin/TicketManagement'
-import UserManagement from './pages/admin/UserManagement'
-import UsageHistoryManagement from './pages/admin/UsageHistoryManagement'
-import MobileTechSupportChats from './pages/tech/MobileTechSupportChats'
 import MobileTechSupportTickets from './pages/tech/MobileTechSupportTickets'
 import TechSupportInventoryAuditHistory from './pages/tech/TechSupportInventoryAuditHistory'
-import TechSupportChats from './pages/tech/TechSupportChats'
 import TechSupportTickets from './pages/tech/TechSupportTickets'
 import { getTechSupportHomePath } from './utils/navigation'
+
+const QRScanner = lazy(() => import('./pages/QRScanner'))
+const MaintenanceReport = lazy(() => import('./pages/MaintenanceReport'))
+const InventoryAuditScanner = lazy(() => import('./pages/InventoryAuditScanner'))
+const MobileChats = lazy(() => import('./pages/MobileChats'))
+const MobileChatDetail = lazy(() => import('./pages/MobileChatDetail'))
+const TechSupportChats = lazy(() => import('./pages/tech/TechSupportChats'))
+const MobileTechSupportChats = lazy(() => import('./pages/tech/MobileTechSupportChats'))
+const TicketSatisfactionReview = lazy(() => import('./pages/TicketSatisfactionReview'))
+const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
+const AssetManagement = lazy(() => import('./pages/admin/AssetManagement'))
+const SupplierManagement = lazy(() => import('./pages/admin/SupplierManagement'))
+const CategoryManagement = lazy(() => import('./pages/admin/CategoryManagement'))
+const LocationManagement = lazy(() => import('./pages/admin/LocationManagement'))
+const TechSupportTypeManagement = lazy(() => import('./pages/admin/TechSupportTypeManagement'))
+const UsageHistoryManagement = lazy(() => import('./pages/admin/UsageHistoryManagement'))
+const InventoryAuditManagement = lazy(() => import('./pages/admin/InventoryAuditManagement'))
+const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
+const NotificationDetail = lazy(() => import('./pages/admin/NotificationDetail'))
+const TicketManagement = lazy(() => import('./pages/admin/TicketManagement'))
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -68,6 +70,20 @@ function RootRedirect() {
   return <Navigate to="/mobile/home" replace />
 }
 
+function RouteFallback() {
+  return (
+    <div className="p-4">
+      <div className="rounded-2xl bg-white px-4 py-6 text-center text-sm text-slate-500 shadow-sm">
+        Đang tải màn hình...
+      </div>
+    </div>
+  )
+}
+
+function withSuspense(element) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>
+}
+
 function App() {
   return (
     <>
@@ -88,12 +104,12 @@ function App() {
           )}
         >
           <Route path="/mobile/home" element={<Home />} />
-          <Route path="/mobile/scan" element={<QRScanner />} />
-          <Route path="/mobile/chats" element={<MobileChats />} />
-          <Route path="/mobile/chats/:ticketId" element={<MobileChatDetail />} />
-          <Route path="/mobile/maintenance" element={<MaintenanceReport />} />
+          <Route path="/mobile/scan" element={withSuspense(<QRScanner />)} />
+          <Route path="/mobile/chats" element={withSuspense(<MobileChats />)} />
+          <Route path="/mobile/chats/:ticketId" element={withSuspense(<MobileChatDetail />)} />
+          <Route path="/mobile/maintenance" element={withSuspense(<MaintenanceReport />)} />
           <Route path="/mobile/tickets/:ticketId" element={<TicketDetail />} />
-          <Route path="/mobile/tickets/:ticketId/review" element={<TicketSatisfactionReview />} />
+          <Route path="/mobile/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
         </Route>
 
         <Route
@@ -106,8 +122,8 @@ function App() {
           )}
         >
           <Route path="/tech/tickets" element={<TechSupportTickets />} />
-          <Route path="/tech/chats" element={<TechSupportChats />} />
-          <Route path="/tech/inventory-audits" element={<InventoryAuditScanner />} />
+          <Route path="/tech/chats" element={withSuspense(<TechSupportChats />)} />
+          <Route path="/tech/inventory-audits" element={withSuspense(<InventoryAuditScanner />)} />
           <Route path="/tech/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />
           <Route path="/tech/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
@@ -122,8 +138,8 @@ function App() {
           )}
         >
           <Route path="/tech-mobile/tickets" element={<MobileTechSupportTickets />} />
-          <Route path="/tech-mobile/chats" element={<MobileTechSupportChats />} />
-          <Route path="/tech-mobile/inventory-audits" element={<InventoryAuditScanner />} />
+          <Route path="/tech-mobile/chats" element={withSuspense(<MobileTechSupportChats />)} />
+          <Route path="/tech-mobile/inventory-audits" element={withSuspense(<InventoryAuditScanner />)} />
           <Route path="/tech-mobile/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />
           <Route path="/tech-mobile/tickets/:ticketId" element={<TicketDetail />} />
         </Route>
@@ -137,20 +153,20 @@ function App() {
             </ProtectedRoute>
           )}
         >
-          <Route path="/admin/dashboard" element={<Dashboard />} />
-          <Route path="/admin/assets" element={<AssetManagement />} />
-          <Route path="/admin/suppliers" element={<SupplierManagement />} />
-          <Route path="/admin/categories" element={<CategoryManagement />} />
-          <Route path="/admin/locations" element={<LocationManagement />} />
-          <Route path="/admin/tech-support-types" element={<TechSupportTypeManagement />} />
-          <Route path="/admin/usage-history" element={<UsageHistoryManagement />} />
+          <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
+          <Route path="/admin/assets" element={withSuspense(<AssetManagement />)} />
+          <Route path="/admin/suppliers" element={withSuspense(<SupplierManagement />)} />
+          <Route path="/admin/categories" element={withSuspense(<CategoryManagement />)} />
+          <Route path="/admin/locations" element={withSuspense(<LocationManagement />)} />
+          <Route path="/admin/tech-support-types" element={withSuspense(<TechSupportTypeManagement />)} />
+          <Route path="/admin/usage-history" element={withSuspense(<UsageHistoryManagement />)} />
           <Route path="/admin/maintenance-history" element={<Navigate to="/admin/tickets" replace />} />
-          <Route path="/admin/inventory-audits" element={<InventoryAuditManagement />} />
-          <Route path="/admin/users" element={<UserManagement />} />
-          <Route path="/admin/notifications/:id" element={<NotificationDetail />} />
-          <Route path="/admin/tickets" element={<TicketManagement />} />
+          <Route path="/admin/inventory-audits" element={withSuspense(<InventoryAuditManagement />)} />
+          <Route path="/admin/users" element={withSuspense(<UserManagement />)} />
+          <Route path="/admin/notifications/:id" element={withSuspense(<NotificationDetail />)} />
+          <Route path="/admin/tickets" element={withSuspense(<TicketManagement />)} />
           <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
-          <Route path="/admin/tickets/:ticketId/review" element={<TicketSatisfactionReview />} />
+          <Route path="/admin/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
         </Route>
 
         <Route
@@ -162,8 +178,8 @@ function App() {
             </ProtectedRoute>
           )}
         >
-          <Route path="/supply/consumables" element={<AssetManagement restrictToConsumable />} />
-          <Route path="/supply/notifications/:id" element={<NotificationDetail />} />
+          <Route path="/supply/consumables" element={withSuspense(<AssetManagement restrictToConsumable />)} />
+          <Route path="/supply/notifications/:id" element={withSuspense(<NotificationDetail />)} />
         </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>

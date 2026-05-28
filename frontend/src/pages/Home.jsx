@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -57,12 +57,22 @@ function CollapsibleSection({ title, subtitle, icon: Icon, iconClassName, open, 
   )
 }
 
-function SwipeCarousel({ items, activeIndex, onChange, emptyText, renderItem }) {
+function SwipeCarousel({
+  items,
+  activeIndex,
+  onChange,
+  emptyText,
+  renderItem,
+  searchValue = '',
+  onSearchChange,
+  searchPlaceholder = 'Nhập tên thiết bị để tìm kiếm',
+}) {
   const touchStartXRef = useRef(null)
-  const safeIndex = items.length === 0 ? 0 : Math.min(Math.max(activeIndex, 0), items.length - 1)
+  const hasItems = items.length > 0
+  const safeIndex = hasItems ? Math.min(Math.max(activeIndex, 0), items.length - 1) : 0
   const activeItem = items[safeIndex]
-  const canGoPrev = safeIndex > 0
-  const canGoNext = safeIndex < items.length - 1
+  const canGoPrev = hasItems && safeIndex > 0
+  const canGoNext = hasItems && safeIndex < items.length - 1
 
   const handleTouchStart = (event) => {
     touchStartXRef.current = event.changedTouches?.[0]?.clientX ?? null
@@ -83,43 +93,52 @@ function SwipeCarousel({ items, activeIndex, onChange, emptyText, renderItem }) 
     }
   }
 
-  if (items.length === 0) {
-    return <EmptyState>{emptyText}</EmptyState>
-  }
-
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="grid grid-cols-[auto,minmax(0,1fr),auto] items-start gap-2 text-xs text-slate-500">
         <button
           type="button"
           onClick={() => canGoPrev && onChange(safeIndex - 1)}
           disabled={!canGoPrev}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-40"
+          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40"
         >
           <ChevronLeft size={14} />
           Trước
         </button>
-        <p className="text-center font-medium">
-          Thẻ {safeIndex + 1}/{items.length} · Vuốt trái/phải để xem tiếp
-        </p>
+        <div className="min-w-0 space-y-1">
+          <input
+            type="search"
+            value={searchValue}
+            onChange={(event) => onSearchChange?.(event.target.value)}
+            placeholder={searchPlaceholder}
+            className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-fptOrange focus:ring-2 focus:ring-orange-100"
+          />
+          <p className="text-center font-medium">
+            {hasItems ? `Kết quả ${safeIndex + 1}/${items.length} · Vuốt trái/phải để xem tiếp` : 'Chưa có kết quả phù hợp'}
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => canGoNext && onChange(safeIndex + 1)}
           disabled={!canGoNext}
-          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-40"
+          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40"
         >
           Sau
           <ChevronRight size={14} />
         </button>
       </div>
 
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        className="rounded-2xl border border-slate-200 bg-slate-50"
-      >
-        {renderItem(activeItem)}
-      </div>
+      {hasItems ? (
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className="rounded-2xl border border-slate-200 bg-slate-50"
+        >
+          {renderItem(activeItem)}
+        </div>
+      ) : (
+        <EmptyState>{emptyText}</EmptyState>
+      )}
 
       {items.length > 1 && (
         <div className="flex justify-center gap-1.5">
@@ -148,9 +167,24 @@ function Home() {
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [usageIndex, setUsageIndex] = useState(0)
   const [maintenanceIndex, setMaintenanceIndex] = useState(0)
+  const [usageSearch, setUsageSearch] = useState('')
+  const [maintenanceSearch, setMaintenanceSearch] = useState('')
   const [showPendingRatings, setShowPendingRatings] = useState(false)
   const [showUsageHistory, setShowUsageHistory] = useState(false)
   const [showMaintenanceHistory, setShowMaintenanceHistory] = useState(false)
+
+  const normalizedUsageSearch = usageSearch.trim().toLowerCase()
+  const normalizedMaintenanceSearch = maintenanceSearch.trim().toLowerCase()
+
+  const filteredUsageHistory = useMemo(() => {
+    if (!normalizedUsageSearch) return usageHistory
+    return usageHistory.filter((item) => (item.assetName || '').toLowerCase().includes(normalizedUsageSearch))
+  }, [usageHistory, normalizedUsageSearch])
+
+  const filteredMaintenanceHistory = useMemo(() => {
+    if (!normalizedMaintenanceSearch) return maintenanceHistory
+    return maintenanceHistory.filter((item) => (item.assetName || '').toLowerCase().includes(normalizedMaintenanceSearch))
+  }, [maintenanceHistory, normalizedMaintenanceSearch])
 
   useEffect(() => {
     const loadData = async () => {
@@ -179,16 +213,16 @@ function Home() {
   }, [])
 
   useEffect(() => {
-    if (usageIndex >= usageHistory.length && usageHistory.length > 0) {
-      setUsageIndex(usageHistory.length - 1)
+    if (usageIndex >= filteredUsageHistory.length && filteredUsageHistory.length > 0) {
+      setUsageIndex(filteredUsageHistory.length - 1)
     }
-  }, [usageHistory, usageIndex])
+  }, [filteredUsageHistory, usageIndex])
 
   useEffect(() => {
-    if (maintenanceIndex >= maintenanceHistory.length && maintenanceHistory.length > 0) {
-      setMaintenanceIndex(maintenanceHistory.length - 1)
+    if (maintenanceIndex >= filteredMaintenanceHistory.length && filteredMaintenanceHistory.length > 0) {
+      setMaintenanceIndex(filteredMaintenanceHistory.length - 1)
     }
-  }, [maintenanceHistory, maintenanceIndex])
+  }, [filteredMaintenanceHistory, maintenanceIndex])
 
   return (
     <div className="space-y-4">
@@ -263,10 +297,15 @@ function Home() {
         onToggle={() => setShowUsageHistory((prev) => !prev)}
       >
         <SwipeCarousel
-          items={usageHistory}
+          items={filteredUsageHistory}
           activeIndex={usageIndex}
           onChange={setUsageIndex}
-          emptyText="Chưa có dữ liệu mượn / trả."
+          searchValue={usageSearch}
+          onSearchChange={(value) => {
+            setUsageSearch(value)
+            setUsageIndex(0)
+          }}
+          emptyText={usageSearch.trim() ? 'Không tìm thấy lịch sử mượn / trả theo tên thiết bị.' : 'Chưa có dữ liệu mượn / trả.'}
           renderItem={(item) => (
             <div key={item.id} className="p-3">
               <div className="flex items-start justify-between gap-3">
@@ -298,10 +337,15 @@ function Home() {
         onToggle={() => setShowMaintenanceHistory((prev) => !prev)}
       >
         <SwipeCarousel
-          items={maintenanceHistory}
+          items={filteredMaintenanceHistory}
           activeIndex={maintenanceIndex}
           onChange={setMaintenanceIndex}
-          emptyText="Chưa có dữ liệu báo hỏng."
+          searchValue={maintenanceSearch}
+          onSearchChange={(value) => {
+            setMaintenanceSearch(value)
+            setMaintenanceIndex(0)
+          }}
+          emptyText={maintenanceSearch.trim() ? 'Không tìm thấy lịch sử báo hỏng theo tên thiết bị.' : 'Chưa có dữ liệu báo hỏng.'}
           renderItem={(item) => (
             <div key={item.id} className="p-3">
               <div className="flex items-start justify-between gap-3">
