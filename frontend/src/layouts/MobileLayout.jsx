@@ -1,7 +1,9 @@
-import { Bell, Home, LogOut, MessageCircle, QrCode, Wrench } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bell, Home, LogOut, MessageCircle, QrCode, Star, Wrench } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
+import { formatVietnamDateTime } from '../utils/datetime'
 
 const navItems = [
   { to: '/mobile/home', label: 'Home', icon: Home },
@@ -17,7 +19,18 @@ function MobileLayout() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [chatNotifications, setChatNotifications] = useState([])
   const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const [pendingRatings, setPendingRatings] = useState([])
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+
+  const loadPendingRatings = useCallback(async () => {
+    if (user?.role !== 'NhanVien') return
+    try {
+      const response = await axiosClient.get('/api/tickets/pending-satisfaction/me')
+      setPendingRatings(response.data || [])
+    } catch {
+      setPendingRatings([])
+    }
+  }, [user?.role])
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (event) => {
@@ -63,6 +76,15 @@ function MobileLayout() {
     return () => window.removeEventListener('mhv-chat-notification', handleChatNotification)
   }, [])
 
+  useEffect(() => {
+    void loadPendingRatings()
+    const handleRefresh = () => {
+      void loadPendingRatings()
+    }
+    window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+  }, [loadPendingRatings])
+
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -78,6 +100,10 @@ function MobileLayout() {
     }
   }
 
+  const totalAttentionCount = unreadChatCount + pendingRatings.length
+  const hasNotifications = pendingRatings.length > 0 || chatNotifications.length > 0
+  const latestChatNotifications = useMemo(() => chatNotifications.slice(0, 8), [chatNotifications])
+
   return (
     <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100">
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-orange-200 bg-fptOrange px-4 py-3 text-white shadow">
@@ -89,20 +115,26 @@ function MobileLayout() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => setShowNotificationDropdown((prev) => !prev)}
+              onClick={() => {
+                const nextValue = !showNotificationDropdown
+                setShowNotificationDropdown(nextValue)
+                if (nextValue) {
+                  void loadPendingRatings()
+                }
+              }}
               className="relative inline-flex items-center rounded-md bg-white/15 p-2 hover:bg-white/25"
             >
               <Bell size={14} />
-              {unreadChatCount > 0 && (
+              {totalAttentionCount > 0 && (
                 <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold text-white">
-                  {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                  {totalAttentionCount > 99 ? '99+' : totalAttentionCount}
                 </span>
               )}
             </button>
             {showNotificationDropdown && (
-              <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-orange-100 bg-white text-slate-700 shadow-lg">
+              <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-orange-100 bg-white text-slate-700 shadow-lg">
                 <div className="flex items-center justify-between border-b border-orange-100 px-3 py-2">
-                  <p className="text-sm font-semibold">Tin nhắn mới</p>
+                  <p className="text-sm font-semibold">Việc cần chú ý</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -111,14 +143,50 @@ function MobileLayout() {
                     }}
                     className="text-[11px] font-semibold text-blue-600"
                   >
-                    Đánh dấu tất cả là đã đọc
+                    Đã đọc chat
                   </button>
                 </div>
                 <div className="max-h-80 overflow-auto">
-                  {chatNotifications.length === 0 && (
-                    <p className="px-3 py-2 text-sm text-slate-500">Chưa có thông báo chat.</p>
+                  {!hasNotifications && (
+                    <p className="px-3 py-4 text-sm text-slate-500">Chưa có thông báo mới.</p>
                   )}
-                  {chatNotifications.map((notification) => (
+                  {pendingRatings.length > 0 && (
+                    <div className="border-b border-orange-100 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">Cần đánh giá sau xử lý</p>
+                    </div>
+                  )}
+                  {pendingRatings.map((ticket) => (
+                    <button
+                      key={`review-${ticket.id}`}
+                      type="button"
+                      onClick={() => {
+                        setShowNotificationDropdown(false)
+                        navigate(`/mobile/tickets/${ticket.id}/review`)
+                      }}
+                      className="block w-full border-b border-slate-100 px-3 py-3 text-left text-sm hover:bg-violet-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-violet-100 p-2 text-violet-700">
+                          <Star size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-slate-800">Đánh giá ticket #{ticket.id}</p>
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            {ticket.assetName || 'Thiết bị không xác định'} · {ticket.assetQaCode || '-'}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Ticket đã hoàn tất lúc {formatVietnamDateTime(ticket.resolvedAt, 'gần đây')}.
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  {latestChatNotifications.length > 0 && (
+                    <div className="border-b border-orange-100 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Tin nhắn mới</p>
+                    </div>
+                  )}
+                  {latestChatNotifications.map((notification) => (
                     <button
                       key={notification.id}
                       type="button"

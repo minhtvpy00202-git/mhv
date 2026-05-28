@@ -87,4 +87,7 @@ public class TicketResponse {
 
     @Schema(description = "Điểm hài lòng người dùng từ 1 đến 5", example = "4", nullable = true)
     private Integer satisfactionScore;
+
+    @Schema(description = "Nhận xét sau khi chấm điểm hài lòng", example = "Kỹ thuật viên hỗ trợ nhanh và xử lý dứt điểm.", nullable = true)
+    private String satisfactionComment;
 }

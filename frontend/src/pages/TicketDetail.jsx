@@ -1,14 +1,15 @@
-import { Copy, MessageCircle, Phone, Star } from 'lucide-react'
+import { ArrowRight, Copy, History, MessageCircle, Phone, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import TicketChatBox from '../components/TicketChatBox'
+import TicketEventTimelineModal from '../components/TicketEventTimelineModal'
 import { useAuth } from '../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../utils/contact'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { isTechSupportMobilePath } from '../utils/navigation'
-import { getAssetStatusMeta, getTechnicalStatusMeta, getUsageStatusMeta } from '../utils/assetStatus'
+import { getTechnicalStatusMeta, getUsageStatusMeta } from '../utils/assetStatus'
 import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 function toVietnameseRole(role) {
@@ -32,9 +33,8 @@ function TicketDetail() {
   const { user } = useAuth()
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [savingSatisfaction, setSavingSatisfaction] = useState(false)
   const [showChat, setShowChat] = useState(true)
-  const [timeline, setTimeline] = useState([])
+  const [showTimelineModal, setShowTimelineModal] = useState(false)
 
   useEffect(() => {
     if (!ticketId) return
@@ -60,27 +60,13 @@ function TicketDetail() {
         }
       }
     }
-    const loadTimeline = async () => {
-      try {
-        const response = await axiosClient.get(`/api/tickets/${ticketId}/timeline`, {
-          params: { limit: 100 },
-        })
-        if (!mounted) return
-        setTimeline(response.data || [])
-      } catch (error) {
-        const message = error?.response?.data?.message || 'Không tải được lịch sử ticket.'
-        toast.error(message)
-      }
-    }
     loadTicket()
-    loadTimeline()
     return () => {
       mounted = false
     }
   }, [ticketId])
 
   const statusMeta = useMemo(() => getTicketStatusMeta(ticket?.status), [ticket?.status])
-  const assetDisplayStatusMeta = useMemo(() => getAssetStatusMeta(ticket?.assetDisplayStatus), [ticket?.assetDisplayStatus])
   const assetTechnicalStatusMeta = useMemo(() => getTechnicalStatusMeta(ticket?.assetTechnicalStatus), [ticket?.assetTechnicalStatus])
   const assetUsageStatusMeta = useMemo(() => getUsageStatusMeta(ticket?.assetUsageStatus), [ticket?.assetUsageStatus])
   const isTechMobileRoute = isTechSupportMobilePath(location.pathname)
@@ -99,27 +85,17 @@ function TicketDetail() {
   const canRateSatisfaction = ticket?.status === 'RESOLVED'
     && (Number(ticket?.reporterId) === Number(user?.userId) || user?.role === 'Admin')
     && !isTechSupportRoute
+  const reviewPath = location.pathname.startsWith('/admin/')
+    ? `/admin/tickets/${ticketId}/review`
+    : `/mobile/tickets/${ticketId}/review`
   const reporterPhone = normalizePhone(ticket?.reporterPhone)
   const reporterZaloUrl = getZaloUrl(ticket?.reporterPhone)
   const assigneePhone = normalizePhone(ticket?.assigneePhone)
   const assigneeZaloUrl = getZaloUrl(ticket?.assigneePhone)
-
-  const handleRateSatisfaction = async (score) => {
-    if (!ticket?.id || savingSatisfaction) return
-    setSavingSatisfaction(true)
-    try {
-      const response = await axiosClient.put(`/api/tickets/${ticket.id}/satisfaction`, {
-        satisfactionScore: score,
-      })
-      setTicket(response.data || null)
-      toast.success('Đã lưu điểm hài lòng.')
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không lưu được điểm hài lòng.'
-      toast.error(message)
-    } finally {
-      setSavingSatisfaction(false)
-    }
-  }
+  const mobileChatPath = `/mobile/chats/${ticketId}`
+  const showSupportContactCard = isStandardMobileRoute
+    && ticket?.status !== 'RESOLVED'
+    && (assigneePhone || assigneeZaloUrl)
 
   return (
     <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
@@ -127,7 +103,7 @@ function TicketDetail() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-slate-800">Chi tiết Ticket #{ticketId}</h2>
-            <p className="mt-1 text-sm text-slate-600">Trao đổi trực tiếp giữa giảng viên và kỹ thuật viên.</p>
+            <p className="mt-1 text-sm text-slate-600">Theo dõi tiến độ xử lý sự cố và mở từng chức năng khi cần.</p>
           </div>
           <Link
             to={backPath}
@@ -175,15 +151,9 @@ function TicketDetail() {
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                  <span className="font-semibold">Trạng thái sử dụng:</span>
+                  <span className="font-semibold">Vị trí sử dụng:</span>
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetUsageStatusMeta.tone)}`}>
                     {assetUsageStatusMeta.label}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                  <span className="font-semibold">Trạng thái hiển thị:</span>
-                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetDisplayStatusMeta.tone)}`}>
-                    {assetDisplayStatusMeta.label}
                   </span>
                 </div>
               </div>
@@ -201,28 +171,25 @@ function TicketDetail() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hài lòng người dùng</p>
               <div className="mt-2 space-y-2 text-sm text-slate-700">
                 <p><span className="font-semibold">Điểm hiện tại:</span> {ticket.satisfactionScore ? `${ticket.satisfactionScore}/5` : 'Chưa có đánh giá'}</p>
-                {canRateSatisfaction && (
-                  <div className="flex flex-wrap gap-2">
-                    {[1, 2, 3, 4, 5].map((score) => {
-                      const active = Number(ticket.satisfactionScore || 0) >= score
-                      return (
-                        <button
-                          key={score}
-                          type="button"
-                          disabled={savingSatisfaction}
-                          onClick={() => handleRateSatisfaction(score)}
-                          className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                            active
-                              ? 'border-amber-300 bg-amber-50 text-amber-700'
-                              : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <Star size={14} className={active ? 'fill-current' : ''} />
-                          {score}
-                        </button>
-                      )
-                    })}
-                  </div>
+                <p><span className="font-semibold">Nhận xét:</span> {ticket.satisfactionComment || 'Chưa có nhận xét'}</p>
+                {canRateSatisfaction && !ticket.satisfactionScore && (
+                  <Link
+                    to={reviewPath}
+                    className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
+                  >
+                    <Star size={14} />
+                    Mở trang đánh giá riêng
+                    <ArrowRight size={14} />
+                  </Link>
+                )}
+                {canRateSatisfaction && ticket.satisfactionScore && (
+                  <Link
+                    to={reviewPath}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Xem lại đánh giá
+                    <ArrowRight size={14} />
+                  </Link>
                 )}
               </div>
             </div>
@@ -230,6 +197,27 @@ function TicketDetail() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả sự cố</p>
               <p className="mt-2 text-sm leading-6 text-slate-700">{ticket.description}</p>
             </div>
+            {isStandardMobileRoute && (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 md:col-span-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTimelineModal(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <History size={15} />
+                    Xem toàn bộ timeline
+                  </button>
+                  <Link
+                    to={mobileChatPath}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-sky-100 px-3 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-200"
+                  >
+                    <MessageCircle size={15} />
+                    Mở khu vực chat riêng
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
 
           {isTechMobileRoute && reporterPhone && (
@@ -273,13 +261,11 @@ function TicketDetail() {
             </div>
           )}
 
-          {isStandardMobileRoute && (
+          {showSupportContactCard && (
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
               <p className="text-sm font-semibold text-sky-800">Liên hệ kỹ thuật viên hỗ trợ</p>
-              {!assigneePhone ? (
-                <p className="mt-2 text-sm text-sky-700">Ticket này chưa được gán kỹ thuật viên hoặc chưa có số điện thoại liên hệ.</p>
-              ) : (
-                <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {assigneePhone && (
                   <a
                     href={`tel:${assigneePhone}`}
                     className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
@@ -287,45 +273,19 @@ function TicketDetail() {
                     <Phone size={16} />
                     Gọi kỹ thuật viên
                   </a>
-                  {assigneeZaloUrl && (
-                    <a
-                      href={assigneeZaloUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
-                    >
-                      <MessageCircle size={16} />
-                      Chat Zalo
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-
-      {!loading && ticket && (
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <h3 className="text-base font-semibold text-slate-800">Lịch sử ticket</h3>
-          {timeline.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Chưa có dữ liệu lịch sử.</p>
-          ) : (
-            <div className="mt-3 space-y-3">
-              {timeline.map((event) => (
-                <div key={event.id} className="rounded-xl border border-slate-200 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-800">{event.message}</p>
-                    <p className="text-xs text-slate-500">{formatVietnamDateTime(event.occurredAt)}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {event.actorName || 'Hệ thống'} · {event.eventType}
-                  </p>
-                  {event.detail && (
-                    <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-600">{event.detail}</pre>
-                  )}
-                </div>
-              ))}
+                )}
+                {assigneeZaloUrl && (
+                  <a
+                    href={assigneeZaloUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
+                  >
+                    <MessageCircle size={16} />
+                    Chat Zalo
+                  </a>
+                )}
+              </div>
             </div>
           )}
         </section>
@@ -337,11 +297,11 @@ function TicketDetail() {
         </section>
       )}
 
-      {canOpenChat && (isMobileRoute ? (
-        <TicketChatBox ticketId={Number(ticketId)} embedded />
-      ) : (
+      {canOpenChat && (!isStandardMobileRoute ? (
         <>
-          {showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
+          {isTechMobileRoute ? (
+            <TicketChatBox ticketId={Number(ticketId)} embedded />
+          ) : showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
           {!showChat && (
             <button
               type="button"
@@ -352,7 +312,12 @@ function TicketDetail() {
             </button>
           )}
         </>
-      ))}
+      ) : null)}
+      <TicketEventTimelineModal
+        open={showTimelineModal}
+        onClose={() => setShowTimelineModal(false)}
+        ticket={ticket}
+      />
     </div>
   )
 }

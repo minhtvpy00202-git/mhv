@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
-import { Camera, ImagePlus, QrCode, Sparkles, Ticket, TriangleAlert } from 'lucide-react'
+import { Camera, ImagePlus, QrCode, Sparkles, Ticket, TriangleAlert, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import { useAuth } from '../context/AuthContext'
 import { parseSpecsToEntries } from '../utils/assetSpecs'
-import { formatVietnamDateTime } from '../utils/datetime'
 import { compressImageToBlob } from '../utils/imageProcessing'
-import { getTicketStatusMeta } from '../utils/ticketStatus'
 import { validateMaintenanceTicketForm } from '../utils/validation'
 
 const scannerElementId = 'maintenance-scanner'
@@ -35,16 +33,16 @@ function MaintenanceReport() {
   const [priority, setPriority] = useState('MEDIUM')
   const [imageFile, setImageFile] = useState(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
+  const [showScannerModal, setShowScannerModal] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [loading, setLoading] = useState(false)
   const [latestTicket, setLatestTicket] = useState(null)
-  const [loadingLatestTicket, setLoadingLatestTicket] = useState(false)
   const [formErrors, setFormErrors] = useState({})
   const processingFallbackTimerRef = useRef(null)
 
   useEffect(() => {
-    if (!showModal && keepScannerAliveRef.current) {
+    if (showScannerModal && !showModal && keepScannerAliveRef.current) {
       void startScanner()
     } else {
       void stopScanner()
@@ -54,7 +52,7 @@ function MaintenanceReport() {
         void stopScanner()
         return
       }
-      if (!showModal && keepScannerAliveRef.current) {
+      if (showScannerModal && !showModal && keepScannerAliveRef.current) {
         void startScanner()
       }
     }
@@ -76,13 +74,12 @@ function MaintenanceReport() {
       window.removeEventListener('pagehide', handlePageHide)
       void stopScanner()
     }
-  }, [showModal])
+  }, [showModal, showScannerModal])
 
   useEffect(() => {
     if (!user?.userId) return
     let mounted = true
     const loadLatestTicket = async () => {
-      setLoadingLatestTicket(true)
       try {
         const response = await axiosClient.get('/api/maintenance/latest-ticket/me')
         if (!mounted) return
@@ -92,10 +89,6 @@ function MaintenanceReport() {
         const message = error?.response?.data?.message || 'Không tải được ticket gần nhất.'
         toast.error(message)
         setLatestTicket(null)
-      } finally {
-        if (mounted) {
-          setLoadingLatestTicket(false)
-        }
       }
     }
     loadLatestTicket()
@@ -136,6 +129,7 @@ function MaintenanceReport() {
             setAssetHomeLocationName(response.data?.homeLocationName || '')
             setAssetSpecs(parseSpecsToEntries(response.data?.specs))
             setFormErrors({})
+            setShowScannerModal(false)
             setShowModal(true)
           } catch {
             setAssetQaCode('')
@@ -191,7 +185,12 @@ function MaintenanceReport() {
     if (loading) return
     setShowModal(false)
     resetForm()
-    startScanner()
+  }
+
+  const closeScannerModal = async () => {
+    keepScannerAliveRef.current = false
+    setShowScannerModal(false)
+    await stopScanner()
   }
 
   const handleSelectImage = async (event) => {
@@ -285,9 +284,6 @@ function MaintenanceReport() {
   const handleOpenCamera = () => {
     cameraInputRef.current?.click()
   }
-
-  const latestTicketStatus = getTicketStatusMeta(latestTicket?.status)
-
   return (
     <div className="space-y-4">
       <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-fptOrange to-orange-500 p-5 text-white shadow-sm">
@@ -299,19 +295,19 @@ function MaintenanceReport() {
             </p>
             <h2 className="mt-3 text-2xl font-bold">Quét mã QR và gửi ticket như một ứng dụng di động</h2>
             <p className="mt-2 text-sm leading-6 text-white/90">
-              Quét thiết bị, mô tả lỗi, đính kèm ảnh và mở lại ticket gần nhất để theo dõi kỹ thuật viên xử lý.
+              Quét thiết bị, mô tả lỗi, đính kèm ảnh và theo dõi quá trình xử lý gọn ngay trên điện thoại.
             </p>
           </div>
           <div className="rounded-2xl bg-white/15 p-3">
             <QrCode size={28} />
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           {latestTicket?.id && (
             <button
               type="button"
               onClick={() => navigate(`/mobile/tickets/${latestTicket.id}`)}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-fptOrange shadow-sm"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-3 text-sm font-semibold text-fptOrange shadow-sm"
             >
               <Ticket size={16} />
               Mở ticket gần nhất
@@ -321,92 +317,62 @@ function MaintenanceReport() {
             type="button"
             onClick={() => {
               keepScannerAliveRef.current = true
-              void startScanner()
-              window.scrollTo({ top: 0, behavior: 'smooth' })
+              setShowScannerModal(true)
             }}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-4 py-2 text-sm font-semibold text-white"
+            className={`inline-flex items-center justify-center gap-2 rounded-xl border border-white/40 px-3 py-3 text-sm font-semibold text-white ${latestTicket?.id ? '' : 'col-span-2'}`}
           >
             <QrCode size={16} />
-            Quét lại ngay
+            Mở camera quét QR
           </button>
         </div>
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Ticket gần nhất của bạn</h3>
-            <p className="mt-1 text-sm text-slate-500">Mở nhanh ticket mới nhất để xem tiến độ xử lý hoặc chat với kỹ thuật viên.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-2xl bg-white/12 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Bước 1</p>
+            <p className="mt-1 text-sm font-semibold">Quét thiết bị</p>
+            <p className="mt-1 text-xs text-white/80">Mở camera và nhận diện đúng mã QA.</p>
           </div>
-          <div className="rounded-xl bg-orange-50 p-2 text-fptOrange">
-            <Ticket size={18} />
+          <div className="rounded-2xl bg-white/12 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Bước 2</p>
+            <p className="mt-1 text-sm font-semibold">Mô tả sự cố</p>
+            <p className="mt-1 text-xs text-white/80">Ghi rõ hiện tượng lỗi và đính kèm ảnh.</p>
+          </div>
+          <div className="rounded-2xl bg-white/12 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/80">Bước 3</p>
+            <p className="mt-1 text-sm font-semibold">Theo dõi và đánh giá</p>
+            <p className="mt-1 text-xs text-white/80">Mở ticket để chat và phản hồi sau xử lý.</p>
           </div>
         </div>
-        {loadingLatestTicket ? (
-          <p className="mt-3 rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">Đang tải ticket gần nhất...</p>
-        ) : latestTicket ? (
-          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+      </section>
+
+      {showScannerModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-800">{latestTicket.assetName || 'Thiết bị không xác định'}</p>
-                <p className="mt-1 text-xs text-slate-500">Ticket #{latestTicket.id} · {latestTicket.assetQaCode}</p>
+                <p className="text-sm font-semibold text-slate-800">Quét QR để chọn thiết bị</p>
+                <p className="mt-1 text-xs text-slate-500">Đưa mã QR vào khung camera. Hệ thống sẽ tự mở form báo hỏng khi quét thành công.</p>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${latestTicketStatus.badgeClassName}`}>
-                {latestTicketStatus.label}
-              </span>
-            </div>
-            <div className="mt-3 grid gap-2 text-sm text-slate-600">
-              <p><span className="font-medium text-slate-700">Tạo lúc:</span> {formatVietnamDateTime(latestTicket.createdAt)}</p>
-              <p><span className="font-medium text-slate-700">Kỹ thuật viên:</span> {latestTicket.assigneeName || 'Chưa gán'}</p>
-              <p className="line-clamp-2"><span className="font-medium text-slate-700">Mô tả:</span> {latestTicket.description || 'Không có mô tả.'}</p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => navigate(`/mobile/tickets/${latestTicket.id}`)}
-                className="inline-flex items-center gap-2 rounded-xl bg-fptOrange px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  void closeScannerModal()
+                }}
+                className="rounded-xl border border-slate-300 p-2 text-slate-600 hover:bg-slate-50"
               >
-                <TriangleAlert size={16} />
-                Mở ticket gần nhất
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/mobile/chats')}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
-              >
-                <Ticket size={16} />
-                Xem danh sách chat
+                <X size={16} />
               </button>
             </div>
-          </div>
-        ) : (
-          <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-            Bạn chưa tạo ticket nào. Hãy quét một thiết bị để bắt đầu báo hỏng.
-          </p>
-        )}
-      </section>
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Quét QR để báo hỏng thiết bị</h3>
-            <p className="mt-1 text-sm text-slate-500">Đưa mã QR vào khung quét. Hệ thống sẽ tự nhận diện thiết bị và mở form báo lỗi.</p>
-          </div>
-          <div className="rounded-xl bg-sky-50 p-2 text-sky-600">
-            <QrCode size={18} />
+            <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
+              <div className="rounded-[22px] border border-dashed border-white/20 bg-slate-900 p-2">
+                <div id={scannerElementId} className="min-h-[320px] overflow-hidden rounded-[18px] bg-black" />
+              </div>
+            </div>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              Giữ camera ổn định trong 1-2 giây. Nếu không quét được, hãy tăng ánh sáng hoặc đưa mã QR gần hơn.
+            </div>
           </div>
         </div>
-        <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
-          <div className="rounded-[22px] border border-dashed border-white/20 bg-slate-900 p-2">
-            <div id={scannerElementId} className="min-h-[280px] overflow-hidden rounded-[18px] bg-black" />
-          </div>
-        </div>
-        <div className="mt-3 grid gap-2 text-xs text-slate-500">
-          <p>1. Hướng camera vào mã QR trên thiết bị.</p>
-          <p>2. Kiểm tra lại thông tin thiết bị trong form hiện ra.</p>
-          <p>3. Viết mô tả lỗi và đính kèm ảnh để kỹ thuật viên xử lý nhanh hơn.</p>
-        </div>
-      </section>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/50 p-4">
@@ -420,7 +386,8 @@ function MaintenanceReport() {
                 <TriangleAlert size={18} />
               </div>
             </div>
-            <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Thiết bị đã quét</p>
               <p><span className="font-semibold">Mã QA:</span> {assetQaCode}</p>
               <p className="mt-1"><span className="font-semibold">Tên thiết bị:</span> {assetName || 'Đang tải...'}</p>
               <p className="mt-1"><span className="font-semibold">Phòng hiện tại:</span> {assetLocationName || 'Không xác định'}</p>
@@ -438,7 +405,8 @@ function MaintenanceReport() {
                 </div>
               )}
             </div>
-            <div className="mt-3">
+            <div className="mt-3 rounded-2xl border border-slate-200 p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Nội dung ticket</p>
               <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả lỗi</label>
               <textarea
                 value={description}
@@ -452,7 +420,8 @@ function MaintenanceReport() {
               />
               {formErrors.description && <p className="mt-1 text-xs text-red-600">{formErrors.description}</p>}
             </div>
-            <div className="mt-3">
+            <div className="mt-3 rounded-2xl border border-slate-200 p-3">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Mức ưu tiên và ảnh minh họa</p>
               <label className="mb-1 block text-sm font-medium text-slate-700">Mức độ ưu tiên</label>
               <div className="grid grid-cols-3 gap-2">
                 {priorityOptions.map((option) => (
@@ -471,50 +440,50 @@ function MaintenanceReport() {
                 ))}
               </div>
               {formErrors.priority && <p className="mt-1 text-xs text-red-600">{formErrors.priority}</p>}
-            </div>
-            <input
+              <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               onChange={handleSelectImage}
               className="hidden"
-            />
-            <input
+              />
+              <input
               ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
               onChange={handleSelectImage}
               className="hidden"
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={processingImage || loading}
                 className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                <ImagePlus size={16} />
-                Chọn ảnh lỗi
-              </button>
-              <button
+                >
+                  <ImagePlus size={16} />
+                  Chọn ảnh lỗi
+                </button>
+                <button
                 type="button"
                 onClick={handleOpenCamera}
                 disabled={processingImage || loading}
                 className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                <Camera size={16} />
-                Chụp ảnh lỗi
-              </button>
-            </div>
-            {imagePreviewUrl && (
-              <div className="mt-3">
-                <p className="mb-1 text-xs text-slate-500">Ảnh lỗi đính kèm</p>
-                <img src={imagePreviewUrl} alt="error-preview" className="h-32 w-32 rounded-xl border border-slate-200 object-cover" />
+                >
+                  <Camera size={16} />
+                  Chụp ảnh lỗi
+                </button>
               </div>
-            )}
-            {formErrors.imageFile && <p className="mt-2 text-xs text-red-600">{formErrors.imageFile}</p>}
-            {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
+              {imagePreviewUrl && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs text-slate-500">Ảnh lỗi đính kèm</p>
+                  <img src={imagePreviewUrl} alt="error-preview" className="h-32 w-32 rounded-xl border border-slate-200 object-cover" />
+                </div>
+              )}
+              {formErrors.imageFile && <p className="mt-2 text-xs text-red-600">{formErrors.imageFile}</p>}
+              {processingImage && <p className="mt-2 text-xs text-slate-500">Đang xử lý ảnh...</p>}
+            </div>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="submit"

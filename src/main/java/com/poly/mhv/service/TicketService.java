@@ -15,6 +15,7 @@ import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -318,19 +319,34 @@ public class TicketService {
         }
 
         ticket.setSatisfactionScore(request.getSatisfactionScore());
+        String normalizedComment = StringUtils.hasText(request.getSatisfactionComment())
+                ? request.getSatisfactionComment().trim()
+                : null;
+        ticket.setSatisfactionComment(normalizedComment);
         Ticket saved = ticketRepository.save(ticket);
         helpdeskKpiService.invalidateCaches();
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("Điểm hài lòng", request.getSatisfactionScore());
+        detail.put("Người đánh giá", getActorDisplayName(actor));
+        if (normalizedComment != null) {
+            detail.put("Nhận xét", normalizedComment);
+        }
         ticketEventService.recordEvent(
                 saved,
                 "TICKET_SATISFACTION_RATED",
                 actor,
                 "Đánh giá mức độ hài lòng",
-                Map.of(
-                        "Điểm hài lòng", request.getSatisfactionScore(),
-                        "Người đánh giá", getActorDisplayName(actor)
-                )
+                detail
         );
         return mapToResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TicketResponse> getMyPendingSatisfactionTickets() {
+        AppUser actor = currentUserProvider.getCurrentUser();
+        return ticketRepository.findPendingSatisfactionByReporterId(actor.getId()).stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -460,6 +476,7 @@ public class TicketService {
                 .acceptedAt(ticket.getAcceptedAt())
                 .resolvedAt(ticket.getResolvedAt())
                 .satisfactionScore(ticket.getSatisfactionScore())
+                .satisfactionComment(ticket.getSatisfactionComment())
                 .build();
     }
 

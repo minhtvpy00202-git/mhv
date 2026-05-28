@@ -1,13 +1,11 @@
-import { History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { ChevronDown, ChevronLeft, ChevronRight, History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
-import { getAssetStatusLabel, getAssetStatusMeta } from '../utils/assetStatus'
+import { getAssetStatusLabel } from '../utils/assetStatus'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { resolveBackendMediaUrl } from '../utils/mediaUrl'
-
-const PAGE_SIZE = 5
 
 const quickActions = [
   { to: '/mobile/scan', label: 'Quét QR', hint: 'Mượn hoặc trả thiết bị', icon: QrCode, tone: 'bg-sky-50 text-sky-700 border-sky-200' },
@@ -33,73 +31,164 @@ function EmptyState({ children }) {
   )
 }
 
-function Pagination({ page, totalPages, onFirst, onPrev, onNext, onLast }) {
+function CollapsibleSection({ title, subtitle, icon: Icon, iconClassName, open, onToggle, children }) {
   return (
-    <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
-      <p>
-        Trang {page} / {totalPages}
-      </p>
-      <div className="flex gap-2">
-        <button type="button" onClick={onFirst} disabled={page <= 1} className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50">
-          Đầu
-        </button>
-        <button type="button" onClick={onPrev} disabled={page <= 1} className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50">
+    <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-3 text-left"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <div className={`rounded-xl p-2 ${iconClassName}`}>
+            <Icon size={18} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-slate-800">
+              {open ? '▼' : '►'}{title}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          </div>
+        </div>
+        {open ? <ChevronDown size={18} className="mt-1 text-slate-400" /> : <ChevronRight size={18} className="mt-1 text-slate-400" />}
+      </button>
+      {open && <div className="mt-3 space-y-3">{children}</div>}
+    </section>
+  )
+}
+
+function SwipeCarousel({ items, activeIndex, onChange, emptyText, renderItem }) {
+  const touchStartXRef = useRef(null)
+  const safeIndex = items.length === 0 ? 0 : Math.min(Math.max(activeIndex, 0), items.length - 1)
+  const activeItem = items[safeIndex]
+  const canGoPrev = safeIndex > 0
+  const canGoNext = safeIndex < items.length - 1
+
+  const handleTouchStart = (event) => {
+    touchStartXRef.current = event.changedTouches?.[0]?.clientX ?? null
+  }
+
+  const handleTouchEnd = (event) => {
+    const endX = event.changedTouches?.[0]?.clientX
+    const startX = touchStartXRef.current
+    touchStartXRef.current = null
+    if (!Number.isFinite(startX) || !Number.isFinite(endX)) return
+    const deltaX = endX - startX
+    if (Math.abs(deltaX) < 45) return
+    if (deltaX < 0 && canGoNext) {
+      onChange(safeIndex + 1)
+    }
+    if (deltaX > 0 && canGoPrev) {
+      onChange(safeIndex - 1)
+    }
+  }
+
+  if (items.length === 0) {
+    return <EmptyState>{emptyText}</EmptyState>
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+        <button
+          type="button"
+          onClick={() => canGoPrev && onChange(safeIndex - 1)}
+          disabled={!canGoPrev}
+          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-40"
+        >
+          <ChevronLeft size={14} />
           Trước
         </button>
-        <button type="button" onClick={onNext} disabled={page >= totalPages} className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50">
+        <p className="text-center font-medium">
+          Thẻ {safeIndex + 1}/{items.length} · Vuốt trái/phải để xem tiếp
+        </p>
+        <button
+          type="button"
+          onClick={() => canGoNext && onChange(safeIndex + 1)}
+          disabled={!canGoNext}
+          className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-40"
+        >
           Sau
-        </button>
-        <button type="button" onClick={onLast} disabled={page >= totalPages} className="rounded border border-slate-300 px-2 py-1 disabled:opacity-50">
-          Cuối
+          <ChevronRight size={14} />
         </button>
       </div>
+
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="rounded-2xl border border-slate-200 bg-slate-50"
+      >
+        {renderItem(activeItem)}
+      </div>
+
+      {items.length > 1 && (
+        <div className="flex justify-center gap-1.5">
+          {items.map((item, index) => (
+            <button
+              key={item.id || index}
+              type="button"
+              onClick={() => onChange(index)}
+              aria-label={`Xem thẻ ${index + 1}`}
+              className={`h-2.5 rounded-full transition-all ${
+                index === safeIndex ? 'w-6 bg-fptOrange' : 'w-2.5 bg-slate-300'
+              }`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function Home() {
+  const navigate = useNavigate()
   const [usageHistory, setUsageHistory] = useState([])
   const [maintenanceHistory, setMaintenanceHistory] = useState([])
+  const [pendingRatings, setPendingRatings] = useState([])
   const [previewImageUrl, setPreviewImageUrl] = useState('')
-  const [usagePage, setUsagePage] = useState(1)
-  const [maintenancePage, setMaintenancePage] = useState(1)
+  const [usageIndex, setUsageIndex] = useState(0)
+  const [maintenanceIndex, setMaintenanceIndex] = useState(0)
+  const [showPendingRatings, setShowPendingRatings] = useState(false)
+  const [showUsageHistory, setShowUsageHistory] = useState(false)
+  const [showMaintenanceHistory, setShowMaintenanceHistory] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [usageRes, maintenanceRes] = await Promise.all([
+        const [usageRes, maintenanceRes, pendingRatingsRes] = await Promise.all([
           axiosClient.get('/api/usage/history/me'),
           axiosClient.get('/api/maintenance/history/me'),
+          axiosClient.get('/api/tickets/pending-satisfaction/me'),
         ])
         setUsageHistory(usageRes.data || [])
         setMaintenanceHistory(maintenanceRes.data || [])
-        setUsagePage(1)
-        setMaintenancePage(1)
+        setPendingRatings(pendingRatingsRes.data || [])
+        setUsageIndex(0)
+        setMaintenanceIndex(0)
       } catch (error) {
         const message = error?.response?.data?.message || 'Không tải được lịch sử trang chủ.'
         toast.error(message)
       }
     }
     loadData()
+    const handleRefresh = () => {
+      loadData()
+    }
+    window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
   }, [])
 
-  const usageTotalPages = Math.max(1, Math.ceil(usageHistory.length / PAGE_SIZE))
-  const maintenanceTotalPages = Math.max(1, Math.ceil(maintenanceHistory.length / PAGE_SIZE))
+  useEffect(() => {
+    if (usageIndex >= usageHistory.length && usageHistory.length > 0) {
+      setUsageIndex(usageHistory.length - 1)
+    }
+  }, [usageHistory, usageIndex])
 
-  const usageRows = useMemo(() => {
-    const start = (usagePage - 1) * PAGE_SIZE
-    return usageHistory.slice(start, start + PAGE_SIZE)
-  }, [usageHistory, usagePage])
-
-  const maintenanceRows = useMemo(() => {
-    const start = (maintenancePage - 1) * PAGE_SIZE
-    return maintenanceHistory.slice(start, start + PAGE_SIZE)
-  }, [maintenanceHistory, maintenancePage])
-
-  const openMaintenanceCount = useMemo(
-    () => maintenanceHistory.filter((item) => getAssetStatusMeta(item.assetStatus).value && getAssetStatusMeta(item.assetStatus).value !== 'Sẵn sàng').length,
-    [maintenanceHistory],
-  )
+  useEffect(() => {
+    if (maintenanceIndex >= maintenanceHistory.length && maintenanceHistory.length > 0) {
+      setMaintenanceIndex(maintenanceHistory.length - 1)
+    }
+  }, [maintenanceHistory, maintenanceIndex])
 
   return (
     <div className="space-y-4">
@@ -129,20 +218,57 @@ function Home() {
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard label="Mượn / trả" value={usageHistory.length} hint="Tổng lượt thao tác của bạn" tone="border-sky-200 bg-sky-50 text-sky-800" />
         <StatCard label="Báo hỏng" value={maintenanceHistory.length} hint="Số lần đã tạo ticket" tone="border-orange-200 bg-orange-50 text-orange-800" />
-        <StatCard label="Đang chờ xử lý" value={openMaintenanceCount} hint="Thiết bị chưa về trạng thái sẵn sàng" tone="border-rose-200 bg-rose-50 text-rose-800" />
+        <StatCard label="Chờ đánh giá" value={pendingRatings.length} hint="Ticket đã hoàn tất cần phản hồi" tone="border-violet-200 bg-violet-50 text-violet-800" />
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Lịch sử mượn / trả</h3>
-            <p className="mt-1 text-sm text-slate-500">Các lần bạn đã mượn và hoàn trả thiết bị.</p>
-          </div>
-          <History className="text-sky-500" size={20} />
-        </div>
-        <div className="mt-3 space-y-3">
-          {usageRows.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <CollapsibleSection
+        title="Đánh giá sau xử lý"
+        subtitle="Những ticket đã hoàn tất nhưng bạn chưa chấm điểm và nhận xét."
+        icon={TriangleAlert}
+        iconClassName="bg-violet-50 text-violet-500"
+        open={showPendingRatings}
+        onToggle={() => setShowPendingRatings((prev) => !prev)}
+      >
+          {pendingRatings.slice(0, 3).map((ticket) => (
+            <div key={ticket.id} className="rounded-2xl border border-violet-200 bg-violet-50 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{ticket.assetName || 'Thiết bị không xác định'}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">Ticket #{ticket.id} · {ticket.assetQaCode}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/mobile/tickets/${ticket.id}/review`)}
+                  className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
+                >
+                  Đánh giá ngay
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Hoàn tất lúc: {formatVietnamDateTime(ticket.resolvedAt, 'Gần đây')}
+              </p>
+            </div>
+          ))}
+          {pendingRatings.length === 0 && (
+            <EmptyState>Chưa có ticket nào đang chờ bạn đánh giá.</EmptyState>
+          )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Lịch sử mượn / trả"
+        subtitle="Các lần bạn đã mượn và hoàn trả thiết bị."
+        icon={History}
+        iconClassName="bg-sky-50 text-sky-500"
+        open={showUsageHistory}
+        onToggle={() => setShowUsageHistory((prev) => !prev)}
+      >
+        <SwipeCarousel
+          items={usageHistory}
+          activeIndex={usageIndex}
+          onChange={setUsageIndex}
+          emptyText="Chưa có dữ liệu mượn / trả."
+          renderItem={(item) => (
+            <div key={item.id} className="p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{item.assetName || 'Thiết bị không xác định'}</p>
@@ -159,23 +285,25 @@ function Home() {
                 <p><span className="font-medium text-slate-700">Trả lúc:</span> {formatVietnamDateTime(item.endTime)}</p>
               </div>
             </div>
-          ))}
-          {usageRows.length === 0 && <EmptyState>Chưa có dữ liệu mượn / trả.</EmptyState>}
-        </div>
-        <Pagination page={usagePage} totalPages={usageTotalPages} onFirst={() => setUsagePage(1)} onPrev={() => setUsagePage((prev) => Math.max(1, prev - 1))} onNext={() => setUsagePage((prev) => Math.min(usageTotalPages, prev + 1))} onLast={() => setUsagePage(usageTotalPages)} />
-      </section>
+          )}
+        />
+      </CollapsibleSection>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Lịch sử báo hỏng</h3>
-            <p className="mt-1 text-sm text-slate-500">Các lần bạn đã báo lỗi và theo dõi trạng thái thiết bị.</p>
-          </div>
-          <TriangleAlert className="text-orange-500" size={20} />
-        </div>
-        <div className="mt-3 space-y-3">
-          {maintenanceRows.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <CollapsibleSection
+        title="Lịch sử báo hỏng"
+        subtitle="Các lần bạn đã báo lỗi và theo dõi trạng thái thiết bị."
+        icon={TriangleAlert}
+        iconClassName="bg-orange-50 text-orange-500"
+        open={showMaintenanceHistory}
+        onToggle={() => setShowMaintenanceHistory((prev) => !prev)}
+      >
+        <SwipeCarousel
+          items={maintenanceHistory}
+          activeIndex={maintenanceIndex}
+          onChange={setMaintenanceIndex}
+          emptyText="Chưa có dữ liệu báo hỏng."
+          renderItem={(item) => (
+            <div key={item.id} className="p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{item.assetName || 'Thiết bị không xác định'}</p>
@@ -191,26 +319,42 @@ function Home() {
                 <p><span className="font-medium text-slate-700">Báo lúc:</span> {formatVietnamDateTime(item.reportTime)}</p>
               </div>
               <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!item.imageUrl) {
-                      toast.info('Bản ghi này chưa có ảnh lỗi.')
-                      return
-                    }
-                    setPreviewImageUrl(item.imageUrl)
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Xem ảnh lỗi
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/mobile/tickets/${item.id}`)}
+                    className="rounded-lg bg-fptOrange px-3 py-2 text-xs font-semibold text-white hover:bg-fptOrangeDark"
+                  >
+                    Mở ticket
+                  </button>
+                  {pendingRatings.some((ticket) => Number(ticket.id) === Number(item.id)) && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/mobile/tickets/${item.id}/review`)}
+                      className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                    >
+                      Đánh giá
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!item.imageUrl) {
+                        toast.info('Bản ghi này chưa có ảnh lỗi.')
+                        return
+                      }
+                      setPreviewImageUrl(item.imageUrl)
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Xem ảnh lỗi
+                  </button>
+                </div>
               </div>
             </div>
-          ))}
-          {maintenanceRows.length === 0 && <EmptyState>Chưa có dữ liệu báo hỏng.</EmptyState>}
-        </div>
-        <Pagination page={maintenancePage} totalPages={maintenanceTotalPages} onFirst={() => setMaintenancePage(1)} onPrev={() => setMaintenancePage((prev) => Math.max(1, prev - 1))} onNext={() => setMaintenancePage((prev) => Math.min(maintenanceTotalPages, prev + 1))} onLast={() => setMaintenancePage(maintenanceTotalPages)} />
-      </section>
+          )}
+        />
+      </CollapsibleSection>
 
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">

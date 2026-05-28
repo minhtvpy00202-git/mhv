@@ -75,6 +75,9 @@ public class Ticket {
     @Column(name = "satisfaction_score")
     private Integer satisfactionScore;
 
+    @Column(name = "satisfaction_comment", length = 1000)
+    private String satisfactionComment;
+
     @JsonIgnore
     @OneToMany(mappedBy = "ticket")
     @Builder.Default

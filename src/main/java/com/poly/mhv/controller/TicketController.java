@@ -153,6 +153,18 @@ public class TicketController {
         return ResponseEntity.ok(ticketService.rateSatisfaction(id, request));
     }
 
+    @GetMapping("/pending-satisfaction/me")
+    @PreAuthorize("hasRole('NhanVien')")
+    @Operation(summary = "Lấy danh sách ticket chờ đánh giá của tôi", description = "Trả về các ticket đã hoàn tất nhưng nhân viên hiện tại chưa chấm hài lòng.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy danh sách ticket chờ đánh giá thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Chỉ nhân viên được truy cập")
+    })
+    public ResponseEntity<List<TicketResponse>> getMyPendingSatisfactionTickets() {
+        return ResponseEntity.ok(ticketService.getMyPendingSatisfactionTickets());
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyRole('Admin','NhanVien','TechSupport')")
     @Operation(summary = "Lấy danh sách ticket", description = "Lấy danh sách ticket và lọc theo trạng thái, người tạo, người xử lý hoặc thiết bị.")

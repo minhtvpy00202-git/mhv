@@ -104,6 +104,17 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     @EntityGraph(attributePaths = {"asset", "asset.location", "asset.category", "asset.category.techSupportType", "reporter", "assignee"})
     Optional<Ticket> findFirstByReporterIdOrderByCreatedAtDescIdDesc(Integer reporterId);
 
+    @EntityGraph(attributePaths = {"asset", "asset.location", "asset.category", "asset.category.techSupportType", "reporter", "assignee"})
+    @Query("""
+            select t from Ticket t
+            join t.reporter r
+            where r.id = :reporterId
+              and t.status = 'RESOLVED'
+              and t.satisfactionScore is null
+            order by coalesce(t.resolvedAt, t.createdAt) desc, t.id desc
+            """)
+    List<Ticket> findPendingSatisfactionByReporterId(@Param("reporterId") Integer reporterId);
+
     @Modifying
     @Query(value = """
             UPDATE tickets

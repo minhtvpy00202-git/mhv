@@ -77,7 +77,7 @@ function MobileChats() {
             <button
               key={ticket.id}
               type="button"
-              onClick={() => navigate(`/mobile/tickets/${ticket.id}`)}
+              onClick={() => navigate(`/mobile/chats/${ticket.id}`)}
               className="w-full rounded-2xl bg-white p-4 text-left shadow-sm transition hover:bg-orange-50"
             >
               <div className="flex items-start justify-between gap-2">
