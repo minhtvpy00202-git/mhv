@@ -15,6 +15,7 @@ const priorityOptions = [
   { value: 'MEDIUM', label: 'Trung bình' },
   { value: 'HIGH', label: 'Cao' },
 ]
+const scannerConfig = { fps: 10, qrbox: { width: 240, height: 240 } }
 
 function MaintenanceReport() {
   const navigate = useNavigate()
@@ -39,11 +40,15 @@ function MaintenanceReport() {
   const [loading, setLoading] = useState(false)
   const [latestTicket, setLatestTicket] = useState(null)
   const [formErrors, setFormErrors] = useState({})
+  const [scannerError, setScannerError] = useState('')
   const processingFallbackTimerRef = useRef(null)
 
   useEffect(() => {
+    let restartTimer = null
     if (showScannerModal && !showModal && keepScannerAliveRef.current) {
-      void startScanner()
+      restartTimer = window.setTimeout(() => {
+        void startScanner()
+      }, 120)
     } else {
       void stopScanner()
     }
@@ -62,7 +67,9 @@ function MaintenanceReport() {
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pagehide', handlePageHide)
     return () => {
-      keepScannerAliveRef.current = false
+      if (restartTimer) {
+        window.clearTimeout(restartTimer)
+      }
       if (processingFallbackTimerRef.current) {
         clearTimeout(processingFallbackTimerRef.current)
         processingFallbackTimerRef.current = null
@@ -109,14 +116,37 @@ function MaintenanceReport() {
     return decodedText.trim()
   }
 
+  const requestCameraPermission = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Trình duyệt hiện tại không hỗ trợ camera.')
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+      },
+      audio: false,
+    })
+    stream.getTracks().forEach((track) => track.stop())
+  }
+
   const startScanner = async () => {
     if (isScanningRef.current) return
+    const scannerElement = document.getElementById(scannerElementId)
+    if (!scannerElement) {
+      setScannerError('Không tìm thấy khung camera để khởi động máy quét.')
+      return
+    }
+    setScannerError('')
+    await stopScanner()
+    let permissionGranted = false
     const scanner = new Html5Qrcode(scannerElementId)
     scannerRef.current = scanner
     try {
+      await requestCameraPermission()
+      permissionGranted = true
       await scanner.start(
         { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        scannerConfig,
         async (decodedText) => {
           const qaCode = extractQaCode(decodedText)
           if (!qaCode) return
@@ -144,8 +174,21 @@ function MaintenanceReport() {
         () => {},
       )
       isScanningRef.current = true
-    } catch {
-      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.')
+      setScannerError('')
+    } catch (error) {
+      const message = error?.message || ''
+      const denied = /denied|permission|notallowed|secure/i.test(message)
+      const blockedMessage = denied
+        ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
+        : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
+      setScannerError(blockedMessage)
+      toast.error(blockedMessage)
+      if (permissionGranted) {
+        await stopScanner()
+      } else {
+        scannerRef.current = null
+        isScanningRef.current = false
+      }
     }
   }
 
@@ -317,6 +360,7 @@ function MaintenanceReport() {
             type="button"
             onClick={() => {
               keepScannerAliveRef.current = true
+              setScannerError('')
               setShowScannerModal(true)
             }}
             className={`inline-flex items-center justify-center gap-2 rounded-xl border border-white/40 px-3 py-3 text-sm font-semibold text-white ${latestTicket?.id ? '' : 'col-span-2'}`}
@@ -367,6 +411,11 @@ function MaintenanceReport() {
                 <div id={scannerElementId} className="min-h-[320px] overflow-hidden rounded-[18px] bg-black" />
               </div>
             </div>
+            {scannerError && (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                {scannerError}
+              </div>
+            )}
             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
               Giữ camera ổn định trong 1-2 giây. Nếu không quét được, hãy tăng ánh sáng hoặc đưa mã QR gần hơn.
             </div>
