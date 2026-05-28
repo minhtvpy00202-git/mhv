@@ -21,4 +21,6 @@ public class MaintenanceHistoryResponse {
     private String imageUrl;
     private LocalDateTime reportTime;
     private String assetStatus;
+    private String technicalStatus;
+    private String usageStatus;
 }

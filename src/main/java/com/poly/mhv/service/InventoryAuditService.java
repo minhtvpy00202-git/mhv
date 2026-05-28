@@ -22,6 +22,7 @@ import com.poly.mhv.repository.InventoryAuditMissingRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +48,7 @@ public class InventoryAuditService {
     private final LocationRepository locationRepository;
     private final AppUserRepository appUserRepository;
     private final NotificationService notificationService;
+    private final HelpdeskKpiService helpdeskKpiService;
 
     public InventoryAuditService(
             InventoryAuditRepository inventoryAuditRepository,
@@ -55,7 +57,8 @@ public class InventoryAuditService {
             AssetRepository assetRepository,
             LocationRepository locationRepository,
             AppUserRepository appUserRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            HelpdeskKpiService helpdeskKpiService
     ) {
         this.inventoryAuditRepository = inventoryAuditRepository;
         this.inventoryAuditItemRepository = inventoryAuditItemRepository;
@@ -64,6 +67,7 @@ public class InventoryAuditService {
         this.locationRepository = locationRepository;
         this.appUserRepository = appUserRepository;
         this.notificationService = notificationService;
+        this.helpdeskKpiService = helpdeskKpiService;
     }
 
     @Transactional
@@ -71,16 +75,24 @@ public class InventoryAuditService {
         if (request == null || request.getLocationId() == null) {
             throw new CustomException("locationId là bắt buộc.");
         }
+        if (request.getDueDate() == null) {
+            throw new CustomException("dueDate là bắt buộc.");
+        }
         if (inventoryAuditRepository.existsByLocationIdAndStatus(request.getLocationId(), "OPEN")) {
             throw new CustomException("Phòng này đã có phiên kiểm kê đang mở.");
         }
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
         AppUser actor = getCurrentUser();
+        LocalDateTime startedAt = LocalDateTime.now();
+        if (!request.getDueDate().isAfter(startedAt)) {
+            throw new CustomException("Hạn kiểm kê phải sau thời điểm tạo phiên.");
+        }
         InventoryAudit audit = InventoryAudit.builder()
                 .location(location)
                 .createdBy(actor)
-                .startedAt(LocalDateTime.now())
+                .startedAt(startedAt)
+                .dueDate(request.getDueDate())
                 .status("OPEN")
                 .notes(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
                 .expectedCount((int) assetRepository.countByHomeLocationIdAndTrackingMode(request.getLocationId(), "ITEMIZED"))
@@ -88,6 +100,7 @@ public class InventoryAuditService {
                 .missingCount(0)
                 .build();
         InventoryAudit saved = inventoryAuditRepository.save(audit);
+        helpdeskKpiService.invalidateCaches();
         return mapSummary(saved);
     }
 
@@ -244,7 +257,13 @@ public class InventoryAuditService {
                         .locationName(asset.getHomeLocation().getRoomName())
                         .resolutionStatus("PENDING")
                         .build());
-                asset.setStatus("Thất lạc");
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_LOST);
+                asset.setUsageStatus(resolveUsageStatus(asset));
+                asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                        asset.getTechnicalStatus(),
+                        asset.getUsageStatus(),
+                        false
+                ));
                 missingAssets.add(asset);
             }
         }
@@ -258,6 +277,7 @@ public class InventoryAuditService {
         audit.setCompletedAt(LocalDateTime.now());
         audit.setStatus("COMPLETED");
         inventoryAuditRepository.save(audit);
+        helpdeskKpiService.invalidateCaches();
 
         AppUser actor = getCurrentUser();
         String actorDisplayName = getActorDisplayName(actor);
@@ -294,9 +314,17 @@ public class InventoryAuditService {
         inventoryAuditMissingRepository.save(missing);
 
         assetRepository.findById(assetQaCode).ifPresent(asset -> {
-            asset.setStatus("Sẵn sàng");
+            asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_GOOD);
+            asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_HOME);
+            asset.setLocation(asset.getHomeLocation());
+            asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                    asset.getTechnicalStatus(),
+                    asset.getUsageStatus(),
+                    false
+            ));
             assetRepository.save(asset);
         });
+        helpdeskKpiService.invalidateCaches();
 
         return getDetail(auditId);
     }
@@ -312,6 +340,7 @@ public class InventoryAuditService {
         inventoryAuditMissingRepository.save(missing);
 
         assetRepository.findById(assetQaCode).ifPresent(assetRepository::delete);
+        helpdeskKpiService.invalidateCaches();
         return getDetail(auditId);
     }
 
@@ -323,6 +352,7 @@ public class InventoryAuditService {
                 .createdByUsername(audit.getCreatedBy().getUsername())
                 .startedAt(audit.getStartedAt())
                 .completedAt(audit.getCompletedAt())
+                .dueDate(audit.getDueDate())
                 .status(audit.getStatus())
                 .expectedCount(audit.getExpectedCount())
                 .scannedCount(audit.getScannedCount())
@@ -360,5 +390,19 @@ public class InventoryAuditService {
             case "TechSupport" -> "Kỹ thuật viên";
             default -> "Người dùng";
         };
+    }
+
+    private String resolveUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return AssetStatusSupport.resolveUsageStatus(
+                asset.getUsageStatus(),
+                asset.getStatus(),
+                locationId,
+                homeLocationId
+        );
     }
 }

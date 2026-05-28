@@ -143,11 +143,10 @@ function TechSupportTickets() {
     <div className="space-y-4">
       <HelpdeskKpiPanel
         title="KPI cá nhân"
-        subtitle="Theo dõi ticket mới phù hợp với chuyên môn của bạn và hiệu suất xử lý ticket đã được giao."
+        subtitle="Bộ KPI giai đoạn 2 của kỹ thuật viên, dùng acceptedAt, điểm hài lòng và xếp loại tự động."
         summary={kpis}
         loading={kpiLoading}
-        newTicketLabel="Tổng ticket mới phù hợp"
-        tableTitle="Khối lượng ticket của bạn"
+        tableTitle="Chi tiết xếp loại của bạn"
         emptyText="Chưa có dữ liệu KPI cá nhân."
       />
 

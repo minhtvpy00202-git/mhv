@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import { getAssetStatusMeta, getTechnicalStatusMeta, getUsageStatusMeta } from '../../utils/assetStatus'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
@@ -17,6 +18,14 @@ const defaultPageInfo = {
 
 function getRowKey(item) {
   return `${item.id}-${item.assetQaCode}-${item.reportTime}`
+}
+
+function getBadgeClassName(tone) {
+  if (tone === 'emerald') return 'bg-emerald-100 text-emerald-800'
+  if (tone === 'blue') return 'bg-blue-100 text-blue-800'
+  if (tone === 'red') return 'bg-red-100 text-red-800'
+  if (tone === 'amber') return 'bg-amber-100 text-amber-800'
+  return 'bg-slate-100 text-slate-700'
 }
 
 function MaintenanceHistoryManagement() {
@@ -80,13 +89,13 @@ function MaintenanceHistoryManagement() {
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Lịch sử báo hỏng</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Luồng maintenance cũ đã đồng bộ theo ticket. Admin theo dõi lịch sử và mở ticket/chat để điều phối xử lý.
+          Luồng maintenance đã tách riêng tình trạng kỹ thuật và trạng thái sử dụng để tránh chồng nghĩa giữa hỏng và đang sửa chữa.
         </p>
       </section>
 
       <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm">
         <div className="w-full max-w-full overflow-x-auto overflow-y-hidden rounded border border-slate-200">
-          <table className="w-max min-w-[1300px] text-sm">
+          <table className="w-max min-w-[1500px] text-sm">
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-3 py-2 text-left">Mã thiết bị</th>
@@ -96,7 +105,9 @@ function MaintenanceHistoryManagement() {
                 <th className="px-3 py-2 text-left">Người báo hỏng</th>
                 <th className="px-3 py-2 text-left">Chi tiết hỏng</th>
                 <th className="px-3 py-2 text-left">Ngày giờ báo hỏng</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
+                <th className="px-3 py-2 text-left">Tình trạng kỹ thuật</th>
+                <th className="px-3 py-2 text-left">Trạng thái sử dụng</th>
+                <th className="px-3 py-2 text-left">Trạng thái hiển thị</th>
                 <th className="px-3 py-2 text-left">Ảnh lỗi</th>
                 <th className="px-3 py-2 text-left">Thao tác</th>
               </tr>
@@ -105,6 +116,9 @@ function MaintenanceHistoryManagement() {
               {!loading &&
                 rows.map((item) => {
                   const rowKey = getRowKey(item)
+                  const assetStatusMeta = getAssetStatusMeta(item.assetStatus)
+                  const technicalStatusMeta = getTechnicalStatusMeta(item.technicalStatus)
+                  const usageStatusMeta = getUsageStatusMeta(item.usageStatus)
                   return (
                   <tr key={rowKey} className="border-t border-slate-100 align-top">
                     <td className="px-3 py-2">{item.assetQaCode}</td>
@@ -115,15 +129,18 @@ function MaintenanceHistoryManagement() {
                     <td className="px-3 py-2">{item.description}</td>
                     <td className="px-3 py-2">{formatVietnamDateTime(item.reportTime)}</td>
                     <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        item.assetStatus === 'Sẵn sàng'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : item.assetStatus === 'Bảo trì'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                      }`}
-                      >
-                        {item.assetStatus}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(technicalStatusMeta.tone)}`}>
+                        {technicalStatusMeta.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(usageStatusMeta.tone)}`}>
+                        {usageStatusMeta.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(assetStatusMeta.tone)}`}>
+                        {assetStatusMeta.label}
                       </span>
                     </td>
                     <td className="px-3 py-2">
@@ -151,7 +168,7 @@ function MaintenanceHistoryManagement() {
                 )})}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={12} className="px-3 py-3 text-center text-slate-500">
                     Chưa có dữ liệu báo hỏng.
                   </td>
                 </tr>

@@ -42,6 +42,12 @@ public class Asset {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "technical_status", length = 30)
+    private String technicalStatus;
+
+    @Column(name = "usage_status", length = 30)
+    private String usageStatus;
+
     @Column(name = "tracking_mode", length = 20)
     @Builder.Default
     private String trackingMode = "ITEMIZED";

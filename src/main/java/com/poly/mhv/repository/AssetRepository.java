@@ -35,6 +35,8 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 c.id,
                 c.name,
                 a.status,
+            a.technicalStatus,
+            a.usageStatus,
                 l.id,
                 l.roomName,
                 hl.id,
@@ -65,7 +67,38 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                     )
                     or (
                         a.trackingMode <> 'CONSUMABLE'
-                        and a.status = :status
+                    and (
+                        (:status = 'Hoạt động tốt'
+                            and coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hoạt động tốt'
+                            and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+                            and not (
+                                coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                                or a.status = 'Đang sử dụng'
+                                or (hl.id is not null and l.id <> hl.id)
+                            )
+                            and coalesce(a.status, '') <> 'Bảo trì')
+                        or (:status = 'Đang cho mượn'
+                            and coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hoạt động tốt'
+                            and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+                            and (
+                                coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                                or a.status = 'Đang sử dụng'
+                                or (hl.id is not null and l.id <> hl.id)
+                            ))
+                        or (:status = 'Hỏng'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hỏng'
+                                or coalesce(a.status, '') = 'Hỏng'
+                            )
+                            and coalesce(a.status, '') <> 'Bảo trì')
+                        or (:status = 'Đang sửa chữa'
+                            and coalesce(a.status, '') = 'Bảo trì')
+                        or (:status = 'Thất lạc'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Thất lạc'
+                                or coalesce(a.status, '') = 'Thất lạc'
+                            ))
+                    )
                     )
               )
               and (:trackingMode is null or a.trackingMode = :trackingMode)
@@ -98,8 +131,81 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
 
     @Query("select count(a) from Asset a where a.trackingMode = 'ITEMIZED'")
     long countAllAssets();
-    @Query("select count(a) from Asset a where a.trackingMode = 'ITEMIZED' and a.status = :status")
-    long countByStatusValue(@Param("status") String status);
+
+    @Query("select count(a) from Asset a where a.trackingMode = 'CONSUMABLE'")
+    long countAllConsumables();
+
+    @Query("""
+            select count(a) from Asset a
+            where a.trackingMode = 'CONSUMABLE'
+              and coalesce(a.quantityOnHand, 0) <= coalesce(a.minimumStock, 0)
+            """)
+    long countLowStockConsumables();
+
+    @Query("""
+            select count(a) from Asset a
+            where a.trackingMode = 'ITEMIZED'
+              and coalesce(a.technicalStatus, 'Hoạt động tốt') = :technicalStatus
+              and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+              and (
+                    (:usageStatus = 'Tại vị trí gốc' and not (
+                        coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                        or a.status = 'Đang sử dụng'
+                        or (a.homeLocation.id is not null and a.location.id <> a.homeLocation.id)
+                    ))
+                    or (:usageStatus = 'Đang cho mượn' and (
+                        coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                        or a.status = 'Đang sử dụng'
+                        or (a.homeLocation.id is not null and a.location.id <> a.homeLocation.id)
+                    ))
+                  )
+              and coalesce(a.status, '') <> 'Bảo trì'
+            """)
+    long countAvailableAssets(
+            @Param("technicalStatus") String technicalStatus,
+            @Param("usageStatus") String usageStatus
+    );
+
+    @Query("""
+            select count(a) from Asset a
+            where a.trackingMode = 'ITEMIZED'
+              and coalesce(a.technicalStatus, 'Hoạt động tốt') = :technicalStatus
+              and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+              and (
+                    (:usageStatus = 'Tại vị trí gốc' and not (
+                        coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                        or a.status = 'Đang sử dụng'
+                        or (a.homeLocation.id is not null and a.location.id <> a.homeLocation.id)
+                    ))
+                    or (:usageStatus = 'Đang cho mượn' and (
+                        coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                        or a.status = 'Đang sử dụng'
+                        or (a.homeLocation.id is not null and a.location.id <> a.homeLocation.id)
+                    ))
+                  )
+            """)
+    long countBorrowedAssets(
+            @Param("technicalStatus") String technicalStatus,
+            @Param("usageStatus") String usageStatus
+    );
+
+    @Query("""
+            select count(a) from Asset a
+            where a.trackingMode = 'ITEMIZED'
+              and (
+                    coalesce(a.technicalStatus, 'Hoạt động tốt') = :technicalStatus
+                    or coalesce(a.status, '') = 'Hỏng'
+              )
+              and coalesce(a.status, '') <> 'Bảo trì'
+            """)
+    long countBrokenAssets(@Param("technicalStatus") String technicalStatus);
+
+    @Query("""
+            select count(a) from Asset a
+            where a.trackingMode = 'ITEMIZED'
+              and coalesce(a.status, '') = 'Bảo trì'
+            """)
+    long countRepairingAssets(@Param("technicalStatus") String technicalStatus);
     @Query("select a from Asset a join fetch a.location l join fetch a.category c order by l.id asc, a.qaCode asc")
     List<Asset> findAllForExportOrderByLocation();
 }

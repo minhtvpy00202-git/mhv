@@ -15,8 +15,9 @@ public class UsageHistoryAdminResponse {
     private String assetQaCode;
     private String assetName;
     private String homeLocationName;
+    private String assetTechnicalStatus;
     private LocalDateTime startTime;
     private String borrowedLocationName;
     private LocalDateTime endTime;
-    private String username;
+    private String borrowerFullName;
 }

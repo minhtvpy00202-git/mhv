@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,7 +49,7 @@ public class InventoryAuditController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
     @PreAuthorize("hasRole('Admin')")
-    public ResponseEntity<InventoryAuditSummaryResponse> createAudit(@RequestBody InventoryAuditCreateRequest request) {
+    public ResponseEntity<InventoryAuditSummaryResponse> createAudit(@Valid @RequestBody InventoryAuditCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(inventoryAuditService.createAudit(request));
     }
 

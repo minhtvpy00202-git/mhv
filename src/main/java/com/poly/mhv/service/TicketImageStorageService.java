@@ -77,7 +77,8 @@ public class TicketImageStorageService {
         Path normalizedUploadDir = uploadDir.normalize();
         Path candidatePath = Paths.get(normalized).normalize();
         if (candidatePath.startsWith(normalizedUploadDir) && candidatePath.getFileName() != null) {
-            return "/uploads/" + candidatePath.getFileName();
+            Path relativePath = normalizedUploadDir.relativize(candidatePath).normalize();
+            return "/uploads/" + relativePath.toString().replace('\\', '/');
         }
 
         return normalized;

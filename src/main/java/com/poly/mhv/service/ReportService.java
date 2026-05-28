@@ -11,6 +11,7 @@ import com.poly.mhv.repository.InventoryAuditItemRepository;
 import com.poly.mhv.repository.InventoryAuditMissingRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -61,9 +62,11 @@ public class ReportService {
             createCell(headerRow, 2, "Loại");
             createCell(headerRow, 3, "Phòng học");
             createCell(headerRow, 4, "Kiểu theo dõi");
-            createCell(headerRow, 5, "Trạng thái");
-            createCell(headerRow, 6, "Số lượng tồn");
-            createCell(headerRow, 7, "Đơn vị tính");
+            createCell(headerRow, 5, "Tình trạng kỹ thuật");
+            createCell(headerRow, 6, "Trạng thái sử dụng");
+            createCell(headerRow, 7, "Trạng thái hiển thị");
+            createCell(headerRow, 8, "Số lượng tồn");
+            createCell(headerRow, 9, "Đơn vị tính");
 
             int rowNum = 1;
             for (Asset asset : assets) {
@@ -73,12 +76,26 @@ public class ReportService {
                 createCell(row, 2, getCategoryDisplayName(asset.getCategory()));
                 createCell(row, 3, asset.getLocation().getRoomName());
                 createCell(row, 4, "CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode()) ? "Tiêu hao" : "Đơn chiếc");
-                createCell(row, 5, asset.getStatus());
-                createCell(row, 6, asset.getQuantityOnHand() == null ? "" : String.valueOf(asset.getQuantityOnHand()));
-                createCell(row, 7, asset.getUnit());
+                if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
+                    createCell(row, 5, "");
+                    createCell(row, 6, "");
+                    createCell(row, 7, asset.getStatus());
+                } else {
+                    String technicalStatus = resolveTechnicalStatus(asset);
+                    String usageStatus = resolveUsageStatus(asset);
+                    createCell(row, 5, technicalStatus);
+                    createCell(row, 6, usageStatus);
+                    createCell(row, 7, AssetStatusSupport.deriveDisplayStatus(
+                            technicalStatus,
+                            usageStatus,
+                            AssetStatusSupport.isRepairInProgress(asset.getStatus())
+                    ));
+                }
+                createCell(row, 8, asset.getQuantityOnHand() == null ? "" : String.valueOf(asset.getQuantityOnHand()));
+                createCell(row, 9, asset.getUnit());
             }
 
-            for (int i = 0; i <= 7; i++) {
+            for (int i = 0; i <= 9; i++) {
                 sheet.autoSizeColumn(i);
             }
 
@@ -266,5 +283,26 @@ public class ReportService {
 
     private String getCategoryDisplayName(Category category) {
         return category == null ? "" : category.getName();
+    }
+
+    private String resolveTechnicalStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        }
+        return AssetStatusSupport.resolveTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
+    }
+
+    private String resolveUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return AssetStatusSupport.resolveUsageStatus(
+                asset.getUsageStatus(),
+                asset.getStatus(),
+                locationId,
+                homeLocationId
+        );
     }
 }

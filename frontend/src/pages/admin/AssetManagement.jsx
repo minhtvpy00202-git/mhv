@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Boxes, Check, Eye, History, Package, PackagePlus, Plus, QrCode, RefreshCw, Search, Send, Trash2, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Boxes, Check, ChevronDown, ChevronRight, Eye, History, Package, PackagePlus, Plus, QrCode, RefreshCw, Search, Send, Trash2, Wrench, X } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import { useAuth } from '../../context/AuthContext'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
+import {
+  getAssetStatusLabel,
+  getTechnicalStatusLabel,
+  getUsageStatusLabel,
+  itemizedStatusOptions,
+  technicalStatusOptions,
+  usageStatusOptions,
+} from '../../utils/assetStatus'
 import { formatVietnamDate, formatVietnamDateTime } from '../../utils/datetime'
 import { validateAssetForm, validateSupplierForm } from '../../utils/validation'
 
-const itemizedStatusOptions = ['Sẵn sàng', 'Đang sử dụng', 'Hỏng', 'Bảo trì', 'Thất lạc']
 const consumableStatusOptions = ['Còn hàng', 'Cần nhập']
 const managementTabs = [
   {
@@ -183,6 +190,63 @@ function getConsumableExpiryState(asset) {
   }
 }
 
+function getConsumableExpiryGroupKey(expirationDate) {
+  return expirationDate || '__NO_EXPIRY__'
+}
+
+function buildConsumableExpiryGroups(asset, detail) {
+  const receiptLots = Array.isArray(detail?.receiptLots) ? detail.receiptLots : []
+  const activeLots = receiptLots.filter((lot) => Number(lot?.quantityRemaining ?? 0) > 0)
+
+  if (activeLots.length === 0) {
+    return [
+      {
+        key: `${asset.qaCode}-fallback`,
+        expirationDate: asset?.expiryTrackingEnabled ? (asset.expirationDate || null) : null,
+        quantityOnHand: Number(asset?.quantityOnHand ?? 0),
+        purchasePrice: asset?.purchasePrice ?? null,
+        lotCount: 0,
+      },
+    ]
+  }
+
+  const groupedMap = new Map()
+  activeLots.forEach((lot) => {
+    const expirationDate = asset?.expiryTrackingEnabled ? (lot.expirationDate || null) : null
+    const groupKey = getConsumableExpiryGroupKey(expirationDate)
+    const quantityRemaining = Number(lot?.quantityRemaining ?? 0)
+    const unitPrice = Number(lot?.unitPrice ?? 0)
+    const existingGroup = groupedMap.get(groupKey) || {
+      key: `${asset.qaCode}-${groupKey}`,
+      expirationDate,
+      quantityOnHand: 0,
+      totalValue: 0,
+      lotCount: 0,
+    }
+    existingGroup.quantityOnHand += Number.isNaN(quantityRemaining) ? 0 : quantityRemaining
+    existingGroup.totalValue += Number.isNaN(quantityRemaining) || Number.isNaN(unitPrice) ? 0 : quantityRemaining * unitPrice
+    existingGroup.lotCount += 1
+    groupedMap.set(groupKey, existingGroup)
+  })
+
+  return Array.from(groupedMap.values())
+    .map((group) => ({
+      key: group.key,
+      expirationDate: group.expirationDate,
+      quantityOnHand: group.quantityOnHand,
+      purchasePrice: group.quantityOnHand > 0 ? group.totalValue / group.quantityOnHand : null,
+      lotCount: group.lotCount,
+    }))
+    .sort((left, right) => {
+      const leftDate = parseDateOnly(left.expirationDate)
+      const rightDate = parseDateOnly(right.expirationDate)
+      if (!leftDate && !rightDate) return 0
+      if (!leftDate) return 1
+      if (!rightDate) return -1
+      return leftDate.getTime() - rightDate.getTime()
+    })
+}
+
 function getConsumableRequestStatusMeta(status) {
   const normalizedStatus = String(status || 'PENDING').trim().toUpperCase()
   if (normalizedStatus === 'APPROVED') {
@@ -297,6 +361,7 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [supplierFormErrors, setSupplierFormErrors] = useState({})
   const [activeTab, setActiveTab] = useState(restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED')
   const [consumableWorkspace, setConsumableWorkspace] = useState('OVERVIEW')
+  const [showConsumableOverviewSummary, setShowConsumableOverviewSummary] = useState(false)
   const [roomSearchKeyword, setRoomSearchKeyword] = useState('')
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [consumableStatusCounts, setConsumableStatusCounts] = useState(defaultConsumableStatusCounts)
@@ -314,6 +379,8 @@ function AssetManagement({ restrictToConsumable = false }) {
     name: '',
     categoryId: '',
     locationId: '',
+    technicalStatus: 'Hoạt động tốt',
+    usageStatus: 'Tại vị trí gốc',
     supplierId: '',
     purchasePrice: '',
     purchaseDate: '',
@@ -395,6 +462,14 @@ function AssetManagement({ restrictToConsumable = false }) {
     const merged = [...roomStockOptions, ...inventoryOptions]
     return merged.filter((option, index, collection) => collection.findIndex((item) => item.qaCode === option.qaCode) === index)
   }, [activeTrackingMode, assets, locationOverview?.stocks])
+  const consumableExpiryGroupsByQaCode = useMemo(
+    () =>
+      assets.reduce((accumulator, asset) => {
+        accumulator[asset.qaCode] = buildConsumableExpiryGroups(asset, assetDetailsByQaCode[asset.qaCode])
+        return accumulator
+      }, {}),
+    [assetDetailsByQaCode, assets],
+  )
 
   const createSpecEntryWithKey = (entry = {}) => {
     specEntryIdRef.current += 1
@@ -448,6 +523,36 @@ function AssetManagement({ restrictToConsumable = false }) {
     if (nextFilters.locationId) params.locationId = Number(nextFilters.locationId)
     return params
   }, [])
+
+  useEffect(() => {
+    if (!isConsumableTab || assets.length === 0) return
+    const missingQaCodes = assets
+      .map((asset) => asset.qaCode)
+      .filter((qaCode) => !Array.isArray(assetDetailsByQaCode[qaCode]?.receiptLots))
+    if (missingQaCodes.length === 0) return
+    let cancelled = false
+
+    const loadMissingAssetDetails = async () => {
+      const results = await Promise.allSettled(
+        missingQaCodes.map((qaCode) => axiosClient.get(`/api/assets/${qaCode}`)),
+      )
+      if (cancelled) return
+      setAssetDetailsByQaCode((prev) => {
+        const next = { ...prev }
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            next[missingQaCodes[index]] = result.value?.data || {}
+          }
+        })
+        return next
+      })
+    }
+
+    void loadMissingAssetDetails()
+    return () => {
+      cancelled = true
+    }
+  }, [assetDetailsByQaCode, assets, isConsumableTab])
 
   const loadAssets = async (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
     setLoading(true)
@@ -616,6 +721,11 @@ function AssetManagement({ restrictToConsumable = false }) {
     void initializePage()
   }, [loadConsumableStatusCounts, restrictToConsumable])
 
+  useEffect(() => {
+    if (!isConsumableTab || !isAdmin) return
+    void loadPendingConsumableRequests()
+  }, [isAdmin, isConsumableTab])
+
   const resetForm = () => {
     setSelectedQaCode(null)
     setSupplierKeyword('')
@@ -626,6 +736,8 @@ function AssetManagement({ restrictToConsumable = false }) {
       name: '',
       categoryId: '',
       locationId: activeTrackingMode === 'CONSUMABLE' && consumableStorageLocation?.id ? String(consumableStorageLocation.id) : '',
+      technicalStatus: 'Hoạt động tốt',
+      usageStatus: 'Tại vị trí gốc',
       supplierId: '',
       purchasePrice: '',
       purchaseDate: '',
@@ -674,6 +786,12 @@ function AssetManagement({ restrictToConsumable = false }) {
 
   const handleSwitchConsumableWorkspace = async (nextWorkspace) => {
     setConsumableWorkspace(nextWorkspace)
+    if (nextWorkspace === 'REQUESTS') {
+      if (isAdmin) {
+        await loadPendingConsumableRequests()
+      }
+      return
+    }
     if (nextWorkspace !== 'ROOMS') return
     const initialLocationId = selectedOverviewLocationId || filters.locationId || String(locations[0]?.id || '')
     if (!initialLocationId) return
@@ -794,7 +912,9 @@ function AssetManagement({ restrictToConsumable = false }) {
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
-        status: isConsumableMode(form.trackingMode) ? 'Còn hàng' : 'Sẵn sàng',
+        status: isConsumableMode(form.trackingMode) ? 'Còn hàng' : itemizedStatusOptions[0].value,
+        technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
+        usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
         specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
@@ -843,6 +963,8 @@ function AssetManagement({ restrictToConsumable = false }) {
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
         locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
+        technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
+        usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
         specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
@@ -910,6 +1032,8 @@ function AssetManagement({ restrictToConsumable = false }) {
         locationId: isConsumableMode(detail.trackingMode || asset.trackingMode)
           ? String(consumableStorageLocation?.id || detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId || '')
           : String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId),
+        technicalStatus: detail.technicalStatus || asset.technicalStatus || 'Hoạt động tốt',
+        usageStatus: detail.usageStatus || asset.usageStatus || 'Tại vị trí gốc',
         supplierId: detail.supplierId ? String(detail.supplierId) : '',
         purchasePrice: detail.purchasePrice ?? asset.purchasePrice ?? '',
         purchaseDate: detail.purchaseDate || asset.purchaseDate || '',
@@ -1431,11 +1555,35 @@ function AssetManagement({ restrictToConsumable = false }) {
                   >
                     Theo dõi theo phòng
                   </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchConsumableWorkspace('REQUESTS')}
+                      className={`inline-flex items-center gap-2 border-b-2 px-1 pb-2 text-sm font-semibold ${
+                        consumableWorkspace === 'REQUESTS'
+                          ? 'border-fptOrange text-fptOrangeDark'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <span>Phiếu chờ duyệt</span>
+                      <span
+                        className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] ${
+                          consumableWorkspace === 'REQUESTS'
+                            ? 'bg-orange-100 text-fptOrangeDark'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {pendingConsumableRequests.length}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <p className="mt-3 text-sm text-slate-500">
                   {consumableWorkspace === 'OVERVIEW'
                     ? 'Theo dõi tồn kho, các mặt hàng cần nhập và giá trị tồn của toàn kho.'
-                    : 'Theo dõi lượng vật tư đã cấp cho từng phòng và cập nhật số lượng còn lại.'}
+                    : consumableWorkspace === 'ROOMS'
+                      ? 'Theo dõi lượng vật tư đã cấp cho từng phòng và cập nhật số lượng còn lại.'
+                      : 'Admin duyệt hoặc từ chối các phiếu yêu cầu cấp phát đang chờ xử lý.'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1472,114 +1620,58 @@ function AssetManagement({ restrictToConsumable = false }) {
 
           {consumableWorkspace === 'OVERVIEW' ? (
             <>
-              <div className="grid gap-4 xl:grid-cols-3">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tổng giá trị tồn</p>
-                      <h3 className="mt-2 text-3xl font-bold text-slate-900">{formatCurrency(consumableSummary.totalInventoryValue)}</h3>
-                    </div>
-                    <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-                      <Boxes size={20} />
-                    </div>
-                  </div>
-                  <p className="text-sm text-slate-500">
-                    {consumableSummary.trackedCount} vật tư đang được theo dõi trong kho hiện tại.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Mặt hàng đang đủ dùng</p>
-                      <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.healthyCount} loại</h3>
-                    </div>
-                    <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
-                      <Package size={20} />
-                    </div>
-                  </div>
-                  <p className="text-sm text-slate-500">Các vật tư đang còn trên ngưỡng cảnh báo và đủ để phục vụ cấp phát.</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="mb-3 flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Cần nhập thêm</p>
-                      <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.restockCount} loại</h3>
-                    </div>
-                    <div className="rounded-xl bg-red-50 p-3 text-red-600">
-                      <History size={20} />
-                    </div>
-                  </div>
-                  <p className="text-sm text-slate-500">Các vật tư đã chạm hoặc thấp hơn ngưỡng cảnh báo và cần nhập thêm.</p>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Workflow cấp phát</p>
-                      <h3 className="text-lg font-semibold text-slate-800">Phiếu yêu cầu chờ duyệt</h3>
-                      <p className="text-sm text-slate-500">Admin duyệt hoặc từ chối các phiếu yêu cầu do nhân viên quản lý cấp phát tạo.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => loadPendingConsumableRequests()}
-                      disabled={pendingConsumableRequestsLoading}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-                    >
-                      <RefreshCw size={16} />
-                      Làm mới phiếu
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {pendingConsumableRequestsLoading && (
-                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                        Đang tải danh sách phiếu chờ duyệt...
-                      </div>
-                    )}
-                    {!pendingConsumableRequestsLoading && pendingConsumableRequests.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-semibold text-slate-800">{item.assetName}</p>
-                              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Chờ duyệt</span>
-                            </div>
-                            <p className="text-sm text-slate-500">
-                              Phiếu #{item.id} • {item.locationName} • {item.quantityRequested} {item.unit || ''}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              Người yêu cầu: {item.requestedByFullName || item.requestedByUsername} • {formatDateTime(item.createdAt)}
-                            </p>
-                            <p className="text-sm text-slate-700">{item.reason}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <ActionIconButton
-                              icon={Check}
-                              label="Duyệt cấp phát"
-                              variant="success"
-                              className="h-9 w-9"
-                              onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
-                            />
-                            <ActionIconButton
-                              icon={X}
-                              label="Từ chối phiếu"
-                              variant="danger"
-                              className="h-9 w-9"
-                              onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
-                            />
-                          </div>
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowConsumableOverviewSummary((prev) => !prev)}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  {showConsumableOverviewSummary ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span>Số liệu tổng quan</span>
+                </button>
+                {showConsumableOverviewSummary && (
+                  <div className="grid gap-4 border-t border-slate-200 px-4 py-4 xl:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tổng giá trị tồn</p>
+                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{formatCurrency(consumableSummary.totalInventoryValue)}</h3>
+                        </div>
+                        <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                          <Boxes size={20} />
                         </div>
                       </div>
-                    ))}
-                    {!pendingConsumableRequestsLoading && pendingConsumableRequests.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                        Hiện không có phiếu yêu cầu nào đang chờ Admin duyệt.
+                      <p className="text-sm text-slate-500">
+                        {consumableSummary.trackedCount} vật tư đang được theo dõi trong kho hiện tại.
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Mặt hàng đang đủ dùng</p>
+                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.healthyCount} loại</h3>
+                        </div>
+                        <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
+                          <Package size={20} />
+                        </div>
                       </div>
-                    )}
+                      <p className="text-sm text-slate-500">Các vật tư đang còn trên ngưỡng cảnh báo và đủ để phục vụ cấp phát.</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-start justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Cần nhập thêm</p>
+                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.restockCount} loại</h3>
+                        </div>
+                        <div className="rounded-xl bg-red-50 p-3 text-red-600">
+                          <History size={20} />
+                        </div>
+                      </div>
+                      <p className="text-sm text-slate-500">Các vật tư đã chạm hoặc thấp hơn ngưỡng cảnh báo và cần nhập thêm.</p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
@@ -1725,32 +1817,32 @@ function AssetManagement({ restrictToConsumable = false }) {
 
                   <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
                     <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="bg-slate-100/80">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-fptOrange text-white">
                         <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                            <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                          <th className="px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('name')} className="transition-colors hover:text-orange-100">
                               {getSortLabel('name', 'Tên vật tư')}
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                            <button type="button" onClick={() => handleSort('category')} className="hover:text-fptOrange">
+                          <th className="px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('category')} className="transition-colors hover:text-orange-100">
                               {getSortLabel('category', 'Loại')}
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                            <button type="button" onClick={() => handleSort('quantityOnHand')} className="hover:text-fptOrange">
-                              Tồn tổng
+                          <th className="px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('quantityOnHand')} className="transition-colors hover:text-orange-100">
+                              Tồn theo HSD
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Ngưỡng báo</th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Đơn giá</th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
-                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
-                          <th className="px-3 py-2 text-right font-semibold text-slate-600">Hành động</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white">Ngưỡng báo</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white">Đơn giá</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
+                          <th className="px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
+                          <th className="px-3 py-2 text-right font-semibold text-white">Hành động</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-200 bg-white">
                         {loading &&
                           Array.from({ length: 6 }).map((_, index) => (
                             <tr key={`skeleton-consumable-${index}`} className="animate-pulse">
@@ -1762,64 +1854,87 @@ function AssetManagement({ restrictToConsumable = false }) {
                             </tr>
                           ))}
                         {!loading &&
-                          assets.map((asset) => {
+                          assets.flatMap((asset) => {
                             const stockState = getConsumableInventoryState(asset)
-                            const expiryState = getConsumableExpiryState(asset)
-                            return (
-                              <tr key={asset.qaCode} className="hover:bg-slate-50/70">
-                                <td className="px-3 py-3">
-                                  <div className="font-medium text-slate-700">{asset.name}</div>
-                                  <div className="text-xs text-slate-500">{asset.qaCode}</div>
-                                </td>
-                                <td className="px-3 py-3">{asset.category}</td>
-                                <td className="px-3 py-3">{`${asset.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</td>
-                                <td className="px-3 py-3">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</td>
-                                <td className="px-3 py-3">{formatCurrency(asset.purchasePrice)}</td>
-                                <td className="px-3 py-3">
-                                  <div className="flex flex-col gap-1">
-                                    <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
-                                      {expiryState.label}
-                                    </span>
-                                    <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
-                                    {stockState.label}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="flex justify-end gap-2">
-                                    <ActionIconButton
-                                      icon={PackagePlus}
-                                      label="Nhập hàng"
-                                      variant="info"
-                                      onClick={() => handleOpenReceiveModal(asset)}
-                                    />
-                                    {!isConsumableManager && (
-                                      <ActionIconButton
-                                        icon={Send}
-                                        label="Cấp phát"
-                                        variant="success"
-                                        onClick={() => handleOpenIssueModal(asset)}
-                                      />
-                                    )}
-                                    <ActionIconButton
-                                      icon={Wrench}
-                                      label="Sửa vật tư"
-                                      variant="primary"
-                                      onClick={() => handleSelectAsset(asset)}
-                                    />
-                                    <ActionIconButton
-                                      icon={Trash2}
-                                      label="Xóa vật tư"
-                                      variant="danger"
-                                      onClick={() => handleDeleteAsset(asset.qaCode)}
-                                    />
-                                  </div>
-                                </td>
-                              </tr>
-                            )
+                            const expiryGroups = consumableExpiryGroupsByQaCode[asset.qaCode] || buildConsumableExpiryGroups(asset)
+                            return expiryGroups.map((group, groupIndex) => {
+                              const expiryState = getConsumableExpiryState({
+                                ...asset,
+                                expirationDate: group.expirationDate,
+                              })
+                              return (
+                                <tr key={group.key} className="hover:bg-slate-50/70">
+                                  {groupIndex === 0 && (
+                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
+                                      <div className="font-medium text-slate-700">{asset.name}</div>
+                                      <div className="text-xs text-slate-500">{asset.qaCode}</div>
+                                      {expiryGroups.length > 1 && (
+                                        <div className="mt-1 text-xs text-slate-400">{expiryGroups.length} nhóm hạn sử dụng</div>
+                                      )}
+                                    </td>
+                                  )}
+                                  {groupIndex === 0 && <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{asset.category}</td>}
+                                  <td className="px-3 py-3">
+                                    <div className="font-medium text-slate-700">{`${group.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
+                                    <div className="text-xs text-slate-500">{`Tổng mặt hàng: ${asset.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
+                                  </td>
+                                  {groupIndex === 0 && (
+                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</td>
+                                  )}
+                                  <td className="px-3 py-3">
+                                    <div className="font-medium text-slate-700">{formatCurrency(group.purchasePrice)}</div>
+                                    {group.lotCount > 1 && <div className="text-xs text-slate-500">{`Gộp ${group.lotCount} lô cùng HSD`}</div>}
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="flex flex-col gap-1">
+                                      <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
+                                        {expiryState.label}
+                                      </span>
+                                      <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
+                                    </div>
+                                  </td>
+                                  {groupIndex === 0 && (
+                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
+                                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
+                                        {stockState.label}
+                                      </span>
+                                    </td>
+                                  )}
+                                  {groupIndex === 0 && (
+                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
+                                      <div className="flex justify-end gap-2">
+                                        <ActionIconButton
+                                          icon={PackagePlus}
+                                          label="Nhập hàng"
+                                          variant="info"
+                                          onClick={() => handleOpenReceiveModal(asset)}
+                                        />
+                                        {!isConsumableManager && (
+                                          <ActionIconButton
+                                            icon={Send}
+                                            label="Cấp phát"
+                                            variant="success"
+                                            onClick={() => handleOpenIssueModal(asset)}
+                                          />
+                                        )}
+                                        <ActionIconButton
+                                          icon={Wrench}
+                                          label="Sửa vật tư"
+                                          variant="primary"
+                                          onClick={() => handleSelectAsset(asset)}
+                                        />
+                                        <ActionIconButton
+                                          icon={Trash2}
+                                          label="Xóa vật tư"
+                                          variant="danger"
+                                          onClick={() => handleDeleteAsset(asset.qaCode)}
+                                        />
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              )
+                            })
                           })}
                         {!loading && assets.length === 0 && (
                           <tr>
@@ -1861,7 +1976,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                 </div>
               </div>
             </>
-          ) : (
+          ) : consumableWorkspace === 'ROOMS' ? (
             <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
                 <div className="mb-4 border-b border-slate-200 pb-3">
@@ -2150,6 +2265,72 @@ function AssetManagement({ restrictToConsumable = false }) {
                 )}
               </div>
             </div>
+          ) : (
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Workflow cấp phát</p>
+                  <h3 className="text-lg font-semibold text-slate-800">Phiếu yêu cầu chờ duyệt</h3>
+                  <p className="text-sm text-slate-500">Admin duyệt hoặc từ chối các phiếu yêu cầu do nhân viên quản lý cấp phát tạo.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadPendingConsumableRequests()}
+                  disabled={pendingConsumableRequestsLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  <RefreshCw size={16} />
+                  Làm mới phiếu
+                </button>
+              </div>
+              <div className="space-y-3">
+                {pendingConsumableRequestsLoading && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                    Đang tải danh sách phiếu chờ duyệt...
+                  </div>
+                )}
+                {!pendingConsumableRequestsLoading && pendingConsumableRequests.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-800">{item.assetName}</p>
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Chờ duyệt</span>
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          Phiếu #{item.id} • {item.locationName} • {item.quantityRequested} {item.unit || ''}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          Người yêu cầu: {item.requestedByFullName || item.requestedByUsername} • {formatDateTime(item.createdAt)}
+                        </p>
+                        <p className="text-sm text-slate-700">{item.reason}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <ActionIconButton
+                          icon={Check}
+                          label="Duyệt cấp phát"
+                          variant="success"
+                          className="h-9 w-9"
+                          onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
+                        />
+                        <ActionIconButton
+                          icon={X}
+                          label="Từ chối phiếu"
+                          variant="danger"
+                          className="h-9 w-9"
+                          onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {!pendingConsumableRequestsLoading && pendingConsumableRequests.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                    Hiện không có phiếu yêu cầu nào đang chờ Admin duyệt.
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       ) : (
@@ -2216,8 +2397,8 @@ function AssetManagement({ restrictToConsumable = false }) {
               >
                 <option value="">Tất cả trạng thái</option>
                 {itemizedStatusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
+                  <option key={status.value} value={status.value}>
+                    {status.label}
                   </option>
                 ))}
               </select>
@@ -2294,9 +2475,10 @@ function AssetManagement({ restrictToConsumable = false }) {
                   </th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('status')} className="hover:text-fptOrange">
-                      {getSortLabel('status', 'Trạng thái')}
+                      {getSortLabel('status', 'Tình trạng kỹ thuật')}
                     </button>
                   </th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>
                   <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
@@ -2306,7 +2488,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                   {loading &&
                     Array.from({ length: 6 }).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="animate-pulse">
-                        {Array.from({ length: 8 }).map((__, cellIndex) => (
+                        {Array.from({ length: 9 }).map((__, cellIndex) => (
                           <td key={`cell-${cellIndex}`} className="px-3 py-2">
                             <div className="h-4 w-24 rounded bg-slate-200" />
                           </td>
@@ -2320,7 +2502,15 @@ function AssetManagement({ restrictToConsumable = false }) {
                         <td className="px-3 py-2">{asset.name}</td>
                         <td className="px-3 py-2">{asset.category}</td>
                         <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>
-                        <td className="px-3 py-2">{asset.status}</td>
+                        <td className="px-3 py-2">
+                          <div className="space-y-1">
+                            <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
+                            {asset.status && asset.status !== asset.technicalStatus && asset.status !== 'Hoạt động tốt' && (
+                              <p className="text-xs text-slate-500">Hiển thị: {getAssetStatusLabel(asset.status)}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>
                         <td className="px-3 py-2">
                           <ActionIconButton
                             icon={Eye}
@@ -2391,7 +2581,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                     ))}
                   {!loading && assets.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-500">
+                      <td colSpan={9} className="px-3 py-6 text-center text-sm text-slate-500">
                         Chưa có tài sản cố định phù hợp.
                       </td>
                     </tr>
@@ -2522,6 +2712,49 @@ function AssetManagement({ restrictToConsumable = false }) {
                   </p>
                 )}
               </div>
+              {!isConsumableForm && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Tình trạng kỹ thuật</label>
+                    <select
+                      value={form.technicalStatus}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, technicalStatus: e.target.value }))
+                        setFormErrors((prev) => ({ ...prev, technicalStatus: '' }))
+                      }}
+                      className={getFieldClass(Boolean(formErrors.technicalStatus))}
+                    >
+                      {technicalStatusOptions.map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.technicalStatus && <p className="mt-1 text-xs text-red-600">{formErrors.technicalStatus}</p>}
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái sử dụng</label>
+                    <select
+                      value={form.usageStatus}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, usageStatus: e.target.value }))
+                        setFormErrors((prev) => ({ ...prev, usageStatus: '' }))
+                      }}
+                      className={getFieldClass(Boolean(formErrors.usageStatus))}
+                    >
+                      {usageStatusOptions.map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {status.label}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.usageStatus && <p className="mt-1 text-xs text-red-600">{formErrors.usageStatus}</p>}
+                    <p className="mt-1 text-xs text-slate-500">
+                      `Tình trạng kỹ thuật` và `Trạng thái sử dụng` được lưu riêng để tránh chồng nghĩa giữa hỏng và đang sửa chữa.
+                    </p>
+                  </div>
+                </>
+              )}
               {isConsumableForm && (
                 <>
                   <div>
@@ -3582,6 +3815,13 @@ function AssetManagement({ restrictToConsumable = false }) {
             </div>
             <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <p><span className="font-semibold">Kiểu theo dõi:</span> {getTrackingModeLabel(selectedOriginAsset.trackingMode)}</p>
+              {!isConsumableMode(selectedOriginAsset.trackingMode) && (
+                <>
+                  <p><span className="font-semibold">Tình trạng kỹ thuật:</span> {getTechnicalStatusLabel(selectedOriginAsset.technicalStatus || selectedOriginAsset.status)}</p>
+                  <p><span className="font-semibold">Trạng thái sử dụng:</span> {getUsageStatusLabel(selectedOriginAsset.usageStatus)}</p>
+                  <p><span className="font-semibold">Trạng thái hiển thị:</span> {getAssetStatusLabel(selectedOriginAsset.status)}</p>
+                </>
+              )}
               <p><span className="font-semibold">Ngày mua:</span> {formatDate(selectedOriginAsset.purchaseDate)}</p>
               <p><span className="font-semibold">Giá mua:</span> {formatCurrency(selectedOriginAsset.purchasePrice)}</p>
               {isConsumableMode(selectedOriginAsset.trackingMode) && (

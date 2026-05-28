@@ -60,6 +60,12 @@ export function validateAssetForm(form) {
     if (!isPositiveNumber(form?.locationId)) {
       errors.locationId = 'Vui lòng chọn phòng gốc hợp lệ.'
     }
+    if (!String(form?.technicalStatus || '').trim()) {
+      errors.technicalStatus = 'Vui lòng chọn tình trạng kỹ thuật.'
+    }
+    if (!String(form?.usageStatus || '').trim()) {
+      errors.usageStatus = 'Vui lòng chọn trạng thái sử dụng.'
+    }
     if (!isPositiveNumber(form?.supplierId)) {
       errors.supplierId = 'Vui lòng chọn nhà cung cấp từ danh sách.'
     }

@@ -31,10 +31,22 @@ public class AssetUpdateRequest {
     private Integer locationId;
 
     @Pattern(
-            regexp = "^(Sẵn sàng|Đang sử dụng|Hỏng|Bảo trì|Thất lạc)$",
+            regexp = "^(Sẵn sàng|Hoạt động tốt|Đang sử dụng|Đang cho mượn|Hỏng|Bảo trì|Đang sửa chữa|Thất lạc)$",
             message = "Trạng thái thiết bị không hợp lệ."
     )
     private String status;
+
+    @Pattern(
+            regexp = "^(Sẵn sàng|Hoạt động tốt|Hỏng|Bảo trì|Đang sửa chữa|Thất lạc)$",
+            message = "Tình trạng kỹ thuật không hợp lệ."
+    )
+    private String technicalStatus;
+
+    @Pattern(
+            regexp = "^(Tại vị trí gốc|Đang cho mượn)$",
+            message = "Trạng thái sử dụng không hợp lệ."
+    )
+    private String usageStatus;
 
     @Size(max = 5000, message = "Thông tin đặc tính kỹ thuật không được vượt quá 5000 ký tự.")
     private String specs;

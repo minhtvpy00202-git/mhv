@@ -31,6 +31,15 @@ public class TicketResponse {
     @Schema(description = "ID loại kỹ thuật viên phụ trách", example = "3")
     private Integer assetCategoryTechTypeId;
 
+    @Schema(description = "Tình trạng kỹ thuật của thiết bị", example = "Hỏng", nullable = true)
+    private String assetTechnicalStatus;
+
+    @Schema(description = "Trạng thái sử dụng của thiết bị", example = "Đang cho mượn", nullable = true)
+    private String assetUsageStatus;
+
+    @Schema(description = "Trạng thái hiển thị tổng hợp của thiết bị", example = "Đang sửa chữa", nullable = true)
+    private String assetDisplayStatus;
+
     @Schema(description = "ID người báo hỏng", example = "12")
     private Integer reporterId;
 
@@ -70,6 +79,12 @@ public class TicketResponse {
     @Schema(description = "Hạn xử lý ticket theo UTC", example = "2026-05-16T08:30:00", nullable = true)
     private LocalDateTime dueDate;
 
+    @Schema(description = "Thời điểm ticket được tiếp nhận chính thức", example = "2026-05-15T08:45:00", nullable = true)
+    private LocalDateTime acceptedAt;
+
     @Schema(description = "Thời điểm hoàn tất ticket theo UTC", example = "2026-05-15T10:05:00", nullable = true)
     private LocalDateTime resolvedAt;
+
+    @Schema(description = "Điểm hài lòng người dùng từ 1 đến 5", example = "4", nullable = true)
+    private Integer satisfactionScore;
 }

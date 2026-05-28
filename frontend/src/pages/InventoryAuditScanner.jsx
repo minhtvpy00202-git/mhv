@@ -297,6 +297,7 @@ function InventoryAuditScanner() {
                         <p>Đã quét: {audit.scannedCount || 0}</p>
                         <p>Người tạo: {audit.createdByUsername || '-'}</p>
                         <p>Bắt đầu: {formatVietnamDateTime(audit.startedAt, '')}</p>
+                        <p className="col-span-2">Hạn hoàn tất: {formatVietnamDateTime(audit.dueDate, 'Chưa đặt hạn')}</p>
                       </div>
                     </button>
                   )

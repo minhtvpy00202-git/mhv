@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import { getAssetStatusLabel, getAssetStatusMeta } from '../utils/assetStatus'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { resolveBackendMediaUrl } from '../utils/mediaUrl'
 
@@ -96,7 +97,7 @@ function Home() {
   }, [maintenanceHistory, maintenancePage])
 
   const openMaintenanceCount = useMemo(
-    () => maintenanceHistory.filter((item) => item.assetStatus && item.assetStatus !== 'Sẵn sàng').length,
+    () => maintenanceHistory.filter((item) => getAssetStatusMeta(item.assetStatus).value && getAssetStatusMeta(item.assetStatus).value !== 'Sẵn sàng').length,
     [maintenanceHistory],
   )
 
@@ -181,7 +182,7 @@ function Home() {
                   <p className="mt-0.5 text-xs text-slate-500">{item.assetQaCode}</p>
                 </div>
                 <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
-                  {item.assetStatus || 'Đang theo dõi'}
+                  {getAssetStatusLabel(item.assetStatus, 'Đang theo dõi')}
                 </span>
               </div>
               <div className="mt-3 grid gap-2 text-sm text-slate-600">

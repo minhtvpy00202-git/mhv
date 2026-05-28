@@ -11,6 +11,7 @@ import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -128,8 +129,35 @@ public class MaintenanceService {
                 .description(ticket.getDescription())
                 .imageUrl(ticketImageStorageService.toPublicImageUrl(ticket.getImageUrl()))
                 .reportTime(ticket.getCreatedAt())
-                .assetStatus(asset.getStatus())
+                .assetStatus(AssetStatusSupport.deriveDisplayStatus(
+                        resolveTechnicalStatus(asset),
+                        resolveUsageStatus(asset),
+                        AssetStatusSupport.isRepairInProgress(asset.getStatus())
+                ))
+                .technicalStatus(resolveTechnicalStatus(asset))
+                .usageStatus(resolveUsageStatus(asset))
                 .build();
+    }
+
+    private String resolveTechnicalStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        }
+        return AssetStatusSupport.resolveTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
+    }
+
+    private String resolveUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return AssetStatusSupport.resolveUsageStatus(
+                asset.getUsageStatus(),
+                asset.getStatus(),
+                locationId,
+                homeLocationId
+        );
     }
 
 }

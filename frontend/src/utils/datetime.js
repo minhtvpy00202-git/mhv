@@ -66,3 +66,17 @@ export function formatVietnamDate(value, fallback = '-') {
   })
 }
 
+export function toDateTimeLocalValue(value) {
+  const parsed = parseServerDateTime(value)
+  if (!parsed) return ''
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+export function getFutureDateTimeLocalValue(hoursAhead = 24) {
+  return toDateTimeLocalValue(new Date(Date.now() + Math.max(1, hoursAhead) * 60 * 60 * 1000))
+}

@@ -37,6 +37,17 @@ function formatMinutes(minutes) {
   return remainMinutes > 0 ? `${hours}g ${remainMinutes}p` : `${hours}g`
 }
 
+function formatPercentage(value) {
+  const safeValue = Number(value) || 0
+  return `${safeValue.toFixed(1)}%`
+}
+
+function formatSatisfaction(score) {
+  const safeScore = Number(score) || 0
+  if (safeScore <= 0) return '-'
+  return `${safeScore.toFixed(1)}/5`
+}
+
 function getWorkspaceTickets(pendingRows, myRows) {
   const byId = new Map()
   ;[...(pendingRows || []), ...(myRows || [])].forEach((ticket) => {
@@ -113,28 +124,46 @@ function MobileTechSupportTickets() {
 
   const summaryCards = [
     {
-      label: 'Ticket mới phù hợp',
-      value: kpis?.newTicketCount ?? 0,
+      label: 'Tiếp nhận nhanh',
+      value: formatPercentage(kpis?.fastResponseRate ?? 0),
       icon: AlertCircle,
-      className: 'border-amber-200 bg-amber-50 text-amber-800',
+      className: 'border-cyan-200 bg-cyan-50 text-cyan-800',
     },
     {
-      label: 'Đang xử lý',
-      value: tickets.filter((item) => Number(item.assigneeId) === Number(user?.userId) && item.status === 'IN_PROGRESS').length,
+      label: 'Đúng hạn',
+      value: formatPercentage(kpis?.onTimeResolutionRate ?? 0),
       icon: Clock3,
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    },
+    {
+      label: 'Xử lý TB',
+      value: formatMinutes(kpis?.averageResolutionMinutes ?? 0),
+      icon: AlertCircle,
       className: 'border-blue-200 bg-blue-50 text-blue-800',
     },
     {
-      label: 'Quá hạn SLA',
-      value: kpis?.overdueTicketCount ?? 0,
-      icon: AlertCircle,
+      label: 'Tái lỗi',
+      value: formatPercentage(kpis?.repeatIncidentRate ?? 0),
+      icon: MessageCircle,
       className: 'border-rose-200 bg-rose-50 text-rose-800',
     },
     {
-      label: 'Phản hồi TB',
-      value: formatMinutes(kpis?.averageFirstResponseMinutes ?? 0),
-      icon: MessageCircle,
+      label: 'Lần đầu',
+      value: formatPercentage(kpis?.firstTimeFixRate ?? 0),
+      icon: CheckCircle2,
       className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    },
+    {
+      label: 'Hài lòng',
+      value: formatSatisfaction(kpis?.averageSatisfactionScore ?? 0),
+      icon: MessageCircle,
+      className: 'border-violet-200 bg-violet-50 text-violet-800',
+    },
+    {
+      label: 'Xếp loại',
+      value: kpis?.performanceGrade || '-',
+      icon: Clock3,
+      className: 'border-amber-200 bg-amber-50 text-amber-800',
     },
   ]
 

@@ -7,6 +7,7 @@ import com.poly.mhv.dto.dashboard.SmartSuggestionResponse;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -47,14 +48,25 @@ public class DashboardService {
         }
         DashboardSummaryResponse response = DashboardSummaryResponse.builder()
                 .totalAssets(assetRepository.countAllAssets())
-                .inUseAssets(assetRepository.countByStatusValue("Đang sử dụng"))
-                .brokenAssets(assetRepository.countByStatusValue("Hỏng"))
-                .maintenanceAssets(assetRepository.countByStatusValue("Bảo trì"))
-                .availableAssets(assetRepository.countByStatusValue("Sẵn sàng"))
+                .inUseAssets(assetRepository.countBorrowedAssets(
+                        AssetStatusSupport.TECHNICAL_STATUS_GOOD,
+                        AssetStatusSupport.USAGE_STATUS_BORROWED
+                ))
+                .brokenAssets(assetRepository.countBrokenAssets(AssetStatusSupport.TECHNICAL_STATUS_BROKEN))
+                .maintenanceAssets(assetRepository.countRepairingAssets(AssetStatusSupport.TECHNICAL_STATUS_BROKEN))
+                .availableAssets(assetRepository.countAvailableAssets(
+                        AssetStatusSupport.TECHNICAL_STATUS_GOOD,
+                        AssetStatusSupport.USAGE_STATUS_HOME
+                ))
                 .build();
         cachedSummary = response;
         cachedSummaryExpiresAt = now + DASHBOARD_CACHE_TTL_MS;
         return response;
+    }
+
+    public void invalidateSummaryCache() {
+        cachedSummary = null;
+        cachedSummaryExpiresAt = 0L;
     }
 
     @Transactional(readOnly = true)

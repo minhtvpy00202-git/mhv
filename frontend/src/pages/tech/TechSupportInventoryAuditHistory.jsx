@@ -116,6 +116,10 @@ function TechSupportInventoryAuditHistory() {
                   <p className="mt-1 text-sm text-slate-700">{formatVietnamDateTime(audit.completedAt, '')}</p>
                 </div>
                 <div className="rounded-xl bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Hạn hoàn tất</p>
+                  <p className="mt-1 text-sm text-slate-700">{formatVietnamDateTime(audit.dueDate, 'Chưa đặt hạn')}</p>
+                </div>
+                <div className="rounded-xl bg-white px-3 py-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Dự kiến</p>
                   <p className="mt-1 text-sm font-semibold text-slate-800">{audit.expectedCount ?? 0}</p>
                 </div>

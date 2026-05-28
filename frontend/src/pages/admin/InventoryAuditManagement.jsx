@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
-import { formatVietnamDateTime } from '../../utils/datetime'
+import { formatVietnamDateTime, getFutureDateTimeLocalValue } from '../../utils/datetime'
 
 const PAGE_SIZE = 10
 const defaultPageInfo = {
@@ -15,7 +15,7 @@ function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
   const [audits, setAudits] = useState([])
   const [selectedAudit, setSelectedAudit] = useState(null)
-  const [form, setForm] = useState({ locationId: '', notes: '' })
+  const [form, setForm] = useState({ locationId: '', dueDate: getFutureDateTimeLocalValue(24), notes: '' })
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
@@ -65,14 +65,19 @@ function InventoryAuditManagement() {
       toast.error('Vui lòng chọn phòng kiểm kê.')
       return
     }
+    if (!form.dueDate) {
+      toast.error('Vui lòng nhập hạn hoàn tất kiểm kê.')
+      return
+    }
     setCreating(true)
     try {
       const response = await axiosClient.post('/api/inventory-audits', {
         locationId: Number(form.locationId),
+        dueDate: form.dueDate,
         notes: form.notes,
       })
       toast.success('Tạo phiên kiểm kê thành công.')
-      setForm({ locationId: '', notes: '' })
+      setForm({ locationId: '', dueDate: getFutureDateTimeLocalValue(24), notes: '' })
       await loadInitialData(0)
       await loadAuditDetail(response.data.id)
     } catch (error) {
@@ -145,7 +150,7 @@ function InventoryAuditManagement() {
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Tạo phiên kiểm kê định kỳ</h2>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-3">
           <select
             value={form.locationId}
             onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
@@ -158,6 +163,12 @@ function InventoryAuditManagement() {
               </option>
             ))}
           </select>
+          <input
+            type="datetime-local"
+            value={form.dueDate}
+            onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+          />
           <input
             value={form.notes}
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
@@ -188,6 +199,7 @@ function InventoryAuditManagement() {
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Bắt đầu</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn hoàn tất</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Kết thúc</th>
                 <th className="px-3 py-2 text-right font-semibold text-slate-600">Chi tiết</th>
               </tr>
@@ -196,7 +208,7 @@ function InventoryAuditManagement() {
               {loading &&
                 Array.from({ length: 6 }).map((_, index) => (
                   <tr key={`audit-loading-${index}`} className="animate-pulse">
-                    <td className="px-3 py-2" colSpan={6}>
+                    <td className="px-3 py-2" colSpan={7}>
                       <div className="h-4 w-full rounded bg-slate-200" />
                     </td>
                   </tr>
@@ -208,6 +220,7 @@ function InventoryAuditManagement() {
                     <td className="px-3 py-2">{audit.locationName}</td>
                     <td className="px-3 py-2">{audit.status}</td>
                     <td className="px-3 py-2">{formatVietnamDateTime(audit.startedAt, '')}</td>
+                    <td className="px-3 py-2">{formatVietnamDateTime(audit.dueDate, '')}</td>
                     <td className="px-3 py-2">{formatVietnamDateTime(audit.completedAt, '')}</td>
                     <td className="px-3 py-2 text-right">
                       <button
@@ -294,6 +307,9 @@ function InventoryAuditManagement() {
           <p className="mb-2 text-sm text-slate-600">
             Dự kiến: {selectedAudit.summary.expectedCount || 0} | Đã quét: {selectedAudit.summary.scannedCount || 0} | Thất lạc:{' '}
             {selectedAudit.summary.missingCount || 0}
+          </p>
+          <p className="mb-4 text-sm text-slate-600">
+            Bắt đầu: {formatVietnamDateTime(selectedAudit.summary.startedAt, '')} | Hạn hoàn tất: {formatVietnamDateTime(selectedAudit.summary.dueDate, 'Chưa đặt hạn')}
           </p>
           <div className="grid gap-4 md:grid-cols-2">
             <div>

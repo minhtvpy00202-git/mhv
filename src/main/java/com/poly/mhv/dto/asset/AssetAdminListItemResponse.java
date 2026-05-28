@@ -18,6 +18,8 @@ public class AssetAdminListItemResponse {
     private Integer categoryId;
     private String categoryName;
     private String status;
+    private String technicalStatus;
+    private String usageStatus;
     private Integer locationId;
     private String locationName;
     private Integer homeLocationId;

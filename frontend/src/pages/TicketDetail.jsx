@@ -1,4 +1,4 @@
-import { Copy, MessageCircle, Phone } from 'lucide-react'
+import { Copy, MessageCircle, Phone, Star } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -8,12 +8,21 @@ import { useAuth } from '../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../utils/contact'
 import { formatVietnamDateTime } from '../utils/datetime'
 import { isTechSupportMobilePath } from '../utils/navigation'
+import { getAssetStatusMeta, getTechnicalStatusMeta, getUsageStatusMeta } from '../utils/assetStatus'
 import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 function toVietnameseRole(role) {
   if (role === 'Admin') return 'Quản trị viên'
   if (role === 'TechSupport') return 'Kỹ thuật viên hỗ trợ'
   return 'Nhân viên'
+}
+
+function getAssetBadgeClassName(tone) {
+  if (tone === 'emerald') return 'bg-emerald-100 text-emerald-800'
+  if (tone === 'blue') return 'bg-blue-100 text-blue-800'
+  if (tone === 'red') return 'bg-red-100 text-red-800'
+  if (tone === 'amber') return 'bg-amber-100 text-amber-800'
+  return 'bg-slate-100 text-slate-700'
 }
 
 function TicketDetail() {
@@ -23,6 +32,7 @@ function TicketDetail() {
   const { user } = useAuth()
   const [ticket, setTicket] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [savingSatisfaction, setSavingSatisfaction] = useState(false)
   const [showChat, setShowChat] = useState(true)
   const [timeline, setTimeline] = useState([])
 
@@ -70,6 +80,9 @@ function TicketDetail() {
   }, [ticketId])
 
   const statusMeta = useMemo(() => getTicketStatusMeta(ticket?.status), [ticket?.status])
+  const assetDisplayStatusMeta = useMemo(() => getAssetStatusMeta(ticket?.assetDisplayStatus), [ticket?.assetDisplayStatus])
+  const assetTechnicalStatusMeta = useMemo(() => getTechnicalStatusMeta(ticket?.assetTechnicalStatus), [ticket?.assetTechnicalStatus])
+  const assetUsageStatusMeta = useMemo(() => getUsageStatusMeta(ticket?.assetUsageStatus), [ticket?.assetUsageStatus])
   const isTechMobileRoute = isTechSupportMobilePath(location.pathname)
   const isTechRoute = location.pathname.startsWith('/tech/')
   const isTechSupportRoute = isTechRoute || isTechMobileRoute
@@ -83,10 +96,30 @@ function TicketDetail() {
       : '/mobile/home'
   const isMobileRoute = isStandardMobileRoute || isTechMobileRoute
   const canOpenChat = !isTechSupportRoute || Number(ticket?.assigneeId) === Number(user?.userId)
+  const canRateSatisfaction = ticket?.status === 'RESOLVED'
+    && (Number(ticket?.reporterId) === Number(user?.userId) || user?.role === 'Admin')
+    && !isTechSupportRoute
   const reporterPhone = normalizePhone(ticket?.reporterPhone)
   const reporterZaloUrl = getZaloUrl(ticket?.reporterPhone)
   const assigneePhone = normalizePhone(ticket?.assigneePhone)
   const assigneeZaloUrl = getZaloUrl(ticket?.assigneePhone)
+
+  const handleRateSatisfaction = async (score) => {
+    if (!ticket?.id || savingSatisfaction) return
+    setSavingSatisfaction(true)
+    try {
+      const response = await axiosClient.put(`/api/tickets/${ticket.id}/satisfaction`, {
+        satisfactionScore: score,
+      })
+      setTicket(response.data || null)
+      toast.success('Đã lưu điểm hài lòng.')
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không lưu được điểm hài lòng.'
+      toast.error(message)
+    } finally {
+      setSavingSatisfaction(false)
+    }
+  }
 
   return (
     <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
@@ -127,7 +160,32 @@ function TicketDetail() {
               <div className="mt-2 space-y-2 text-sm text-slate-700">
                 <p><span className="font-semibold">Mức ưu tiên:</span> {ticket.priority}</p>
                 <p><span className="font-semibold">Tạo lúc:</span> {formatVietnamDateTime(ticket.createdAt)}</p>
+                <p><span className="font-semibold">Tiếp nhận lúc:</span> {formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận')}</p>
                 <p><span className="font-semibold">Hạn SLA:</span> {formatVietnamDateTime(ticket.dueDate)}</p>
+                <p><span className="font-semibold">Hoàn tất lúc:</span> {formatVietnamDateTime(ticket.resolvedAt, 'Chưa hoàn tất')}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trạng thái thiết bị</p>
+              <div className="mt-2 grid gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                  <span className="font-semibold">Tình trạng kỹ thuật:</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetTechnicalStatusMeta.tone)}`}>
+                    {assetTechnicalStatusMeta.label}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                  <span className="font-semibold">Trạng thái sử dụng:</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetUsageStatusMeta.tone)}`}>
+                    {assetUsageStatusMeta.label}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                  <span className="font-semibold">Trạng thái hiển thị:</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetDisplayStatusMeta.tone)}`}>
+                    {assetDisplayStatusMeta.label}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="rounded-2xl bg-slate-50 p-3">
@@ -137,6 +195,35 @@ function TicketDetail() {
                 <p><span className="font-semibold">SĐT người báo:</span> {ticket.reporterPhone || 'Chưa có số'}</p>
                 <p><span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}</p>
                 <p><span className="font-semibold">SĐT kỹ thuật viên:</span> {ticket.assigneePhone || 'Chưa có số'}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hài lòng người dùng</p>
+              <div className="mt-2 space-y-2 text-sm text-slate-700">
+                <p><span className="font-semibold">Điểm hiện tại:</span> {ticket.satisfactionScore ? `${ticket.satisfactionScore}/5` : 'Chưa có đánh giá'}</p>
+                {canRateSatisfaction && (
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 3, 4, 5].map((score) => {
+                      const active = Number(ticket.satisfactionScore || 0) >= score
+                      return (
+                        <button
+                          key={score}
+                          type="button"
+                          disabled={savingSatisfaction}
+                          onClick={() => handleRateSatisfaction(score)}
+                          className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                            active
+                              ? 'border-amber-300 bg-amber-50 text-amber-700'
+                              : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <Star size={14} className={active ? 'fill-current' : ''} />
+                          {score}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
             <div className="rounded-2xl bg-slate-50 p-3 md:col-span-2">

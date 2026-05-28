@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import { getTechnicalStatusLabel } from '../../utils/assetStatus'
 import { formatVietnamDateTime } from '../../utils/datetime'
 const PAGE_SIZE = 10
 const defaultPageInfo = {
@@ -174,8 +175,15 @@ function UsageHistoryManagement() {
   }
 
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <h2 className="mb-4 text-lg font-semibold text-slate-800">Lịch sử mượn thiết bị</h2>
+    <div className="space-y-4">
+      <section className="rounded-xl bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-800">Lịch sử mượn thiết bị</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Bảng dưới hiển thị ngắn gọn các lần mượn/trả theo đúng thông tin nghiệp vụ cần theo dõi.
+        </p>
+      </section>
+
+      <section className="rounded-xl bg-white p-4 shadow-sm">
       <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <input
           value={filters.assetName}
@@ -301,12 +309,7 @@ function UsageHistoryManagement() {
               </th>
               <th className="px-3 py-2 text-left font-semibold text-slate-600">
                 <button type="button" onClick={() => handleSort('homeLocationName')} className="hover:text-fptOrange">
-                  {getSortLabel('homeLocationName', 'Phòng gốc')}
-                </button>
-              </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('startTime')} className="hover:text-fptOrange">
-                  {getSortLabel('startTime', 'Ngày mượn')}
+                  {getSortLabel('homeLocationName', 'Vị trí gốc')}
                 </button>
               </th>
               <th className="px-3 py-2 text-left font-semibold text-slate-600">
@@ -315,22 +318,28 @@ function UsageHistoryManagement() {
                 </button>
               </th>
               <th className="px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('startTime')} className="hover:text-fptOrange">
+                  {getSortLabel('startTime', 'Ngày mượn')}
+                </button>
+              </th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-600">
                 <button type="button" onClick={() => handleSort('endTime')} className="hover:text-fptOrange">
                   {getSortLabel('endTime', 'Ngày trả')}
                 </button>
               </th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-600">Tình trạng kỹ thuật</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('username')} className="hover:text-fptOrange">
-                  {getSortLabel('username', 'Người mượn')}
+                <button type="button" onClick={() => handleSort('borrowerFullName')} className="hover:text-fptOrange">
+                  {getSortLabel('borrowerFullName', 'Người mượn')}
                 </button>
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading &&
-              Array.from({ length: 8 }).map((_, index) => (
+              Array.from({ length: 9 }).map((_, index) => (
                 <tr key={`history-loading-${index}`} className="animate-pulse">
-                  <td className="px-3 py-2" colSpan={8}>
+                  <td className="px-3 py-2" colSpan={9}>
                     <div className="h-4 w-full rounded bg-slate-200" />
                   </td>
                 </tr>
@@ -342,10 +351,11 @@ function UsageHistoryManagement() {
                   <td className="px-3 py-2">{history.assetQaCode}</td>
                   <td className="px-3 py-2">{history.assetName}</td>
                   <td className="px-3 py-2">{history.homeLocationName}</td>
-                  <td className="px-3 py-2">{formatVietnamDateTime(history.startTime, '')}</td>
                   <td className="px-3 py-2">{history.borrowedLocationName}</td>
+                  <td className="px-3 py-2">{formatVietnamDateTime(history.startTime, '')}</td>
                   <td className="px-3 py-2">{history.endTime ? formatVietnamDateTime(history.endTime, '') : ''}</td>
-                  <td className="px-3 py-2">{history.username}</td>
+                  <td className="px-3 py-2">{getTechnicalStatusLabel(history.assetTechnicalStatus)}</td>
+                  <td className="px-3 py-2">{history.borrowerFullName}</td>
                 </tr>
               ))}
           </tbody>
@@ -376,6 +386,7 @@ function UsageHistoryManagement() {
           )}
         </div>
       )}
+      </section>
     </div>
   )
 }

@@ -66,8 +66,14 @@ public class Ticket {
     @Column(name = "due_date")
     private LocalDateTime dueDate;
 
+    @Column(name = "accepted_at")
+    private LocalDateTime acceptedAt;
+
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
+
+    @Column(name = "satisfaction_score")
+    private Integer satisfactionScore;
 
     @JsonIgnore
     @OneToMany(mappedBy = "ticket")

@@ -36,6 +36,10 @@ public class AssetCreateRequest {
 
     private String status;
 
+    private String technicalStatus;
+
+    private String usageStatus;
+
     @Size(max = 5000, message = "Thông tin đặc tính kỹ thuật không được vượt quá 5000 ký tự.")
     private String specs;
 

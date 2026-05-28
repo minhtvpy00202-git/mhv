@@ -15,6 +15,7 @@ import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -83,7 +84,12 @@ public class UsageHistoryService {
         );
         UsageHistory saved = usageHistoryRepository.findByAssetQaCodeAndEndTimeIsNull(asset.getQaCode())
                 .orElseThrow(() -> new CustomException("Không tạo được phiên mượn thiết bị."));
-        asset.setStatus("Đang sử dụng");
+        asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_BORROWED);
+        asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                resolveTechnicalStatus(asset),
+                asset.getUsageStatus(),
+                false
+        ));
         asset.setLocation(toLocation);
         assetRepository.save(asset);
         String actorDisplayName = getActorDisplayName(user);
@@ -126,7 +132,12 @@ public class UsageHistoryService {
         }
 
         usageHistory.setEndTime(LocalDateTime.now());
-        asset.setStatus("Sẵn sàng");
+        asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_HOME);
+        asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                resolveTechnicalStatus(asset),
+                asset.getUsageStatus(),
+                false
+        ));
         asset.setLocation(asset.getHomeLocation());
 
         assetRepository.save(asset);
@@ -220,46 +231,84 @@ public class UsageHistoryService {
         if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
             throw new CustomException("Vật tư tiêu hao không hỗ trợ mượn/trả.");
         }
-        if ("Sẵn sàng".equals(asset.getStatus())) {
+        String technicalStatus = resolveTechnicalStatus(asset);
+        String usageStatus = resolveUsageStatus(asset);
+        if (AssetStatusSupport.TECHNICAL_STATUS_GOOD.equals(technicalStatus)
+                && AssetStatusSupport.USAGE_STATUS_HOME.equals(usageStatus)) {
             return;
         }
-        if ("Hỏng".equals(asset.getStatus())) {
+        if (AssetStatusSupport.TECHNICAL_STATUS_BROKEN.equals(technicalStatus)
+                && AssetStatusSupport.isRepairInProgress(asset.getStatus())) {
+            throw new CustomException("Thiết bị đang Đang sửa chữa, không thể mượn.");
+        }
+        if (AssetStatusSupport.TECHNICAL_STATUS_BROKEN.equals(technicalStatus)) {
             throw new CustomException("Thiết bị đang ở trạng thái Hỏng, không thể mượn.");
         }
-        if ("Bảo trì".equals(asset.getStatus())) {
-            throw new CustomException("Thiết bị đang Bảo trì, không thể mượn.");
-        }
-        if ("Đang sử dụng".equals(asset.getStatus())) {
-            throw new CustomException("Thiết bị đang Đang sử dụng, không thể mượn.");
-        }
-        if ("Thất lạc".equals(asset.getStatus())) {
+        if (AssetStatusSupport.TECHNICAL_STATUS_LOST.equals(technicalStatus)) {
             throw new CustomException("Thiết bị đang ở trạng thái Thất lạc, không thể mượn.");
         }
-        throw new CustomException("Thiết bị không ở trạng thái Sẵn sàng.");
+        if (AssetStatusSupport.USAGE_STATUS_BORROWED.equals(usageStatus)) {
+            throw new CustomException("Thiết bị đang Đang cho mượn, không thể mượn.");
+        }
+        throw new CustomException("Thiết bị không ở trạng thái Hoạt động tốt.");
+    }
+
+    private String resolveTechnicalStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        }
+        return AssetStatusSupport.resolveTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
+    }
+
+    private String resolveUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return AssetStatusSupport.resolveUsageStatus(
+                asset.getUsageStatus(),
+                asset.getStatus(),
+                locationId,
+                homeLocationId
+        );
     }
 
     private UsageHistoryResponse mapToResponse(UsageHistory usageHistory) {
+        Asset asset = usageHistory.getAsset();
+        String technicalStatus = resolveTechnicalStatus(asset);
+        String usageStatus = resolveUsageStatus(asset);
         return UsageHistoryResponse.builder()
                 .id(usageHistory.getId())
                 .assetQaCode(usageHistory.getAsset().getQaCode())
                 .userId(usageHistory.getUser().getId())
                 .fromLocationId(usageHistory.getFromLocation().getId())
                 .toLocationId(usageHistory.getToLocation().getId())
+                .assetTechnicalStatus(technicalStatus)
+                .assetUsageStatus(usageStatus)
+                .assetDisplayStatus(AssetStatusSupport.deriveDisplayStatus(
+                        technicalStatus,
+                        usageStatus,
+                        AssetStatusSupport.isRepairInProgress(asset.getStatus())
+                ))
                 .startTime(usageHistory.getStartTime())
                 .endTime(usageHistory.getEndTime())
                 .build();
     }
 
     private UsageHistoryAdminResponse mapToAdminResponse(UsageHistory usageHistory) {
+        Asset asset = usageHistory.getAsset();
+        String technicalStatus = resolveTechnicalStatus(asset);
         return UsageHistoryAdminResponse.builder()
                 .id(usageHistory.getId())
-                .assetQaCode(usageHistory.getAsset().getQaCode())
-                .assetName(usageHistory.getAsset().getName())
-                .homeLocationName(usageHistory.getAsset().getHomeLocation().getRoomName())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .homeLocationName(asset.getHomeLocation().getRoomName())
+                .assetTechnicalStatus(technicalStatus)
                 .startTime(usageHistory.getStartTime())
                 .borrowedLocationName(usageHistory.getToLocation().getRoomName())
                 .endTime(usageHistory.getEndTime())
-                .username(usageHistory.getUser().getUsername())
+                .borrowerFullName(getFullNameOrUsername(usageHistory.getUser()))
                 .build();
     }
 
@@ -272,7 +321,7 @@ public class UsageHistoryService {
             case "homeLocationName" -> Sort.by(direction, "asset.homeLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
             case "borrowedLocationName" -> Sort.by(direction, "toLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
             case "endTime" -> Sort.by(direction, "endTime").and(Sort.by(Sort.Direction.DESC, "id"));
-            case "username" -> Sort.by(direction, "user.username").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "borrowerFullName", "username" -> Sort.by(direction, "user.fullName").and(Sort.by(Sort.Direction.DESC, "id"));
             default -> Sort.by(direction, "startTime").and(Sort.by(Sort.Direction.DESC, "id"));
         };
     }

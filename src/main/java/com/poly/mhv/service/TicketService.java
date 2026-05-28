@@ -5,6 +5,7 @@ import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.notification.RealtimeNotificationResponse;
 import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
+import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.Ticket;
@@ -12,6 +13,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +41,8 @@ public class TicketService {
     private final CurrentUserProvider currentUserProvider;
     private final TicketEventService ticketEventService;
     private final TicketImageStorageService ticketImageStorageService;
+    private final DashboardService dashboardService;
+    private final HelpdeskKpiService helpdeskKpiService;
 
     @Transactional
     public TicketResponse createTicket(TicketCreateRequest request) {
@@ -86,12 +90,16 @@ public class TicketService {
                 .status("PENDING")
                 .createdAt(createdAt)
                 .dueDate(calculateDueDate(priority, createdAt))
+                .acceptedAt(null)
                 .resolvedAt(null)
+                .satisfactionScore(null)
                 .build();
 
-        asset.setStatus("Hỏng");
+        markAssetBroken(asset, false);
         assetRepository.save(asset);
         Ticket saved = ticketRepository.save(ticket);
+        dashboardService.invalidateSummaryCache();
+        helpdeskKpiService.invalidateCaches();
         List<AppUser> eligibleTechSupports = getEligibleTechSupportsByAsset(asset);
         String reporterDisplayName = getActorDisplayName(reporter);
         notificationService.createNotification(
@@ -169,9 +177,12 @@ public class TicketService {
         ticket.setAssignee(assignee);
         ticket.setStatus("IN_PROGRESS");
         ticket.setResolvedAt(null);
-        ticket.getAsset().setStatus("Bảo trì");
+        ticket.setAcceptedAt(LocalDateTime.now());
+        markAssetBroken(ticket.getAsset(), true);
         assetRepository.save(ticket.getAsset());
         Ticket saved = ticketRepository.save(ticket);
+        dashboardService.invalidateSummaryCache();
+        helpdeskKpiService.invalidateCaches();
         String actorDisplayName = getActorDisplayName(actor);
         String assigneeDisplayName = getActorDisplayName(assignee);
         notificationService.createNotification(
@@ -243,9 +254,11 @@ public class TicketService {
         ticket.setStatus("RESOLVED");
         ticket.setResolvedAt(LocalDateTime.now());
         Asset asset = ticket.getAsset();
-        asset.setStatus("Sẵn sàng");
+        markAssetGood(asset);
         assetRepository.save(asset);
         Ticket saved = ticketRepository.save(ticket);
+        dashboardService.invalidateSummaryCache();
+        helpdeskKpiService.invalidateCaches();
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "TICKET_RESOLVED",
@@ -277,6 +290,44 @@ public class TicketService {
                 Map.of(
                         "Từ trạng thái", toVietnameseStatus("IN_PROGRESS"),
                         "Sang trạng thái", toVietnameseStatus(saved.getStatus())
+                )
+        );
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    public TicketResponse rateSatisfaction(Integer ticketId, TicketSatisfactionRequest request) {
+        if (ticketId == null) {
+            throw new CustomException("id ticket là bắt buộc.");
+        }
+        if (request == null || request.getSatisfactionScore() == null) {
+            throw new CustomException("satisfactionScore là bắt buộc.");
+        }
+
+        Ticket ticket = ticketRepository.findDetailById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        if (!"RESOLVED".equals(ticket.getStatus())) {
+            throw new CustomException("Chỉ được chấm điểm hài lòng khi ticket đã hoàn tất.");
+        }
+
+        AppUser actor = currentUserProvider.getCurrentUser();
+        boolean isAdmin = "Admin".equals(actor.getRole());
+        boolean isReporter = ticket.getReporter() != null && actor.getId().equals(ticket.getReporter().getId());
+        if (!isAdmin && !isReporter) {
+            throw new CustomException("Bạn không có quyền chấm điểm ticket này.");
+        }
+
+        ticket.setSatisfactionScore(request.getSatisfactionScore());
+        Ticket saved = ticketRepository.save(ticket);
+        helpdeskKpiService.invalidateCaches();
+        ticketEventService.recordEvent(
+                saved,
+                "TICKET_SATISFACTION_RATED",
+                actor,
+                "Đánh giá mức độ hài lòng",
+                Map.of(
+                        "Điểm hài lòng", request.getSatisfactionScore(),
+                        "Người đánh giá", getActorDisplayName(actor)
                 )
         );
         return mapToResponse(saved);
@@ -386,6 +437,13 @@ public class TicketService {
                 .assetLocationName(ticket.getAsset().getLocation().getRoomName())
                 .assetCategoryName(ticket.getAsset().getCategory().getName())
                 .assetCategoryTechTypeId(getAssetTechTypeId(ticket.getAsset()))
+                .assetTechnicalStatus(resolveTechnicalStatus(ticket.getAsset()))
+                .assetUsageStatus(resolveUsageStatus(ticket.getAsset()))
+                .assetDisplayStatus(AssetStatusSupport.deriveDisplayStatus(
+                        resolveTechnicalStatus(ticket.getAsset()),
+                        resolveUsageStatus(ticket.getAsset()),
+                        AssetStatusSupport.isRepairInProgress(ticket.getAsset().getStatus())
+                ))
                 .reporterId(ticket.getReporter().getId())
                 .reporterName(reporterName)
                 .reporterRole(ticket.getReporter().getRole())
@@ -399,7 +457,9 @@ public class TicketService {
                 .status(ticket.getStatus())
                 .createdAt(ticket.getCreatedAt())
                 .dueDate(ticket.getDueDate())
+                .acceptedAt(ticket.getAcceptedAt())
                 .resolvedAt(ticket.getResolvedAt())
+                .satisfactionScore(ticket.getSatisfactionScore())
                 .build();
     }
 
@@ -427,6 +487,53 @@ public class TicketService {
                     .anyMatch(type -> type != null && techTypeId.equals(type.getId()));
         }
         return false;
+    }
+
+    private void markAssetBroken(Asset asset, boolean repairInProgress) {
+        if (asset == null) {
+            return;
+        }
+        asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_BROKEN);
+        asset.setUsageStatus(resolveUsageStatus(asset));
+        asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                asset.getTechnicalStatus(),
+                asset.getUsageStatus(),
+                repairInProgress
+        ));
+    }
+
+    private void markAssetGood(Asset asset) {
+        if (asset == null) {
+            return;
+        }
+        asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_GOOD);
+        asset.setUsageStatus(resolveUsageStatus(asset));
+        asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                asset.getTechnicalStatus(),
+                asset.getUsageStatus(),
+                false
+        ));
+    }
+
+    private String resolveUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return AssetStatusSupport.resolveUsageStatus(
+                asset.getUsageStatus(),
+                asset.getStatus(),
+                locationId,
+                homeLocationId
+        );
+    }
+
+    private String resolveTechnicalStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        }
+        return AssetStatusSupport.resolveTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
     }
 
     private boolean canAccessTicket(AppUser actor, Ticket ticket) {

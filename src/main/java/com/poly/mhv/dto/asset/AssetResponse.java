@@ -19,6 +19,8 @@ public class AssetResponse {
     private Integer categoryId;
     private String category;
     private String status;
+    private String technicalStatus;
+    private String usageStatus;
     private Integer locationId;
     private String locationName;
     private Integer homeLocationId;

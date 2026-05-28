@@ -4,6 +4,7 @@ import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
 import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
+import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
 import com.poly.mhv.dto.ticket.TicketTimelineEventResponse;
 import com.poly.mhv.service.TicketEventService;
 import com.poly.mhv.service.TicketService;
@@ -132,6 +133,24 @@ public class TicketController {
             @PathVariable Integer id
     ) {
         return ResponseEntity.ok(ticketService.resolveTicket(id));
+    }
+
+    @PutMapping("/{id}/satisfaction")
+    @PreAuthorize("hasAnyRole('Admin','NhanVien')")
+    @Operation(summary = "Chấm điểm hài lòng ticket", description = "Ghi nhận điểm hài lòng sau khi ticket đã hoàn tất.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lưu điểm hài lòng thành công"),
+            @ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ hoặc ticket chưa hoàn tất"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "403", description = "Không có quyền chấm điểm"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
+    })
+    public ResponseEntity<TicketResponse> rateSatisfaction(
+            @Parameter(description = "ID ticket cần chấm điểm", example = "15")
+            @PathVariable Integer id,
+            @Valid @RequestBody TicketSatisfactionRequest request
+    ) {
+        return ResponseEntity.ok(ticketService.rateSatisfaction(id, request));
     }
 
     @GetMapping

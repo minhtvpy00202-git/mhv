@@ -37,6 +37,7 @@ import com.poly.mhv.repository.ConsumableReceiptLotRepository;
 import com.poly.mhv.repository.ConsumableRequestRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
+import com.poly.mhv.util.AssetStatusSupport;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
 import java.math.BigDecimal;
@@ -124,6 +125,10 @@ public class AssetService {
 
         boolean consumable = isConsumableMode(trackingMode);
         boolean expiryTrackingEnabled = consumable && isExpiryTrackingEnabled(request.getExpiryTrackingEnabled());
+        String initialTechnicalStatus = consumable ? null : normalizeRequestedTechnicalStatus(request.getTechnicalStatus(), request.getStatus());
+        String initialUsageStatus = consumable
+                ? null
+                : normalizeRequestedUsageStatus(request.getUsageStatus(), request.getStatus());
         Location location = consumable
                 ? getConsumableStorageLocationOrThrow()
                 : locationRepository.findById(request.getLocationId())
@@ -133,7 +138,11 @@ public class AssetService {
                 .trackingMode(trackingMode)
                 .name(request.getName())
                 .category(category)
-                .status(consumable ? computeConsumableStatus(request.getQuantityOnHand(), request.getMinimumStock()) : "Sẵn sàng")
+                .status(consumable
+                        ? computeConsumableStatus(request.getQuantityOnHand(), request.getMinimumStock())
+                        : AssetStatusSupport.deriveLegacyStatus(initialTechnicalStatus, initialUsageStatus, false))
+                .technicalStatus(initialTechnicalStatus)
+                .usageStatus(initialUsageStatus)
                 .location(location)
                 .homeLocation(location)
                 .specs(normalizeSpecs(request.getSpecs()))
@@ -203,7 +212,7 @@ public class AssetService {
             String sortDirection
     ) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
-        String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
+        String normalizedStatus = normalizeAssetFilterStatus(status);
         String normalizedTrackingMode = StringUtils.hasText(trackingMode) ? normalizeTrackingMode(trackingMode) : null;
         PageRequest pageable = PageRequest.of(
                 Math.max(0, page),
@@ -267,7 +276,7 @@ public class AssetService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
         String oldName = asset.getName();
         String oldCategory = getCategoryDisplayName(asset.getCategory());
-        String oldStatus = asset.getStatus();
+        String oldStatus = isItemizedMode(asset.getTrackingMode()) ? getItemizedDisplayStatus(asset) : asset.getStatus();
         String oldHome = asset.getHomeLocation().getRoomName();
         String trackingMode = normalizeTrackingMode(asset.getTrackingMode());
 
@@ -281,8 +290,9 @@ public class AssetService {
         if (StringUtils.hasText(request.getName())) {
             asset.setName(request.getName());
         }
-        if (StringUtils.hasText(request.getStatus()) && isItemizedMode(trackingMode)) {
-            asset.setStatus(request.getStatus().trim());
+        if (isItemizedMode(trackingMode)) {
+            ensureItemizedStatusesInitialized(asset);
+            applyItemizedStatusUpdate(asset, request);
         }
         if (request.getCategoryId() != null) {
             Category category = categoryRepository.findById(request.getCategoryId())
@@ -342,6 +352,7 @@ public class AssetService {
             asset.setExpiryTrackingEnabled(null);
             asset.setExpirationDate(null);
             validatePurchaseInfo(asset.getPurchasePrice(), asset.getPurchaseDate(), asset.getWarrantyExpirationDate());
+            syncItemizedLegacyStatus(asset, false);
         }
         Asset updated = assetRepository.save(asset);
         AppUser actor = getCurrentUser();
@@ -361,7 +372,7 @@ public class AssetService {
                         Map.entry("Loại cũ", oldCategory),
                         Map.entry("Loại mới", getCategoryDisplayName(updated.getCategory())),
                         Map.entry("Trạng thái cũ", oldStatus),
-                        Map.entry("Trạng thái mới", updated.getStatus()),
+                        Map.entry("Trạng thái mới", isItemizedMode(trackingMode) ? getItemizedDisplayStatus(updated) : updated.getStatus()),
                         Map.entry("Phòng gốc cũ", oldHome),
                         Map.entry("Phòng gốc mới", updated.getHomeLocation().getRoomName()),
                         Map.entry("Người thực hiện", actorDisplayName)
@@ -802,13 +813,20 @@ public class AssetService {
         }
         Location effectiveHomeLocation = asset.getHomeLocation() != null ? asset.getHomeLocation() : asset.getLocation();
         String normalizedTrackingMode = normalizeTrackingMode(asset.getTrackingMode());
+        String technicalStatus = isConsumableMode(normalizedTrackingMode) ? null : getItemizedTechnicalStatus(asset);
+        String usageStatus = isConsumableMode(normalizedTrackingMode) ? null : getItemizedUsageStatus(asset);
+        String displayStatus = isConsumableMode(normalizedTrackingMode)
+                ? computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock())
+                : getItemizedDisplayStatus(asset);
         return AssetResponse.builder()
                 .qaCode(asset.getQaCode())
                 .trackingMode(normalizedTrackingMode)
                 .name(asset.getName())
                 .categoryId(asset.getCategory().getId())
                 .category(getCategoryDisplayName(asset.getCategory()))
-                .status(isConsumableMode(normalizedTrackingMode) ? computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()) : asset.getStatus())
+                .status(displayStatus)
+                .technicalStatus(technicalStatus)
+                .usageStatus(usageStatus)
                 .locationId(asset.getLocation().getId())
                 .locationName(asset.getLocation().getRoomName())
                 .homeLocationId(effectiveHomeLocation != null ? effectiveHomeLocation.getId() : null)
@@ -865,13 +883,31 @@ public class AssetService {
 
     private AssetResponse mapToAssetListResponse(AssetAdminListItemResponse item) {
         String normalizedTrackingMode = normalizeTrackingMode(item.getTrackingMode());
+        String technicalStatus = isConsumableMode(normalizedTrackingMode) ? null : getItemizedTechnicalStatus(item.getTechnicalStatus(), item.getStatus());
+        String usageStatus = isConsumableMode(normalizedTrackingMode)
+                ? null
+                : getItemizedUsageStatus(
+                        item.getUsageStatus(),
+                        item.getStatus(),
+                        item.getLocationId(),
+                        item.getHomeLocationId()
+                );
+        String displayStatus = isConsumableMode(normalizedTrackingMode)
+                ? computeConsumableStatus(item.getQuantityOnHand(), item.getMinimumStock())
+                : AssetStatusSupport.deriveDisplayStatus(
+                        technicalStatus,
+                        usageStatus,
+                        AssetStatusSupport.isRepairInProgress(item.getStatus())
+                );
         return AssetResponse.builder()
                 .qaCode(item.getQaCode())
                 .trackingMode(normalizedTrackingMode)
                 .name(item.getName())
                 .categoryId(item.getCategoryId())
                 .category(item.getCategoryName())
-                .status(isConsumableMode(normalizedTrackingMode) ? computeConsumableStatus(item.getQuantityOnHand(), item.getMinimumStock()) : item.getStatus())
+                .status(displayStatus)
+                .technicalStatus(technicalStatus)
+                .usageStatus(usageStatus)
                 .locationId(item.getLocationId())
                 .locationName(item.getLocationName())
                 .homeLocationId(item.getHomeLocationId())
@@ -1088,6 +1124,150 @@ public class AssetService {
 
     private boolean isItemizedMode(String trackingMode) {
         return TRACKING_MODE_ITEMIZED.equals(normalizeTrackingMode(trackingMode));
+    }
+
+    private String normalizeAssetFilterStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return null;
+        }
+        String normalized = status.trim();
+        if ("Còn hàng".equals(normalized) || "Cần nhập".equals(normalized)) {
+            return normalized;
+        }
+        return AssetStatusSupport.normalizeDisplayStatusFilter(normalized);
+    }
+
+    private String normalizeRequestedTechnicalStatus(String technicalStatus, String legacyStatus) {
+        try {
+            if (StringUtils.hasText(technicalStatus)) {
+                return AssetStatusSupport.normalizeTechnicalStatus(technicalStatus);
+            }
+            if (StringUtils.hasText(legacyStatus)) {
+                return AssetStatusSupport.normalizeTechnicalStatus(legacyStatus);
+            }
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        } catch (IllegalArgumentException ex) {
+            throw new CustomException(ex.getMessage());
+        }
+    }
+
+    private String normalizeRequestedUsageStatus(String usageStatus, String legacyStatus) {
+        try {
+            if (StringUtils.hasText(usageStatus)) {
+                return AssetStatusSupport.normalizeUsageStatus(usageStatus);
+            }
+            if (StringUtils.hasText(legacyStatus)) {
+                return AssetStatusSupport.normalizeUsageStatus(legacyStatus);
+            }
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        } catch (IllegalArgumentException ex) {
+            throw new CustomException(ex.getMessage());
+        }
+    }
+
+    private String getItemizedTechnicalStatus(Asset asset) {
+        return getItemizedTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
+    }
+
+    private String getItemizedTechnicalStatus(String technicalStatus, String legacyStatus) {
+        return AssetStatusSupport.resolveTechnicalStatus(technicalStatus, legacyStatus);
+    }
+
+    private String getItemizedUsageStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.USAGE_STATUS_HOME;
+        }
+        Integer locationId = asset.getLocation() == null ? null : asset.getLocation().getId();
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return getItemizedUsageStatus(asset.getUsageStatus(), asset.getStatus(), locationId, homeLocationId);
+    }
+
+    private String getItemizedUsageStatus(String usageStatus, String legacyStatus, Integer locationId, Integer homeLocationId) {
+        return AssetStatusSupport.resolveUsageStatus(usageStatus, legacyStatus, locationId, homeLocationId);
+    }
+
+    private String getItemizedDisplayStatus(Asset asset) {
+        return AssetStatusSupport.deriveDisplayStatus(
+                getItemizedTechnicalStatus(asset),
+                getItemizedUsageStatus(asset),
+                AssetStatusSupport.isRepairInProgress(asset.getStatus())
+        );
+    }
+
+    private void ensureItemizedStatusesInitialized(Asset asset) {
+        if (asset == null || !isItemizedMode(asset.getTrackingMode())) {
+            return;
+        }
+        asset.setTechnicalStatus(getItemizedTechnicalStatus(asset));
+        asset.setUsageStatus(getItemizedUsageStatus(asset));
+        syncItemizedLegacyStatus(asset, AssetStatusSupport.isRepairInProgress(asset.getStatus()));
+    }
+
+    private void syncItemizedLegacyStatus(Asset asset, boolean repairInProgress) {
+        if (asset == null || !isItemizedMode(asset.getTrackingMode())) {
+            return;
+        }
+        asset.setTechnicalStatus(getItemizedTechnicalStatus(asset));
+        asset.setUsageStatus(getItemizedUsageStatus(asset));
+        asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
+                asset.getTechnicalStatus(),
+                asset.getUsageStatus(),
+                repairInProgress
+        ));
+    }
+
+    private void applyLegacyStatusSelection(Asset asset, String rawStatus) {
+        if (!StringUtils.hasText(rawStatus)) {
+            return;
+        }
+        String normalized = AssetStatusSupport.normalizeDisplayStatusFilter(rawStatus);
+        switch (normalized) {
+            case AssetStatusSupport.DISPLAY_STATUS_GOOD -> {
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_GOOD);
+                asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_HOME);
+                syncItemizedLegacyStatus(asset, false);
+            }
+            case AssetStatusSupport.DISPLAY_STATUS_BORROWED -> {
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_GOOD);
+                asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_BORROWED);
+                syncItemizedLegacyStatus(asset, false);
+            }
+            case AssetStatusSupport.DISPLAY_STATUS_BROKEN -> {
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_BROKEN);
+                syncItemizedLegacyStatus(asset, false);
+            }
+            case AssetStatusSupport.DISPLAY_STATUS_REPAIRING -> {
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_BROKEN);
+                syncItemizedLegacyStatus(asset, true);
+            }
+            case AssetStatusSupport.DISPLAY_STATUS_LOST -> {
+                asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_LOST);
+                syncItemizedLegacyStatus(asset, false);
+            }
+            default -> throw new CustomException("Trạng thái thiết bị không hợp lệ.");
+        }
+    }
+
+    private void applyItemizedStatusUpdate(Asset asset, AssetUpdateRequest request) {
+        if (asset == null || request == null || !isItemizedMode(asset.getTrackingMode())) {
+            return;
+        }
+        if (StringUtils.hasText(request.getStatus())) {
+            applyLegacyStatusSelection(asset, request.getStatus());
+            return;
+        }
+        if (StringUtils.hasText(request.getTechnicalStatus())) {
+            asset.setTechnicalStatus(normalizeRequestedTechnicalStatus(request.getTechnicalStatus(), null));
+        }
+        if (StringUtils.hasText(request.getUsageStatus())) {
+            asset.setUsageStatus(normalizeRequestedUsageStatus(request.getUsageStatus(), null));
+        }
+        boolean hasTechnicalChange = StringUtils.hasText(request.getTechnicalStatus());
+        boolean hasUsageChange = StringUtils.hasText(request.getUsageStatus());
+        if (hasTechnicalChange || hasUsageChange) {
+            syncItemizedLegacyStatus(asset, false);
+            return;
+        }
     }
 
     private String computeConsumableStatus(Integer quantityOnHand, Integer minimumStock) {

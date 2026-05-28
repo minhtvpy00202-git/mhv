@@ -41,6 +41,9 @@ public class InventoryAudit {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "due_date")
+    private LocalDateTime dueDate;
+
     @Column(nullable = false, length = 20)
     private String status;
 

@@ -1,6 +1,7 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.exception.CustomException;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.net.URI;
 import java.nio.file.Files;
@@ -8,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -19,12 +21,14 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+@Slf4j
 @Service
 public class MediaStorageService {
 
     private final String storageProvider;
     private final Path uploadDir;
     private final String spacesBucket;
+    private final String spacesRegion;
     private final String spacesPublicBaseUrl;
     private final S3Client s3Client;
 
@@ -41,6 +45,7 @@ public class MediaStorageService {
         this.storageProvider = StringUtils.hasText(storageProvider) ? storageProvider.trim().toLowerCase() : "local";
         this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
         this.spacesBucket = spacesBucket != null ? spacesBucket.trim() : "";
+        this.spacesRegion = spacesRegion != null ? spacesRegion.trim() : "";
         this.spacesPublicBaseUrl = spacesPublicBaseUrl != null ? spacesPublicBaseUrl.trim() : "";
         this.s3Client = createS3ClientIfNeeded(spacesRegion, spacesEndpoint, spacesAccessKey, spacesSecretKey);
     }
@@ -68,6 +73,26 @@ public class MediaStorageService {
 
     public boolean isSpacesProvider() {
         return "spaces".equals(storageProvider);
+    }
+
+    @PostConstruct
+    public void logStorageConfiguration() {
+        if (isSpacesProvider()) {
+            log.info(
+                    "Media storage provider: spaces; bucket='{}', region='{}', endpoint='{}', publicBaseUrl='{}'",
+                    spacesBucket,
+                    StringUtils.hasText(spacesRegion) ? spacesRegion : "<empty>",
+                    sanitizeUrlForLog(resolveConfiguredEndpoint()),
+                    sanitizeUrlForLog(spacesPublicBaseUrl)
+            );
+            warnIfLikelyMisconfiguredEndpoint();
+            if (!StringUtils.hasText(spacesPublicBaseUrl)) {
+                log.error("APP_SPACES_PUBLIC_BASE_URL đang trống. Upload có thể thành công nhưng sẽ không trả được URL public.");
+            }
+            return;
+        }
+
+        log.warn("Media storage provider is '{}'; uploads will be stored on local disk at '{}'. On redeploy, local files may be lost.", storageProvider, uploadDir);
     }
 
     private S3Client createS3ClientIfNeeded(
@@ -131,6 +156,38 @@ public class MediaStorageService {
             return spacesPublicBaseUrl.replaceAll("/+$", "") + "/" + normalizedKey;
         }
         throw new IllegalStateException("Thiếu app.spaces.public-base-url để trả URL public cho media trên DigitalOcean Spaces.");
+    }
+
+    private void warnIfLikelyMisconfiguredEndpoint() {
+        String endpoint = resolveConfiguredEndpoint();
+        if (!StringUtils.hasText(endpoint) || !StringUtils.hasText(spacesBucket)) {
+            return;
+        }
+        try {
+            String host = URI.create(endpoint.trim()).getHost();
+            if (StringUtils.hasText(host) && host.startsWith(spacesBucket + ".")) {
+                log.warn(
+                        "APP_SPACES_ENDPOINT='{}' có vẻ đang dùng bucket origin endpoint. Hãy dùng regional S3 endpoint như https://sgp1.digitaloceanspaces.com; bucket origin endpoint chỉ nên dùng cho APP_SPACES_PUBLIC_BASE_URL.",
+                        sanitizeUrlForLog(endpoint)
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("Không thể phân tích APP_SPACES_ENDPOINT='{}' để kiểm tra cấu hình.", sanitizeUrlForLog(endpoint));
+        }
+    }
+
+    private String resolveConfiguredEndpoint() {
+        if (s3Client == null) {
+            return null;
+        }
+        return s3Client.serviceClientConfiguration() != null
+                && s3Client.serviceClientConfiguration().endpointOverride().isPresent()
+                ? s3Client.serviceClientConfiguration().endpointOverride().get().toString()
+                : null;
+    }
+
+    private String sanitizeUrlForLog(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "<empty>";
     }
 
     private String normalizeObjectPrefix(String objectPrefix) {

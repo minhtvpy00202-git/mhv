@@ -16,6 +16,9 @@ public class UsageHistoryResponse {
     private Integer userId;
     private Integer fromLocationId;
     private Integer toLocationId;
+    private String assetTechnicalStatus;
+    private String assetUsageStatus;
+    private String assetDisplayStatus;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
 }

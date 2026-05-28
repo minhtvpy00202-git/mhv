@@ -17,6 +17,7 @@ public class InventoryAuditSummaryResponse {
     private String createdByUsername;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
+    private LocalDateTime dueDate;
     private String status;
     private Integer expectedCount;
     private Integer scannedCount;

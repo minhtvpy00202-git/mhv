@@ -61,9 +61,9 @@ function EmptyChartState({ text }) {
 }
 
 function Dashboard() {
-  const cachedSummary = getSessionCache(SUMMARY_CACHE_KEY)
-  const cachedSuggestions = getSessionCache(SUGGESTIONS_CACHE_KEY)
-  const cachedHelpdeskKpis = getSessionCache(HELPDESK_CACHE_KEY)
+  const cachedSummary = useMemo(() => getSessionCache(SUMMARY_CACHE_KEY), [])
+  const cachedSuggestions = useMemo(() => getSessionCache(SUGGESTIONS_CACHE_KEY), [])
+  const cachedHelpdeskKpis = useMemo(() => getSessionCache(HELPDESK_CACHE_KEY), [])
   const [summary, setSummary] = useState({
     totalAssets: cachedSummary?.totalAssets || 0,
     inUseAssets: cachedSummary?.inUseAssets || 0,
@@ -80,41 +80,67 @@ function Dashboard() {
   useEffect(() => {
     let mounted = true
 
-    const fetchDashboard = async () => {
+    const fetchSummary = async () => {
       try {
-        const response = await axiosClient.get('/api/dashboard/bootstrap')
+        const response = await axiosClient.get('/api/dashboard/summary')
         if (!mounted) return
-        const nextSummary = response.data?.summary || {
+        const nextSummary = response.data || {
           totalAssets: 0,
           inUseAssets: 0,
           brokenAssets: 0,
           maintenanceAssets: 0,
           availableAssets: 0,
         }
-        const nextSuggestions = response.data?.smartSuggestions?.suggestions || []
-        const nextHelpdeskKpis = response.data?.helpdeskKpis || null
 
         setSummary(nextSummary)
-        setSuggestions(nextSuggestions)
-        setHelpdeskKpis(nextHelpdeskKpis)
         setSessionCache(SUMMARY_CACHE_KEY, nextSummary, DASHBOARD_CACHE_TTL_MS)
-        setSessionCache(SUGGESTIONS_CACHE_KEY, nextSuggestions, DASHBOARD_CACHE_TTL_MS)
-        setSessionCache(HELPDESK_CACHE_KEY, nextHelpdeskKpis, DASHBOARD_CACHE_TTL_MS)
       } catch (error) {
-        if (!cachedSummary && !cachedSuggestions && !cachedHelpdeskKpis) {
-          const message = error?.response?.data?.message || 'Không thể tải dữ liệu dashboard.'
+        if (!cachedSummary) {
+          const message = error?.response?.data?.message || 'Không thể tải số liệu tài sản.'
           toast.error(message)
         }
       } finally {
-        if (mounted) {
-          setSummaryLoading(false)
-          setSuggestionsLoading(false)
-          setHelpdeskLoading(false)
-        }
+        if (mounted) setSummaryLoading(false)
       }
     }
 
-    fetchDashboard()
+    const fetchSuggestions = async () => {
+      try {
+        const response = await axiosClient.get('/api/dashboard/smart-suggestions')
+        if (!mounted) return
+        const nextSuggestions = response.data?.suggestions || []
+        setSuggestions(nextSuggestions)
+        setSessionCache(SUGGESTIONS_CACHE_KEY, nextSuggestions, DASHBOARD_CACHE_TTL_MS)
+      } catch (error) {
+        if (!cachedSuggestions) {
+          const message = error?.response?.data?.message || 'Không thể tải gợi ý quản trị.'
+          toast.error(message)
+        }
+      } finally {
+        if (mounted) setSuggestionsLoading(false)
+      }
+    }
+
+    const fetchHelpdesk = async () => {
+      try {
+        const response = await axiosClient.get('/api/dashboard/helpdesk-kpis/admin')
+        if (!mounted) return
+        const nextHelpdeskKpis = response.data || null
+        setHelpdeskKpis(nextHelpdeskKpis)
+        setSessionCache(HELPDESK_CACHE_KEY, nextHelpdeskKpis, DASHBOARD_CACHE_TTL_MS)
+      } catch (error) {
+        if (!cachedHelpdeskKpis) {
+          const message = error?.response?.data?.message || 'Không thể tải số liệu helpdesk.'
+          toast.error(message)
+        }
+      } finally {
+        if (mounted) setHelpdeskLoading(false)
+      }
+    }
+
+    void fetchSummary()
+    void fetchSuggestions()
+    void fetchHelpdesk()
     return () => {
       mounted = false
     }
@@ -122,10 +148,10 @@ function Dashboard() {
 
   const assetStatusData = useMemo(
     () => [
-      { name: 'Sẵn sàng', value: summary.availableAssets, fill: '#22c55e' },
-      { name: 'Đang sử dụng', value: summary.inUseAssets, fill: '#3b82f6' },
+      { name: 'Hoạt động tốt', value: summary.availableAssets, fill: '#22c55e' },
+      { name: 'Đang cho mượn', value: summary.inUseAssets, fill: '#3b82f6' },
       { name: 'Hỏng', value: summary.brokenAssets, fill: '#ef4444' },
-      { name: 'Bảo trì', value: summary.maintenanceAssets, fill: '#f59e0b' },
+      { name: 'Đang sửa chữa', value: summary.maintenanceAssets, fill: '#f59e0b' },
     ],
     [summary],
   )
@@ -154,45 +180,35 @@ function Dashboard() {
   }, [helpdeskKpis])
 
   const totalIssueAssets = summary.brokenAssets + summary.maintenanceAssets
+  const technicallyHealthyAssets = summary.availableAssets + summary.inUseAssets
   const availabilityRate = buildRate(summary.availableAssets, summary.totalAssets)
   const issueRate = buildRate(totalIssueAssets, summary.totalAssets)
 
   const cards = [
     { label: 'Tổng thiết bị', value: summary.totalAssets },
-    { label: 'Sẵn sàng', value: summary.availableAssets },
-    { label: 'Đang sử dụng', value: summary.inUseAssets },
+    { label: 'Hoạt động tốt', value: technicallyHealthyAssets },
+    { label: 'Tại vị trí gốc', value: summary.availableAssets },
+    { label: 'Đang cho mượn', value: summary.inUseAssets },
     { label: 'Hỏng', value: summary.brokenAssets },
-    { label: 'Bảo trì', value: summary.maintenanceAssets },
+    { label: 'Đang sửa chữa', value: summary.maintenanceAssets },
   ]
-
-  if (summaryLoading && suggestionsLoading && helpdeskLoading) {
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="animate-pulse rounded-xl bg-white p-4 shadow-sm">
-              <div className="h-3 w-20 rounded bg-slate-200" />
-              <div className="mt-3 h-7 w-14 rounded bg-slate-200" />
-            </div>
-          ))}
-        </div>
-        <div className="rounded-xl bg-white p-4 shadow-sm">
-          <div className="h-4 w-44 animate-pulse rounded bg-slate-200" />
-          <div className="mt-4 h-64 animate-pulse rounded-xl bg-slate-100" />
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {cards.map((card) => (
-          <div key={card.label} className="rounded-xl bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-500">{card.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-800">{formatCompactNumber(card.value)}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {summaryLoading && !cachedSummary
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="animate-pulse rounded-xl bg-white p-4 shadow-sm">
+                <div className="h-3 w-20 rounded bg-slate-200" />
+                <div className="mt-3 h-7 w-14 rounded bg-slate-200" />
+              </div>
+            ))
+          : cards.map((card) => (
+              <div key={card.label} className="rounded-xl bg-white p-4 shadow-sm">
+                <p className="text-xs text-slate-500">{card.label}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-800">{formatCompactNumber(card.value)}</p>
+              </div>
+            ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -200,6 +216,18 @@ function Dashboard() {
           title="Phân bố trạng thái thiết bị"
           subtitle="Theo dõi nhanh sức khỏe tài sản toàn hệ thống."
         >
+          {summaryLoading && !cachedSummary ? (
+            <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+              <div className="h-80 animate-pulse rounded-xl border border-slate-100 bg-slate-100" />
+              <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                  <div className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                </div>
+                <div className="h-52 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+              </div>
+            </div>
+          ) : (
           <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="h-80 rounded-xl border border-slate-100 bg-slate-50/50 p-2">
               {assetStatusData.some((item) => item.value > 0) ? (
@@ -231,9 +259,30 @@ function Dashboard() {
             </div>
 
             <div className="grid gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-semibold text-slate-700">Giải thích theo mô hình 2 lớp trạng thái</p>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tình trạng kỹ thuật</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      <p><span className="font-semibold">Hoạt động tốt:</span> {formatCompactNumber(technicallyHealthyAssets)}</p>
+                      <p><span className="font-semibold">Hỏng:</span> {formatCompactNumber(summary.brokenAssets)}</p>
+                      <p><span className="font-semibold">Đang sửa chữa:</span> {formatCompactNumber(summary.maintenanceAssets)}</p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vị trí sử dụng</p>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      <p><span className="font-semibold">Tại vị trí gốc:</span> {formatCompactNumber(summary.availableAssets)}</p>
+                      <p><span className="font-semibold">Đang cho mượn:</span> {formatCompactNumber(summary.inUseAssets)}</p>
+                      <p className="text-xs text-slate-500">Vị trí gốc nghĩa là phòng ban, khu vực sở hữu tài sản. </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-xs font-medium text-emerald-700">Tỷ lệ sẵn sàng</p>
+                  <p className="text-xs font-medium text-emerald-700">Tỷ lệ tại vị trí gốc</p>
                   <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatPercentage(availabilityRate)}</p>
                   <p className="mt-1 text-sm text-emerald-700">
                     {formatCompactNumber(summary.availableAssets)} / {formatCompactNumber(summary.totalAssets)} thiết bị
@@ -270,6 +319,7 @@ function Dashboard() {
               </div>
             </div>
           </div>
+          )}
         </DashboardSection>
 
         <DashboardSection
@@ -309,6 +359,16 @@ function Dashboard() {
           title="Tổng quan helpdesk"
           subtitle="So sánh nhanh ticket mới, đang xử lý, đã hoàn tất và quá hạn."
         >
+          {helpdeskLoading && !cachedHelpdeskKpis ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                <div className="h-24 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+              </div>
+              <div className="h-72 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+            </div>
+          ) : (
+          <>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium text-slate-500">Ticket đang hoạt động</p>
@@ -343,12 +403,17 @@ function Dashboard() {
               <EmptyChartState text="Chưa có dữ liệu helpdesk để dựng biểu đồ." />
             )}
           </div>
+          </>
+          )}
         </DashboardSection>
 
         <DashboardSection
           title="Kỹ thuật viên nổi bật"
           subtitle="Top kỹ thuật viên có nhiều ticket được giao nhất."
         >
+          {helpdeskLoading && !cachedHelpdeskKpis ? (
+            <div className="h-[22rem] animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+          ) : (
           <div className="h-[22rem] rounded-xl border border-slate-200 p-3">
             {technicianChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -371,12 +436,13 @@ function Dashboard() {
               <EmptyChartState text="Chưa có dữ liệu kỹ thuật viên để so sánh." />
             )}
           </div>
+          )}
         </DashboardSection>
       </div>
 
       <HelpdeskKpiPanel
-        title="Helpdesk KPI Chi Tiết"
-        subtitle="Các KPI chi tiết cho hệ thống ticket hỗ trợ và bảo trì."
+        title="KPI vận hành Admin"
+        subtitle="Bộ KPI giai đoạn 2 cho dashboard quản trị, dùng ticket SLA, sức khỏe tài sản, vật tư và kiểm kê có hạn hoàn tất."
         summary={helpdeskKpis}
         loading={helpdeskLoading}
       />

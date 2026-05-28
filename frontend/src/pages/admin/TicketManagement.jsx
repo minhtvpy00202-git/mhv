@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Eye } from 'lucide-react'
+import { Check, ImageIcon } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
@@ -199,37 +199,43 @@ function TicketManagement() {
         </div>
 
         <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-[1600px] text-sm">
+          <table className="min-w-[1750px] text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left">Ticket</th>
-                <th className="px-3 py-2 text-left">Mã thiết bị</th>
-                <th className="px-3 py-2 text-left">Tên thiết bị</th>
-                <th className="px-3 py-2 text-left">Phòng</th>
-                <th className="px-3 py-2 text-left">Người báo</th>
-                <th className="px-3 py-2 text-left">Sự cố</th>
-                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="px-3 py-2 text-left">Ngày báo</th>
-                <th className="px-3 py-2 text-left">Ưu tiên</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
-                <th className="px-3 py-2 text-left">KTV phụ trách</th>
-                <th className="px-3 py-2 text-left">Hạn sửa chữa</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ticket</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Mã thiết bị</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Tên thiết bị</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Người báo</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Mô tả sự cố</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ảnh lỗi</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ưu tiên</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">KTV phụ trách</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ngày báo</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Hạn sửa chữa</th>
               </tr>
             </thead>
             <tbody>
               {!loading && tickets.map((ticket) => (
                 <tr key={ticket.id} className="border-t border-slate-100 align-top">
-                  <td className="px-3 py-2">#{ticket.id}</td>
-                  <td className="px-3 py-2">{ticket.assetQaCode}</td>
-                  <td className="px-3 py-2">{ticket.assetName || '-'}</td>
-                  <td className="px-3 py-2">{ticket.assetLocationName || '-'}</td>
-                  <td className="px-3 py-2">{ticket.reporterName || `#${ticket.reporterId}`}</td>
-                  <td className="max-w-xs px-3 py-2">
-                    <p className="line-clamp-3 whitespace-pre-wrap text-slate-700">{ticket.description || '-'}</p>
+                  <td className="whitespace-nowrap px-3 py-2">#{ticket.id}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{ticket.assetQaCode}</td>
+                  <td className="max-w-[180px] truncate whitespace-nowrap px-3 py-2" title={ticket.assetName || '-'}>
+                    {ticket.assetName || '-'}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="max-w-[150px] truncate whitespace-nowrap px-3 py-2" title={ticket.assetLocationName || '-'}>
+                    {ticket.assetLocationName || '-'}
+                  </td>
+                  <td className="max-w-[150px] truncate whitespace-nowrap px-3 py-2" title={ticket.reporterName || `#${ticket.reporterId}`}>
+                    {ticket.reporterName || `#${ticket.reporterId}`}
+                  </td>
+                  <td className="max-w-[260px] truncate whitespace-nowrap px-3 py-2 text-slate-700" title={ticket.description || '-'}>
+                    {ticket.description || '-'}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
                     <ActionIconButton
-                      icon={Eye}
+                      icon={ImageIcon}
                       label="Xem ảnh lỗi"
                       onClick={() => {
                         if (!ticket.imageUrl) {
@@ -240,9 +246,8 @@ function TicketManagement() {
                       }}
                     />
                   </td>
-                  <td className="px-3 py-2">{formatVietnamDateTime(ticket.createdAt)}</td>
-                  <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
-                  <td className="px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                       ticket.status === 'RESOLVED'
                         ? 'bg-emerald-100 text-emerald-800'
@@ -256,24 +261,24 @@ function TicketManagement() {
                   </td>
                   <td className="px-3 py-2">
                     {ticket.status === 'PENDING' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex min-w-[240px] items-center gap-2">
                         {getEligibleTechSupports(ticket).length === 0 ? (
-                          <p className="text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
+                          <p className="whitespace-nowrap text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
                         ) : (
-                        <select
-                          value={assignDraft[ticket.id] || ''}
-                          onChange={(event) =>
-                            setAssignDraft((prev) => ({ ...prev, [ticket.id]: event.target.value }))
-                          }
-                          className="rounded border border-slate-300 px-2 py-1 text-xs"
-                        >
-                          <option value="">Chọn kỹ thuật viên</option>
-                          {getEligibleTechSupports(ticket).map((tech) => (
-                            <option key={tech.id} value={tech.id}>
-                              {tech.fullName || tech.username}
-                            </option>
-                          ))}
-                        </select>
+                          <select
+                            value={assignDraft[ticket.id] || ''}
+                            onChange={(event) =>
+                              setAssignDraft((prev) => ({ ...prev, [ticket.id]: event.target.value }))
+                            }
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          >
+                            <option value="">Chọn kỹ thuật viên</option>
+                            {getEligibleTechSupports(ticket).map((tech) => (
+                              <option key={tech.id} value={tech.id}>
+                                {tech.fullName || tech.username}
+                              </option>
+                            ))}
+                          </select>
                         )}
                         <ActionIconButton
                           icon={Check}
@@ -284,11 +289,12 @@ function TicketManagement() {
                         />
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
+                      <p className="whitespace-nowrap text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
                     )}
                   </td>
-                  <td className="px-3 py-2">
-                    <p>{formatVietnamDateTime(ticket.dueDate)}</p>
+                  <td className="whitespace-nowrap px-3 py-2">{formatVietnamDateTime(ticket.createdAt)}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <p className="whitespace-nowrap">{formatVietnamDateTime(ticket.dueDate)}</p>
                     {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
                   </td>
                 </tr>
