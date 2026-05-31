@@ -1,5 +1,24 @@
+import {
+  IconAlertTriangle as AlertTriangle,
+  IconBoxMultiple as Boxes,
+  IconCheck as Check,
+  IconChevronDown as ChevronDown,
+  IconChevronRight as ChevronRight,
+  IconDownload as Download,
+  IconFileDescription as Detail,
+  IconHistory as History,
+  IconPackage as Package,
+  IconPackageImport as PackagePlus,
+  IconPlus as Plus,
+  IconQrcode as QrCode,
+  IconRefresh as RefreshCw,
+  IconSearch as Search,
+  IconSend as Send,
+  IconTool as Wrench,
+  IconTrash as Trash2,
+  IconX as X,
+} from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Boxes, Check, ChevronDown, ChevronRight, Eye, History, Package, PackagePlus, Plus, QrCode, RefreshCw, Search, Send, Trash2, Wrench, X } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
@@ -267,6 +286,26 @@ function getConsumableRequestStatusMeta(status) {
   }
 }
 
+function getConsumableDisposalStatusMeta(status) {
+  const normalizedStatus = String(status || 'PENDING').trim().toUpperCase()
+  if (normalizedStatus === 'APPROVED') {
+    return {
+      label: 'Đã tiêu huỷ',
+      className: 'bg-emerald-100 text-emerald-700',
+    }
+  }
+  if (normalizedStatus === 'REJECTED') {
+    return {
+      label: 'Từ chối',
+      className: 'bg-red-100 text-red-700',
+    }
+  }
+  return {
+    label: 'Chờ duyệt',
+    className: 'bg-amber-100 text-amber-700',
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms)
@@ -343,6 +382,30 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [selectedConsumableRequest, setSelectedConsumableRequest] = useState(null)
   const [consumableDecisionAction, setConsumableDecisionAction] = useState('APPROVE')
   const [consumableDecisionNote, setConsumableDecisionNote] = useState('')
+  const [expiredLots, setExpiredLots] = useState([])
+  const [expiredLotsLoading, setExpiredLotsLoading] = useState(false)
+  const [showDisposalRequestModal, setShowDisposalRequestModal] = useState(false)
+  const [selectedExpiredLot, setSelectedExpiredLot] = useState(null)
+  const [disposalRequestForm, setDisposalRequestForm] = useState({
+    reason: 'Do hết hạn sử dụng.',
+    items: [],
+  })
+  const [disposalRequestSubmitting, setDisposalRequestSubmitting] = useState(false)
+  const [disposalRequests, setDisposalRequests] = useState([])
+  const [disposalRequestsLoading, setDisposalRequestsLoading] = useState(false)
+  const [disposalHistoryFilters, setDisposalHistoryFilters] = useState({
+    status: '',
+    keyword: '',
+  })
+  const [pendingDisposalRequests, setPendingDisposalRequests] = useState([])
+  const [pendingDisposalRequestsLoading, setPendingDisposalRequestsLoading] = useState(false)
+  const [showDisposalDecisionModal, setShowDisposalDecisionModal] = useState(false)
+  const [selectedDisposalRequest, setSelectedDisposalRequest] = useState(null)
+  const [disposalDecisionAction, setDisposalDecisionAction] = useState('APPROVE')
+  const [disposalDecisionNote, setDisposalDecisionNote] = useState('')
+  const [disposalDecisionSubmitting, setDisposalDecisionSubmitting] = useState(false)
+  const [downloadingDisposalRequestId, setDownloadingDisposalRequestId] = useState(null)
+  const [selectedDisposalHistoryRequest, setSelectedDisposalHistoryRequest] = useState(null)
   const [showStockAdjustModal, setShowStockAdjustModal] = useState(false)
   const [selectedStockRecord, setSelectedStockRecord] = useState(null)
   const [stockAdjustSubmitting, setStockAdjustSubmitting] = useState(false)
@@ -362,6 +425,7 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [activeTab, setActiveTab] = useState(restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED')
   const [consumableWorkspace, setConsumableWorkspace] = useState('OVERVIEW')
   const [showConsumableOverviewSummary, setShowConsumableOverviewSummary] = useState(false)
+  const [showExpiredLotsSummary, setShowExpiredLotsSummary] = useState(false)
   const [roomSearchKeyword, setRoomSearchKeyword] = useState('')
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [consumableStatusCounts, setConsumableStatusCounts] = useState(defaultConsumableStatusCounts)
@@ -470,6 +534,25 @@ function AssetManagement({ restrictToConsumable = false }) {
       }, {}),
     [assetDetailsByQaCode, assets],
   )
+  const filteredDisposalRequests = useMemo(() => {
+    const keyword = disposalHistoryFilters.keyword.trim().toLowerCase()
+    return disposalRequests.filter((request) => {
+      if (disposalHistoryFilters.status && request.status !== disposalHistoryFilters.status) {
+        return false
+      }
+      if (!keyword) return true
+      const haystacks = [
+        request.assetName,
+        request.assetQaCode,
+        request.reason,
+        request.requestedByFullName,
+        request.requestedByUsername,
+        request.lotCode,
+        ...(request.items || []).flatMap((item) => [item.lotCode, item.supplierName]),
+      ]
+      return haystacks.some((value) => String(value || '').toLowerCase().includes(keyword))
+    })
+  }, [disposalHistoryFilters.keyword, disposalHistoryFilters.status, disposalRequests])
 
   const createSpecEntryWithKey = (entry = {}) => {
     specEntryIdRef.current += 1
@@ -661,6 +744,50 @@ function AssetManagement({ restrictToConsumable = false }) {
     }
   }
 
+  const loadExpiredLots = async () => {
+    setExpiredLotsLoading(true)
+    try {
+      const response = await axiosClient.get('/api/assets/expired-lots')
+      setExpiredLots(response.data || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh sách lô hết hạn.'
+      toast.error(message)
+    } finally {
+      setExpiredLotsLoading(false)
+    }
+  }
+
+  const loadDisposalRequests = async (status = '') => {
+    setDisposalRequestsLoading(true)
+    try {
+      const response = await axiosClient.get('/api/assets/disposal-requests', {
+        params: status ? { status } : {},
+      })
+      setDisposalRequests(response.data || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải lịch sử tiêu huỷ.'
+      toast.error(message)
+    } finally {
+      setDisposalRequestsLoading(false)
+    }
+  }
+
+  const loadPendingDisposalRequests = async () => {
+    if (!isAdmin) return
+    setPendingDisposalRequestsLoading(true)
+    try {
+      const response = await axiosClient.get('/api/assets/disposal-requests', {
+        params: { status: 'PENDING' },
+      })
+      setPendingDisposalRequests(response.data || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh sách yêu cầu tiêu huỷ chờ duyệt.'
+      toast.error(message)
+    } finally {
+      setPendingDisposalRequestsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!isConsumableForm || !consumableStorageLocation?.id) return
     const storageLocationId = String(consumableStorageLocation.id)
@@ -724,6 +851,21 @@ function AssetManagement({ restrictToConsumable = false }) {
   useEffect(() => {
     if (!isConsumableTab || !isAdmin) return
     void loadPendingConsumableRequests()
+  }, [isAdmin, isConsumableTab])
+
+  useEffect(() => {
+    if (!isConsumableTab) return
+    void loadExpiredLots()
+  }, [isConsumableTab])
+
+  useEffect(() => {
+    if (!isConsumableTab) return
+    void loadDisposalRequests()
+  }, [isConsumableTab])
+
+  useEffect(() => {
+    if (!isConsumableTab || !isAdmin) return
+    void loadPendingDisposalRequests()
   }, [isAdmin, isConsumableTab])
 
   const resetForm = () => {
@@ -790,6 +932,14 @@ function AssetManagement({ restrictToConsumable = false }) {
       if (isAdmin) {
         await loadPendingConsumableRequests()
       }
+      return
+    }
+    if (nextWorkspace === 'DISPOSAL') {
+      await Promise.all([
+        loadExpiredLots(),
+        loadDisposalRequests(),
+        isAdmin ? loadPendingDisposalRequests() : Promise.resolve(),
+      ])
       return
     }
     if (nextWorkspace !== 'ROOMS') return
@@ -859,6 +1009,26 @@ function AssetManagement({ restrictToConsumable = false }) {
     setSelectedConsumableRequest(null)
     setConsumableDecisionAction('APPROVE')
     setConsumableDecisionNote('')
+  }
+
+  const closeDisposalRequestModal = () => {
+    setShowDisposalRequestModal(false)
+    setSelectedExpiredLot(null)
+    setDisposalRequestForm({
+      reason: 'Do hết hạn sử dụng.',
+      items: [],
+    })
+  }
+
+  const closeDisposalDecisionModal = () => {
+    setShowDisposalDecisionModal(false)
+    setSelectedDisposalRequest(null)
+    setDisposalDecisionAction('APPROVE')
+    setDisposalDecisionNote('')
+  }
+
+  const closeDisposalHistoryDetailModal = () => {
+    setSelectedDisposalHistoryRequest(null)
   }
 
   const closeLocationOverviewModal = () => {
@@ -1196,6 +1366,32 @@ function AssetManagement({ restrictToConsumable = false }) {
     setShowConsumableDecisionModal(true)
   }
 
+  const handleOpenDisposalRequestModal = (lot) => {
+    const relatedLots = expiredLots.filter((item) => item.assetQaCode === lot?.assetQaCode)
+    setSelectedExpiredLot(lot)
+    setDisposalRequestForm({
+      reason: 'Do hết hạn sử dụng.',
+      items: relatedLots.map((item) => ({
+        receiptLotId: item.lotId,
+        lotCode: item.lotCode || `Lô #${item.lotId}`,
+        expirationDate: item.expirationDate,
+        receivedDate: item.receivedDate,
+        quantityRemaining: item.quantityRemaining,
+        unit: item.unit,
+        selected: item.lotId === lot?.lotId,
+        quantityRequested: item.lotId === lot?.lotId ? String(item.quantityRemaining || '') : '',
+      })),
+    })
+    setShowDisposalRequestModal(true)
+  }
+
+  const handleOpenDisposalDecisionModal = (request, action) => {
+    setSelectedDisposalRequest(request)
+    setDisposalDecisionAction(action)
+    setDisposalDecisionNote(action === 'REJECT' ? '' : (request?.decisionNote || ''))
+    setShowDisposalDecisionModal(true)
+  }
+
   const handleReceiveConsumable = async () => {
     if (!selectedReceiveAsset?.qaCode) return
     const quantity = Number(receiveForm.quantity)
@@ -1315,6 +1511,99 @@ function AssetManagement({ restrictToConsumable = false }) {
       toast.error(message)
     } finally {
       setConsumableDecisionSubmitting(false)
+    }
+  }
+
+  const handleCreateDisposalRequest = async () => {
+    if (!selectedExpiredLot?.assetQaCode) return
+    if (!disposalRequestForm.reason.trim()) {
+      toast.error('Vui lòng nhập lý do tiêu huỷ.')
+      return
+    }
+    const selectedItems = (disposalRequestForm.items || [])
+      .filter((item) => item.selected)
+      .map((item) => ({
+        receiptLotId: item.receiptLotId,
+        quantityRequested: Number(item.quantityRequested),
+      }))
+      .filter((item) => Number.isInteger(item.quantityRequested) && item.quantityRequested > 0)
+    if (selectedItems.length === 0) {
+      toast.error('Vui lòng chọn ít nhất một lô và nhập số lượng tiêu huỷ hợp lệ.')
+      return
+    }
+    setDisposalRequestSubmitting(true)
+    try {
+      await axiosClient.post('/api/assets/disposal-requests', {
+        reason: disposalRequestForm.reason.trim(),
+        items: selectedItems,
+      })
+      toast.success('Đã tạo yêu cầu tiêu huỷ.')
+      await Promise.all([
+        loadExpiredLots(),
+        loadAssets(pageInfo.page),
+        loadDisposalRequests(),
+        isAdmin ? loadPendingDisposalRequests() : Promise.resolve(),
+      ])
+      closeDisposalRequestModal()
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tạo yêu cầu tiêu huỷ.'
+      toast.error(message)
+    } finally {
+      setDisposalRequestSubmitting(false)
+    }
+  }
+
+  const handleDownloadDisposalDocument = async (requestId) => {
+    if (!requestId) return
+    setDownloadingDisposalRequestId(requestId)
+    try {
+      const response = await axiosClient.get(`/api/reports/export-expired-disposal/${requestId}`, {
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `bien-ban-huy-hang-hoa-het-han-${requestId}.docx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải biên bản tiêu huỷ.'
+      toast.error(message)
+    } finally {
+      setDownloadingDisposalRequestId(null)
+    }
+  }
+
+  const handleSubmitDisposalDecision = async () => {
+    if (!selectedDisposalRequest?.id) return
+    if (disposalDecisionAction === 'REJECT' && !disposalDecisionNote.trim()) {
+      toast.error('Vui lòng nhập lý do từ chối yêu cầu tiêu huỷ.')
+      return
+    }
+    setDisposalDecisionSubmitting(true)
+    try {
+      const endpoint = disposalDecisionAction === 'APPROVE' ? 'approve' : 'reject'
+      const response = await axiosClient.post(`/api/assets/disposal-requests/${selectedDisposalRequest.id}/${endpoint}`, {
+        note: disposalDecisionNote.trim(),
+      })
+      toast.success(disposalDecisionAction === 'APPROVE' ? 'Đã duyệt yêu cầu tiêu huỷ.' : 'Đã từ chối yêu cầu tiêu huỷ.')
+      await Promise.all([
+        loadAssets(pageInfo.page),
+        loadExpiredLots(),
+        loadDisposalRequests(),
+        loadPendingDisposalRequests(),
+      ])
+      closeDisposalDecisionModal()
+      if (disposalDecisionAction === 'APPROVE') {
+        await handleDownloadDisposalDocument(response.data?.id || selectedDisposalRequest.id)
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể xử lý yêu cầu tiêu huỷ.'
+      toast.error(message)
+    } finally {
+      setDisposalDecisionSubmitting(false)
     }
   }
 
@@ -1472,10 +1761,10 @@ function AssetManagement({ restrictToConsumable = false }) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-800">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
           </p>
         </div>
@@ -1490,18 +1779,18 @@ function AssetManagement({ restrictToConsumable = false }) {
                 onClick={() => handleSwitchTab(tab.value)}
                 className={`rounded-xl border px-4 py-3 text-left transition ${
                   active
-                    ? 'border-fptOrange bg-orange-50 text-fptOrangeDark'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50/50'
+                    ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50/50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-orange-500/40 dark:hover:bg-orange-500/10'
                 }`}
               >
                 <p className="text-sm font-semibold">{tab.label}</p>
-                <p className="mt-1 text-xs text-slate-500">{tab.description}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{tab.description}</p>
               </button>
             )
           })}
         </div>
         )}
-        <div className="grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2">
+        <div className="grid gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:grid-cols-2">
           <button
             type="button"
             onClick={openCreateModal}
@@ -1529,17 +1818,17 @@ function AssetManagement({ restrictToConsumable = false }) {
 
       {isConsumableTab ? (
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+                <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
                   <button
                     type="button"
                     onClick={() => handleSwitchConsumableWorkspace('OVERVIEW')}
                     className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
                       consumableWorkspace === 'OVERVIEW'
-                        ? 'border-fptOrange text-fptOrangeDark'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                     }`}
                   >
                     Tổng quan kho
@@ -1549,11 +1838,22 @@ function AssetManagement({ restrictToConsumable = false }) {
                     onClick={() => handleSwitchConsumableWorkspace('ROOMS')}
                     className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
                       consumableWorkspace === 'ROOMS'
-                        ? 'border-fptOrange text-fptOrangeDark'
-                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                        ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                     }`}
                   >
                     Theo dõi theo phòng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchConsumableWorkspace('DISPOSAL')}
+                    className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
+                      consumableWorkspace === 'DISPOSAL'
+                        ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    Tiêu huỷ
                   </button>
                   {isAdmin && (
                     <button
@@ -1561,29 +1861,31 @@ function AssetManagement({ restrictToConsumable = false }) {
                       onClick={() => handleSwitchConsumableWorkspace('REQUESTS')}
                       className={`inline-flex items-center gap-2 border-b-2 px-1 pb-2 text-sm font-semibold ${
                         consumableWorkspace === 'REQUESTS'
-                          ? 'border-fptOrange text-fptOrangeDark'
-                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                          ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                       }`}
                     >
                       <span>Phiếu chờ duyệt</span>
                       <span
                         className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] ${
                           consumableWorkspace === 'REQUESTS'
-                            ? 'bg-orange-100 text-fptOrangeDark'
-                            : 'bg-slate-100 text-slate-500'
+                            ? 'bg-orange-100 text-fptOrangeDark dark:bg-orange-500/15 dark:text-orange-300'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                         }`}
                       >
-                        {pendingConsumableRequests.length}
+                        {pendingConsumableRequests.length + pendingDisposalRequests.length}
                       </span>
                     </button>
                   )}
                 </div>
-                <p className="mt-3 text-sm text-slate-500">
+                <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
                   {consumableWorkspace === 'OVERVIEW'
                     ? 'Theo dõi tồn kho, các mặt hàng cần nhập và giá trị tồn của toàn kho.'
                     : consumableWorkspace === 'ROOMS'
                       ? 'Theo dõi lượng vật tư đã cấp cho từng phòng và cập nhật số lượng còn lại.'
-                      : 'Admin duyệt hoặc từ chối các phiếu yêu cầu cấp phát đang chờ xử lý.'}
+                      : consumableWorkspace === 'DISPOSAL'
+                        ? 'Tạo phiếu tiêu huỷ theo lô, gộp nhiều lô cùng vật tư và tra cứu lịch sử xử lý.'
+                      : 'Admin duyệt hoặc từ chối các phiếu yêu cầu cấp phát và tiêu huỷ đang chờ xử lý.'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1600,7 +1902,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                   type="button"
                   onClick={() => loadAssets()}
                   disabled={loading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <RefreshCw size={16} />
                   Tải lại
@@ -1609,7 +1911,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                   type="button"
                   onClick={handleDownloadExcel}
                   disabled={downloading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg border border-orange-200 px-3 py-2 text-sm font-semibold text-fptOrangeDark hover:bg-orange-50 disabled:opacity-60 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
                 >
                   <Package size={16} />
                   Xuất Excel
@@ -1620,63 +1922,147 @@ function AssetManagement({ restrictToConsumable = false }) {
 
           {consumableWorkspace === 'OVERVIEW' ? (
             <>
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <button
                   type="button"
                   onClick={() => setShowConsumableOverviewSummary((prev) => !prev)}
-                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-900"
                 >
                   {showConsumableOverviewSummary ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                   <span>Số liệu tổng quan</span>
                 </button>
                 {showConsumableOverviewSummary && (
-                  <div className="grid gap-4 border-t border-slate-200 px-4 py-4 xl:grid-cols-3">
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="mb-3 flex items-start justify-between">
+                  <div className="grid gap-4 border-t border-slate-200 px-4 py-4 dark:border-slate-800 xl:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                      <div className="mb-3 flex items-start justify-between gap-4">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Tổng giá trị tồn</p>
-                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{formatCurrency(consumableSummary.totalInventoryValue)}</h3>
+                          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Tổng giá trị tồn</p>
+                          <h3 className="mt-2 whitespace-nowrap text-3xl font-bold text-slate-900 dark:text-slate-100">{formatCurrency(consumableSummary.totalInventoryValue)}</h3>
                         </div>
-                        <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+                        <div className="rounded-xl bg-orange-50 p-3 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300">
                           <Boxes size={20} />
                         </div>
                       </div>
-                      <p className="text-sm text-slate-500">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         {consumableSummary.trackedCount} vật tư đang được theo dõi trong kho hiện tại.
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="mb-3 flex items-start justify-between">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                      <div className="mb-3 flex items-start justify-between gap-4">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Mặt hàng đang đủ dùng</p>
-                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.healthyCount} loại</h3>
+                          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Mặt hàng đang đủ dùng</p>
+                          <h3 className="mt-2 whitespace-nowrap text-3xl font-bold text-slate-900 dark:text-slate-100">{consumableSummary.healthyCount} loại</h3>
                         </div>
-                        <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
+                        <div className="rounded-xl bg-orange-50 p-3 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300">
                           <Package size={20} />
                         </div>
                       </div>
-                      <p className="text-sm text-slate-500">Các vật tư đang còn trên ngưỡng cảnh báo và đủ để phục vụ cấp phát.</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Các vật tư đang còn trên ngưỡng cảnh báo và đủ để phục vụ cấp phát.</p>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="mb-3 flex items-start justify-between">
+                    <div className="rounded-2xl border border-orange-200 bg-orange-50/70 p-5 shadow-sm dark:border-orange-500/30 dark:bg-orange-500/10">
+                      <div className="mb-3 flex items-start justify-between gap-4">
                         <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Cần nhập thêm</p>
-                          <h3 className="mt-2 text-3xl font-bold text-slate-900">{consumableSummary.restockCount} loại</h3>
+                          <p className="text-sm font-semibold text-orange-700 dark:text-orange-300">Cần nhập thêm</p>
+                          <h3 className="mt-2 whitespace-nowrap text-3xl font-bold text-orange-900 dark:text-orange-200">{consumableSummary.restockCount} loại</h3>
                         </div>
-                        <div className="rounded-xl bg-red-50 p-3 text-red-600">
+                        <div className="rounded-xl bg-white/80 p-3 text-orange-700 dark:bg-slate-950/80 dark:text-orange-300">
                           <History size={20} />
                         </div>
                       </div>
-                      <p className="text-sm text-slate-500">Các vật tư đã chạm hoặc thấp hơn ngưỡng cảnh báo và cần nhập thêm.</p>
+                      <p className="text-sm text-orange-700 dark:text-orange-300">Các vật tư đã chạm hoặc thấp hơn ngưỡng cảnh báo và cần nhập thêm.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-red-200 bg-red-50/70 shadow-sm dark:border-red-500/30 dark:bg-red-500/10">
+                <button
+                  type="button"
+                  onClick={() => setShowExpiredLotsSummary((prev) => !prev)}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-100/50 dark:text-red-300 dark:hover:bg-red-500/10"
+                >
+                  {showExpiredLotsSummary ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <span>Lô hàng đã hết hạn cần tiêu huỷ</span>
+                  <span className="ml-auto whitespace-nowrap text-xs font-semibold text-red-700/80 dark:text-red-300/80">
+                    {expiredLotsLoading ? 'Đang kiểm tra...' : `${expiredLots.length} lô cần xử lý`}
+                  </span>
+                </button>
+                {showExpiredLotsSummary && (
+                  <div className="border-t border-red-200 px-4 py-4 dark:border-red-500/20">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-red-900 dark:text-red-200">
+                          {expiredLotsLoading ? 'Đang kiểm tra lô hết hạn...' : `${expiredLots.length} lô cần xử lý`}
+                        </h3>
+                        <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                          Người dùng xem danh sách các lô đã hết hạn, tạo yêu cầu tiêu huỷ và chuyển Admin phê duyệt.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadExpiredLots()}
+                        disabled={expiredLotsLoading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100/70 disabled:opacity-60 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                      >
+                        <RefreshCw size={16} />
+                        Làm mới lô hết hạn
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {expiredLotsLoading && (
+                        <div className="rounded-2xl border border-dashed border-red-200 px-4 py-6 text-center text-sm text-red-700 dark:border-red-500/30 dark:text-red-300">
+                          Đang tải danh sách lô hàng hết hạn...
+                        </div>
+                      )}
+                      {!expiredLotsLoading && expiredLots.slice(0, 6).map((lot) => (
+                        <div
+                          key={lot.lotId}
+                          className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-white/80 p-4 dark:border-red-500/30 dark:bg-slate-950/70 lg:flex-row lg:items-center lg:justify-between"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-slate-800 dark:text-slate-100">{lot.assetName}</p>
+                              <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                                Quá hạn {lot.daysExpired} ngày
+                              </span>
+                              {lot.pendingDisposal && (
+                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                  Đã có phiếu chờ duyệt
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-300">
+                              {lot.assetQaCode} • {lot.lotCode || `Lô #${lot.lotId}`} • {lot.quantityRemaining} {lot.unit || ''}
+                            </p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              Hạn sử dụng: {formatDate(lot.expirationDate)} • Ngày nhập: {formatDate(lot.receivedDate)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDisposalRequestModal(lot)}
+                            disabled={lot.pendingDisposal}
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100/70 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                          >
+                            <Trash2 size={16} />
+                            {lot.pendingDisposal ? 'Đang chờ duyệt' : 'Tạo yêu cầu tiêu huỷ'}
+                          </button>
+                        </div>
+                      ))}
+                      {!expiredLotsLoading && expiredLots.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-emerald-200 px-4 py-6 text-center text-sm text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300">
+                          Hiện chưa có lô vật tư nào hết hạn cần tiêu huỷ.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
 
               <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                  <div className="mb-4 border-b border-slate-200 pb-3">
-                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Trạng thái</h3>
+                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-4 border-b border-slate-200 pb-3 dark:border-slate-800">
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Trạng thái</h3>
                   </div>
                   <div className="space-y-2">
                     <button
@@ -1686,12 +2072,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                         setFilters(reset)
                         await loadAssets(0, reset)
                       }}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
-                        !filters.status ? 'border-fptOrange bg-orange-50 text-fptOrangeDark' : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                      className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm ${
+                        !filters.status ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800'
                       }`}
                     >
-                      <span>Tất cả vật tư</span>
-                      <span className="text-xs text-slate-400">{consumableStatusCounts.all}</span>
+                      <span className="whitespace-nowrap">Tất cả vật tư</span>
+                      <span className="whitespace-nowrap text-xs tabular-nums text-slate-400 dark:text-slate-500">{consumableStatusCounts.all}</span>
                     </button>
                     {consumableStatusOptions.map((status) => (
                       <button
@@ -1702,30 +2088,30 @@ function AssetManagement({ restrictToConsumable = false }) {
                           setFilters(nextFilters)
                           await loadAssets(0, nextFilters)
                         }}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm ${
                           filters.status === status
-                            ? 'border-fptOrange bg-orange-50 text-fptOrangeDark'
-                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                            ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800'
                         }`}
                       >
-                        <span>{status === 'Còn hàng' ? 'Đủ dùng' : 'Cần nhập'}</span>
-                        <span className="text-xs text-slate-400">
+                        <span className="whitespace-nowrap">{status === 'Còn hàng' ? 'Đủ dùng' : 'Cần nhập'}</span>
+                        <span className="whitespace-nowrap text-xs tabular-nums text-slate-400 dark:text-slate-500">
                           {status === 'Còn hàng' ? consumableStatusCounts.healthy : consumableStatusCounts.restock}
                         </span>
                       </button>
                     ))}
                   </div>
-                  <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white/80 p-3 text-sm text-slate-500">
+                  <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white/80 p-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-400">
                     Mẹo: dùng bộ lọc nhanh để xem ngay mặt hàng đang đủ dùng hoặc các vật tư cần nhập thêm.
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Danh sách quản lý</p>
-                      <h3 className="text-lg font-semibold text-slate-800">Tổng quan kho</h3>
-                      <p className="text-sm text-slate-500">Danh sách vật tư trong kho với đơn giá trung bình và trạng thái hạn sử dụng nếu mặt hàng có quản lý hạn dùng.</p>
+                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Danh sách quản lý</p>
+                      <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Tổng quan kho</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Danh sách vật tư trong kho với đơn giá trung bình và trạng thái hạn sử dụng nếu mặt hàng có quản lý hạn dùng.</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -1740,17 +2126,17 @@ function AssetManagement({ restrictToConsumable = false }) {
                         type="button"
                         onClick={handleResetFilters}
                         disabled={loading}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Xóa bộ lọc
                       </button>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <div className="xl:col-span-2">
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tìm vật tư</label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Tìm vật tư</label>
                       <div className="relative">
                         <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
@@ -1762,7 +2148,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                       </div>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Chọn loại</label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Chọn loại</label>
                       <select
                         value={filters.categoryId}
                         onChange={(e) =>
@@ -1783,7 +2169,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Chọn kho</label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Chọn kho</label>
                       <select
                         value={filters.locationId}
                         onChange={(e) => setFilters((prev) => ({ ...prev, locationId: e.target.value }))}
@@ -1798,7 +2184,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Trạng thái</label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Trạng thái</label>
                       <select
                         value={filters.status}
                         onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
@@ -1817,29 +2203,29 @@ function AssetManagement({ restrictToConsumable = false }) {
 
                   <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
                     <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
+                    <table className="min-w-[1080px] text-sm">
                       <thead className="bg-fptOrange text-white">
                         <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-white">
+                          <th className="w-[22%] px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('name')} className="transition-colors hover:text-orange-100">
                               {getSortLabel('name', 'Tên vật tư')}
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">
+                          <th className="w-[14%] px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('category')} className="transition-colors hover:text-orange-100">
                               {getSortLabel('category', 'Loại')}
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">
+                          <th className="w-[14%] px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('quantityOnHand')} className="transition-colors hover:text-orange-100">
                               Tồn theo HSD
                             </button>
                           </th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">Ngưỡng báo</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">Đơn giá</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
-                          <th className="px-3 py-2 text-right font-semibold text-white">Hành động</th>
+                          <th className="w-[10%] px-3 py-2 text-right font-semibold text-white">Ngưỡng báo</th>
+                          <th className="w-[12%] px-3 py-2 text-right font-semibold text-white">Đơn giá</th>
+                          <th className="w-[12%] px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
+                          <th className="w-[8%] px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
+                          <th className="w-[8%] px-3 py-2 text-right font-semibold text-white">Hành động</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
@@ -1847,7 +2233,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                           Array.from({ length: 6 }).map((_, index) => (
                             <tr key={`skeleton-consumable-${index}`} className="animate-pulse">
                               {Array.from({ length: 8 }).map((__, cellIndex) => (
-                                <td key={`cell-consumable-${cellIndex}`} className="px-3 py-2">
+                                <td key={`cell-consumable-${cellIndex}`} className="px-3 py-2 align-top">
                                   <div className="h-4 w-24 rounded bg-slate-200" />
                                 </td>
                               ))}
@@ -1863,7 +2249,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 expirationDate: group.expirationDate,
                               })
                               return (
-                                <tr key={group.key} className="hover:bg-slate-50/70">
+                                <tr key={group.key} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/80">
                                   {groupIndex === 0 && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
                                       <div className="font-medium text-slate-700">{asset.name}</div>
@@ -1874,28 +2260,39 @@ function AssetManagement({ restrictToConsumable = false }) {
                                     </td>
                                   )}
                                   {groupIndex === 0 && <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{asset.category}</td>}
-                                  <td className="px-3 py-3">
-                                    <div className="font-medium text-slate-700">{`${group.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
-                                    <div className="text-xs text-slate-500">{`Tổng mặt hàng: ${asset.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
+                                  <td className="px-3 py-3 align-top">
+                                    <div className="whitespace-nowrap font-medium tabular-nums text-slate-700">{`${group.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
+                                    <div className="whitespace-nowrap text-xs tabular-nums text-slate-500">{`Tổng mặt hàng: ${asset.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
                                   </td>
                                   {groupIndex === 0 && (
-                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</td>
+                                    <td rowSpan={expiryGroups.length} className="px-3 py-3 text-right align-top">
+                                      <span className="whitespace-nowrap tabular-nums">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</span>
+                                    </td>
                                   )}
-                                  <td className="px-3 py-3">
-                                    <div className="font-medium text-slate-700">{formatCurrency(group.purchasePrice)}</div>
-                                    {group.lotCount > 1 && <div className="text-xs text-slate-500">{`Gộp ${group.lotCount} lô cùng HSD`}</div>}
+                                  <td className="px-3 py-3 text-right align-top">
+                                    <div className="whitespace-nowrap font-medium tabular-nums text-slate-700">{formatCurrency(group.purchasePrice)}</div>
+                                    {group.lotCount > 1 && <div className="whitespace-nowrap text-xs text-slate-500">{`Gộp ${group.lotCount} lô cùng HSD`}</div>}
                                   </td>
-                                  <td className="px-3 py-3">
-                                    <div className="flex flex-col gap-1">
-                                      <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
-                                        {expiryState.label}
+                                  <td className={`px-3 py-3 ${asset.expiryTrackingEnabled ? 'align-top' : 'text-center align-middle'}`}>
+                                    {asset.expiryTrackingEnabled ? (
+                                      <div className="flex flex-col gap-1">
+                                        <span className="whitespace-nowrap text-xs text-slate-500">{expiryState.dateLabel}</span>
+                                        <span className={`inline-flex w-fit whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
+                                          {expiryState.label}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span
+                                        aria-label="Không áp dụng"
+                                        className="inline-flex w-full justify-center text-base font-medium leading-none text-slate-400 dark:text-slate-500"
+                                      >
+                                        –
                                       </span>
-                                      <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
-                                    </div>
+                                    )}
                                   </td>
                                   {groupIndex === 0 && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
-                                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
+                                      <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
                                         {stockState.label}
                                       </span>
                                     </td>
@@ -1978,9 +2375,9 @@ function AssetManagement({ restrictToConsumable = false }) {
             </>
           ) : consumableWorkspace === 'ROOMS' ? (
             <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                <div className="mb-4 border-b border-slate-200 pb-3">
-                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tìm phòng</label>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-4 border-b border-slate-200 pb-3 dark:border-slate-800">
+                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Tìm phòng</label>
                 </div>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -1999,12 +2396,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                         key={location.id}
                         type="button"
                         onClick={() => handleLocationOverviewChange(String(location.id))}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
-                          active ? 'border-fptOrange bg-orange-50 text-fptOrangeDark' : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                        className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm ${
+                          active ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800'
                         }`}
                       >
-                        <span>{location.roomName}</span>
-                        <span className="text-xs text-slate-400">{active ? 'Đang xem' : ''}</span>
+                        <span className="truncate">{location.roomName}</span>
+                        <span className="whitespace-nowrap text-xs text-slate-400 dark:text-slate-500">{active ? 'Đang xem' : ''}</span>
                       </button>
                     )
                   })}
@@ -2020,7 +2417,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                 <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Không gian theo phòng</p>
+                      <p className="text-sm font-semibold text-slate-600">Không gian theo phòng</p>
                       <h3 className="text-lg font-semibold text-slate-800">
                         {locationOverview?.locationName ? `Danh sách vật tư tại: ${locationOverview.locationName}` : 'Theo dõi vật tư theo phòng'}
                       </h3>
@@ -2126,13 +2523,22 @@ function AssetManagement({ restrictToConsumable = false }) {
                                     </td>
                                     <td className="px-3 py-3">{stock.quantityIssued}</td>
                                     <td className="px-3 py-3">{stock.quantityConsumed}</td>
-                                    <td className="px-3 py-3">
-                                      <div className="flex flex-col gap-1">
-                                        <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
-                                          {expiryState.label}
+                                    <td className={`px-3 py-3 ${stock.expiryTrackingEnabled ? '' : 'text-center align-middle'}`}>
+                                      {stock.expiryTrackingEnabled ? (
+                                        <div className="flex flex-col gap-1">
+                                          <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
+                                          <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(expiryState.tone)}`}>
+                                            {expiryState.label}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span
+                                          aria-label="Không áp dụng"
+                                          className="inline-flex w-full justify-center text-base font-medium leading-none text-slate-400 dark:text-slate-500"
+                                        >
+                                          –
                                         </span>
-                                        <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
-                                      </div>
+                                      )}
                                     </td>
                                     <td className="px-3 py-3">
                                       <div className="flex gap-2">
@@ -2265,70 +2671,303 @@ function AssetManagement({ restrictToConsumable = false }) {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Workflow cấp phát</p>
-                  <h3 className="text-lg font-semibold text-slate-800">Phiếu yêu cầu chờ duyệt</h3>
-                  <p className="text-sm text-slate-500">Admin duyệt hoặc từ chối các phiếu yêu cầu do nhân viên quản lý cấp phát tạo.</p>
+          ) : consumableWorkspace === 'DISPOSAL' ? (
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-red-200 bg-white p-4 shadow-sm dark:border-red-500/30 dark:bg-slate-950">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-300">Lịch sử tiêu huỷ</p>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Tra cứu phiếu tiêu huỷ theo trạng thái</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Có thể lọc theo trạng thái, tìm theo tên vật tư, mã QA, lô hàng hoặc người đề nghị.</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_auto]">
+                    <input
+                      value={disposalHistoryFilters.keyword}
+                      onChange={(e) => setDisposalHistoryFilters((prev) => ({ ...prev, keyword: e.target.value }))}
+                      className={getFieldClass(false)}
+                      placeholder="Tìm vật tư, mã QA, lô hàng..."
+                    />
+                    <select
+                      value={disposalHistoryFilters.status}
+                      onChange={(e) => setDisposalHistoryFilters((prev) => ({ ...prev, status: e.target.value }))}
+                      className={getFieldClass(false)}
+                    >
+                      <option value="">Tất cả trạng thái</option>
+                      <option value="PENDING">Chờ duyệt</option>
+                      <option value="APPROVED">Đã tiêu huỷ</option>
+                      <option value="REJECTED">Từ chối</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => loadDisposalRequests(disposalHistoryFilters.status)}
+                      disabled={disposalRequestsLoading}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                    >
+                      <RefreshCw size={16} />
+                      Làm mới
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => loadPendingConsumableRequests()}
-                  disabled={pendingConsumableRequestsLoading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-                >
-                  <RefreshCw size={16} />
-                  Làm mới phiếu
-                </button>
               </div>
-              <div className="space-y-3">
-                {pendingConsumableRequestsLoading && (
-                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                    Đang tải danh sách phiếu chờ duyệt...
+
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                {disposalRequestsLoading && (
+                  <div className="border-b border-slate-200 px-4 py-8 text-center text-sm text-red-700 dark:border-slate-800 dark:text-red-300">
+                    Đang tải lịch sử tiêu huỷ...
                   </div>
                 )}
-                {!pendingConsumableRequestsLoading && pendingConsumableRequests.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-slate-800">{item.assetName}</p>
-                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Chờ duyệt</span>
+                {!disposalRequestsLoading && (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[1120px] text-sm">
+                      <thead className="bg-slate-100/80 dark:bg-slate-900/70">
+                        <tr>
+                          <th className="w-[8%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Phiếu</th>
+                          <th className="w-[20%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Vật tư</th>
+                          <th className="w-[12%] px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng</th>
+                          <th className="w-[10%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Số lô</th>
+                          <th className="w-[16%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Người đề nghị</th>
+                          <th className="w-[10%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>
+                          <th className="w-[14%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Xử lý</th>
+                          <th className="w-[10%] px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Hành động</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredDisposalRequests.map((item) => {
+                          const statusMeta = getConsumableDisposalStatusMeta(item.status)
+                          return (
+                            <tr key={item.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-slate-900/60">
+                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                                <div className="font-semibold">#{item.id}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">{item.assetQaCode}</div>
+                              </td>
+                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                                <div className="font-medium">{item.assetName}</div>
+                                <div className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{item.reason}</div>
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                                <div className="font-medium whitespace-nowrap">{item.quantityRequested} {item.unit || ''}</div>
+                              </td>
+                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                                <div className="font-medium">{item.itemCount || item.items?.length || 1} lô</div>
+                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                  {(item.items || []).slice(0, 2).map((lotItem) => lotItem.lotCode || `Lô #${lotItem.receiptLotId}`).join(', ') || (item.lotCode || `Lô #${item.receiptLotId}`)}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                                <div className="font-medium">{item.requestedByFullName || item.requestedByUsername}</div>
+                                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(item.createdAt)}</div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusMeta.className}`}>
+                                  {statusMeta.label}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                                {item.resolvedAt ? (
+                                  <>
+                                    <div className="font-medium">{item.resolvedByFullName || item.resolvedByUsername}</div>
+                                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(item.resolvedAt)}</div>
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-slate-500 dark:text-slate-400">Đang chờ xử lý</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex justify-end gap-2">
+                                  <ActionIconButton
+                                    icon={Detail}
+                                    label="Xem chi tiết phiếu tiêu huỷ"
+                                    variant="info"
+                                    className="h-9 w-9"
+                                    onClick={() => setSelectedDisposalHistoryRequest(item)}
+                                  />
+                                  {isAdmin && String(item.status || '').toUpperCase() === 'PENDING' && (
+                                    <>
+                                      <ActionIconButton
+                                        icon={Check}
+                                        label="Duyệt tiêu huỷ"
+                                        variant="success"
+                                        className="h-9 w-9"
+                                        onClick={() => handleOpenDisposalDecisionModal(item, 'APPROVE')}
+                                      />
+                                      <ActionIconButton
+                                        icon={X}
+                                        label="Từ chối yêu cầu tiêu huỷ"
+                                        variant="danger"
+                                        className="h-9 w-9"
+                                        onClick={() => handleOpenDisposalDecisionModal(item, 'REJECT')}
+                                      />
+                                    </>
+                                  )}
+                                  {String(item.status || '').toUpperCase() === 'APPROVED' && (
+                                    <ActionIconButton
+                                      icon={Download}
+                                      label="Tải biên bản tiêu huỷ"
+                                      variant="default"
+                                      className="h-9 w-9"
+                                      onClick={() => handleDownloadDisposalDocument(item.id)}
+                                      disabled={downloadingDisposalRequestId === item.id}
+                                    />
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {filteredDisposalRequests.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                              Không có phiếu tiêu huỷ nào khớp với bộ lọc hiện tại.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-600">Workflow cấp phát</p>
+                    <h3 className="text-lg font-semibold text-slate-800">Phiếu yêu cầu cấp phát chờ duyệt</h3>
+                    <p className="text-sm text-slate-500">Admin duyệt hoặc từ chối các phiếu yêu cầu do nhân viên quản lý cấp phát tạo.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => loadPendingConsumableRequests()}
+                    disabled={pendingConsumableRequestsLoading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                  >
+                    <RefreshCw size={16} />
+                    Làm mới phiếu
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {pendingConsumableRequestsLoading && (
+                    <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                      Đang tải danh sách phiếu chờ duyệt...
+                    </div>
+                  )}
+                  {!pendingConsumableRequestsLoading && pendingConsumableRequests.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-800">{item.assetName}</p>
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">Chờ duyệt</span>
+                          </div>
+                          <p className="text-sm text-slate-500">
+                            Phiếu #{item.id} • {item.locationName} • {item.quantityRequested} {item.unit || ''}
+                          </p>
+                          <p className="text-sm text-slate-500">
+                            Người yêu cầu: {item.requestedByFullName || item.requestedByUsername} • {formatDateTime(item.createdAt)}
+                          </p>
+                          <p className="text-sm text-slate-700">{item.reason}</p>
                         </div>
-                        <p className="text-sm text-slate-500">
-                          Phiếu #{item.id} • {item.locationName} • {item.quantityRequested} {item.unit || ''}
-                        </p>
-                        <p className="text-sm text-slate-500">
-                          Người yêu cầu: {item.requestedByFullName || item.requestedByUsername} • {formatDateTime(item.createdAt)}
-                        </p>
-                        <p className="text-sm text-slate-700">{item.reason}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <ActionIconButton
-                          icon={Check}
-                          label="Duyệt cấp phát"
-                          variant="success"
-                          className="h-9 w-9"
-                          onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
-                        />
-                        <ActionIconButton
-                          icon={X}
-                          label="Từ chối phiếu"
-                          variant="danger"
-                          className="h-9 w-9"
-                          onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
-                        />
+                        <div className="flex flex-wrap gap-2">
+                          <ActionIconButton
+                            icon={Check}
+                            label="Duyệt cấp phát"
+                            variant="success"
+                            className="h-9 w-9"
+                            onClick={() => handleOpenConsumableDecisionModal(item, 'APPROVE')}
+                          />
+                          <ActionIconButton
+                            icon={X}
+                            label="Từ chối phiếu"
+                            variant="danger"
+                            className="h-9 w-9"
+                            onClick={() => handleOpenConsumableDecisionModal(item, 'REJECT')}
+                          />
+                        </div>
                       </div>
                     </div>
+                  ))}
+                  {!pendingConsumableRequestsLoading && pendingConsumableRequests.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
+                      Hiện không có phiếu yêu cầu cấp phát nào đang chờ Admin duyệt.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-red-200 bg-white p-4 shadow-sm dark:border-red-500/30 dark:bg-slate-950">
+                <div className="mb-4 flex flex-col gap-3 border-b border-red-200 pb-4 dark:border-red-500/20 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-300">Workflow tiêu huỷ</p>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Yêu cầu tiêu huỷ hàng hết hạn chờ duyệt</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Admin duyệt tiêu huỷ, xác nhận cập nhật tồn kho và tải biên bản Word ngay sau khi xử lý.</p>
                   </div>
-                ))}
-                {!pendingConsumableRequestsLoading && pendingConsumableRequests.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-                    Hiện không có phiếu yêu cầu nào đang chờ Admin duyệt.
-                  </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => loadPendingDisposalRequests()}
+                    disabled={pendingDisposalRequestsLoading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                  >
+                    <RefreshCw size={16} />
+                    Làm mới yêu cầu
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {pendingDisposalRequestsLoading && (
+                    <div className="rounded-2xl border border-dashed border-red-200 px-4 py-8 text-center text-sm text-red-700 dark:border-red-500/30 dark:text-red-300">
+                      Đang tải danh sách yêu cầu tiêu huỷ...
+                    </div>
+                  )}
+                  {!pendingDisposalRequestsLoading && pendingDisposalRequests.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-red-200 bg-red-50/50 p-4 dark:border-red-500/30 dark:bg-red-500/5">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">{item.assetName}</p>
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getConsumableDisposalStatusMeta(item.status).className}`}>
+                              {getConsumableDisposalStatusMeta(item.status).label}
+                            </span>
+                          </div>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Phiếu #{item.id} • {item.quantityRequested} {item.unit || ''} • {item.itemCount || item.items?.length || 1} lô
+                          </p>
+                          {(item.items || []).slice(0, 2).map((lotItem) => (
+                            <p key={lotItem.id || lotItem.receiptLotId} className="text-sm text-slate-500 dark:text-slate-400">
+                              {lotItem.lotCode || `Lô #${lotItem.receiptLotId}`} • HSD {formatDate(lotItem.expirationDate)} • {lotItem.quantityRequested} {item.unit || ''}
+                            </p>
+                          ))}
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Người đề nghị: {item.requestedByFullName || item.requestedByUsername} • {formatDateTime(item.createdAt)}
+                          </p>
+                          <p className="text-sm text-slate-700 dark:text-slate-200">{item.reason}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <ActionIconButton
+                            icon={Check}
+                            label="Duyệt tiêu huỷ"
+                            variant="success"
+                            className="h-9 w-9"
+                            onClick={() => handleOpenDisposalDecisionModal(item, 'APPROVE')}
+                            disabled={downloadingDisposalRequestId === item.id}
+                          />
+                          <ActionIconButton
+                            icon={X}
+                            label="Từ chối yêu cầu tiêu huỷ"
+                            variant="danger"
+                            className="h-9 w-9"
+                            onClick={() => handleOpenDisposalDecisionModal(item, 'REJECT')}
+                            disabled={downloadingDisposalRequestId === item.id}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {!pendingDisposalRequestsLoading && pendingDisposalRequests.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-red-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-red-500/30 dark:text-slate-400">
+                      Hiện không có yêu cầu tiêu huỷ nào đang chờ Admin duyệt.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2513,7 +3152,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                         <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>
                         <td className="px-3 py-2">
                           <ActionIconButton
-                            icon={Eye}
+                            icon={Detail}
                             label="Xem đặc tính kỹ thuật"
                             variant="violet"
                             onClick={async () => {
@@ -3550,6 +4189,124 @@ function AssetManagement({ restrictToConsumable = false }) {
         </div>
       )}
 
+      {showDisposalRequestModal && selectedExpiredLot && (
+        <div className="fixed inset-0 z-[58] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-4xl rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">Tạo yêu cầu tiêu huỷ vật tư hết hạn</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Chọn một hoặc nhiều lô cùng vật tư và nhập số lượng tiêu huỷ theo từng lô.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDisposalRequestModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-sm text-slate-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-slate-200">
+                <p><span className="font-semibold">Tên vật phẩm:</span> {selectedExpiredLot.assetName}</p>
+                <p><span className="font-semibold">Mã vật tư:</span> {selectedExpiredLot.assetQaCode}</p>
+                <p><span className="font-semibold">Số lô hết hạn đang có:</span> {disposalRequestForm.items.length}</p>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/70">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Chọn</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô hàng</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Hạn sử dụng</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Còn lại</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {disposalRequestForm.items.map((item) => (
+                      <tr key={item.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.selected)}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setDisposalRequestForm((prev) => ({
+                                ...prev,
+                                items: prev.items.map((entry) => (
+                                  entry.receiptLotId === item.receiptLotId
+                                    ? {
+                                        ...entry,
+                                        selected: checked,
+                                        quantityRequested: checked ? (entry.quantityRequested || String(entry.quantityRemaining || '')) : '',
+                                      }
+                                    : entry
+                                )),
+                              }))
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-slate-700 dark:text-slate-200">{item.lotCode}</td>
+                        <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.receivedDate)}</td>
+                        <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>
+                        <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-200">{item.quantityRemaining} {item.unit || ''}</td>
+                        <td className="px-3 py-3">
+                          <input
+                            type="number"
+                            min="1"
+                            max={item.quantityRemaining}
+                            disabled={!item.selected}
+                            value={item.quantityRequested}
+                            onChange={(e) => {
+                              const nextValue = e.target.value
+                              setDisposalRequestForm((prev) => ({
+                                ...prev,
+                                items: prev.items.map((entry) => (
+                                  entry.receiptLotId === item.receiptLotId
+                                    ? { ...entry, quantityRequested: nextValue }
+                                    : entry
+                                )),
+                              }))
+                            }}
+                            className={`${getFieldClass(false)} text-right`}
+                            placeholder="0"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Lý do cần tiêu huỷ</label>
+                <textarea
+                  rows={4}
+                  value={disposalRequestForm.reason}
+                  onChange={(e) => setDisposalRequestForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  className={getFieldClass(false)}
+                  placeholder="Do hết hạn sử dụng."
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateDisposalRequest}
+                disabled={disposalRequestSubmitting}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                Gửi yêu cầu tiêu huỷ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showConsumableDecisionModal && selectedConsumableRequest && (
         <div className="fixed inset-0 z-[58] flex items-center justify-center bg-slate-900/50 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
@@ -3606,6 +4363,158 @@ function AssetManagement({ restrictToConsumable = false }) {
               >
                 {consumableDecisionAction === 'APPROVE' ? 'Xác nhận duyệt cấp phát' : 'Xác nhận từ chối'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDisposalDecisionModal && selectedDisposalRequest && (
+        <div className="fixed inset-0 z-[59] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                  {disposalDecisionAction === 'APPROVE' ? 'Duyệt tiêu huỷ vật tư hết hạn' : 'Từ chối yêu cầu tiêu huỷ'}
+                </h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Phiếu #{selectedDisposalRequest.id} • {selectedDisposalRequest.assetName} • {selectedDisposalRequest.itemCount || selectedDisposalRequest.items?.length || 1} lô
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDisposalDecisionModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-sm text-slate-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-slate-200">
+                <p>Số lượng tiêu huỷ: {selectedDisposalRequest.quantityRequested} {selectedDisposalRequest.unit || ''}</p>
+                <p>Người đề nghị: {selectedDisposalRequest.requestedByFullName || selectedDisposalRequest.requestedByUsername}</p>
+                <p>Lý do: {selectedDisposalRequest.reason}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200">
+                  Danh sách lô trong phiếu
+                </div>
+                <div className="max-h-52 overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-900/70">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>
+                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(selectedDisposalRequest.items || []).map((item) => (
+                        <tr key={item.id || item.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
+                          <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{item.lotCode || `Lô #${item.receiptLotId}`}</td>
+                          <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>
+                          <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{item.quantityRequested}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {disposalDecisionAction === 'APPROVE' && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                  Bạn có chắc chắn muốn tiêu huỷ các sản phẩm trên?
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {disposalDecisionAction === 'APPROVE' ? 'Ghi chú duyệt' : 'Lý do từ chối'}
+                </label>
+                <textarea
+                  rows={4}
+                  value={disposalDecisionNote}
+                  onChange={(e) => setDisposalDecisionNote(e.target.value)}
+                  className={getFieldClass(false)}
+                  placeholder={
+                    disposalDecisionAction === 'APPROVE'
+                      ? 'Ví dụ: tiêu huỷ theo biên bản do lô đã quá hạn sử dụng.'
+                      : 'Nhập lý do từ chối để người đề nghị biết cách xử lý tiếp.'
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleSubmitDisposalDecision}
+                disabled={disposalDecisionSubmitting}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
+                  disposalDecisionAction === 'APPROVE' ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-700 hover:bg-slate-800'
+                }`}
+              >
+                {disposalDecisionAction === 'APPROVE' ? 'Có, chắc chắn' : 'Xác nhận từ chối'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedDisposalHistoryRequest && (
+        <div className="fixed inset-0 z-[58] flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-4xl rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">Chi tiết phiếu tiêu huỷ #{selectedDisposalHistoryRequest.id}</h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {selectedDisposalHistoryRequest.assetName} • {selectedDisposalHistoryRequest.quantityRequested} {selectedDisposalHistoryRequest.unit || ''} • {selectedDisposalHistoryRequest.itemCount || selectedDisposalHistoryRequest.items?.length || 1} lô
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDisposalHistoryDetailModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+                <p><span className="font-semibold">Người đề nghị:</span> {selectedDisposalHistoryRequest.requestedByFullName || selectedDisposalHistoryRequest.requestedByUsername}</p>
+                <p><span className="font-semibold">Thời gian tạo:</span> {formatDateTime(selectedDisposalHistoryRequest.createdAt)}</p>
+                <p><span className="font-semibold">Lý do:</span> {selectedDisposalHistoryRequest.reason}</p>
+                {selectedDisposalHistoryRequest.resolvedAt && (
+                  <p>
+                    <span className="font-semibold">Xử lý:</span> {formatDateTime(selectedDisposalHistoryRequest.resolvedAt)} bởi {selectedDisposalHistoryRequest.resolvedByFullName || selectedDisposalHistoryRequest.resolvedByUsername}
+                  </p>
+                )}
+                {selectedDisposalHistoryRequest.decisionNote && (
+                  <p><span className="font-semibold">Ghi chú xử lý:</span> {selectedDisposalHistoryRequest.decisionNote}</p>
+                )}
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/70">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>
+                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selectedDisposalHistoryRequest.items || []).map((lotItem) => (
+                      <tr key={lotItem.id || lotItem.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
+                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{lotItem.lotCode || `Lô #${lotItem.receiptLotId}`}</td>
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.receivedDate)}</td>
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.expirationDate)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{lotItem.quantityRequested}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
+import { IconFileDescription as Detail, IconMessageCircle as MessageCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
-import { Eye, MessageCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -145,7 +145,7 @@ function MaintenanceHistoryManagement() {
                     </td>
                     <td className="px-3 py-2">
                       <ActionIconButton
-                        icon={Eye}
+                        icon={Detail}
                         label="Xem ảnh lỗi"
                         onClick={() => {
                           if (!item.imageUrl) {

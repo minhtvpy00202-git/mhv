@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ThemeToggle from '../components/ThemeToggle'
+import { useBranding } from '../context/BrandingContext'
 
 function Register() {
+  const { branding } = useBranding()
   const navigate = useNavigate()
   const [form, setForm] = useState({
     username: '',
@@ -85,14 +88,17 @@ function Register() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-4 dark:bg-slate-950">
+      <div className="fixed right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <form onSubmit={handleSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow dark:bg-slate-900">
         <h1 className="text-xl font-bold text-fptOrange">Đăng ký tài khoản</h1>
-        <p className="mt-1 text-sm text-slate-500">Asset Management</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{`${branding.companyName} ${branding.appName}`}</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Tên đăng nhập *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tên đăng nhập *</label>
             <div className="flex gap-2">
               <input
                 value={form.username}
@@ -113,7 +119,7 @@ function Register() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Mật khẩu *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mật khẩu *</label>
             <input
               type="password"
               value={form.password}
@@ -124,7 +130,7 @@ function Register() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Xác nhận mật khẩu *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Xác nhận mật khẩu *</label>
             <input
               type="password"
               value={form.confirmPassword}
@@ -136,7 +142,7 @@ function Register() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Họ và tên *</label>
             <input
               value={form.fullName}
               onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
@@ -146,7 +152,7 @@ function Register() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Ngày sinh</label>
             <input
               type="date"
               value={form.birthday}
@@ -157,7 +163,7 @@ function Register() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Số điện thoại</label>
             <input
               value={form.phone}
               onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
@@ -171,7 +177,7 @@ function Register() {
         <div className="mt-5 grid grid-cols-2 gap-2">
           <Link
             to="/login"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-center font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-center font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Đăng nhập
           </Link>

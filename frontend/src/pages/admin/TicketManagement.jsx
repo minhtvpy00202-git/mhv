@@ -1,5 +1,5 @@
+import { IconCheck as Check, IconPhoto as ImageIcon } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ImageIcon } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
@@ -142,17 +142,26 @@ function TicketManagement() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">Điều phối ticket sửa chữa</h2>
-        <p className="mt-1 text-sm text-slate-600">Theo dõi ticket báo hỏng, xem nhanh thông tin sự cố và gán kỹ thuật viên phụ trách.</p>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Điều phối ticket sửa chữa</h2>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Theo dõi ticket báo hỏng, xem nhanh thông tin sự cố và gán kỹ thuật viên phụ trách.</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Chờ tiếp nhận: {stats.pending}</div>
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Đang xử lý: {stats.inProgress}</div>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Đã giải quyết: {stats.resolved}</div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Chờ tiếp nhận</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{stats.pending}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Đang xử lý</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{stats.inProgress}</p>
+          </div>
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-4 py-3 dark:border-orange-500/30 dark:bg-orange-500/10">
+            <p className="text-xs font-medium text-orange-700 dark:text-orange-300">Đã giải quyết</p>
+            <p className="mt-1 text-2xl font-semibold text-orange-900 dark:text-orange-200">{stats.resolved}</p>
+          </div>
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 md:grid-cols-4">
           <select
             value={filters.status}
@@ -198,9 +207,9 @@ function TicketManagement() {
           </button>
         </div>
 
-        <div className="overflow-auto rounded-lg border border-slate-200">
+        <div className="overflow-auto rounded-2xl border border-slate-200">
           <table className="min-w-[1750px] text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50/80">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Ticket</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Mã thiết bị</th>
@@ -218,7 +227,7 @@ function TicketManagement() {
             </thead>
             <tbody>
               {!loading && tickets.map((ticket) => (
-                <tr key={ticket.id} className="border-t border-slate-100 align-top">
+                <tr key={ticket.id} className="border-t border-slate-100 align-top hover:bg-slate-50/60">
                   <td className="whitespace-nowrap px-3 py-2">#{ticket.id}</td>
                   <td className="whitespace-nowrap px-3 py-2">{ticket.assetQaCode}</td>
                   <td className="max-w-[180px] truncate whitespace-nowrap px-3 py-2" title={ticket.assetName || '-'}>
@@ -301,14 +310,14 @@ function TicketManagement() {
               ))}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
                     Không có ticket phù hợp.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          {loading && <p className="px-3 py-3 text-sm text-slate-500">Đang tải ticket...</p>}
+          {loading && <p className="px-3 py-4 text-sm text-slate-500">Đang tải ticket...</p>}
         </div>
         {!loading && pageInfo.totalItems > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">

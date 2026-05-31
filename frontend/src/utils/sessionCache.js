@@ -22,5 +22,7 @@ export function setSessionCache(key, value, ttlMs) {
       value,
       expiresAt: Date.now() + ttlMs,
     }))
-  } catch {}
+  } catch {
+    // Ignore storage write failures in restricted/private browsing modes.
+  }
 }

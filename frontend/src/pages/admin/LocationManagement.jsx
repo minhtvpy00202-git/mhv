@@ -1,5 +1,5 @@
+import { IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Trash2, Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'

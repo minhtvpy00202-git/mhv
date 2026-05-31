@@ -1,12 +1,17 @@
 package com.poly.mhv.service;
 
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.Category;
+import com.poly.mhv.entity.ConsumableDisposalRequest;
+import com.poly.mhv.entity.ConsumableDisposalRequestItem;
+import com.poly.mhv.entity.ConsumableReceiptLot;
 import com.poly.mhv.entity.InventoryAudit;
 import com.poly.mhv.entity.InventoryAuditItem;
 import com.poly.mhv.entity.InventoryAuditMissing;
 import com.poly.mhv.entity.UsageHistory;
 import com.poly.mhv.repository.AssetRepository;
+import com.poly.mhv.repository.ConsumableDisposalRequestRepository;
 import com.poly.mhv.repository.InventoryAuditItemRepository;
 import com.poly.mhv.repository.InventoryAuditMissingRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
@@ -14,14 +19,32 @@ import com.poly.mhv.repository.UsageHistoryRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import org.apache.poi.xwpf.usermodel.BreakType;
+import org.apache.poi.xwpf.usermodel.ParagraphAlignment;
+import org.apache.poi.xwpf.usermodel.TableRowAlign;
+import org.apache.poi.xwpf.usermodel.TextAlignment;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBody;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblBorders;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STBorder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -34,19 +57,25 @@ public class ReportService {
     private final InventoryAuditRepository inventoryAuditRepository;
     private final InventoryAuditItemRepository inventoryAuditItemRepository;
     private final InventoryAuditMissingRepository inventoryAuditMissingRepository;
+    private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
+    private final BrandingSettingsService brandingSettingsService;
 
     public ReportService(
             AssetRepository assetRepository,
             UsageHistoryRepository usageHistoryRepository,
             InventoryAuditRepository inventoryAuditRepository,
             InventoryAuditItemRepository inventoryAuditItemRepository,
-            InventoryAuditMissingRepository inventoryAuditMissingRepository
+            InventoryAuditMissingRepository inventoryAuditMissingRepository,
+            ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
+            BrandingSettingsService brandingSettingsService
     ) {
         this.assetRepository = assetRepository;
         this.usageHistoryRepository = usageHistoryRepository;
         this.inventoryAuditRepository = inventoryAuditRepository;
         this.inventoryAuditItemRepository = inventoryAuditItemRepository;
         this.inventoryAuditMissingRepository = inventoryAuditMissingRepository;
+        this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
+        this.brandingSettingsService = brandingSettingsService;
     }
 
     @Transactional(readOnly = true)
@@ -266,6 +295,132 @@ public class ReportService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public byte[] exportExpiredDisposalDocument(Long requestId) throws IOException {
+        ConsumableDisposalRequest request = consumableDisposalRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy yêu cầu tiêu huỷ."));
+        if (!"APPROVED".equalsIgnoreCase(request.getStatus())) {
+            throw new RuntimeException("Chỉ xuất được biên bản cho yêu cầu tiêu huỷ đã được duyệt.");
+        }
+        Asset asset = request.getAsset();
+        AppUser requester = request.getRequestedBy();
+        AppUser approver = request.getResolvedBy();
+        LocalDate documentDate = resolveDocumentDate(request);
+        List<ConsumableDisposalRequestItem> requestItems = request.getItems() == null ? List.of() : request.getItems();
+        String companyName = brandingSettingsService.getCompanyName();
+        String appName = brandingSettingsService.getAppName();
+
+        try (XWPFDocument document = new XWPFDocument(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            configureDocumentPage(document);
+
+            XWPFTable headerTable = document.createTable(1, 2);
+            applyInvisibleBorders(headerTable);
+            headerTable.setTableAlignment(TableRowAlign.CENTER);
+            populateHeaderCell(headerTable.getRow(0).getCell(0), List.of(companyName), ParagraphAlignment.CENTER, true);
+            populateHeaderCell(
+                    headerTable.getRow(0).getCell(1),
+                    List.of("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "Độc lập - Tự do - Hạnh phúc"),
+                    ParagraphAlignment.CENTER,
+                    true
+            );
+
+            createParagraph(document, "", ParagraphAlignment.LEFT, false);
+            createParagraph(
+                    document,
+                    "Ngày " + documentDate.getDayOfMonth()
+                            + " tháng " + documentDate.getMonthValue()
+                            + " năm " + documentDate.getYear(),
+                    ParagraphAlignment.RIGHT,
+                    false
+            );
+            createParagraph(document, "BIÊN BẢN HỦY HÀNG HÓA HẾT HẠN SỬ DỤNG", ParagraphAlignment.CENTER, true);
+            createParagraph(document, "Căn cứ đề nghị tiêu huỷ vật tư hết hạn sử dụng đã được phê duyệt.", ParagraphAlignment.LEFT, false);
+            createParagraph(
+                    document,
+                    "Hôm nay, tại kho vật tư của " + companyName + ", chúng tôi gồm:",
+                    ParagraphAlignment.LEFT,
+                    false
+            );
+            createParagraph(
+                    document,
+                    "1. " + getFullNameOrFallback(requester) + " - Chức vụ: " + toDocumentRoleLabel(requester),
+                    ParagraphAlignment.LEFT,
+                    false
+            );
+            createParagraph(
+                    document,
+                    "2. " + getFullNameOrFallback(approver) + " - Chức vụ: " + toDocumentRoleLabel(approver),
+                    ParagraphAlignment.LEFT,
+                    false
+            );
+            createParagraph(
+                    document,
+                    "Cùng thống nhất tiêu huỷ lô hàng hóa hết hạn sử dụng theo danh sách dưới đây:",
+                    ParagraphAlignment.LEFT,
+                    false
+            );
+
+            int rowCount = Math.max(2, requestItems.size() + 1);
+            XWPFTable itemsTable = document.createTable(rowCount, 7);
+            applyInvisibleBorders(itemsTable);
+            XWPFTableRow headerRow = itemsTable.getRow(0);
+            setTableCellText(headerRow.getCell(0), "STT", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(1), "Tên hàng hóa", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(2), "ĐVT", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(3), "Số lượng", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(4), "Ngày nhập", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(5), "Ngày hết hạn sử dụng", ParagraphAlignment.CENTER, true);
+            setTableCellText(headerRow.getCell(6), "Lô hàng", ParagraphAlignment.CENTER, true);
+            if (requestItems.isEmpty()) {
+                ConsumableReceiptLot lot = request.getReceiptLot();
+                XWPFTableRow valueRow = itemsTable.getRow(1);
+                setTableCellText(valueRow.getCell(0), "1", ParagraphAlignment.CENTER, false);
+                setTableCellText(valueRow.getCell(1), asset.getName(), ParagraphAlignment.LEFT, false);
+                setTableCellText(valueRow.getCell(2), StringUtils.hasText(asset.getUnit()) ? asset.getUnit() : "", ParagraphAlignment.CENTER, false);
+                setTableCellText(valueRow.getCell(3), String.valueOf(request.getQuantityRequested()), ParagraphAlignment.CENTER, false);
+                setTableCellText(valueRow.getCell(4), formatLocalDate(lot != null ? lot.getReceivedDate() : null), ParagraphAlignment.CENTER, false);
+                setTableCellText(valueRow.getCell(5), formatLocalDate(lot != null ? lot.getExpirationDate() : null), ParagraphAlignment.CENTER, false);
+                setTableCellText(valueRow.getCell(6), getLotDisplayName(lot), ParagraphAlignment.CENTER, false);
+            } else {
+                for (int index = 0; index < requestItems.size(); index += 1) {
+                    ConsumableDisposalRequestItem requestItem = requestItems.get(index);
+                    ConsumableReceiptLot lot = requestItem.getReceiptLot();
+                    XWPFTableRow valueRow = itemsTable.getRow(index + 1);
+                    setTableCellText(valueRow.getCell(0), String.valueOf(index + 1), ParagraphAlignment.CENTER, false);
+                    setTableCellText(valueRow.getCell(1), asset.getName(), ParagraphAlignment.LEFT, false);
+                    setTableCellText(valueRow.getCell(2), StringUtils.hasText(asset.getUnit()) ? asset.getUnit() : "", ParagraphAlignment.CENTER, false);
+                    setTableCellText(valueRow.getCell(3), String.valueOf(requestItem.getQuantityRequested()), ParagraphAlignment.CENTER, false);
+                    setTableCellText(valueRow.getCell(4), formatLocalDate(lot != null ? lot.getReceivedDate() : null), ParagraphAlignment.CENTER, false);
+                    setTableCellText(valueRow.getCell(5), formatLocalDate(lot != null ? lot.getExpirationDate() : null), ParagraphAlignment.CENTER, false);
+                    setTableCellText(valueRow.getCell(6), getLotDisplayName(lot), ParagraphAlignment.CENTER, false);
+                }
+            }
+
+            createParagraph(document, "Lý do tiêu huỷ: " + request.getReason(), ParagraphAlignment.LEFT, false);
+            createParagraph(
+                    document,
+                    "Biên bản được lập thành 01 bản để lưu hồ sơ " + companyName + " " + appName + ".",
+                    ParagraphAlignment.LEFT,
+                    false
+            );
+
+            XWPFTable signatureTable = document.createTable(2, 3);
+            applyInvisibleBorders(signatureTable);
+            signatureTable.setTableAlignment(TableRowAlign.CENTER);
+            XWPFTableRow roleRow = signatureTable.getRow(0);
+            setTableCellText(roleRow.getCell(0), "Quản trị hệ thống", ParagraphAlignment.CENTER, true);
+            setTableCellText(roleRow.getCell(1), "Nhân viên quản lý vật tư", ParagraphAlignment.CENTER, true);
+            setTableCellText(roleRow.getCell(2), "Giám đốc", ParagraphAlignment.CENTER, true);
+            XWPFTableRow noteRow = signatureTable.getRow(1);
+            setTableCellText(noteRow.getCell(0), "(Ký và ghi rõ họ tên)", ParagraphAlignment.CENTER, false);
+            setTableCellText(noteRow.getCell(1), "(Ký và ghi rõ họ tên)", ParagraphAlignment.CENTER, false);
+            setTableCellText(noteRow.getCell(2), "(Ký và ghi rõ họ tên)", ParagraphAlignment.CENTER, false);
+
+            document.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
     private void createCell(Row row, int column, String value) {
         Cell cell = row.createCell(column);
         cell.setCellValue(value == null ? "" : value);
@@ -304,5 +459,113 @@ public class ReportService {
                 locationId,
                 homeLocationId
         );
+    }
+
+    private void createParagraph(XWPFDocument document, String text, ParagraphAlignment alignment, boolean bold) {
+        XWPFParagraph paragraph = document.createParagraph();
+        writeParagraph(paragraph, text, alignment, bold);
+    }
+
+    private LocalDate resolveDocumentDate(ConsumableDisposalRequest request) {
+        LocalDateTime resolvedAt = request.getResolvedAt();
+        if (resolvedAt != null) {
+            return resolvedAt.toLocalDate();
+        }
+        if (request.getCreatedAt() != null) {
+            return request.getCreatedAt().toLocalDate();
+        }
+        return LocalDate.now();
+    }
+
+    private String formatLocalDate(LocalDate value) {
+        if (value == null) {
+            return "";
+        }
+        return value.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+    }
+
+    private String getFullNameOrFallback(AppUser user) {
+        if (user == null) {
+            return "";
+        }
+        return StringUtils.hasText(user.getFullName()) ? user.getFullName().trim() : user.getUsername();
+    }
+
+    private String toDocumentRoleLabel(AppUser user) {
+        if (user == null) {
+            return "";
+        }
+        return switch (user.getRole()) {
+            case "Admin" -> "Quản trị hệ thống";
+            case "ConsumableManager" -> "Nhân viên quản lý vật tư";
+            case "TechSupport" -> "Kỹ thuật viên";
+            case "NhanVien" -> "Nhân viên";
+            default -> "Người dùng";
+        };
+    }
+
+    private String getLotDisplayName(ConsumableReceiptLot lot) {
+        if (lot == null) {
+            return "";
+        }
+        return StringUtils.hasText(lot.getLotCode()) ? lot.getLotCode().trim() : "Lô #" + lot.getId();
+    }
+
+    private void configureDocumentPage(XWPFDocument document) {
+        CTBody body = document.getDocument().getBody();
+        CTSectPr section = body.isSetSectPr() ? body.getSectPr() : body.addNewSectPr();
+        CTPageMar pageMar = section.isSetPgMar() ? section.getPgMar() : section.addNewPgMar();
+        pageMar.setTop(BigInteger.valueOf(1134));
+        pageMar.setBottom(BigInteger.valueOf(1134));
+        pageMar.setLeft(BigInteger.valueOf(1701));
+        pageMar.setRight(BigInteger.valueOf(1134));
+    }
+
+    private void applyInvisibleBorders(XWPFTable table) {
+        CTTblPr tableProperties = table.getCTTbl().getTblPr();
+        if (tableProperties == null) {
+            tableProperties = table.getCTTbl().addNewTblPr();
+        }
+        CTTblBorders borders = tableProperties.isSetTblBorders()
+                ? tableProperties.getTblBorders()
+                : tableProperties.addNewTblBorders();
+        borders.addNewTop().setVal(STBorder.NONE);
+        borders.addNewBottom().setVal(STBorder.NONE);
+        borders.addNewLeft().setVal(STBorder.NONE);
+        borders.addNewRight().setVal(STBorder.NONE);
+        borders.addNewInsideH().setVal(STBorder.NONE);
+        borders.addNewInsideV().setVal(STBorder.NONE);
+    }
+
+    private void populateHeaderCell(XWPFTableCell cell, List<String> lines, ParagraphAlignment alignment, boolean bold) {
+        cell.removeParagraph(0);
+        for (String line : lines) {
+            XWPFParagraph paragraph = cell.addParagraph();
+            writeParagraph(paragraph, line, alignment, bold);
+        }
+    }
+
+    private void setTableCellText(XWPFTableCell cell, String text, ParagraphAlignment alignment, boolean bold) {
+        cell.removeParagraph(0);
+        XWPFParagraph paragraph = cell.addParagraph();
+        writeParagraph(paragraph, text, alignment, bold);
+    }
+
+    private void writeParagraph(XWPFParagraph paragraph, String text, ParagraphAlignment alignment, boolean bold) {
+        paragraph.setAlignment(alignment);
+        paragraph.setVerticalAlignment(TextAlignment.CENTER);
+        paragraph.setSpacingBetween(1.5);
+        XWPFRun run = paragraph.createRun();
+        run.setFontFamily("Times New Roman");
+        run.setFontSize(13);
+        run.setBold(bold);
+        String normalizedText = text == null ? "" : text;
+        String[] lines = normalizedText.split("\\n", -1);
+        for (int index = 0; index < lines.length; index += 1) {
+            if (index > 0) {
+                run.addBreak(BreakType.TEXT_WRAPPING);
+            }
+            run.setText(lines[index]);
+        }
     }
 }

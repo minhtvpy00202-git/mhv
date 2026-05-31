@@ -103,4 +103,27 @@ public class ReportController {
             throw new CustomException("Không thể xuất biên bản kiểm kê.");
         }
     }
+
+    @GetMapping("/export-expired-disposal/{requestId}")
+    @Operation(summary = "Xuất biên bản tiêu huỷ hàng hết hạn", description = "Xuất file Word biên bản tiêu huỷ cho một yêu cầu tiêu huỷ vật tư hết hạn đã được duyệt.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Xuất biên bản tiêu huỷ thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
+            @ApiResponse(responseCode = "404", description = "Không tìm thấy yêu cầu tiêu huỷ"),
+            @ApiResponse(responseCode = "500", description = "Lỗi xuất file Word")
+    })
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    public ResponseEntity<byte[]> exportExpiredDisposal(@PathVariable Long requestId) {
+        try {
+            byte[] documentBytes = reportService.exportExpiredDisposalDocument(requestId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+            headers.setContentDisposition(ContentDisposition.attachment().filename("bien-ban-huy-hang-hoa-het-han-" + requestId + ".docx").build());
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(documentBytes);
+        } catch (IOException ex) {
+            throw new CustomException("Không thể xuất biên bản tiêu huỷ.");
+        }
+    }
 }

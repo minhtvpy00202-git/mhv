@@ -1,5 +1,11 @@
+import {
+  IconCheck as Check,
+  IconFileDescription as Detail,
+  IconHistory as History,
+  IconMessageCircle as MessageCircle,
+  IconPlayerPlay as Play,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Eye, History, MessageCircle, Play } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -232,7 +238,7 @@ function TechSupportTickets() {
                     </td>
                     <td className="px-3 py-2">
                       <ActionIconButton
-                        icon={Eye}
+                        icon={Detail}
                         label="Xem ảnh lỗi"
                         onClick={() => {
                           if (!ticket.imageUrl) {

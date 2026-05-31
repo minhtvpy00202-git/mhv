@@ -9,10 +9,13 @@ import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
 import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
+import com.poly.mhv.dto.asset.ExpiredConsumableLotResponse;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.service.CategoryService;
 import com.poly.mhv.service.LocationService;
@@ -200,6 +203,13 @@ public class AssetController {
         return ResponseEntity.ok(assetService.getConsumableRequests(status));
     }
 
+    @GetMapping("/expired-lots")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Lấy danh sách lô vật tư đã hết hạn", description = "Trả về các lô vật tư tiêu hao còn tồn kho nhưng đã hết hạn sử dụng và cần tiêu huỷ.")
+    public ResponseEntity<List<ExpiredConsumableLotResponse>> getExpiredConsumableLots() {
+        return ResponseEntity.ok(assetService.getExpiredConsumableLots());
+    }
+
     @PostMapping("/locations/{locationId}/consumable-requests")
     @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Tạo yêu cầu cấp phát vật tư", description = "Người dùng tạo yêu cầu cấp phát vật tư tiêu hao cho một phòng.")
@@ -208,6 +218,52 @@ public class AssetController {
             @Valid @RequestBody ConsumableRequestCreateRequest request
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(assetService.createConsumableRequest(locationId, request));
+    }
+
+    @GetMapping("/disposal-requests")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Lấy danh sách yêu cầu tiêu huỷ vật tư", description = "Admin và nhân viên quản lý vật tư lấy danh sách hoặc lọc theo trạng thái các phiếu tiêu huỷ vật tư hết hạn.")
+    public ResponseEntity<List<ConsumableDisposalRequestResponse>> getConsumableDisposalRequests(@RequestParam(required = false) String status) {
+        return ResponseEntity.ok(assetService.getConsumableDisposalRequests(status));
+    }
+
+    @PostMapping("/disposal-requests")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Tạo phiếu tiêu huỷ vật tư hết hạn", description = "Người dùng tạo phiếu tiêu huỷ có thể gồm một hoặc nhiều lô vật tư hết hạn, với số lượng tiêu huỷ theo từng lô.")
+    public ResponseEntity<ConsumableDisposalRequestResponse> createConsumableDisposalRequest(
+            @Valid @RequestBody ConsumableDisposalRequestCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.createConsumableDisposalRequest(request));
+    }
+
+    @PostMapping("/receipt-lots/{lotId}/disposal-requests")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Tạo yêu cầu tiêu huỷ lô hết hạn", description = "Người dùng tạo yêu cầu tiêu huỷ cho một lô vật tư đã hết hạn sử dụng.")
+    public ResponseEntity<ConsumableDisposalRequestResponse> createConsumableDisposalRequest(
+            @PathVariable Long lotId,
+            @Valid @RequestBody ConsumableDisposalRequestCreateRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.createConsumableDisposalRequest(lotId, request));
+    }
+
+    @PostMapping("/disposal-requests/{requestId}/approve")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Duyệt tiêu huỷ lô vật tư hết hạn", description = "Admin duyệt tiêu huỷ một lô vật tư hết hạn và cập nhật tồn kho.")
+    public ResponseEntity<ConsumableDisposalRequestResponse> approveConsumableDisposalRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody(required = false) ConsumableRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(assetService.approveConsumableDisposalRequest(requestId, request));
+    }
+
+    @PostMapping("/disposal-requests/{requestId}/reject")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Từ chối yêu cầu tiêu huỷ", description = "Admin từ chối yêu cầu tiêu huỷ lô vật tư hết hạn.")
+    public ResponseEntity<ConsumableDisposalRequestResponse> rejectConsumableDisposalRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody ConsumableRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(assetService.rejectConsumableDisposalRequest(requestId, request));
     }
 
     @PostMapping("/consumable-requests/{requestId}/approve")

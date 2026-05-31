@@ -1,4 +1,4 @@
-import { ClipboardList, RefreshCcw } from 'lucide-react'
+import { IconClipboardList as ClipboardList, IconRefresh as RefreshCcw } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'

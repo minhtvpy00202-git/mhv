@@ -26,7 +26,9 @@ async function fileToBitmapOrImage(file) {
         drawTo: (context, width, height) => context.drawImage(bitmap, 0, 0, width, height),
         dispose: () => bitmap.close?.(),
       }
-    } catch {}
+    } catch {
+      // Fall back to HTMLImageElement loading when createImageBitmap is unavailable or fails.
+    }
   }
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)

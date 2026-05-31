@@ -1,4 +1,11 @@
-import { ArrowRight, Copy, History, MessageCircle, Phone, Star } from 'lucide-react'
+import {
+  IconArrowRight as ArrowRight,
+  IconCopy as Copy,
+  IconHistory as History,
+  IconMessageCircle as MessageCircle,
+  IconPhone as Phone,
+  IconStar as Star,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -19,11 +26,11 @@ function toVietnameseRole(role) {
 }
 
 function getAssetBadgeClassName(tone) {
-  if (tone === 'emerald') return 'bg-emerald-100 text-emerald-800'
-  if (tone === 'blue') return 'bg-blue-100 text-blue-800'
-  if (tone === 'red') return 'bg-red-100 text-red-800'
-  if (tone === 'amber') return 'bg-amber-100 text-amber-800'
-  return 'bg-slate-100 text-slate-700'
+  if (tone === 'emerald') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
+  if (tone === 'blue') return 'bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300'
+  if (tone === 'red') return 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
+  if (tone === 'amber') return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+  return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
 }
 
 function TicketDetail() {
@@ -98,135 +105,169 @@ function TicketDetail() {
     && (assigneePhone || assigneeZaloUrl)
 
   return (
-    <div className={`space-y-4 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">Chi tiết Ticket #{ticketId}</h2>
-            <p className="mt-1 text-sm text-slate-600">Theo dõi tiến độ xử lý sự cố và mở từng chức năng khi cần.</p>
+    <div className={`space-y-5 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
+      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.18),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.24),transparent_62%)]" />
+        <div className="relative flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-3xl">
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>
+              {statusMeta.label}
+            </span>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+              Ticket #{ticketId}
+            </h2>
+            <p className="mt-2 max-w-[44ch] text-sm leading-6 text-slate-600 dark:text-slate-400">
+              Theo dõi tiến độ xử lý, người liên quan và các bước hành động tiếp theo trên cùng một màn chi tiết.
+            </p>
           </div>
           <Link
             to={backPath}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            Quay lại
+            Quay lại danh sách
           </Link>
         </div>
       </section>
 
       {loading && (
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-sm text-slate-500">Đang tải dữ liệu ticket...</p>
+        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Đang tải dữ liệu ticket...</p>
         </section>
       )}
 
       {!loading && ticket && (
-        <section className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">{ticket.assetName || 'Thiết bị'}</p>
-              <p className="mt-1 text-xs text-slate-500">{ticket.assetQaCode} · {ticket.assetLocationName || 'Không rõ vị trí'}</p>
-            </div>
-            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>{statusMeta.label}</span>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Thông tin ticket</p>
-              <div className="mt-2 space-y-2 text-sm text-slate-700">
-                <p><span className="font-semibold">Mức ưu tiên:</span> {ticket.priority}</p>
-                <p><span className="font-semibold">Tạo lúc:</span> {formatVietnamDateTime(ticket.createdAt)}</p>
-                <p><span className="font-semibold">Tiếp nhận lúc:</span> {formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận')}</p>
-                <p><span className="font-semibold">Hạn SLA:</span> {formatVietnamDateTime(ticket.dueDate)}</p>
-                <p><span className="font-semibold">Hoàn tất lúc:</span> {formatVietnamDateTime(ticket.resolvedAt, 'Chưa hoàn tất')}</p>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trạng thái thiết bị</p>
-              <div className="mt-2 grid gap-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                  <span className="font-semibold">Tình trạng kỹ thuật:</span>
+        <section className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Thiết bị liên quan</p>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                    {ticket.assetName || 'Thiết bị'}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                    {ticket.assetQaCode} · {ticket.assetLocationName || 'Không rõ vị trí'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetTechnicalStatusMeta.tone)}`}>
                     {assetTechnicalStatusMeta.label}
                   </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                  <span className="font-semibold">Vị trí sử dụng:</span>
                   <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getAssetBadgeClassName(assetUsageStatusMeta.tone)}`}>
                     {assetUsageStatusMeta.label}
                   </span>
                 </div>
               </div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Người liên quan</p>
-              <div className="mt-2 space-y-2 text-sm text-slate-700">
-                <p><span className="font-semibold">Người báo:</span> {ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}</p>
-                <p><span className="font-semibold">SĐT người báo:</span> {ticket.reporterPhone || 'Chưa có số'}</p>
-                <p><span className="font-semibold">Kỹ thuật viên:</span> {ticket.assigneeName || 'Chưa gán'}</p>
-                <p><span className="font-semibold">SĐT kỹ thuật viên:</span> {ticket.assigneePhone || 'Chưa có số'}</p>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Hài lòng người dùng</p>
-              <div className="mt-2 space-y-2 text-sm text-slate-700">
-                <p><span className="font-semibold">Điểm hiện tại:</span> {ticket.satisfactionScore ? `${ticket.satisfactionScore}/5` : 'Chưa có đánh giá'}</p>
-                <p><span className="font-semibold">Nhận xét:</span> {ticket.satisfactionComment || 'Chưa có nhận xét'}</p>
-                {canRateSatisfaction && !ticket.satisfactionScore && (
-                  <Link
-                    to={reviewPath}
-                    className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
-                  >
-                    <Star size={14} />
-                    Mở trang đánh giá riêng
-                    <ArrowRight size={14} />
-                  </Link>
-                )}
-                {canRateSatisfaction && ticket.satisfactionScore && (
-                  <Link
-                    to={reviewPath}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    Xem lại đánh giá
-                    <ArrowRight size={14} />
-                  </Link>
-                )}
-              </div>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-3 md:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mô tả sự cố</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{ticket.description}</p>
-            </div>
-            {isStandardMobileRoute && (
-              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3 md:col-span-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowTimelineModal(true)}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <History size={15} />
-                    Xem toàn bộ timeline
-                  </button>
-                  <Link
-                    to={mobileChatPath}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-sky-100 px-3 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-200"
-                  >
-                    <MessageCircle size={15} />
-                    Mở khu vực chat riêng
-                  </Link>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mức ưu tiên</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{ticket.priority}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mức xử lý của ticket hiện tại.</p>
+                </div>
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Tạo lúc</p>
+                  <p className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">{formatVietnamDateTime(ticket.createdAt)}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Thời điểm ghi nhận sự cố.</p>
+                </div>
+                <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Hạn SLA</p>
+                  <p className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">{formatVietnamDateTime(ticket.dueDate)}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mốc cần hoàn tất theo cam kết.</p>
                 </div>
               </div>
-            )}
+
+              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Mô tả sự cố</p>
+                <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-300">{ticket.description}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Thông tin xử lý</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-700 dark:text-slate-300">
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Tiếp nhận lúc</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận')}</p>
+                  </div>
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Hoàn tất lúc</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.resolvedAt, 'Chưa hoàn tất')}</p>
+                  </div>
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Người báo</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{ticket.reporterPhone || 'Chưa có số'}</p>
+                  </div>
+                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Kỹ thuật viên</p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{ticket.assigneeName || 'Chưa gán'}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{ticket.assigneePhone || 'Chưa có số'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Phản hồi người dùng</p>
+                <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Điểm hiện tại</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                    {ticket.satisfactionScore ? `${ticket.satisfactionScore}/5` : 'Chưa có'}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{ticket.satisfactionComment || 'Chưa có nhận xét'}</p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {canRateSatisfaction && !ticket.satisfactionScore && (
+                    <Link
+                      to={reviewPath}
+                      className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
+                    >
+                      <Star size={14} />
+                      Gửi đánh giá
+                      <ArrowRight size={14} />
+                    </Link>
+                  )}
+                  {canRateSatisfaction && ticket.satisfactionScore && (
+                    <Link
+                      to={reviewPath}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      Xem lại đánh giá
+                      <ArrowRight size={14} />
+                    </Link>
+                  )}
+                  {isStandardMobileRoute && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setShowTimelineModal(true)}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        <History size={15} />
+                        Xem timeline
+                      </button>
+                      <Link
+                        to={mobileChatPath}
+                        className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
+                      >
+                        <MessageCircle size={15} />
+                        Mở chat
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {isTechMobileRoute && reporterPhone && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-sm font-semibold text-emerald-800">Liên hệ người báo hỏng</p>
+            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ người báo hỏng</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <a
                   href={`tel:${reporterPhone}`}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300"
                 >
                   <Phone size={16} />
                   Gọi điện
@@ -236,7 +277,7 @@ function TicketDetail() {
                     href={reporterZaloUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
                   >
                     <MessageCircle size={16} />
                     Nhắn Zalo
@@ -252,7 +293,7 @@ function TicketDetail() {
                       toast.error('Không copy được số điện thoại.')
                     }
                   }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 >
                   <Copy size={16} />
                   Copy số
@@ -262,13 +303,13 @@ function TicketDetail() {
           )}
 
           {showSupportContactCard && (
-            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
-              <p className="text-sm font-semibold text-sky-800">Liên hệ kỹ thuật viên hỗ trợ</p>
+            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ kỹ thuật viên hỗ trợ</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {assigneePhone && (
                   <a
                     href={`tel:${assigneePhone}`}
-                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
+                    className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300"
                   >
                     <Phone size={16} />
                     Gọi kỹ thuật viên
@@ -279,7 +320,7 @@ function TicketDetail() {
                     href={assigneeZaloUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700"
+                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
                   >
                     <MessageCircle size={16} />
                     Chat Zalo
@@ -292,7 +333,7 @@ function TicketDetail() {
       )}
 
       {!canOpenChat && isTechRoute && (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
           Bạn chỉ có thể mở chat sau khi bấm “Nhận xử lý” ticket này.
         </section>
       )}

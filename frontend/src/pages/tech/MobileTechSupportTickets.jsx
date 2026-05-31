@@ -1,4 +1,13 @@
-import { AlertCircle, CheckCircle2, Clock3, Copy, Image as ImageIcon, MessageCircle, Phone, Search } from 'lucide-react'
+import {
+  IconAlertCircle as AlertCircle,
+  IconCircleCheck as CheckCircle2,
+  IconClockHour3 as Clock3,
+  IconCopy as Copy,
+  IconMessageCircle as MessageCircle,
+  IconPhone as Phone,
+  IconPhoto as ImageIcon,
+  IconSearch as Search,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'

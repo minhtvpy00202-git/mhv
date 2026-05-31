@@ -1,7 +1,17 @@
-import { Bell, Home, LogOut, MessageCircle, QrCode, Star, Wrench } from 'lucide-react'
+import {
+  IconBell as Bell,
+  IconHome as Home,
+  IconLogout as LogOut,
+  IconMessageCircle as MessageCircle,
+  IconQrcode as QrCode,
+  IconStar as Star,
+  IconTool as Wrench,
+} from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import axiosClient from '../api/axiosClient'
+import ThemeToggle from '../components/ThemeToggle'
+import { useBranding } from '../context/BrandingContext'
 import { useAuth } from '../context/AuthContext'
 import { formatVietnamDateTime } from '../utils/datetime'
 
@@ -14,6 +24,7 @@ const navItems = [
 
 function MobileLayout() {
   const { user, logout } = useAuth()
+  const { branding } = useBranding()
   const navigate = useNavigate()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
@@ -105,13 +116,14 @@ function MobileLayout() {
   const latestChatNotifications = useMemo(() => chatNotifications.slice(0, 8), [chatNotifications])
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-orange-200 bg-fptOrange px-4 py-3 text-white shadow">
+    <div className="mx-auto min-h-[100dvh] w-full max-w-md bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-orange-200 bg-fptOrange px-4 py-3 text-white shadow dark:border-orange-900/60 dark:bg-orange-700">
         <div>
           <h1 className="text-sm font-medium text-white/90">Nhân viên</h1>
-          <p className="text-base font-semibold">{user?.fullName || user?.username || 'FPT Infrastructure'}</p>
+          <p className="text-base font-semibold">{user?.fullName || user?.username || `${branding.companyName} ${branding.appName}`}</p>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle compact className="border-white/20 bg-white/10 px-2.5 text-white hover:bg-white/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20" />
           <div className="relative">
             <button
               type="button"
@@ -122,7 +134,7 @@ function MobileLayout() {
                   void loadPendingRatings()
                 }
               }}
-              className="relative inline-flex items-center rounded-md bg-white/15 p-2 hover:bg-white/25"
+              className="relative inline-flex items-center rounded-lg bg-white/15 p-2 hover:bg-white/25"
             >
               <Bell size={14} />
               {totalAttentionCount > 0 && (
@@ -132,8 +144,8 @@ function MobileLayout() {
               )}
             </button>
             {showNotificationDropdown && (
-              <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-orange-100 bg-white text-slate-700 shadow-lg">
-                <div className="flex items-center justify-between border-b border-orange-100 px-3 py-2">
+              <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-orange-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                <div className="flex items-center justify-between border-b border-orange-100 px-3 py-2 dark:border-slate-800">
                   <p className="text-sm font-semibold">Việc cần chú ý</p>
                   <button
                     type="button"
@@ -141,18 +153,18 @@ function MobileLayout() {
                       setChatNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
                       setUnreadChatCount(0)
                     }}
-                    className="text-[11px] font-semibold text-blue-600"
+                    className="text-[11px] font-semibold text-blue-600 dark:text-blue-300"
                   >
                     Đã đọc chat
                   </button>
                 </div>
                 <div className="max-h-80 overflow-auto">
                   {!hasNotifications && (
-                    <p className="px-3 py-4 text-sm text-slate-500">Chưa có thông báo mới.</p>
+                    <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo mới.</p>
                   )}
                   {pendingRatings.length > 0 && (
                     <div className="border-b border-orange-100 px-3 py-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-violet-600">Cần đánh giá sau xử lý</p>
+                      <p className="text-xs font-semibold text-violet-700 dark:text-violet-300">Cần đánh giá sau xử lý</p>
                     </div>
                   )}
                   {pendingRatings.map((ticket) => (
@@ -163,18 +175,18 @@ function MobileLayout() {
                         setShowNotificationDropdown(false)
                         navigate(`/mobile/tickets/${ticket.id}/review`)
                       }}
-                      className="block w-full border-b border-slate-100 px-3 py-3 text-left text-sm hover:bg-violet-50"
+                      className="block w-full border-b border-slate-100 px-3 py-3 text-left text-sm hover:bg-violet-50 dark:border-slate-800 dark:hover:bg-violet-500/10"
                     >
                       <div className="flex items-start gap-3">
                         <div className="rounded-xl bg-violet-100 p-2 text-violet-700">
                           <Star size={16} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-slate-800">Đánh giá ticket #{ticket.id}</p>
-                          <p className="mt-0.5 truncate text-xs text-slate-500">
-                            {ticket.assetName || 'Thiết bị không xác định'} · {ticket.assetQaCode || '-'}
+                          <p className="font-semibold text-slate-800 dark:text-slate-100">Đánh giá ticket #{ticket.id}</p>
+                          <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                            {ticket.assetName || 'Thiết bị không xác định'} - {ticket.assetQaCode || '-'}
                           </p>
-                          <p className="mt-1 text-xs text-slate-600">
+                          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
                             Ticket đã hoàn tất lúc {formatVietnamDateTime(ticket.resolvedAt, 'gần đây')}.
                           </p>
                         </div>
@@ -183,7 +195,7 @@ function MobileLayout() {
                   ))}
                   {latestChatNotifications.length > 0 && (
                     <div className="border-b border-orange-100 px-3 py-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">Tin nhắn mới</p>
+                      <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">Tin nhắn mới</p>
                     </div>
                   )}
                   {latestChatNotifications.map((notification) => (
@@ -198,12 +210,12 @@ function MobileLayout() {
                         setShowNotificationDropdown(false)
                         navigate(notification.ticketPath)
                       }}
-                      className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-orange-50 ${
-                        notification.isRead ? 'text-slate-600' : 'font-semibold text-slate-800'
+                      className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-orange-500/10 ${
+                        notification.isRead ? 'text-slate-600 dark:text-slate-300' : 'font-semibold text-slate-800 dark:text-slate-100'
                       }`}
                     >
-                      <p>💬 {notification.senderName}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{notification.messagePreview}</p>
+                      <p>Tin nhắn từ {notification.senderName}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.messagePreview}</p>
                     </button>
                   ))}
                 </div>
@@ -213,7 +225,7 @@ function MobileLayout() {
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-xs font-semibold hover:bg-white/25"
+            className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-xs font-semibold hover:bg-white/25"
           >
             <LogOut size={14} />
             Đăng xuất
@@ -223,8 +235,8 @@ function MobileLayout() {
 
       <main className="px-4 pb-24 pt-5">
         {showInstallPrompt && (
-          <div className="mb-4 rounded-2xl border border-orange-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-700">Cài app lên màn hình chính để quét QR nhanh hơn.</p>
+          <div className="mb-4 rounded-2xl border border-orange-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-100">Cài app lên màn hình chính để quét QR nhanh hơn.</p>
             <button
               type="button"
               onClick={handleInstallPwa}
@@ -237,14 +249,14 @@ function MobileLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)]">
+      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition ${
-                isActive ? 'bg-orange-50 text-fptOrangeDark' : 'text-slate-500 hover:bg-orange-50 hover:text-fptOrange'
+                isActive ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-500 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-400 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
               }`
             }
           >

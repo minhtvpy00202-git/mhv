@@ -1,4 +1,4 @@
-import { ArrowLeft, MessageCircle } from 'lucide-react'
+import { IconArrowLeft as ArrowLeft, IconMessageCircle as MessageCircle } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'

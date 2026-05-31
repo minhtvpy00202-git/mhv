@@ -2,13 +2,179 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --brand-primary: #f27025;
+    --brand-primary-dark: #d25a15;
+    --brand-primary-rgb: 242 112 37;
+  }
+
+  html {
+    min-height: 100%;
+    background-color: #f8fafc;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html {
+      background-color: #020617;
+    }
+
+    body {
+      background-color: #020617;
+      color: #e2e8f0;
+    }
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
 }
 
-#root {
-  min-height: 100vh;
+@layer components {
+  .brand-theme .bg-fptOrange {
+    background-color: var(--brand-primary) !important;
+  }
+
+  .brand-theme .text-fptOrange,
+  .brand-theme .text-fptOrangeDark,
+  .brand-theme .hover\:text-fptOrange:hover,
+  .brand-theme .hover\:text-fptOrangeDark:hover {
+    color: var(--brand-primary) !important;
+  }
+
+  .brand-theme .border-fptOrange,
+  .brand-theme .focus\:border-orange-400:focus {
+    border-color: var(--brand-primary) !important;
+  }
+
+  .brand-theme .ring-fptOrange,
+  .brand-theme .focus\:ring-fptOrange:focus,
+  .brand-theme .focus\:ring-orange-100:focus {
+    --tw-ring-color: rgb(var(--brand-primary-rgb) / 0.18) !important;
+  }
+
+  .brand-theme .hover\:bg-fptOrangeDark:hover {
+    background-color: var(--brand-primary-dark) !important;
+  }
+
+  .brand-theme .bg-orange-50,
+  .brand-theme .bg-orange-50\/70,
+  .brand-theme .hover\:bg-orange-50:hover,
+  .brand-theme .hover\:bg-orange-50\/50:hover,
+  .brand-theme .hover\:bg-orange-100\/70:hover,
+  .brand-theme .dark\:hover\:bg-orange-500\/10:hover {
+    background-color: rgb(var(--brand-primary-rgb) / 0.1) !important;
+  }
+
+  .brand-theme .border-orange-200,
+  .brand-theme .dark\:border-orange-500\/30,
+  .brand-theme .dark\:border-orange-500\/40 {
+    border-color: rgb(var(--brand-primary-rgb) / 0.24) !important;
+  }
+
+  .brand-theme .text-orange-700,
+  .brand-theme .text-orange-900,
+  .brand-theme .dark\:text-orange-300,
+  .brand-theme .dark\:text-orange-200,
+  .brand-theme .hover\:text-orange-100:hover {
+    color: var(--brand-primary) !important;
+  }
+
+  .dark .theme-surface-zone .bg-white {
+    background-color: rgb(2 6 23);
+  }
+
+  .dark .theme-surface-zone .bg-slate-50,
+  .dark .theme-surface-zone .bg-slate-50\/50,
+  .dark .theme-surface-zone .bg-slate-50\/80,
+  .dark .theme-surface-zone .bg-slate-50\/70,
+  .dark .theme-surface-zone .bg-slate-50\/60,
+  .dark .theme-surface-zone .bg-slate-100,
+  .dark .theme-surface-zone .bg-slate-100\/80 {
+    background-color: rgb(15 23 42);
+  }
+
+  .dark .theme-surface-zone .border-slate-100,
+  .dark .theme-surface-zone .border-slate-200,
+  .dark .theme-surface-zone .border-slate-300 {
+    border-color: rgb(30 41 59);
+  }
+
+  .dark .theme-surface-zone .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+  .dark .theme-surface-zone .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: rgb(30 41 59);
+  }
+
+  .dark .theme-surface-zone .text-slate-800,
+  .dark .theme-surface-zone .text-slate-700 {
+    color: rgb(241 245 249);
+  }
+
+  .dark .theme-surface-zone .text-slate-600,
+  .dark .theme-surface-zone .text-slate-500 {
+    color: rgb(148 163 184);
+  }
+
+  .dark .theme-surface-zone .text-slate-400 {
+    color: rgb(100 116 139);
+  }
+
+  .dark .theme-surface-zone table {
+    color: rgb(226 232 240);
+  }
+
+  .dark .theme-surface-zone table thead {
+    background-color: rgb(15 23 42);
+  }
+
+  .dark .theme-surface-zone table th {
+    color: rgb(203 213 225);
+  }
+
+  .dark .theme-surface-zone table tbody {
+    background-color: rgb(2 6 23);
+  }
+
+  .dark .theme-surface-zone .hover\:bg-slate-50:hover,
+  .dark .theme-surface-zone .hover\:bg-slate-50\/60:hover,
+  .dark .theme-surface-zone .hover\:bg-slate-50\/70:hover,
+  .dark .theme-surface-zone .hover\:bg-slate-100:hover {
+    background-color: rgb(15 23 42);
+  }
+
+  .dark .theme-surface-zone input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .dark .theme-surface-zone select,
+  .dark .theme-surface-zone textarea {
+    background-color: rgb(2 6 23);
+    color: rgb(226 232 240);
+    border-color: rgb(51 65 85);
+  }
+
+  .dark .theme-surface-zone input:not([type='checkbox']):not([type='radio']):not([type='range'])::placeholder,
+  .dark .theme-surface-zone textarea::placeholder {
+    color: rgb(100 116 139);
+  }
+
+  .dark .theme-surface-zone select option {
+    background-color: rgb(2 6 23);
+    color: rgb(226 232 240);
+  }
+
+  .dark .theme-surface-zone .shadow-sm,
+  .dark .theme-surface-zone .shadow-lg,
+  .dark .theme-surface-zone .shadow-xl {
+    box-shadow: 0 0 0 1px rgb(15 23 42 / 0.35), 0 16px 40px rgb(2 6 23 / 0.28);
+  }
 }

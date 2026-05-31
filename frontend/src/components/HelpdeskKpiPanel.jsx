@@ -30,15 +30,15 @@ function formatSatisfaction(score) {
 function getGradeTone(grade) {
   switch (grade) {
     case 'Xuất sắc':
-      return 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      return 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
     case 'Tốt':
-      return 'border-blue-200 bg-blue-50 text-blue-800'
+      return 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
     case 'Khá':
-      return 'border-violet-200 bg-violet-50 text-violet-800'
+      return 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300'
     case 'Trung bình':
-      return 'border-amber-200 bg-amber-50 text-amber-800'
+      return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
     default:
-      return 'border-rose-200 bg-rose-50 text-rose-800'
+      return 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
   }
 }
 
@@ -140,32 +140,32 @@ function HelpdeskKpiPanel({
       ]
 
   const toneClasses = {
-    amber: 'border-amber-200 bg-amber-50 text-amber-800',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-    blue: 'border-blue-200 bg-blue-50 text-blue-800',
-    rose: 'border-rose-200 bg-rose-50 text-rose-800',
-    violet: 'border-violet-200 bg-violet-50 text-violet-800',
-    sky: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+    amber: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+    blue: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+    rose: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300',
+    violet: 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300',
+    sky: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300',
   }
 
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-slate-800">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-600">{subtitle}</p>}
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{title}</h2>
+        {subtitle && <p className="text-sm text-slate-600 dark:text-slate-400">{subtitle}</p>}
       </div>
 
       {loading ? (
         <div className="mt-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {Array.from({ length: 7 }).map((_, index) => (
-              <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="h-3 w-24 rounded bg-slate-200" />
-                <div className="mt-3 h-7 w-20 rounded bg-slate-200" />
+              <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
+                <div className="mt-3 h-7 w-20 rounded bg-slate-200 dark:bg-slate-700" />
               </div>
             ))}
           </div>
-          <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-50" />
+          <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900" />
         </div>
       ) : (
         <>
@@ -179,13 +179,13 @@ function HelpdeskKpiPanel({
             ))}
           </div>
 
-          <div className="mt-4 rounded-xl border border-slate-200">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-700">{tableTitle}</h3>
+            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{tableTitle}</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
                     <th className="px-4 py-2 text-left">Kỹ thuật viên</th>
                     <th className="px-4 py-2 text-left">Tổng được giao</th>
@@ -200,11 +200,11 @@ function HelpdeskKpiPanel({
                 </thead>
                 <tbody>
                   {(summary?.ticketsByTechnician || []).map((item) => (
-                    <tr key={item.technicianId || item.technicianUsername} className="border-t border-slate-100">
+                    <tr key={item.technicianId || item.technicianUsername} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-2">
-                        <p className="font-medium text-slate-800">{item.technicianName || item.technicianUsername}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-100">{item.technicianName || item.technicianUsername}</p>
                         {item.technicianUsername && (
-                          <p className="text-xs text-slate-500">{item.technicianUsername}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">{item.technicianUsername}</p>
                         )}
                       </td>
                       <td className="px-4 py-2">{item.assignedTicketCount}</td>
@@ -223,7 +223,7 @@ function HelpdeskKpiPanel({
                   ))}
                   {(!summary?.ticketsByTechnician || summary.ticketsByTechnician.length === 0) && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-3 text-center text-slate-500">
+                      <td colSpan={9} className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
                         {emptyText}
                       </td>
                     </tr>

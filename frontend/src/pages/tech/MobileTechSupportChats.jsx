@@ -1,4 +1,8 @@
-import { Clock3, MessageCircle, Search } from 'lucide-react'
+import {
+  IconClockHour3 as Clock3,
+  IconMessageCircle as MessageCircle,
+  IconSearch as Search,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'

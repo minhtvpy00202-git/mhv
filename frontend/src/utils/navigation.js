@@ -31,7 +31,6 @@ function prefersTechSupportMobilePath() {
   if (typeof window === 'undefined') {
     return false
   }
-  const currentPath = window.location?.pathname || ''
   return isNarrowViewport()
 }
 

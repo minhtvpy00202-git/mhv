@@ -1,4 +1,9 @@
-import { ArrowLeft, MessageSquareText, Send, Star } from 'lucide-react'
+import {
+  IconArrowLeft as ArrowLeft,
+  IconMessage2 as MessageSquareText,
+  IconSend as Send,
+  IconStar as Star,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'

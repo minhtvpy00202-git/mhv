@@ -5,6 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.asset.AssetCreateRequest;
 import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestItemCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestItemResponse;
+import com.poly.mhv.dto.asset.ConsumableDisposalRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableReceiptLotResponse;
 import com.poly.mhv.dto.asset.ConsumableLocationOverviewResponse;
 import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
@@ -15,12 +19,15 @@ import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
+import com.poly.mhv.dto.asset.ExpiredConsumableLotResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
+import com.poly.mhv.entity.ConsumableDisposalRequest;
+import com.poly.mhv.entity.ConsumableDisposalRequestItem;
 import com.poly.mhv.entity.ConsumableIssue;
 import com.poly.mhv.entity.ConsumableLocationStock;
 import com.poly.mhv.entity.ConsumableReceiptLot;
@@ -31,6 +38,8 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.CategoryRepository;
+import com.poly.mhv.repository.ConsumableDisposalRequestItemRepository;
+import com.poly.mhv.repository.ConsumableDisposalRequestRepository;
 import com.poly.mhv.repository.ConsumableIssueRepository;
 import com.poly.mhv.repository.ConsumableLocationStockRepository;
 import com.poly.mhv.repository.ConsumableReceiptLotRepository;
@@ -44,6 +53,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -77,6 +88,8 @@ public class AssetService {
     private final ConsumableLocationStockRepository consumableLocationStockRepository;
     private final ConsumableReceiptLotRepository consumableReceiptLotRepository;
     private final ConsumableRequestRepository consumableRequestRepository;
+    private final ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository;
+    private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
     private final LocationRepository locationRepository;
     private final SupplierRepository supplierRepository;
     private final QRCodeGenerator qrCodeGenerator;
@@ -93,6 +106,8 @@ public class AssetService {
             ConsumableLocationStockRepository consumableLocationStockRepository,
             ConsumableReceiptLotRepository consumableReceiptLotRepository,
             ConsumableRequestRepository consumableRequestRepository,
+            ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository,
+            ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
             LocationRepository locationRepository,
             SupplierRepository supplierRepository,
             QRCodeGenerator qrCodeGenerator,
@@ -106,6 +121,8 @@ public class AssetService {
         this.consumableLocationStockRepository = consumableLocationStockRepository;
         this.consumableReceiptLotRepository = consumableReceiptLotRepository;
         this.consumableRequestRepository = consumableRequestRepository;
+        this.consumableDisposalRequestItemRepository = consumableDisposalRequestItemRepository;
+        this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
         this.locationRepository = locationRepository;
         this.supplierRepository = supplierRepository;
         this.qrCodeGenerator = qrCodeGenerator;
@@ -344,6 +361,14 @@ public class AssetService {
                 validateConsumableExpirySettingChange(asset.getQaCode(), expiryTrackingEnabled);
                 asset.setExpiryTrackingEnabled(expiryTrackingEnabled);
             }
+            if (isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled())) {
+                if (request.getExpirationDate() != null) {
+                    validateConsumableExpiry(true, request.getExpirationDate(), asset.getPurchaseDate());
+                    syncInitialConsumableLotExpiration(asset, request.getExpirationDate());
+                }
+            } else {
+                asset.setExpirationDate(null);
+            }
             validateConsumableState(asset);
             asset.setWarrantyExpirationDate(null);
             refreshConsumableExpirySummary(asset);
@@ -571,6 +596,199 @@ public class AssetService {
         return requests.stream()
                 .map(this::mapToConsumableRequestResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpiredConsumableLotResponse> getExpiredConsumableLots() {
+        LocalDate today = LocalDate.now();
+        return consumableReceiptLotRepository
+                .findByQuantityRemainingGreaterThanAndExpirationDateBeforeOrderByExpirationDateAscReceivedDateAscIdAsc(0, today)
+                .stream()
+                .map((lot) -> mapToExpiredConsumableLotResponse(lot, today))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsumableDisposalRequestResponse> getConsumableDisposalRequests(String status) {
+        List<ConsumableDisposalRequest> requests = StringUtils.hasText(status)
+                ? consumableDisposalRequestRepository.findByStatusOrderByCreatedAtDescIdDesc(status.trim().toUpperCase())
+                : consumableDisposalRequestRepository.findAllByOrderByCreatedAtDescIdDesc();
+        return requests.stream()
+                .map(this::mapToConsumableDisposalRequestResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ConsumableDisposalRequestResponse createConsumableDisposalRequest(ConsumableDisposalRequestCreateRequest request) {
+        if (request == null) {
+            throw new CustomException("Dữ liệu yêu cầu tiêu huỷ không được để trống.");
+        }
+        List<ValidatedDisposalItem> validatedItems = normalizeDisposalRequestItems(request.getItems(), LocalDate.now());
+        if (validatedItems.isEmpty()) {
+            throw new CustomException("Vui lòng chọn ít nhất một lô hàng để tiêu huỷ.");
+        }
+        AppUser requester = getCurrentUser();
+        Asset asset = validatedItems.get(0).lot().getAsset();
+        String reason = StringUtils.hasText(request.getReason()) ? request.getReason().trim() : "Do hết hạn sử dụng.";
+        int totalQuantityRequested = validatedItems.stream()
+                .mapToInt((item) -> item.quantityRequested())
+                .sum();
+
+        ConsumableDisposalRequest disposalRequest = ConsumableDisposalRequest.builder()
+                .asset(asset)
+                .receiptLot(validatedItems.get(0).lot())
+                .requestedBy(requester)
+                .quantityRequested(totalQuantityRequested)
+                .reason(reason)
+                .status("PENDING")
+                .createdAt(LocalDateTime.now())
+                .build();
+        List<ConsumableDisposalRequestItem> requestItems = new ArrayList<>();
+        for (ValidatedDisposalItem item : validatedItems) {
+            requestItems.add(ConsumableDisposalRequestItem.builder()
+                    .disposalRequest(disposalRequest)
+                    .receiptLot(item.lot())
+                    .quantityRequested(item.quantityRequested())
+                    .build());
+        }
+        disposalRequest.setItems(requestItems);
+        ConsumableDisposalRequest savedRequest = consumableDisposalRequestRepository.save(disposalRequest);
+        notificationService.createNotification(
+                "CONSUMABLE_DISPOSAL_REQUEST_CREATED",
+                "Có yêu cầu tiêu huỷ vật tư hết hạn",
+                getActorDisplayName(requester) + " vừa tạo yêu cầu tiêu huỷ cho " + requestItems.size() + " lô của vật tư " + asset.getName() + ".",
+                requester.getUsername(),
+                asset.getQaCode(),
+                asset.getName(),
+                Map.of(
+                        "Vật tư", asset.getQaCode() + " - " + asset.getName(),
+                        "Số lô cần tiêu huỷ", String.valueOf(requestItems.size()),
+                        "Tổng số lượng tiêu huỷ", totalQuantityRequested + " " + safeUnit(asset),
+                        "Người đề nghị", getActorDisplayName(requester),
+                        "Lý do", reason
+                )
+        );
+        return mapToConsumableDisposalRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableDisposalRequestResponse createConsumableDisposalRequest(Long lotId, ConsumableDisposalRequestCreateRequest request) {
+        if (lotId == null) {
+            throw new CustomException("Không xác định được lô hàng cần tiêu huỷ.");
+        }
+        ConsumableReceiptLot lot = consumableReceiptLotRepository.findById(lotId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy lô vật tư cần tiêu huỷ."));
+        ConsumableDisposalRequestCreateRequest normalizedRequest = ConsumableDisposalRequestCreateRequest.builder()
+                .reason(request != null ? request.getReason() : null)
+                .items(List.of(
+                        ConsumableDisposalRequestItemCreateRequest.builder()
+                                .receiptLotId(lotId)
+                                .quantityRequested(safeInteger(lot.getQuantityRemaining()))
+                                .build()
+                ))
+                .build();
+        return createConsumableDisposalRequest(normalizedRequest);
+    }
+
+    @Transactional
+    public ConsumableDisposalRequestResponse approveConsumableDisposalRequest(Long requestId, ConsumableRequestDecisionRequest request) {
+        ConsumableDisposalRequest disposalRequest = consumableDisposalRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy yêu cầu tiêu huỷ."));
+        if (!"PENDING".equalsIgnoreCase(disposalRequest.getStatus())) {
+            throw new CustomException("Yêu cầu tiêu huỷ này đã được xử lý.");
+        }
+        Asset asset = assetRepository.findDetailByQaCode(disposalRequest.getAsset().getQaCode())
+                .orElseThrow(() -> new CustomException("Không tìm thấy vật tư cần tiêu huỷ."));
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        String decisionNote = request != null && StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null;
+        List<ConsumableDisposalRequestItem> requestItems = getEffectiveDisposalRequestItems(disposalRequest);
+        int totalQuantityToDispose = requestItems.stream()
+                .mapToInt((item) -> safePositiveInteger(item.getQuantityRequested(), "Số lượng tiêu huỷ phải lớn hơn 0."))
+                .sum();
+        int currentQuantity = safeInteger(asset.getQuantityOnHand());
+        if (currentQuantity < totalQuantityToDispose) {
+            throw new CustomException("Tồn kho hiện tại không đủ để ghi nhận tiêu huỷ các lô đã chọn.");
+        }
+        for (ConsumableDisposalRequestItem requestItem : requestItems) {
+            ConsumableReceiptLot lot = consumableReceiptLotRepository.findById(requestItem.getReceiptLot().getId())
+                    .orElseThrow(() -> new CustomException("Không tìm thấy lô vật tư của yêu cầu tiêu huỷ."));
+            validateExpiredLotForDisposal(lot, LocalDate.now());
+            int quantityToDispose = safePositiveInteger(requestItem.getQuantityRequested(), "Số lượng tiêu huỷ phải lớn hơn 0.");
+            int lotQuantityRemaining = safeInteger(lot.getQuantityRemaining());
+            if (lotQuantityRemaining < quantityToDispose) {
+                throw new CustomException("Số lượng còn lại của lô " + getLotDisplayName(lot) + " đã thay đổi, vui lòng tải lại dữ liệu.");
+            }
+            lot.setQuantityRemaining(lotQuantityRemaining - quantityToDispose);
+            consumableReceiptLotRepository.save(lot);
+        }
+        asset.setQuantityOnHand(currentQuantity - totalQuantityToDispose);
+        refreshConsumableExpirySummary(asset);
+        asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
+        Asset updatedAsset = assetRepository.save(asset);
+
+        disposalRequest.setStatus("APPROVED");
+        disposalRequest.setDecisionNote(decisionNote);
+        disposalRequest.setResolvedAt(now);
+        disposalRequest.setResolvedBy(actor);
+        ConsumableDisposalRequest savedRequest = consumableDisposalRequestRepository.save(disposalRequest);
+        invalidateAssetCaches(updatedAsset.getQaCode());
+
+        notificationService.createNotification(
+                "CONSUMABLE_DISPOSAL_REQUEST_APPROVED",
+                "Đã duyệt tiêu huỷ vật tư hết hạn",
+                getActorDisplayName(actor) + " đã duyệt tiêu huỷ " + requestItems.size() + " lô của vật tư " + updatedAsset.getName() + ".",
+                actor.getUsername(),
+                updatedAsset.getQaCode(),
+                updatedAsset.getName(),
+                Map.of(
+                        "Phiếu tiêu huỷ", "#" + savedRequest.getId(),
+                        "Vật tư", updatedAsset.getQaCode() + " - " + updatedAsset.getName(),
+                        "Số lô tiêu huỷ", String.valueOf(requestItems.size()),
+                        "Tổng số lượng tiêu huỷ", totalQuantityToDispose + " " + safeUnit(updatedAsset),
+                        "Người duyệt", getActorDisplayName(actor),
+                        "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
+                )
+        );
+        notifyLowStockIfNeeded(updatedAsset, actor);
+        return mapToConsumableDisposalRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableDisposalRequestResponse rejectConsumableDisposalRequest(Long requestId, ConsumableRequestDecisionRequest request) {
+        ConsumableDisposalRequest disposalRequest = consumableDisposalRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy yêu cầu tiêu huỷ."));
+        if (!"PENDING".equalsIgnoreCase(disposalRequest.getStatus())) {
+            throw new CustomException("Yêu cầu tiêu huỷ này đã được xử lý.");
+        }
+        if (request == null || !StringUtils.hasText(request.getNote())) {
+            throw new CustomException("Vui lòng nhập lý do từ chối yêu cầu tiêu huỷ.");
+        }
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        String decisionNote = request.getNote().trim();
+        disposalRequest.setStatus("REJECTED");
+        disposalRequest.setDecisionNote(decisionNote);
+        disposalRequest.setResolvedAt(now);
+        disposalRequest.setResolvedBy(actor);
+        ConsumableDisposalRequest savedRequest = consumableDisposalRequestRepository.save(disposalRequest);
+
+        notificationService.createNotification(
+                "CONSUMABLE_DISPOSAL_REQUEST_REJECTED",
+                "Yêu cầu tiêu huỷ vật tư bị từ chối",
+                getActorDisplayName(actor) + " đã từ chối yêu cầu tiêu huỷ cho vật tư " + disposalRequest.getAsset().getName() + ".",
+                actor.getUsername(),
+                disposalRequest.getAsset().getQaCode(),
+                disposalRequest.getAsset().getName(),
+                Map.of(
+                        "Phiếu tiêu huỷ", "#" + savedRequest.getId(),
+                        "Vật tư", disposalRequest.getAsset().getQaCode() + " - " + disposalRequest.getAsset().getName(),
+                        "Số lô trong phiếu", String.valueOf(getEffectiveDisposalRequestItems(disposalRequest).size()),
+                        "Người duyệt", getActorDisplayName(actor),
+                        "Lý do từ chối", decisionNote
+                )
+        );
+        return mapToConsumableDisposalRequestResponse(savedRequest);
     }
 
     @Transactional
@@ -1682,6 +1900,73 @@ public class AssetService {
                 .build();
     }
 
+    private ConsumableDisposalRequestResponse mapToConsumableDisposalRequestResponse(ConsumableDisposalRequest request) {
+        AppUser requestedBy = request.getRequestedBy();
+        AppUser resolvedBy = request.getResolvedBy();
+        ConsumableReceiptLot receiptLot = request.getReceiptLot();
+        Supplier supplier = receiptLot != null ? receiptLot.getSupplier() : null;
+        List<ConsumableDisposalRequestItem> requestItems = getEffectiveDisposalRequestItems(request);
+        return ConsumableDisposalRequestResponse.builder()
+                .id(request.getId())
+                .assetQaCode(request.getAsset().getQaCode())
+                .assetName(request.getAsset().getName())
+                .unit(request.getAsset().getUnit())
+                .receiptLotId(receiptLot != null ? receiptLot.getId() : null)
+                .lotCode(receiptLot != null ? receiptLot.getLotCode() : null)
+                .quantityRequested(request.getQuantityRequested())
+                .receivedDate(receiptLot != null ? receiptLot.getReceivedDate() : null)
+                .expirationDate(receiptLot != null ? receiptLot.getExpirationDate() : null)
+                .supplierName(supplier != null ? supplier.getName() : null)
+                .reason(request.getReason())
+                .status(request.getStatus())
+                .decisionNote(request.getDecisionNote())
+                .createdAt(request.getCreatedAt())
+                .resolvedAt(request.getResolvedAt())
+                .requestedByUserId(requestedBy != null ? requestedBy.getId() : null)
+                .requestedByUsername(requestedBy != null ? requestedBy.getUsername() : null)
+                .requestedByFullName(requestedBy != null ? requestedBy.getFullName() : null)
+                .resolvedByUserId(resolvedBy != null ? resolvedBy.getId() : null)
+                .resolvedByUsername(resolvedBy != null ? resolvedBy.getUsername() : null)
+                .resolvedByFullName(resolvedBy != null ? resolvedBy.getFullName() : null)
+                .itemCount(requestItems.size())
+                .items(requestItems.stream().map(this::mapToConsumableDisposalRequestItemResponse).toList())
+                .build();
+    }
+
+    private ConsumableDisposalRequestItemResponse mapToConsumableDisposalRequestItemResponse(ConsumableDisposalRequestItem item) {
+        ConsumableReceiptLot receiptLot = item.getReceiptLot();
+        Supplier supplier = receiptLot != null ? receiptLot.getSupplier() : null;
+        return ConsumableDisposalRequestItemResponse.builder()
+                .id(item.getId())
+                .receiptLotId(receiptLot != null ? receiptLot.getId() : null)
+                .lotCode(getLotDisplayName(receiptLot))
+                .quantityRequested(item.getQuantityRequested())
+                .quantityRemainingAtRequest(receiptLot != null ? receiptLot.getQuantityRemaining() : null)
+                .receivedDate(receiptLot != null ? receiptLot.getReceivedDate() : null)
+                .expirationDate(receiptLot != null ? receiptLot.getExpirationDate() : null)
+                .unitPrice(receiptLot != null ? receiptLot.getUnitPrice() : null)
+                .supplierName(supplier != null ? supplier.getName() : null)
+                .build();
+    }
+
+    private ExpiredConsumableLotResponse mapToExpiredConsumableLotResponse(ConsumableReceiptLot lot, LocalDate today) {
+        Supplier supplier = lot.getSupplier();
+        return ExpiredConsumableLotResponse.builder()
+                .lotId(lot.getId())
+                .assetQaCode(lot.getAsset().getQaCode())
+                .assetName(lot.getAsset().getName())
+                .unit(lot.getAsset().getUnit())
+                .lotCode(lot.getLotCode())
+                .quantityRemaining(safeInteger(lot.getQuantityRemaining()))
+                .unitPrice(lot.getUnitPrice())
+                .receivedDate(lot.getReceivedDate())
+                .expirationDate(lot.getExpirationDate())
+                .supplierName(supplier != null ? supplier.getName() : null)
+                .daysExpired(lot.getExpirationDate() == null ? 0 : ChronoUnit.DAYS.between(lot.getExpirationDate(), today))
+                .pendingDisposal(consumableDisposalRequestItemRepository.existsByReceiptLotIdAndDisposalRequestStatus(lot.getId(), "PENDING"))
+                .build();
+    }
+
     private String buildConsumableRequestIssueNote(ConsumableRequest request, String decisionNote) {
         StringBuilder builder = new StringBuilder();
         builder.append("Cấp phát theo phiếu yêu cầu #").append(request.getId())
@@ -1740,11 +2025,100 @@ public class AssetService {
 
     private String toRoleLabel(String role) {
         return switch (role) {
-            case "Admin" -> "Quản trị viên";
+            case "Admin" -> "Quản trị hệ thống";
             case "NhanVien" -> "Nhân viên";
             case "TechSupport" -> "Kỹ thuật viên";
+            case "ConsumableManager" -> "Nhân viên quản lý vật tư";
             default -> "Người dùng";
         };
+    }
+
+    private void validateExpiredLotForDisposal(ConsumableReceiptLot lot, LocalDate today) {
+        if (lot == null || lot.getAsset() == null) {
+            throw new CustomException("Không tìm thấy thông tin lô vật tư cần tiêu huỷ.");
+        }
+        if (!Boolean.TRUE.equals(lot.getAsset().getExpiryTrackingEnabled())) {
+            throw new CustomException("Vật tư này không quản lý hạn sử dụng theo lô.");
+        }
+        if (safeInteger(lot.getQuantityRemaining()) <= 0) {
+            throw new CustomException("Lô vật tư này không còn số lượng tồn để tiêu huỷ.");
+        }
+        if (lot.getExpirationDate() == null || !lot.getExpirationDate().isBefore(today)) {
+            throw new CustomException("Chỉ có thể tạo yêu cầu tiêu huỷ cho lô đã hết hạn sử dụng.");
+        }
+    }
+
+    private String getLotDisplayName(ConsumableReceiptLot lot) {
+        if (lot == null) {
+            return "Chưa cập nhật";
+        }
+        if (StringUtils.hasText(lot.getLotCode())) {
+            return lot.getLotCode().trim();
+        }
+        return "Lô #" + lot.getId();
+    }
+
+    private void syncInitialConsumableLotExpiration(Asset asset, LocalDate expirationDate) {
+        if (asset == null || !StringUtils.hasText(asset.getQaCode())) {
+            return;
+        }
+        List<ConsumableReceiptLot> lots = consumableReceiptLotRepository.findByAssetQaCodeOrderByReceivedDateAscIdAsc(asset.getQaCode());
+        if (lots.isEmpty()) {
+            asset.setExpirationDate(expirationDate);
+            return;
+        }
+        ConsumableReceiptLot initialLot = lots.get(0);
+        initialLot.setExpirationDate(expirationDate);
+        consumableReceiptLotRepository.save(initialLot);
+    }
+
+    private List<ValidatedDisposalItem> normalizeDisposalRequestItems(
+            List<ConsumableDisposalRequestItemCreateRequest> items,
+            LocalDate today
+    ) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        List<ValidatedDisposalItem> normalizedItems = new ArrayList<>();
+        Asset asset = null;
+        for (ConsumableDisposalRequestItemCreateRequest item : items) {
+            if (item == null || item.getReceiptLotId() == null) {
+                throw new CustomException("Lô hàng tiêu huỷ không hợp lệ.");
+            }
+            ConsumableReceiptLot lot = consumableReceiptLotRepository.findById(item.getReceiptLotId())
+                    .orElseThrow(() -> new CustomException("Không tìm thấy lô vật tư cần tiêu huỷ."));
+            if (asset == null) {
+                asset = lot.getAsset();
+            } else if (!asset.getQaCode().equals(lot.getAsset().getQaCode())) {
+                throw new CustomException("Mỗi phiếu tiêu huỷ chỉ được gộp các lô của cùng một vật tư.");
+            }
+            validateExpiredLotForDisposal(lot, today);
+            int quantityRequested = safePositiveInteger(item.getQuantityRequested(), "Số lượng tiêu huỷ phải lớn hơn 0.");
+            if (safeInteger(lot.getQuantityRemaining()) < quantityRequested) {
+                throw new CustomException("Số lượng tiêu huỷ của lô " + getLotDisplayName(lot) + " vượt quá số lượng còn lại.");
+            }
+            if (consumableDisposalRequestItemRepository.existsByReceiptLotIdAndDisposalRequestStatus(lot.getId(), "PENDING")) {
+                throw new CustomException("Lô " + getLotDisplayName(lot) + " đã có yêu cầu tiêu huỷ đang chờ duyệt.");
+            }
+            normalizedItems.add(new ValidatedDisposalItem(lot, quantityRequested));
+        }
+        return normalizedItems;
+    }
+
+    private List<ConsumableDisposalRequestItem> getEffectiveDisposalRequestItems(ConsumableDisposalRequest request) {
+        if (request != null && request.getItems() != null && !request.getItems().isEmpty()) {
+            return request.getItems();
+        }
+        if (request == null || request.getReceiptLot() == null) {
+            return List.of();
+        }
+        return List.of(
+                ConsumableDisposalRequestItem.builder()
+                        .disposalRequest(request)
+                        .receiptLot(request.getReceiptLot())
+                        .quantityRequested(request.getQuantityRequested())
+                        .build()
+        );
     }
 
     private record CachedAssetResponse(AssetResponse response, long expiresAt) {
@@ -1760,5 +2134,8 @@ public class AssetService {
     }
 
     private record LotAllocation(ConsumableReceiptLot lot, int quantity) {
+    }
+
+    private record ValidatedDisposalItem(ConsumableReceiptLot lot, int quantityRequested) {
     }
 }

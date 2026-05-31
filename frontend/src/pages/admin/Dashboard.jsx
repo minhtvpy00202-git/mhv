@@ -22,6 +22,7 @@ const DASHBOARD_CACHE_TTL_MS = 30_000
 const SUMMARY_CACHE_KEY = 'mhv-admin-dashboard-summary'
 const SUGGESTIONS_CACHE_KEY = 'mhv-admin-dashboard-suggestions'
 const HELPDESK_CACHE_KEY = 'mhv-admin-dashboard-helpdesk'
+const CHART_CURSOR = { fill: 'rgba(148, 163, 184, 0.12)' }
 
 function formatCompactNumber(value) {
   return Number(value || 0).toLocaleString('vi-VN')
@@ -37,13 +38,37 @@ function buildRate(numerator, denominator) {
   return (numerator / denominator) * 100
 }
 
+function DashboardTooltip({ active, payload, label }) {
+  if (!active || !payload || payload.length === 0) return null
+
+  return (
+    <div className="min-w-[11rem] rounded-xl border border-slate-700 bg-slate-950/95 px-3 py-2 shadow-2xl backdrop-blur">
+      {label ? <p className="mb-2 text-sm font-semibold text-slate-100">{label}</p> : null}
+      <div className="space-y-1.5">
+        {payload.map((entry) => (
+          <div key={`${entry.dataKey}-${entry.name}`} className="flex items-center justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2 text-slate-300">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: entry.color || entry.payload?.fill || '#94a3b8' }}
+              />
+              <span>{entry.name}</span>
+            </span>
+            <span className="font-semibold text-slate-100">{formatCompactNumber(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DashboardSection({ title, subtitle, children, action }) {
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-          {subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}
+          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">{title}</h2>
+          {subtitle && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -54,7 +79,7 @@ function DashboardSection({ title, subtitle, children, action }) {
 
 function EmptyChartState({ text }) {
   return (
-    <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500">
+    <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
       {text}
     </div>
   )
@@ -204,9 +229,9 @@ function Dashboard() {
               </div>
             ))
           : cards.map((card) => (
-              <div key={card.label} className="rounded-xl bg-white p-4 shadow-sm">
-                <p className="text-xs text-slate-500">{card.label}</p>
-                <p className="mt-1 text-2xl font-semibold text-slate-800">{formatCompactNumber(card.value)}</p>
+              <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-sm font-medium text-slate-500">{card.label}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatCompactNumber(card.value)}</p>
               </div>
             ))}
       </div>
@@ -249,7 +274,7 @@ function Dashboard() {
                         <Cell key={entry.name} fill={entry.fill || chartColors[index % chartColors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => formatCompactNumber(value)} />
+                    <Tooltip content={<DashboardTooltip />} />
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
@@ -263,7 +288,7 @@ function Dashboard() {
                 <p className="text-sm font-semibold text-slate-700">Giải thích theo mô hình 2 lớp trạng thái</p>
                 <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tình trạng kỹ thuật</p>
+                    <p className="text-sm font-semibold text-slate-700">Tình trạng kỹ thuật</p>
                     <div className="mt-2 space-y-2 text-sm text-slate-700">
                       <p><span className="font-semibold">Hoạt động tốt:</span> {formatCompactNumber(technicallyHealthyAssets)}</p>
                       <p><span className="font-semibold">Hỏng:</span> {formatCompactNumber(summary.brokenAssets)}</p>
@@ -271,7 +296,7 @@ function Dashboard() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vị trí sử dụng</p>
+                    <p className="text-sm font-semibold text-slate-700">Vị trí sử dụng</p>
                     <div className="mt-2 space-y-2 text-sm text-slate-700">
                       <p><span className="font-semibold">Tại vị trí gốc:</span> {formatCompactNumber(summary.availableAssets)}</p>
                       <p><span className="font-semibold">Đang cho mượn:</span> {formatCompactNumber(summary.inUseAssets)}</p>
@@ -281,31 +306,31 @@ function Dashboard() {
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-xs font-medium text-emerald-700">Tỷ lệ tại vị trí gốc</p>
-                  <p className="mt-2 text-2xl font-semibold text-emerald-800">{formatPercentage(availabilityRate)}</p>
-                  <p className="mt-1 text-sm text-emerald-700">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Tỷ lệ tại vị trí gốc</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{formatPercentage(availabilityRate)}</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                     {formatCompactNumber(summary.availableAssets)} / {formatCompactNumber(summary.totalAssets)} thiết bị
                   </p>
                 </div>
-                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                  <p className="text-xs font-medium text-rose-700">Tỷ lệ cần xử lý</p>
-                  <p className="mt-2 text-2xl font-semibold text-rose-800">{formatPercentage(issueRate)}</p>
-                  <p className="mt-1 text-sm text-rose-700">
+                <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
+                  <p className="text-xs font-medium text-orange-700 dark:text-orange-300">Tỷ lệ cần xử lý</p>
+                  <p className="mt-2 text-2xl font-semibold text-orange-900 dark:text-orange-200">{formatPercentage(issueRate)}</p>
+                  <p className="mt-1 text-sm text-orange-700 dark:text-orange-300">
                     {formatCompactNumber(totalIssueAssets)} thiết bị hỏng/bảo trì
                   </p>
                 </div>
               </div>
 
               <div className="h-52 rounded-xl border border-slate-200 p-3">
-                <p className="mb-2 text-sm font-semibold text-slate-700">Số lượng tuyệt đối theo trạng thái</p>
+                <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Số lượng tuyệt đối theo trạng thái</p>
                 {assetStatusData.some((item) => item.value > 0) ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={assetStatusData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                       <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <Tooltip formatter={(value) => formatCompactNumber(value)} />
+                      <Tooltip content={<DashboardTooltip />} cursor={CHART_CURSOR} />
                       <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                         {assetStatusData.map((entry) => (
                           <Cell key={`asset-bar-${entry.name}`} fill={entry.fill} />
@@ -326,7 +351,7 @@ function Dashboard() {
           title="Gợi ý quản trị"
           subtitle="Những điểm cần ưu tiên theo dõi trong kỳ hiện tại."
           action={(
-            <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+            <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
               {suggestions.length} gợi ý
             </span>
           )}
@@ -336,7 +361,7 @@ function Dashboard() {
               <p className="text-sm text-slate-500">Đang tải gợi ý...</p>
             )}
             {suggestions.map((text, index) => (
-              <div key={`${index}-${text}`} className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
+              <div key={`${index}-${text}`} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                 <div className="flex items-start gap-3">
                   <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">
                     {index + 1}
@@ -391,7 +416,7 @@ function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => formatCompactNumber(value)} />
+                  <Tooltip content={<DashboardTooltip />} cursor={CHART_CURSOR} />
                   <Bar dataKey="value" radius={[10, 10, 0, 0]}>
                     {helpdeskStatusChartData.map((entry) => (
                       <Cell key={`helpdesk-status-${entry.name}`} fill={entry.fill} />
@@ -425,7 +450,7 @@ function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
                   <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(value) => formatCompactNumber(value)} />
+                  <Tooltip content={<DashboardTooltip />} cursor={CHART_CURSOR} />
                   <Legend />
                   <Bar dataKey="resolved" stackId="tickets" name="Đã xử lý" fill="#22c55e" />
                   <Bar dataKey="inProgress" stackId="tickets" name="Đang xử lý" fill="#3b82f6" />

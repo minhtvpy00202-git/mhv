@@ -1,7 +1,8 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import GlobalNotification from './components/GlobalNotification'
 import { useAuth } from './context/AuthContext'
+import { useBranding } from './context/BrandingContext'
 import AdminLayout from './layouts/AdminLayout'
 import ConsumableManagerLayout from './layouts/ConsumableManagerLayout'
 import MobileLayout from './layouts/MobileLayout'
@@ -36,6 +37,7 @@ const InventoryAuditManagement = lazy(() => import('./pages/admin/InventoryAudit
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 const NotificationDetail = lazy(() => import('./pages/admin/NotificationDetail'))
 const TicketManagement = lazy(() => import('./pages/admin/TicketManagement'))
+const BrandingSettings = lazy(() => import('./pages/admin/BrandingSettings'))
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -85,6 +87,12 @@ function withSuspense(element) {
 }
 
 function App() {
+  const { branding } = useBranding()
+
+  useEffect(() => {
+    document.title = `${branding.companyName} ${branding.appName}`.trim()
+  }, [branding.appName, branding.companyName])
+
   return (
     <>
       <GlobalNotification />
@@ -163,6 +171,7 @@ function App() {
           <Route path="/admin/maintenance-history" element={<Navigate to="/admin/tickets" replace />} />
           <Route path="/admin/inventory-audits" element={withSuspense(<InventoryAuditManagement />)} />
           <Route path="/admin/users" element={withSuspense(<UserManagement />)} />
+          <Route path="/admin/branding" element={withSuspense(<BrandingSettings />)} />
           <Route path="/admin/notifications/:id" element={withSuspense(<NotificationDetail />)} />
           <Route path="/admin/tickets" element={withSuspense(<TicketManagement />)} />
           <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />

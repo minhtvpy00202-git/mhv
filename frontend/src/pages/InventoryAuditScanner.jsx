@@ -1,4 +1,9 @@
-import { Camera, ClipboardCheck, RefreshCcw, ScanLine } from 'lucide-react'
+import {
+  IconCamera as Camera,
+  IconClipboardCheck as ClipboardCheck,
+  IconRefresh as RefreshCcw,
+  IconScan as ScanLine,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'

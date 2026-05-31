@@ -5,15 +5,22 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { BrandingProvider } from './context/BrandingContext.jsx'
+import { initializeTheme, ThemeProvider } from './context/ThemeContext.jsx'
 import 'react-toastify/dist/ReactToastify.css'
 
 registerSW({ immediate: true })
+initializeTheme()
 
 createRoot(document.getElementById('root')).render(
   <BrowserRouter>
-    <AuthProvider>
-      <App />
-      <ToastContainer position="top-center" autoClose={2500} />
-    </AuthProvider>
+    <ThemeProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          <App />
+          <ToastContainer position="top-center" autoClose={2500} />
+        </AuthProvider>
+      </BrandingProvider>
+    </ThemeProvider>
   </BrowserRouter>,
 )

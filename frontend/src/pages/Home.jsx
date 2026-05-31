@@ -1,4 +1,17 @@
-import { ChevronDown, ChevronLeft, ChevronRight, History, MessageCircle, QrCode, TriangleAlert, Wrench } from 'lucide-react'
+import {
+  IconAlertTriangle as TriangleAlert,
+  IconArrowUpRight as ArrowUpRight,
+  IconBolt as Bolt,
+  IconChevronDown as ChevronDown,
+  IconChevronLeft as ChevronLeft,
+  IconChevronRight as ChevronRight,
+  IconHistory as History,
+  IconLayoutGrid as LayoutGrid,
+  IconMessageCircle as MessageCircle,
+  IconQrcode as QrCode,
+  IconStars as Stars,
+  IconTool as Wrench,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -8,24 +21,46 @@ import { formatVietnamDateTime } from '../utils/datetime'
 import { resolveBackendMediaUrl } from '../utils/mediaUrl'
 
 const quickActions = [
-  { to: '/mobile/scan', label: 'Quét QR', hint: 'Mượn hoặc trả thiết bị', icon: QrCode, tone: 'bg-sky-50 text-sky-700 border-sky-200' },
-  { to: '/mobile/maintenance', label: 'Báo hỏng', hint: 'Tạo ticket sự cố', icon: Wrench, tone: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { to: '/mobile/chats', label: 'Trao đổi', hint: 'Chat với kỹ thuật viên', icon: MessageCircle, tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  {
+    to: '/mobile/scan',
+    label: 'Quét QR',
+    hint: 'Mượn hoặc trả thiết bị',
+    icon: QrCode,
+    tone: 'border-orange-200 bg-orange-50/70 text-slate-900 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-slate-100',
+    iconTone: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+  },
+  {
+    to: '/mobile/maintenance',
+    label: 'Báo hỏng',
+    hint: 'Tạo ticket sự cố',
+    icon: Wrench,
+    tone: 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
+    iconTone: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  },
+  {
+    to: '/mobile/chats',
+    label: 'Trao đổi',
+    hint: 'Chat với kỹ thuật viên',
+    icon: MessageCircle,
+    tone: 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
+    iconTone: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
+  },
 ]
 
 function StatCard({ label, value, hint, tone }) {
   return (
-    <div className={`rounded-2xl border p-3 shadow-sm ${tone}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide">{label}</p>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
-      <p className="mt-1 text-xs opacity-80">{hint}</p>
+    <div className={`rounded-[28px] border p-4 shadow-sm ${tone}`}>
+      <div className="h-1.5 w-10 rounded-full bg-fptOrange/80 dark:bg-orange-300/80" />
+      <p className="mt-4 text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">{value}</p>
+      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">{hint}</p>
     </div>
   )
 }
 
 function EmptyState({ children }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400">
       {children}
     </div>
   )
@@ -33,26 +68,27 @@ function EmptyState({ children }) {
 
 function CollapsibleSection({ title, subtitle, icon: Icon, iconClassName, open, onToggle, children }) {
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
+    <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start justify-between gap-3 text-left"
+        className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left"
       >
         <div className="flex min-w-0 items-start gap-3">
-          <div className={`rounded-xl p-2 ${iconClassName}`}>
+          <div className={`rounded-2xl p-2.5 ${iconClassName}`}>
             <Icon size={18} />
           </div>
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-slate-800">
-              {open ? '▼' : '►'}{title}
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
           </div>
         </div>
-        {open ? <ChevronDown size={18} className="mt-1 text-slate-400" /> : <ChevronRight size={18} className="mt-1 text-slate-400" />}
+        <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500 dark:border-slate-700 dark:text-slate-400">
+          {open ? 'Thu gọn' : 'Mở'}
+          {open ? <ChevronDown size={16} className="text-slate-400 dark:text-slate-500" /> : <ChevronRight size={16} className="text-slate-400 dark:text-slate-500" />}
+        </span>
       </button>
-      {open && <div className="mt-3 space-y-3">{children}</div>}
+      {open && <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/50">{children}</div>}
     </section>
   )
 }
@@ -95,12 +131,12 @@ function SwipeCarousel({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-[auto,minmax(0,1fr),auto] items-start gap-2 text-xs text-slate-500">
+      <div className="grid grid-cols-[auto,minmax(0,1fr),auto] items-start gap-2 text-xs text-slate-500 dark:text-slate-400">
         <button
           type="button"
           onClick={() => canGoPrev && onChange(safeIndex - 1)}
           disabled={!canGoPrev}
-          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40"
+          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
         >
           <ChevronLeft size={14} />
           Trước
@@ -111,7 +147,7 @@ function SwipeCarousel({
             value={searchValue}
             onChange={(event) => onSearchChange?.(event.target.value)}
             placeholder={searchPlaceholder}
-            className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-fptOrange focus:ring-2 focus:ring-orange-100"
+            className="h-10 w-full rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-fptOrange focus:ring-2 focus:ring-orange-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-orange-500/20"
           />
           <p className="text-center font-medium">
             {hasItems ? `Kết quả ${safeIndex + 1}/${items.length} · Vuốt trái/phải để xem tiếp` : 'Chưa có kết quả phù hợp'}
@@ -121,7 +157,7 @@ function SwipeCarousel({
           type="button"
           onClick={() => canGoNext && onChange(safeIndex + 1)}
           disabled={!canGoNext}
-          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40"
+          className="inline-flex h-10 items-center justify-center gap-1 self-start rounded-full border border-slate-300 bg-white px-3 font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
         >
           Sau
           <ChevronRight size={14} />
@@ -132,7 +168,7 @@ function SwipeCarousel({
         <div
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
-          className="rounded-2xl border border-slate-200 bg-slate-50"
+          className="rounded-2xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
         >
           {renderItem(activeItem)}
         </div>
@@ -149,7 +185,7 @@ function SwipeCarousel({
               onClick={() => onChange(index)}
               aria-label={`Xem thẻ ${index + 1}`}
               className={`h-2.5 rounded-full transition-all ${
-                index === safeIndex ? 'w-6 bg-fptOrange' : 'w-2.5 bg-slate-300'
+                index === safeIndex ? 'w-6 bg-fptOrange' : 'w-2.5 bg-slate-300 dark:bg-slate-700'
               }`}
             />
           ))}
@@ -224,61 +260,143 @@ function Home() {
     }
   }, [filteredMaintenanceHistory, maintenanceIndex])
 
+  const primaryAction = quickActions[0]
+  const secondaryActions = quickActions.slice(1)
+
   return (
-    <div className="space-y-4">
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-fptOrange to-orange-500 p-5 text-white shadow-sm">
-        <p className="text-sm font-medium text-white/85">Khu vực nhân viên</p>
-        <h2 className="mt-1 text-2xl font-bold">Theo dõi thiết bị và gửi yêu cầu hỗ trợ</h2>
-        <p className="mt-2 max-w-xl text-sm text-white/90">
-          Quét QR để mượn trả, báo hỏng nhanh và trao đổi trực tiếp với kỹ thuật viên ngay trên ticket.
-        </p>
-        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {quickActions.map(({ to, label, hint, icon: Icon, tone }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`rounded-2xl border px-3 py-3 backdrop-blur transition hover:translate-y-[-1px] ${tone}`}
-            >
-              <div className="flex items-center gap-2">
-                <Icon size={18} />
-                <span className="font-semibold">{label}</span>
+    <div className="space-y-5">
+      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.18),transparent_65%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.22),transparent_65%)]" />
+        <div className="relative grid gap-4">
+          <div className="grid gap-4 md:grid-cols-[1.15fr_0.85fr]">
+            <div>
+              <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
+                <Stars size={14} />
+                Trung tâm thao tác
+              </span>
+              <h2 className="mt-4 max-w-[14ch] text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                Quét, báo hỏng và theo dõi ticket trong một nơi gọn hơn.
+              </h2>
+              <p className="mt-3 max-w-[34ch] text-sm leading-6 text-slate-600 dark:text-slate-400">
+                Các thao tác chính, lịch sử và việc cần xử lý được gom lại để bạn không phải đi qua nhiều màn hình.
+              </p>
+
+              <Link
+                to={primaryAction.to}
+                className={`mt-5 block rounded-[28px] border p-4 shadow-sm transition hover:-translate-y-0.5 ${primaryAction.tone}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex h-12 w-12 items-center justify-center rounded-[20px] ${primaryAction.iconTone}`}>
+                      <primaryAction.icon size={20} />
+                    </span>
+                    <div>
+                      <p className="text-base font-semibold">{primaryAction.label}</p>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{primaryAction.hint}</p>
+                    </div>
+                  </div>
+                  <ArrowUpRight size={18} className="shrink-0 text-fptOrange dark:text-orange-300" />
+                </div>
+              </Link>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Ưu tiên hôm nay</p>
+                    <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      {pendingRatings.length}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                      ticket đã hoàn tất đang chờ bạn đánh giá.
+                    </p>
+                  </div>
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-[20px] bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                    <Bolt size={20} />
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPendingRatings((prev) => !prev)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Xem việc cần làm
+                  <ChevronRight size={16} />
+                </button>
               </div>
-              <p className="mt-1 text-xs opacity-80">{hint}</p>
-            </Link>
-          ))}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-[24px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mượn / trả</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{usageHistory.length}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Tổng lượt thao tác</p>
+                </div>
+                <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Báo hỏng</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{maintenanceHistory.length}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Lần đã tạo ticket</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {secondaryActions.map(({ to, label, hint, icon: Icon, tone, iconTone }) => (
+              <Link
+                key={to}
+                to={to}
+                className={`rounded-[28px] border p-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${iconTone}`}>
+                      <Icon size={18} />
+                    </span>
+                    <div>
+                      <p className="font-semibold">{label}</p>
+                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{hint}</p>
+                    </div>
+                  </div>
+                  <ArrowUpRight size={18} className="shrink-0 text-slate-400 dark:text-slate-500" />
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Mượn / trả" value={usageHistory.length} hint="Tổng lượt thao tác của bạn" tone="border-sky-200 bg-sky-50 text-sky-800" />
-        <StatCard label="Báo hỏng" value={maintenanceHistory.length} hint="Số lần đã tạo ticket" tone="border-orange-200 bg-orange-50 text-orange-800" />
-        <StatCard label="Chờ đánh giá" value={pendingRatings.length} hint="Ticket đã hoàn tất cần phản hồi" tone="border-violet-200 bg-violet-50 text-violet-800" />
+      <section className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
+        <StatCard label="Theo dõi phản hồi" value={pendingRatings.length} hint="Ticket hoàn tất đang chờ bạn đánh giá." tone="border-orange-200 bg-orange-50/70 dark:border-orange-500/30 dark:bg-orange-500/10" />
+        <StatCard label="Lịch sử sử dụng" value={usageHistory.length} hint="Các lượt mượn và trả thiết bị." tone="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />
+        <StatCard label="Sự cố đã gửi" value={maintenanceHistory.length} hint="Các ticket báo hỏng bạn đã tạo." tone="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />
       </section>
 
       <CollapsibleSection
         title="Đánh giá sau xử lý"
-        subtitle="Những ticket đã hoàn tất nhưng bạn chưa chấm điểm và nhận xét."
+        subtitle="Những ticket đã hoàn tất nhưng bạn chưa gửi phản hồi."
         icon={TriangleAlert}
-        iconClassName="bg-violet-50 text-violet-500"
+        iconClassName="bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300"
         open={showPendingRatings}
         onToggle={() => setShowPendingRatings((prev) => !prev)}
       >
+        <div className="space-y-3">
           {pendingRatings.slice(0, 3).map((ticket) => (
-            <div key={ticket.id} className="rounded-2xl border border-violet-200 bg-violet-50 p-3">
+            <div key={ticket.id} className="rounded-[24px] border border-orange-200 bg-white p-4 dark:border-orange-500/30 dark:bg-slate-950">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{ticket.assetName || 'Thiết bị không xác định'}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">Ticket #{ticket.id} · {ticket.assetQaCode}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{ticket.assetName || 'Thiết bị không xác định'}</p>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Ticket #{ticket.id} · {ticket.assetQaCode}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => navigate(`/mobile/tickets/${ticket.id}/review`)}
-                  className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-700"
+                  className="rounded-xl bg-fptOrange px-3 py-2 text-xs font-semibold text-white hover:bg-fptOrangeDark"
                 >
                   Đánh giá ngay
                 </button>
               </div>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
                 Hoàn tất lúc: {formatVietnamDateTime(ticket.resolvedAt, 'Gần đây')}
               </p>
             </div>
@@ -286,13 +404,14 @@ function Home() {
           {pendingRatings.length === 0 && (
             <EmptyState>Chưa có ticket nào đang chờ bạn đánh giá.</EmptyState>
           )}
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Lịch sử mượn / trả"
-        subtitle="Các lần bạn đã mượn và hoàn trả thiết bị."
-        icon={History}
-        iconClassName="bg-sky-50 text-sky-500"
+        title="Lịch sử mượn và trả"
+        subtitle="Tra cứu nhanh thiết bị đã nhận, vị trí sử dụng và thời điểm hoàn trả."
+        icon={LayoutGrid}
+        iconClassName="bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300"
         open={showUsageHistory}
         onToggle={() => setShowUsageHistory((prev) => !prev)}
       >
@@ -307,21 +426,23 @@ function Home() {
           }}
           emptyText={usageSearch.trim() ? 'Không tìm thấy lịch sử mượn / trả theo tên thiết bị.' : 'Chưa có dữ liệu mượn / trả.'}
           renderItem={(item) => (
-            <div key={item.id} className="p-3">
+            <div key={item.id} className="p-1">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{item.assetName || 'Thiết bị không xác định'}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.assetQaCode}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{item.assetName || 'Thiết bị không xác định'}</p>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{item.assetQaCode}</p>
                 </div>
-                <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+                <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                   {item.endTime ? 'Đã trả' : 'Đang mượn'}
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 text-sm text-slate-600">
-                <p><span className="font-medium text-slate-700">Phòng gốc:</span> {item.homeLocationName || '-'}</p>
-                <p><span className="font-medium text-slate-700">Phòng đích:</span> {item.borrowedLocationName || '-'}</p>
-                <p><span className="font-medium text-slate-700">Mượn lúc:</span> {formatVietnamDateTime(item.startTime)}</p>
-                <p><span className="font-medium text-slate-700">Trả lúc:</span> {formatVietnamDateTime(item.endTime)}</p>
+              <div className="mt-3 grid gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Phòng gốc:</span> {item.homeLocationName || '-'}</p>
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Phòng đích:</span> {item.borrowedLocationName || '-'}</p>
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Mượn lúc:</span> {formatVietnamDateTime(item.startTime)}</p>
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Trả lúc:</span> {formatVietnamDateTime(item.endTime)}</p>
+              </div>
               </div>
             </div>
           )}
@@ -330,9 +451,9 @@ function Home() {
 
       <CollapsibleSection
         title="Lịch sử báo hỏng"
-        subtitle="Các lần bạn đã báo lỗi và theo dõi trạng thái thiết bị."
-        icon={TriangleAlert}
-        iconClassName="bg-orange-50 text-orange-500"
+        subtitle="Mở lại ticket cũ, xem ảnh lỗi và tiếp tục theo dõi thiết bị."
+        icon={History}
+        iconClassName="bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300"
         open={showMaintenanceHistory}
         onToggle={() => setShowMaintenanceHistory((prev) => !prev)}
       >
@@ -347,20 +468,21 @@ function Home() {
           }}
           emptyText={maintenanceSearch.trim() ? 'Không tìm thấy lịch sử báo hỏng theo tên thiết bị.' : 'Chưa có dữ liệu báo hỏng.'}
           renderItem={(item) => (
-            <div key={item.id} className="p-3">
+            <div key={item.id} className="p-1">
+              <div className="rounded-[24px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{item.assetName || 'Thiết bị không xác định'}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.assetQaCode}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{item.assetName || 'Thiết bị không xác định'}</p>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{item.assetQaCode}</p>
                 </div>
-                <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-semibold text-orange-700">
+                <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
                   {getAssetStatusLabel(item.assetStatus, 'Đang theo dõi')}
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 text-sm text-slate-600">
-                <p><span className="font-medium text-slate-700">Phòng gốc:</span> {item.homeLocationName || '-'}</p>
-                <p><span className="font-medium text-slate-700">Phòng hiện tại:</span> {item.currentLocationName || '-'}</p>
-                <p><span className="font-medium text-slate-700">Báo lúc:</span> {formatVietnamDateTime(item.reportTime)}</p>
+              <div className="mt-3 grid gap-2 text-sm text-slate-600 dark:text-slate-400">
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Phòng gốc:</span> {item.homeLocationName || '-'}</p>
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Phòng hiện tại:</span> {item.currentLocationName || '-'}</p>
+                <p><span className="font-medium text-slate-700 dark:text-slate-200">Báo lúc:</span> {formatVietnamDateTime(item.reportTime)}</p>
               </div>
               <div className="mt-3">
                 <div className="flex flex-wrap gap-2">
@@ -375,7 +497,7 @@ function Home() {
                     <button
                       type="button"
                       onClick={() => navigate(`/mobile/tickets/${item.id}/review`)}
-                      className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                      className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
                     >
                       Đánh giá
                     </button>
@@ -389,11 +511,12 @@ function Home() {
                       }
                       setPreviewImageUrl(item.imageUrl)
                     }}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
                   >
                     Xem ảnh lỗi
                   </button>
                 </div>
+              </div>
               </div>
             </div>
           )}
@@ -401,13 +524,13 @@ function Home() {
       </CollapsibleSection>
 
       {previewImageUrl && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl">
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl dark:bg-slate-950">
             <img src={resolveBackendMediaUrl(previewImageUrl)} alt="error-preview" className="h-[300px] w-full rounded-2xl object-cover" />
             <button
               type="button"
               onClick={() => setPreviewImageUrl('')}
-              className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
             >
               Đóng
             </button>

@@ -1,5 +1,5 @@
+import { IconTool as Wrench } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'

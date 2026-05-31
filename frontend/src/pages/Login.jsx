@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
 import { getTechSupportHomePath } from '../utils/navigation'
 import { validateLoginForm } from '../utils/validation'
 
@@ -17,6 +19,7 @@ function Login() {
   const [errors, setErrors] = useState({})
   const navigate = useNavigate()
   const { login } = useAuth()
+  const { branding } = useBranding()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -65,14 +68,17 @@ function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-100 px-4 dark:bg-slate-950">
+      <div className="fixed right-4 top-4">
+        <ThemeToggle />
+      </div>
+      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow dark:bg-slate-900">
         <h1 className="text-xl font-bold text-fptOrange">Đăng nhập hệ thống</h1>
-        <p className="mt-1 text-sm text-slate-500">Asset Management</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{`${branding.companyName} ${branding.appName}`}</p>
 
         <div className="mt-4 space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Username</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Username</label>
             <input
               value={username}
               onChange={(e) => {
@@ -85,7 +91,7 @@ function Login() {
             {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Password</label>
             <input
               type="password"
               value={password}
@@ -103,7 +109,7 @@ function Login() {
         <div className="mt-5 grid grid-cols-2 gap-2">
           <Link
             to="/register"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-center font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-center font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Đăng ký
           </Link>

@@ -1,4 +1,13 @@
-import { ImagePlus, Mic, Minus, Pause, Play, Send, Square, X } from 'lucide-react'
+import {
+  IconMicrophone as Mic,
+  IconMinus as Minus,
+  IconPhotoPlus as ImagePlus,
+  IconPlayerPause as Pause,
+  IconPlayerPlay as Play,
+  IconSend as Send,
+  IconSquare as Square,
+  IconX as X,
+} from '@tabler/icons-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -455,9 +464,9 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
     <section
       className={
         embedded
-          ? 'flex h-[calc(100vh-190px)] min-h-[540px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
+          ? 'flex h-[calc(100dvh-190px)] min-h-[540px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'
           : `fixed bottom-4 right-4 z-40 flex w-[min(92vw,390px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ${
-              minimized ? 'h-auto' : 'h-[min(74vh,620px)] max-h-[calc(100vh-2rem)]'
+              minimized ? 'h-auto' : 'h-[min(74dvh,620px)] max-h-[calc(100dvh-2rem)]'
             }`
       }
     >
@@ -504,7 +513,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
                 }`}
               >
                 <p className={`mb-1 text-[11px] ${message.isMine ? 'text-orange-100' : 'text-slate-600'}`}>
-                  {message.isMine ? 'Bạn' : `User #${message.senderId}`} · {message.timeText}
+                  {message.isMine ? 'Bạn' : `User #${message.senderId}`} - {message.timeText}
                 </p>
                 {message.parsed.type === 'image' && (
                   <ResilientChatImage src={message.parsed.value} alt="chat-img" />

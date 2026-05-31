@@ -1,5 +1,5 @@
+import { IconFileDescription as Detail, IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Eye, Trash2, Wrench } from 'lucide-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
@@ -407,7 +407,7 @@ function CategoryManagement() {
                           ))}
                           {category.specTemplateCount > 3 && (
                             <ActionIconButton
-                              icon={Eye}
+                              icon={Detail}
                               label="Xem mẫu thông số"
                               variant="violet"
                               className="h-7 w-7"

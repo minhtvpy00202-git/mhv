@@ -1,7 +1,17 @@
-import { Bell, ClipboardCheck, ClipboardList, History, LogOut, MessageCircle } from 'lucide-react'
+import {
+  IconBell as Bell,
+  IconChecklist as ClipboardCheck,
+  IconClipboardList as ClipboardList,
+  IconHistory as History,
+  IconLogout as LogOut,
+  IconMessageCircle as MessageCircle,
+} from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
+import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
 import {
   getTechSupportTicketPath,
   isNarrowViewport,
@@ -17,6 +27,8 @@ const navItems = [
 
 function MobileTechSupportLayout() {
   const { user, logout } = useAuth()
+  const { branding } = useBranding()
+  const primaryColor = normalizeHexColor(branding.primaryColor)
   const navigate = useNavigate()
   const location = useLocation()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
@@ -102,18 +114,22 @@ function MobileTechSupportLayout() {
   }
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md bg-slate-100">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-blue-200 bg-blue-700 px-4 py-3 text-white shadow">
+    <div className="brand-theme mx-auto min-h-[100dvh] w-full max-w-md bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header
+        className="sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3 text-white shadow"
+        style={{ backgroundColor: primaryColor, borderColor: toRgba(primaryColor, 0.28) }}
+      >
         <div>
           <h1 className="text-sm font-medium text-white/85">Kỹ thuật viên hiện trường</h1>
           <p className="text-base font-semibold">{user?.fullName || user?.username || 'TechSupport'}</p>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle compact className="border-white/20 bg-white/10 px-2.5 text-white hover:bg-white/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20" />
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowNotificationDropdown((prev) => !prev)}
-              className="relative inline-flex items-center rounded-md bg-white/15 p-2 hover:bg-white/25"
+              className="relative inline-flex items-center rounded-lg bg-white/15 p-2 hover:bg-white/25"
             >
               <Bell size={14} />
               {unreadChatCount > 0 && (
@@ -123,8 +139,8 @@ function MobileTechSupportLayout() {
               )}
             </button>
             {showNotificationDropdown && (
-              <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-blue-100 bg-white text-slate-700 shadow-lg">
-                <div className="flex items-center justify-between border-b border-blue-100 px-3 py-2">
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-blue-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+                <div className="flex items-center justify-between border-b border-blue-100 px-3 py-2 dark:border-slate-800">
                   <p className="text-sm font-semibold">Tin nhắn mới</p>
                   <button
                     type="button"
@@ -132,14 +148,15 @@ function MobileTechSupportLayout() {
                       setChatNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
                       setUnreadChatCount(0)
                     }}
-                    className="text-[11px] font-semibold text-blue-600"
+                      className="text-[11px] font-semibold"
+                      style={{ color: primaryColor }}
                   >
                     Đánh dấu tất cả
                   </button>
                 </div>
                 <div className="max-h-80 overflow-auto">
                   {chatNotifications.length === 0 && (
-                    <p className="px-3 py-2 text-sm text-slate-500">Chưa có thông báo chat.</p>
+                    <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo chat.</p>
                   )}
                   {chatNotifications.map((notification) => (
                     <button
@@ -153,12 +170,12 @@ function MobileTechSupportLayout() {
                         setShowNotificationDropdown(false)
                         navigate(notification.ticketPath)
                       }}
-                      className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-blue-50 ${
-                        notification.isRead ? 'text-slate-600' : 'font-semibold text-slate-800'
+                      className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-orange-500/10 ${
+                        notification.isRead ? 'text-slate-600 dark:text-slate-300' : 'font-semibold text-slate-800 dark:text-slate-100'
                       }`}
                     >
-                      <p>💬 {notification.senderName}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{notification.messagePreview}</p>
+                      <p>Tin nhắn từ {notification.senderName}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.messagePreview}</p>
                     </button>
                   ))}
                 </div>
@@ -168,7 +185,7 @@ function MobileTechSupportLayout() {
           <button
             type="button"
             onClick={handleLogout}
-            className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-xs font-semibold hover:bg-white/25"
+            className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-2 py-1 text-xs font-semibold hover:bg-white/25"
           >
             <LogOut size={14} />
             Đăng xuất
@@ -178,12 +195,13 @@ function MobileTechSupportLayout() {
 
       <main className="px-4 pb-24 pt-5">
         {showInstallPrompt && (
-          <div className="mb-4 rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-medium text-slate-700">Cài app lên màn hình chính để nhận việc và chat nhanh hơn.</p>
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-100">Cài app lên màn hình chính để nhận việc và chat nhanh hơn.</p>
             <button
               type="button"
               onClick={handleInstallPwa}
-              className="mt-2 rounded-md bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+              className="mt-2 rounded-md px-3 py-2 text-xs font-semibold text-white"
+              style={{ backgroundColor: primaryColor }}
             >
               Thêm vào màn hình chính
             </button>
@@ -192,7 +210,7 @@ function MobileTechSupportLayout() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)]">
+      <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -200,9 +218,10 @@ function MobileTechSupportLayout() {
             end={end}
             className={({ isActive }) =>
               `flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition ${
-                isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-blue-50 hover:text-blue-700'
+                isActive ? 'dark:text-slate-100' : 'text-slate-500 hover:bg-orange-50 hover:text-fptOrangeDark dark:text-slate-400 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
               }`
             }
+            style={({ isActive }) => (isActive ? { backgroundColor: toRgba(primaryColor, 0.1), color: primaryColor } : undefined)}
           >
             <Icon size={18} />
             <span>{label}</span>

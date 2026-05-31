@@ -56,19 +56,19 @@ function GlobalNotification() {
       return
     }
     if (type === 'TICKET_CREATED') {
-      toast.error(message, { icon: '🆕', autoClose: 5000 })
+      toast.error(message, { icon: false, autoClose: 5000 })
       return
     }
     if (type === 'TICKET_ASSIGNED') {
-      toast.info(message, { icon: '🛠️', autoClose: 5000 })
+      toast.info(message, { icon: false, autoClose: 5000 })
       return
     }
     if (type === 'TICKET_RESOLVED') {
-      toast.success(message, { icon: '✅', autoClose: 5000 })
+      toast.success(message, { icon: false, autoClose: 5000 })
       return
     }
     if (user?.role === 'Admin' || user?.role === 'ConsumableManager') {
-      toast(message, { icon: '🔔', autoClose: 5000 })
+      toast(message, { icon: false, autoClose: 5000 })
     }
   }, [user?.role])
 
@@ -104,7 +104,7 @@ function GlobalNotification() {
       const messagePreview = payload?.messagePreview || 'Bạn có tin nhắn mới.'
       const ticketId = payload?.ticketId
       toast.info(`Tin nhắn mới từ ${senderName}`, {
-        icon: '💬',
+        icon: false,
         autoClose: 5000,
       })
       playSound()
