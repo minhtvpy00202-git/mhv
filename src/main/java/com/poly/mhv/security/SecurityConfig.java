@@ -61,8 +61,8 @@ public class SecurityConfig {
                                 "/api/swagger-ui.html",
                                 "/api/swagger-ui/**"
                         ).permitAll()
-                        .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/ws-sockjs/**").permitAll()
+                        .requestMatchers("/ws/**", "/api/ws/**").permitAll()
+                        .requestMatchers("/ws-sockjs/**", "/api/ws-sockjs/**").permitAll()
                         .requestMatchers("/uploads/**", "/api/uploads/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()

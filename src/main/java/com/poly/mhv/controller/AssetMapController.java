@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/asset-map")
+@RequestMapping({"/api/asset-map", "/asset-map"})
 @Tag(name = "So do dinh vi tai san", description = "API quan ly tang, so do phong va tim tai san tren so do")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('Admin')")
