@@ -1,76 +1,224 @@
-# MHV - Xây dựng hệ thống quản lý tài sản và theo dõi yêu cầu hỗ trợ người dùng
+# MHV
 
-Du an MHV giup quan ly tai san, muon/tra thiet bi, bao hong, kiem ke dinh ky, thong bao realtime va ho tro xu ly ticket ky thuat.
+He thong quan ly tai san, vat tu tieu hao, muon/tra thiet bi, ticket sua chua, kiem ke dinh ky va so do dinh vi tai san trong toa nha.
 
-## 1. Cong nghe su dung
+README nay mo ta trang thai he thong hien tai trong monorepo `Spring Boot + React/Vite`.
 
-- Backend: Java 17, Spring Boot, Spring Security, Spring Data JPA, WebSocket, SSE.
-- Frontend: React + Vite, TailwindCSS, React Router, React Toastify.
-- Database: Microsoft SQL Server.
-- Bao cao va QR: Apache POI (Excel), ZXing (QR Code).
+## 1. Tong quan
 
-## 2. Cau truc du an
+MHV phuc vu cac bai toan chinh:
+
+- Quan ly tai san don chiec va vat tu tieu hao.
+- Quan ly nha cung cap, loai tai san, phong/khu vuc, nhom ky thuat vien.
+- Muon/tra tai san qua QR code.
+- Bao hong, dieu phoi ticket, chat realtime va theo doi tien do xu ly.
+- Kiem ke dinh ky cho TechSupport.
+- Theo doi ton kho, cap phat vat tu tieu hao theo phong.
+- Cau hinh branding theo database.
+- Ve so do tang/phong va dinh vi tai san tren ban do.
+
+## 2. Kien truc hien tai
 
 ```text
 mhv/
 |- src/main/java/com/poly/mhv      # Backend Spring Boot
-|- src/main/resources              # Cau hinh backend
-|- frontend/                       # Frontend React
-|- docs/                           # Tai lieu nghiep vu/ky thuat
-|- infrastructure_management_script.sql
-|- pom.xml
+|- src/main/resources              # application.properties va tai nguyen backend
+|- frontend/                       # Frontend React + Vite
+|- docs/                           # Mot so tai lieu va script bo sung
+|- uploads/                        # Thu muc upload local khi dung storage provider = local
+|- Dockerfile                      # Docker image cho backend
+|- pom.xml                         # Cau hinh Maven backend
 ```
 
-## 3. Tinh nang chinh
+## 3. Cong nghe su dung
 
-- Dang nhap, dang ky, xac thuc JWT, phan quyen theo vai tro.
-- Quan ly tai san: them/sua/xoa, loc tim, tao QR.
-- Muon/tra thiet bi qua QR scanner.
-- Bao hong thiet bi va cap nhat trang thai xu ly.
-- Kiem ke dinh ky va doi soat tai san.
-- Quan ly thong bao va xem chi tiet nghiep vu.
-- Goi y thong minh cho Admin dua tren tan suat bao hong va luot muon theo thang.
-- Ticket ky thuat va chat realtime (WebSocket/SSE).
-- Dieu phoi ticket theo nhom TechSupport, ho tro "nhan viec truoc duoc gan truoc".
+### Backend
 
-## 4. Yeu cau moi truong
+- Java 17
+- Spring Boot
+- Spring Security + JWT
+- Spring Data JPA / Hibernate
+- PostgreSQL
+- WebSocket + SSE
+- springdoc OpenAPI / Swagger UI
+- Apache POI
+- ZXing
+- AWS SDK S3-compatible storage (DigitalOcean Spaces)
 
-- Java 17.
-- Maven (hoac dung `./mvnw`).
-- Node.js 18+ va npm.
-- SQL Server dang chay.
+### Frontend
 
-## 5. Cai dat va chay nhanh
+- React 19
+- Vite
+- React Router
+- Tailwind CSS
+- Axios
+- React Toastify
+- Recharts
+- html5-qrcode
+- SockJS + STOMP client
 
-### 5.1 Tao database
+## 4. Vai tro trong he thong
 
-1. Tao database va du lieu mau bang script:
+He thong hien co 4 vai tro chinh:
 
-```bash
-sqlcmd -S localhost,1433 -U sa -P "<mat_khau>" -i infrastructure_management_script.sql
+- `Admin`: quan ly cau hinh, tai san, vat tu, phong/khu vuc, so do, ticket, kiem ke, nguoi dung.
+- `NhanVien`: muon/tra, bao hong, theo doi ticket va chat.
+- `TechSupport`: nhan va xu ly ticket, thuc hien kiem ke.
+- `ConsumableManager`: tao phieu cap phat vat tu tieu hao va quan ly nghiep vu vat tu duoc giao.
+
+## 5. Tinh nang noi bat
+
+### Quan ly tai san
+
+- CRUD tai san, ma QA, QR code.
+- Ho tro 2 nhom:
+  - `ITEMIZED`: tai san don chiec.
+  - `CONSUMABLE`: vat tu tieu hao.
+- Luu thong tin specs, nha cung cap, bao hanh, gia mua, ngay mua.
+
+### Vat tu tieu hao
+
+- Nhap kho theo lo, theo doi han dung, nha cung cap, don gia.
+- Cap phat vat tu theo phong.
+- Theo doi ton kho tai phong sau cap phat.
+- Ho tro yeu cau cap phat va yeu cau tieu huy lo het han.
+
+### Muon/tra va su dung tai san
+
+- Muon/tra bang QR scanner.
+- Luu lich su su dung va phong hien tai/phong goc.
+- Tai san duoc dinh vi theo `Asset.location`.
+
+### Ticket, bao hong va chat
+
+- Tao ticket bao hong.
+- Dieu phoi va nhan viec theo nhom TechSupport.
+- Chat realtime tren ticket.
+- Theo doi timeline xu ly.
+- Danh gia muc do hai long sau khi ticket duoc giai quyet.
+
+### Kiem ke dinh ky
+
+- Admin tao phien kiem ke.
+- TechSupport quet va thuc hien kiem ke tren desktop/mobile.
+- Admin theo doi ket qua, xu ly thieu tai san va xuat bien ban.
+
+### So do dinh vi tai san
+
+- Quan ly tang voi `MapFloor`.
+- Quan ly vung phong/khu vuc tren grid voi `RoomShape`.
+- Gan `Location` vao so do.
+- Ho tro ve phong moi, ve lai phong, sua thong tin, di chuyen phong.
+- Ho tro chon nhieu phong va di chuyen ca cum.
+- Tim tai san theo QA code, ten, loai, phong, tang va hien marker tren so do.
+- Ho tro khu vuc `hasAsset = false` de bieu dien hanh lang, san, cong, duong di... tren so do nhung khong dung cho nghiep vu luu tru tai san.
+
+### Branding va giao dien
+
+- Branding lay tu database thong qua API branding.
+- Ho tro ten cong ty, ten ung dung, mau chu dao, thong tin lien he.
+- Ho tro dark mode qua `ThemeContext`.
+
+## 6. Mo hinh du lieu quan trong
+
+- `Asset`: tai san, vat tu, vi tri hien tai, vi tri goc, specs, trang thai.
+- `Category`: nhom tai san, phan biet `ITEMIZED` va `CONSUMABLE`.
+- `Location`: phong/khu vuc nghiep vu, co the thuoc tang va co co `hasAsset`.
+- `MapFloor`: tang hien thi tren so do.
+- `RoomShape`: vung da ve tren grid gan voi `Location`.
+- `UsageHistory`: lich su muon/tra va di chuyen.
+- `Ticket`, `TicketEvent`, `ChatMessage`: nghiep vu helpdesk.
+- `InventoryAudit`, `InventoryAuditItem`, `InventoryAuditMissing`: nghiep vu kiem ke.
+- `ConsumableReceiptLot`, `ConsumableIssue`, `ConsumableLocationStock`, `ConsumableRequest`, `ConsumableDisposalRequest`: nghiep vu vat tu tieu hao.
+- `AppSetting`: branding va cau hinh giao dien.
+
+## 7. Yeu cau moi truong
+
+- Java 17
+- Node.js 18+ va npm
+- PostgreSQL 14+ (khuyen nghi)
+- Maven 3.9+ hoac dung Maven Wrapper `./mvnw`
+
+## 8. Cau hinh moi truong
+
+Backend doc cau hinh tu `src/main/resources/application.properties` va environment variables.
+
+### Bien moi truong backend quan trong
+
+```env
+JWT_SECRET=your_jwt_secret
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/mhv
+SPRING_DATASOURCE_USERNAME=postgres
+SPRING_DATASOURCE_PASSWORD=postgres
+
+# tuy chon
+SPRING_JPA_SHOW_SQL=false
+SPRING_JPA_FORMAT_SQL=false
+APP_SEED_DEMO_USERS_ENABLED=false
+APP_STORAGE_PROVIDER=local
+APP_UPLOAD_DIR=uploads
 ```
 
-2. Hoac mo script `infrastructure_management_script.sql` bang SSMS va chay thu cong.
+### Storage provider
 
-### 5.2 Cau hinh backend
+- `APP_STORAGE_PROVIDER=local`: luu file vao thu muc `uploads/`.
+- `APP_STORAGE_PROVIDER=spaces`: luu file len DigitalOcean Spaces hoac S3-compatible storage.
 
-Sua file `src/main/resources/application.properties`:
+Neu dung `spaces`, can bo sung:
 
-- `spring.datasource.url`
-- `spring.datasource.username`
-- `spring.datasource.password`
-- `app.cors.allowed-origins` (them domain frontend production neu deploy)
-- `jwt.secret`
+```env
+APP_SPACES_BUCKET=your-bucket
+APP_SPACES_REGION=your-region
+APP_SPACES_ENDPOINT=https://your-endpoint
+APP_SPACES_ACCESS_KEY=your-access-key
+APP_SPACES_SECRET_KEY=your-secret-key
+APP_SPACES_PUBLIC_BASE_URL=https://your-public-base-url
+```
 
-### 5.3 Chay backend
+### Bien moi truong frontend
+
+Frontend goi API thong qua `VITE_API_BASE_URL`.
+
+Vi du `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+Neu frontend va backend cung domain/reverse proxy, co the de rong bien nay de goi cung origin.
+
+## 9. Khoi tao database
+
+He thong hien tai duoc thiet ke de chay voi PostgreSQL va `spring.jpa.hibernate.ddl-auto=update`.
+
+### Cach khoi tao de phat trien local
+
+1. Tao database rong trong PostgreSQL, vi du `mhv`.
+2. Cau hinh cac bien `SPRING_DATASOURCE_*`.
+3. Chay backend, Hibernate se tao/cap nhat schema tu dong.
+
+Luu y:
+
+- File `infrastructure_management_script.sql` trong repo la tai lieu/du lieu cu, khong phai duong khoi tao chinh cho runtime hien tai.
+- README cu co nhac SQL Server, nhung he thong hien tai dang dung PostgreSQL.
+
+## 10. Chay ung dung local
+
+### Chay backend
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-Backend mac dinh: `http://localhost:8080`.
+Mac dinh backend chay tai:
 
-### 5.4 Chay frontend
+- `http://localhost:8080`
+
+Swagger UI:
+
+- `http://localhost:8080/swagger-ui.html`
+
+### Chay frontend
 
 ```bash
 cd frontend
@@ -78,74 +226,138 @@ npm install
 npm run dev
 ```
 
-Frontend mac dinh: `http://localhost:5173`.
+Mac dinh frontend chay tai:
 
-## 6. Bien moi truong frontend
+- `http://localhost:5173`
 
-Frontend su dung `VITE_API_BASE_URL` de goi backend.
+## 11. Seed du lieu
 
-Vi du file `frontend/.env`:
+Khi backend khoi dong:
+
+- He thong luon seed nhom `TechSupportType` mac dinh.
+- Tai khoan demo chi duoc seed khi bat:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8080
+APP_SEED_DEMO_USERS_ENABLED=true
 ```
 
-Khi deploy Vercel, dat `VITE_API_BASE_URL` thanh domain backend production.
+Khi bat co nay, backend se upsert cac tai khoan demo:
 
-## 7. Lenh build/kiem tra
+- `admin`
+- `nhanvien`
+- `techsup1`
+- `techsup2`
+- `techsup3`
+- `techsup4`
+
+Khuyen nghi:
+
+- Khong bat seed demo trong moi truong production.
+- Tai khoan demo co the bi ghi de lai full name/password theo logic seeder.
+
+## 12. Build va kiem tra
 
 ### Backend
 
 ```bash
 ./mvnw -DskipTests compile
 ./mvnw test
+./mvnw package
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
+npm run lint
 npm run build
 ```
 
-## 8. Tai lieu chi tiet
+## 13. Docker
 
-- Tai lieu tong quan chi tiet: `docs/TAI_LIEU_TONG_QUAN_DU_AN.md`
-- So do da co san:
-  - `docs/repair-ticket-flowchart.md`
-  - `docs/repair-ticket-sequence.md`
+Repo hien co `Dockerfile` cho backend.
 
-## 9. Mo ta logic nang cao
+Build image:
 
-### 9.1 Goi y thong minh (Admin Dashboard)
+```bash
+docker build -t mhv-backend .
+```
 
-- He thong tong hop du lieu trong thang hien tai:
-  - So lan bao hong theo thiet bi.
-  - So luot muon theo thiet bi.
-- Tu do sinh danh sach de xuat uu tien:
-  - `breakdownCount >= 3`: de xuat thanh ly/mua moi.
-  - `breakdownCount >= 2` hoac `usageCount >= 30`: de xuat bao tri chuyen sau.
-  - Nguoc lai: de xuat theo doi dinh ky.
-- Neu khong co thiet bi vuot nguong canh bao, he thong tra ve thong diep mac dinh.
+Run container:
 
-### 9.2 Dieu phoi ticket theo nhom ky thuat
+```bash
+docker run --rm -p 8080:8080 \
+  -e JWT_SECRET=your_jwt_secret \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://host.docker.internal:5432/mhv \
+  -e SPRING_DATASOURCE_USERNAME=postgres \
+  -e SPRING_DATASOURCE_PASSWORD=postgres \
+  mhv-backend
+```
 
-- Role cha `TechSupport` gom 4 role con/chuyen mon:
-  - Ky thuat vien cong nghe.
-  - Ky thuat vien thiet bi giang day.
-  - Ky thuat vien thiet bi thi nghiem.
-  - Ky thuat vien thiet bi the duc the thao.
-- Khi phat sinh bao hong:
-  - He thong xac dinh loai thiet bi.
-  - Chi gui thong bao den nhom TechSupport phu hop voi loai do.
-- Co che nhan viec:
-  - Nhieu ky thuat vien cung nhom deu thay ticket va co quyen nhan viec.
-  - Ai nhan truoc se duoc gan ticket (co che tranh gan trung).
-  - Nguoi khac se khong the nhan tiep ticket da co nguoi xu ly.
-- Neu ticket chua co ai nhan:
-  - Admin co the dung tinh nang "Dieu phoi ticket" de chi dinh truc tiep ky thuat vien.
+Luu y:
 
-## 10. Luu y bao mat
+- `Dockerfile` hien tai dong goi backend.
+- Frontend can deploy rieng, vi du Vercel, Netlify hoac reverse proxy cung backend.
 
-- Khong commit thong tin nhay cam (mat khau DB, JWT secret that) len git cong khai.
-- Nen dung bien moi truong theo tung moi truong (`dev`, `staging`, `prod`).
+## 14. Route giao dien chinh
+
+### Admin
+
+- `/admin/dashboard`
+- `/admin/assets`
+- `/admin/asset-map`
+- `/admin/locations`
+- `/admin/tickets`
+- `/admin/inventory-audits`
+- `/admin/branding`
+
+### NhanVien
+
+- `/mobile/home`
+- `/mobile/scan`
+- `/mobile/maintenance`
+- `/mobile/chats`
+
+### TechSupport
+
+- `/tech/tickets`
+- `/tech/chats`
+- `/tech/inventory-audits`
+- `/tech-mobile/tickets`
+- `/tech-mobile/chats`
+
+### ConsumableManager
+
+- `/supply/consumables`
+
+## 15. Luu y nghiep vu quan trong
+
+- `Location.hasAsset = true`: khu vuc hop le de gan/chua tai san.
+- `Location.hasAsset = false`: khu vuc chi de hien thi tren so do, khong hien trong cac nghiep vu can chon phong luu tru tai san.
+- Tai san xuat hien tren so do theo `Asset.location`.
+- `homeLocation` duoc dung lam vi tri goc/fallback cho du lieu legacy va nghiep vu muon/tra.
+- Vat tu tieu hao duoc quan ly theo lo nhap va ton tai kho/phong, khong chi theo mot so luong tong don gian.
+- Branding uu tien lay tu database (`app_settings`) qua API, env chi dong vai tro fallback.
+
+## 16. Thu muc va tai lieu lien quan
+
+- `frontend/.agents/skills/`: cac rule/noi quy thiet ke frontend noi bo.
+- `docs/sql/`: mot so script bo sung.
+- `HELP.md`: file mac dinh do Spring Boot sinh ra.
+
+## 17. Bao mat va van hanh
+
+- Khong commit secret that len git.
+- Tach bien moi truong theo `dev`, `staging`, `prod`.
+- Tat `APP_SEED_DEMO_USERS_ENABLED` trong production.
+- Neu dung object storage, uu tien cap public base URL dung de frontend render media on dinh.
+- Kiem tra `app.cors.allowed-origins` khi doi domain frontend.
+
+## 18. Ghi chu phat trien
+
+- Backend va frontend deu dang duoc phat trien lien tuc; README nay uu tien phan anh codebase hien tai.
+- Neu co chenh lech giua README va code, hay uu tien:
+  - `src/main/resources/application.properties`
+  - `pom.xml`
+  - `frontend/package.json`
+  - route trong `frontend/src/App.jsx`
