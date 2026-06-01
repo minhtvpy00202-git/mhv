@@ -28,6 +28,7 @@ const MobileTechSupportChats = lazy(() => import('./pages/tech/MobileTechSupport
 const TicketSatisfactionReview = lazy(() => import('./pages/TicketSatisfactionReview'))
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
 const AssetManagement = lazy(() => import('./pages/admin/AssetManagement'))
+const AssetMapManagement = lazy(() => import('./pages/admin/AssetMapManagement'))
 const SupplierManagement = lazy(() => import('./pages/admin/SupplierManagement'))
 const CategoryManagement = lazy(() => import('./pages/admin/CategoryManagement'))
 const LocationManagement = lazy(() => import('./pages/admin/LocationManagement'))
@@ -163,6 +164,7 @@ function App() {
         >
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
           <Route path="/admin/assets" element={withSuspense(<AssetManagement />)} />
+          <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
           <Route path="/admin/suppliers" element={withSuspense(<SupplierManagement />)} />
           <Route path="/admin/categories" element={withSuspense(<CategoryManagement />)} />
           <Route path="/admin/locations" element={withSuspense(<LocationManagement />)} />

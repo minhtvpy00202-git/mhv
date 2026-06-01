@@ -820,7 +820,7 @@ function AssetManagement({ restrictToConsumable = false }) {
           totalPages: assetPage.totalPages || 1,
           totalItems: assetPage.totalItems || 0,
         })
-        setLocations(data.locations || [])
+        setLocations((data.locations || []).filter((location) => location?.hasAsset !== false))
         setCategories(data.categories || [])
         setCategoryDetailsById({})
         setAssetDetailsByQaCode({})

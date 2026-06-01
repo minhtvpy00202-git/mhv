@@ -1,6 +1,7 @@
 package com.poly.mhv.repository;
 
 import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
+import com.poly.mhv.dto.assetmap.AssetMapAssetResponse;
 import com.poly.mhv.entity.Asset;
 import java.time.LocalDate;
 import java.util.List;
@@ -121,6 +122,45 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     @EntityGraph(attributePaths = {"location", "homeLocation"})
     @Query("select a from Asset a where a.qaCode in :qaCodes")
     List<Asset> findAllDetailsByQaCodeIn(@Param("qaCodes") List<String> qaCodes);
+
+    @Query("""
+            select new com.poly.mhv.dto.assetmap.AssetMapAssetResponse(
+                a.qaCode,
+                a.name,
+                a.trackingMode,
+                c.id,
+                c.name,
+                a.status,
+                a.technicalStatus,
+                a.usageStatus,
+                l.id,
+                l.roomName,
+                hl.id,
+                hl.roomName,
+                f.id,
+                f.name
+            )
+            from Asset a
+            join a.location l
+            left join l.floor f
+            left join a.homeLocation hl
+            join a.category c
+            where (coalesce(:keyword, '') = ''
+                or lower(a.qaCode) like lower(concat('%', :keyword, '%'))
+                or lower(a.name) like lower(concat('%', :keyword, '%')))
+              and (:categoryId is null or c.id = :categoryId)
+              and (:locationId is null or l.id = :locationId)
+              and (:floorId is null or f.id = :floorId)
+              and (:trackingMode is null or a.trackingMode = :trackingMode)
+            order by case when f.sortOrder is null then 1 else 0 end, f.sortOrder asc, l.roomName asc, a.qaCode asc
+            """)
+    List<AssetMapAssetResponse> searchForAssetMap(
+            @Param("keyword") String keyword,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId,
+            @Param("floorId") Integer floorId,
+            @Param("trackingMode") String trackingMode
+    );
 
     @Query("""
             select max(a.qaCode) from Asset a

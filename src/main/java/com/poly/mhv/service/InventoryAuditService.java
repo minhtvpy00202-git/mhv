@@ -83,6 +83,9 @@ public class InventoryAuditService {
         }
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
+        if (location.getHasAsset() != null && !location.getHasAsset()) {
+            throw new CustomException("Không thể tạo phiên kiểm kê cho khu vực không chứa tài sản.");
+        }
         AppUser actor = getCurrentUser();
         LocalDateTime startedAt = LocalDateTime.now();
         if (!request.getDueDate().isAfter(startedAt)) {

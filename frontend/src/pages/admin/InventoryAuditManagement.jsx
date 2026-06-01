@@ -30,7 +30,7 @@ function InventoryAuditManagement() {
       })
       const data = response.data || {}
       const auditPage = data.audits || {}
-      setLocations(data.locations || [])
+      setLocations((data.locations || []).filter((location) => location?.hasAsset !== false))
       setAudits(auditPage.items || [])
       setPageInfo({
         page: auditPage.page ?? 0,
@@ -47,7 +47,13 @@ function InventoryAuditManagement() {
   }
 
   useEffect(() => {
-    loadInitialData()
+    const bootstrapTimer = window.setTimeout(() => {
+      void loadInitialData()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(bootstrapTimer)
+    }
   }, [])
 
   const loadAuditDetail = async (auditId) => {

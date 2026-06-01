@@ -34,6 +34,7 @@ const menuItems = [
     icon: Boxes,
     children: [
       { to: '/admin/assets', label: 'Quản lý thiết bị', icon: Boxes },
+      { to: '/admin/asset-map', label: 'Sơ đồ định vị tài sản', icon: MapPin },
       { to: '/admin/suppliers', label: 'Quản lý nhà cung cấp', icon: PackageSearch },
       { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
       { to: '/admin/tech-support-types', label: 'Quản lý loại kỹ thuật viên', icon: Wrench },
@@ -74,6 +75,7 @@ function AdminLayout() {
   useEffect(() => {
     if (
       location.pathname.startsWith('/admin/assets')
+      || location.pathname.startsWith('/admin/asset-map')
       || location.pathname.startsWith('/admin/suppliers')
       || location.pathname.startsWith('/admin/categories')
       || location.pathname.startsWith('/admin/tech-support-types')

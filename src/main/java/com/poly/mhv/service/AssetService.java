@@ -148,8 +148,7 @@ public class AssetService {
                 : normalizeRequestedUsageStatus(request.getUsageStatus(), request.getStatus());
         Location location = consumable
                 ? getConsumableStorageLocationOrThrow()
-                : locationRepository.findById(request.getLocationId())
-                        .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
+                : getAssetStorageLocationOrThrow(request.getLocationId(), "Không tìm thấy phòng với id: " + request.getLocationId());
         Asset asset = Asset.builder()
                 .qaCode(generatedQaCode)
                 .trackingMode(trackingMode)
@@ -319,8 +318,10 @@ public class AssetService {
         }
         if (request.getLocationId() != null) {
             if (isItemizedMode(trackingMode)) {
-                Location location = locationRepository.findById(request.getLocationId())
-                        .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
+                Location location = getAssetStorageLocationOrThrow(
+                        request.getLocationId(),
+                        "Không tìm thấy phòng với id: " + request.getLocationId()
+                );
                 asset.setLocation(location);
                 asset.setHomeLocation(location);
             }
@@ -429,8 +430,10 @@ public class AssetService {
         if (currentQuantity < request.getQuantity()) {
             throw new CustomException("Số lượng tồn không đủ để cấp phát.");
         }
-        Location issuedToLocation = locationRepository.findById(request.getIssuedToLocationId())
-                .orElseThrow(() -> new CustomException("Không tìm thấy phòng nhận với id: " + request.getIssuedToLocationId()));
+        Location issuedToLocation = getAssetStorageLocationOrThrow(
+                request.getIssuedToLocationId(),
+                "Không tìm thấy phòng nhận với id: " + request.getIssuedToLocationId()
+        );
         AppUser actor = getCurrentUser();
         LocalDateTime now = LocalDateTime.now();
         List<LotAllocation> allocations = allocateConsumableLots(asset, request.getQuantity());
@@ -571,8 +574,7 @@ public class AssetService {
 
     @Transactional(readOnly = true)
     public ConsumableLocationOverviewResponse getConsumableLocationOverview(Integer locationId) {
-        Location location = locationRepository.findById(locationId)
-                .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + locationId));
+        Location location = getAssetStorageLocationOrThrow(locationId, "Không tìm thấy phòng với id: " + locationId);
         return ConsumableLocationOverviewResponse.builder()
                 .locationId(location.getId())
                 .locationName(location.getRoomName())
@@ -805,8 +807,7 @@ public class AssetService {
         if (!StringUtils.hasText(request.getReason())) {
             throw new CustomException("Lý do cấp phát là bắt buộc.");
         }
-        Location location = locationRepository.findById(locationId)
-                .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + locationId));
+        Location location = getAssetStorageLocationOrThrow(locationId, "Không tìm thấy phòng với id: " + locationId);
         Asset asset = assetRepository.findDetailByQaCode(request.getAssetQaCode().trim())
                 .orElseThrow(() -> new CustomException("Không tìm thấy vật tư với mã: " + request.getAssetQaCode()));
         if (!isConsumableMode(asset.getTrackingMode())) {
@@ -1250,8 +1251,25 @@ public class AssetService {
     }
 
     private Location getConsumableStorageLocationOrThrow() {
-        return locationRepository.findFirstByRoomNameIgnoreCase(DEFAULT_CONSUMABLE_STORAGE_ROOM)
+        Location location = locationRepository.findFirstByRoomNameIgnoreCase(DEFAULT_CONSUMABLE_STORAGE_ROOM)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng lưu trữ mặc định '" + DEFAULT_CONSUMABLE_STORAGE_ROOM + "'."));
+        if (location.getHasAsset() != null && !location.getHasAsset()) {
+            throw new CustomException("Phòng lưu trữ mặc định phải là khu vực chứa tài sản.");
+        }
+        return location;
+    }
+
+    private Location getLocationOrThrow(Integer locationId, String notFoundMessage) {
+        return locationRepository.findById(locationId)
+                .orElseThrow(() -> new CustomException(notFoundMessage));
+    }
+
+    private Location getAssetStorageLocationOrThrow(Integer locationId, String notFoundMessage) {
+        Location location = getLocationOrThrow(locationId, notFoundMessage);
+        if (location.getHasAsset() != null && !location.getHasAsset()) {
+            throw new CustomException("Khu vực này không được phép chứa tài sản.");
+        }
+        return location;
     }
 
     private void validatePurchaseInfo(

@@ -1,11 +1,15 @@
 package com.poly.mhv.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
@@ -30,6 +34,15 @@ public class Location {
     @Column(name = "room_name", nullable = false, length = 100)
     private String roomName;
 
+    @Column(name = "has_asset", columnDefinition = "boolean default true")
+    @Builder.Default
+    private Boolean hasAsset = true;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "floor_id")
+    @JsonIgnoreProperties({"locations", "roomShapes"})
+    private MapFloor floor;
+
     @JsonIgnore
     @OneToMany(mappedBy = "location")
     @Builder.Default
@@ -44,4 +57,9 @@ public class Location {
     @OneToMany(mappedBy = "toLocation")
     @Builder.Default
     private List<UsageHistory> usageHistoriesTo = new ArrayList<>();
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "location")
+    @Builder.Default
+    private List<RoomShape> roomShapes = new ArrayList<>();
 }

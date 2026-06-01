@@ -62,10 +62,12 @@ function QRScanner() {
     }
   }, [showActionModal])
 
-  const fetchLocations = async () => {
+  async function fetchLocations() {
     try {
-      const response = await axiosClient.get('/api/locations')
-      setLocations(response.data || [])
+      const response = await axiosClient.get('/api/locations', {
+        params: { hasAsset: true },
+      })
+      setLocations((response.data || []).filter((location) => location?.hasAsset !== false))
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách phòng.'
       toast.error(message)
@@ -106,7 +108,7 @@ function QRScanner() {
     return decodedText.trim()
   }
 
-  const startScanner = async () => {
+  async function startScanner() {
     if (isScanningRef.current) return
     const scanner = new Html5Qrcode(scannerElementId)
     scannerRef.current = scanner
@@ -135,7 +137,7 @@ function QRScanner() {
     }
   }
 
-  const stopScanner = async () => {
+  async function stopScanner() {
     const scanner = scannerRef.current
     if (!scanner) return
     try {

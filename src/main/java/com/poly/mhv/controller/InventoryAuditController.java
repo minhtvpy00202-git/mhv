@@ -82,7 +82,7 @@ public class InventoryAuditController {
     ) {
         return ResponseEntity.ok(new InventoryAuditManagementBootstrapResponse(
                 inventoryAuditService.getAudits(page, size, status),
-                locationService.getAllLocations(null)
+                locationService.getAllLocations(null, true)
         ));
     }
 

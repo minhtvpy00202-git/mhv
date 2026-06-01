@@ -45,7 +45,9 @@ function UsageHistoryManagement() {
               sortDirection: defaultSortState.direction,
             },
           }),
-          axiosClient.get('/api/locations'),
+          axiosClient.get('/api/locations', {
+            params: { hasAsset: true },
+          }),
           axiosClient.get('/api/users/borrowers'),
         ])
         const historyData = historyRes.data || {}
@@ -56,7 +58,7 @@ function UsageHistoryManagement() {
           totalPages: historyData.totalPages || 1,
           totalItems: historyData.totalItems || 0,
         })
-        setLocations(locationRes.data || [])
+        setLocations((locationRes.data || []).filter((location) => location?.hasAsset !== false))
         setUsers(userRes.data || [])
         setSortState(defaultSortState)
       } catch (error) {

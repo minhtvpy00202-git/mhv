@@ -69,6 +69,9 @@ public class UsageHistoryService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy người dùng với id: " + request.getUserId()));
         Location toLocation = locationRepository.findById(request.getToLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng đích với id: " + request.getToLocationId()));
+        if (toLocation.getHasAsset() != null && !toLocation.getHasAsset()) {
+            throw new CustomException("Không thể chuyển tài sản đến khu vực không chứa tài sản.");
+        }
 
         Location fromLocation = asset.getLocation();
         if (fromLocation.getId().equals(toLocation.getId())) {
