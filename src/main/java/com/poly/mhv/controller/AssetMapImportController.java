@@ -21,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,6 +76,13 @@ public class AssetMapImportController {
     @Operation(summary = "Lay chi tiet import job", description = "Tra ve thong tin job, floors tam va suggestions de review.")
     public ResponseEntity<MapImportJobDetailResponse> getJobDetail(@PathVariable Long jobId) {
         return ResponseEntity.ok(assetMapImportService.getJobDetail(jobId));
+    }
+
+    @DeleteMapping("/jobs/{jobId}")
+    @Operation(summary = "Xoa import job", description = "Xoa import job va cac tep tam lien quan da upload cho luong import ban ve.")
+    public ResponseEntity<Void> deleteJob(@PathVariable Long jobId) {
+        assetMapImportService.deleteJob(jobId);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/jobs/{jobId}/analyze")

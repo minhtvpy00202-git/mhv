@@ -517,6 +517,7 @@ function AssetMapManagement() {
   const [savingSuggestionId, setSavingSuggestionId] = useState(null)
   const [applyingImportJobId, setApplyingImportJobId] = useState(null)
   const [parsingSelectedImportId, setParsingSelectedImportId] = useState(null)
+  const [deletingImportJobId, setDeletingImportJobId] = useState(null)
   const [bboxEditState, setBboxEditState] = useState({
     active: false,
     suggestionId: null,
@@ -950,6 +951,41 @@ function AssetMapManagement() {
     } finally {
       setParsingSelectedImportId(null)
     }
+  }
+
+  const handleDeleteImportJob = (jobId) => {
+    if (!jobId) return
+    openConfirmDialog({
+      title: 'Xóa import job',
+      message: 'Job import này cùng toàn bộ file gốc, preview và file DXF tạm sẽ bị xóa khỏi hệ thống. Bạn có chắc chắn không?',
+      confirmLabel: 'Xóa job',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setConfirmDialog((previous) => ({ ...previous, busy: true }))
+          setDeletingImportJobId(jobId)
+          await axiosClient.delete(`/api/asset-map-import/jobs/${jobId}`)
+          toast.success('Đã xóa import job và dọn file tạm.')
+          const remainingJobs = importJobs.filter((job) => Number(job.id) !== Number(jobId))
+          const nextJobId = remainingJobs[0]?.id ?? null
+          setImportJobs(remainingJobs)
+          setSelectedImportJobId(nextJobId)
+          if (nextJobId) {
+            await loadImportJobDetail(nextJobId)
+          } else {
+            setSelectedImportJobDetail(null)
+          }
+          closeConfirmDialog()
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Không thể xóa import job.'
+          toast.error(message)
+          setConfirmDialog((previous) => ({ ...previous, busy: false }))
+        } finally {
+          setDeletingImportJobId(null)
+        }
+      },
+    })
   }
 
   const handleSuggestionDraftChange = (suggestionId, field, value) => {
@@ -3569,6 +3605,16 @@ function AssetMapManagement() {
                           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                         >
                           {applyingImportJobId === selectedImportJobDetail.job.id ? 'Đang áp dụng...' : 'Áp dụng vào sơ đồ thật'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteImportJob(selectedImportJobDetail.job.id)}
+                          disabled={deletingImportJobId === selectedImportJobDetail.job.id}
+                          className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
+                          title="Xóa import job và file tạm"
+                        >
+                          <Trash size={16} />
+                          {deletingImportJobId === selectedImportJobDetail.job.id ? 'Đang xóa...' : 'Xóa job'}
                         </button>
                       </div>
                     </div>

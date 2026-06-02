@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,6 +58,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 import lombok.Builder;
@@ -95,13 +97,13 @@ public class AssetMapImportService {
     private final MapFloorRepository mapFloorRepository;
     private final LocationRepository locationRepository;
     private final RoomShapeRepository roomShapeRepository;
-    private final MediaStorageService mediaStorageService;
     private final CurrentUserProvider currentUserProvider;
     private final CadImportEngineClient cadImportEngineClient;
     private final OdaFileConverterService odaFileConverterService;
     private final DxfProcessingService dxfProcessingService;
     private final ObjectMapper objectMapper;
     private final Path uploadDir;
+    private final Path importStorageDir;
     private final HttpClient httpClient;
 
     public AssetMapImportService(
@@ -111,7 +113,6 @@ public class AssetMapImportService {
             MapFloorRepository mapFloorRepository,
             LocationRepository locationRepository,
             RoomShapeRepository roomShapeRepository,
-            MediaStorageService mediaStorageService,
             CurrentUserProvider currentUserProvider,
             CadImportEngineClient cadImportEngineClient,
             OdaFileConverterService odaFileConverterService,
@@ -125,13 +126,13 @@ public class AssetMapImportService {
         this.mapFloorRepository = mapFloorRepository;
         this.locationRepository = locationRepository;
         this.roomShapeRepository = roomShapeRepository;
-        this.mediaStorageService = mediaStorageService;
         this.currentUserProvider = currentUserProvider;
         this.cadImportEngineClient = cadImportEngineClient;
         this.odaFileConverterService = odaFileConverterService;
         this.dxfProcessingService = dxfProcessingService;
         this.objectMapper = objectMapper;
         this.uploadDir = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.importStorageDir = this.uploadDir.resolve("asset-map-import").normalize();
         this.httpClient = HttpClient.newHttpClient();
     }
 
@@ -141,17 +142,23 @@ public class AssetMapImportService {
             throw new CustomException("File bản vẽ không được để trống.");
         }
 
+        long startedAt = System.nanoTime();
         String originalFileName = sanitizeFileName(file.getOriginalFilename());
         String sourceType = resolveSourceType(file, requestedSourceType, originalFileName);
         String mimeType = resolveMimeType(file, sourceType);
         String extension = resolveExtension(file, sourceType, mimeType, originalFileName);
         byte[] fileBytes = readFileBytes(file);
+        long readBytesAt = System.nanoTime();
         String sourceFileUrl = storeSourceFile(fileBytes, mimeType, extension);
+        long storedAt = System.nanoTime();
         PdfPreviewData pdfPreview = "PDF".equals(sourceType) ? generatePdfPreview(fileBytes) : null;
+        long previewAt = System.nanoTime();
         List<ParsedPdfLabel> parsedPdfLabels = pdfPreview != null ? extractPdfLabels(fileBytes, pdfPreview) : List.of();
+        long parsedPdfAt = System.nanoTime();
         // Avoid expensive heuristic text scanning for binary DWG during upload.
         // DWG will be analyzed in the next step via ODA/DXF or CAD engine if available.
         List<String> extractedCadTexts = "DXF".equals(sourceType) ? extractCadLikeTexts(fileBytes) : List.of();
+        long extractedCadAt = System.nanoTime();
         AppUser currentUser = currentUserProvider.getCurrentUser();
 
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -185,7 +192,22 @@ public class AssetMapImportService {
                 .requestedBy(currentUser)
                 .build();
 
-        return mapJobSummary(mapImportJobRepository.save(job));
+        MapImportJob savedJob = mapImportJobRepository.save(job);
+        LOGGER.info(
+                "Import upload job {}: sourceType={}, fileSizeBytes={}, storageProvider={}, readMs={}, storeMs={}, previewMs={}, pdfLabelMs={}, cadTextMs={}, totalServerMs={}",
+                savedJob.getId(),
+                sourceType,
+                file.getSize(),
+                "import-local",
+                elapsedMillis(startedAt, readBytesAt),
+                elapsedMillis(readBytesAt, storedAt),
+                elapsedMillis(storedAt, previewAt),
+                elapsedMillis(previewAt, parsedPdfAt),
+                elapsedMillis(parsedPdfAt, extractedCadAt),
+                elapsedMillis(startedAt, extractedCadAt)
+        );
+
+        return mapJobSummary(savedJob);
     }
 
     @Transactional(readOnly = true)
@@ -198,6 +220,17 @@ public class AssetMapImportService {
     @Transactional(readOnly = true)
     public MapImportJobDetailResponse getJobDetail(Long jobId) {
         return mapJobDetail(getJobDetailEntity(jobId));
+    }
+
+    @Transactional
+    public void deleteJob(Long jobId) {
+        MapImportJob job = mapImportJobRepository.findById(jobId)
+                .orElseThrow(() -> new CustomException("Khong tim thay import job."));
+        deleteImportArtifact(job.getSourceFileUrl());
+        deleteImportArtifact(job.getPreviewFileUrl());
+        deleteImportArtifact(extractMetadataString(job.getRawMetadataJson(), "effectiveDxfFileUrl"));
+        mapImportJobRepository.delete(job);
+        LOGGER.info("Deleted import job {} and cleaned local import artifacts.", jobId);
     }
 
     @Transactional
@@ -604,16 +637,58 @@ public class AssetMapImportService {
 
     private String storeSourceFile(byte[] fileBytes, String mimeType, String extension) {
         try {
-            return mediaStorageService.storeBytes(fileBytes, mimeType, "asset-map-import", extension);
+            return storeImportArtifact(fileBytes, "source", extension);
         } catch (Exception ex) {
             throw new CustomException("Khong the luu file ban ve.");
         }
+    }
+
+    private String storeImportArtifact(byte[] bytes, String category, String extension) {
+        try {
+            Path categoryDir = importStorageDir.resolve(category).normalize();
+            Files.createDirectories(categoryDir);
+            String safeExtension = StringUtils.hasText(extension) ? extension.trim().toLowerCase(Locale.ROOT) : "bin";
+            Path targetPath = categoryDir.resolve(UUID.randomUUID() + "." + safeExtension).normalize();
+            Files.write(targetPath, bytes);
+            return toImportArtifactUrl(targetPath);
+        } catch (Exception ex) {
+            throw new CustomException("Khong the luu tep import tam thoi.");
+        }
+    }
+
+    private String toImportArtifactUrl(Path path) {
+        Path normalized = path.toAbsolutePath().normalize();
+        if (!normalized.startsWith(uploadDir)) {
+            throw new CustomException("Duong dan tep import khong hop le.");
+        }
+        String relativePath = uploadDir.relativize(normalized).toString().replace('\\', '/');
+        return "/uploads/" + relativePath;
+    }
+
+    private void deleteImportArtifact(String storedUrl) {
+        if (!StringUtils.hasText(storedUrl) || !storedUrl.startsWith("/uploads/")) {
+            return;
+        }
+        try {
+            Path artifactPath = uploadDir.resolve(storedUrl.substring("/uploads/".length())).normalize();
+            if (!artifactPath.startsWith(importStorageDir)) {
+                return;
+            }
+            Files.deleteIfExists(artifactPath);
+        } catch (Exception ex) {
+            LOGGER.warn("Khong the xoa tep import tam thoi: {}", storedUrl);
+        }
+    }
+
+    private long elapsedMillis(long startNano, long endNano) {
+        return Math.max(0L, Math.round((endNano - startNano) / 1_000_000.0d));
     }
 
     private DxfPreparedData prepareLocalCadData(MapImportJob job) {
         if (job == null || "PDF".equalsIgnoreCase(job.getSourceFileType())) {
             return null;
         }
+        long startedAt = System.nanoTime();
         List<DxfTextLabel> cachedLabels = extractDxfTextLabels(job.getRawMetadataJson());
         List<DxfGeometryBox> cachedGeometryBoxes = extractDxfGeometryBoxes(job.getRawMetadataJson());
         List<DxfInsertMarker> cachedInsertMarkers = extractDxfInsertMarkers(job.getRawMetadataJson());
@@ -625,6 +700,14 @@ public class AssetMapImportService {
                 && cachedParseVersion != null
                 && cachedParseVersion >= 3
                 && (!cachedLabels.isEmpty() || !cachedGeometryBoxes.isEmpty() || !cachedInsertMarkers.isEmpty())) {
+            LOGGER.info(
+                    "CAD local data job {}: cacheHit=true, labels={}, geometryBoxes={}, insertMarkers={}, totalMs={}",
+                    job.getId(),
+                    cachedLabels.size(),
+                    cachedGeometryBoxes.size(),
+                    cachedInsertMarkers.size(),
+                    elapsedMillis(startedAt, System.nanoTime())
+            );
             return new DxfPreparedData(
                     existingDxfUrl,
                     cachedWidth != null ? cachedWidth : 1600,
@@ -635,11 +718,13 @@ public class AssetMapImportService {
             );
         }
         if ("DWG".equalsIgnoreCase(job.getSourceFileType()) && !odaFileConverterService.isEnabledFor(job.getSourceFileType())) {
+            LOGGER.warn("CAD local data job {}: ODA disabled for DWG, skip local DWG->DXF pipeline.", job.getId());
             return null;
         }
         try {
             Path workspaceDir = Files.createTempDirectory("asset-map-import-");
             Path sourcePath = materializeStoredFile(job.getSourceFileUrl(), job.getSourceFileType().toLowerCase(Locale.ROOT), workspaceDir.resolve("source"));
+            long materializedAt = System.nanoTime();
             Path dxfPath = sourcePath;
             String effectiveDxfUrl = job.getSourceFileUrl();
             String conversionLog = null;
@@ -647,9 +732,11 @@ public class AssetMapImportService {
                 OdaConversionResult conversionResult = odaFileConverterService.convertDwgToDxf(sourcePath, workspaceDir);
                 dxfPath = conversionResult.dxfPath();
                 conversionLog = conversionResult.commandOutput();
-                effectiveDxfUrl = mediaStorageService.storeBytes(Files.readAllBytes(dxfPath), "application/dxf", "asset-map-import/converted", "dxf");
+                effectiveDxfUrl = storeImportArtifact(Files.readAllBytes(dxfPath), "converted", "dxf");
             }
+            long convertedAt = System.nanoTime();
             DxfParseResult parseResult = dxfProcessingService.parse(dxfPath);
+            long parsedAt = System.nanoTime();
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("effectiveDxfFileUrl", effectiveDxfUrl);
             metadata.put("dxfParseVersion", 3);
@@ -664,6 +751,27 @@ public class AssetMapImportService {
                 metadata.put("odaConversionLog", conversionLog);
             }
             job.setRawMetadataJson(writeMetadata(mergeMetadata(job.getRawMetadataJson(), metadata)));
+            LOGGER.info(
+                    "CAD local data job {}: cacheHit=false, sourceType={}, materializeMs={}, convertAndStoreMs={}, parseMs={}, labels={}, geometryBoxes={}, insertMarkers={}, effectiveDxfUrl={}",
+                    job.getId(),
+                    job.getSourceFileType(),
+                    elapsedMillis(startedAt, materializedAt),
+                    elapsedMillis(materializedAt, convertedAt),
+                    elapsedMillis(convertedAt, parsedAt),
+                    parseResult.labels().size(),
+                    parseResult.geometryBoxes().size(),
+                    parseResult.insertMarkers().size(),
+                    effectiveDxfUrl
+            );
+            if (parseResult.geometryBoxes().isEmpty()) {
+                LOGGER.warn(
+                        "CAD local data job {}: DXF parse produced zero geometry boxes. labels={}, insertMarkers={}, sourceType={}",
+                        job.getId(),
+                        parseResult.labels().size(),
+                        parseResult.insertMarkers().size(),
+                        job.getSourceFileType()
+                );
+            }
             return new DxfPreparedData(
                     effectiveDxfUrl,
                     parseResult.canvasWidthPx(),
@@ -686,7 +794,7 @@ public class AssetMapImportService {
             if (StringUtils.hasText(storedUrl) && storedUrl.startsWith("/uploads/")) {
                 Path localPath = uploadDir.resolve(storedUrl.substring("/uploads/".length())).normalize();
                 if (Files.exists(localPath)) {
-                    Files.copy(localPath, normalizedTarget);
+                    Files.copy(localPath, normalizedTarget, StandardCopyOption.REPLACE_EXISTING);
                     return normalizedTarget;
                 }
             }
@@ -726,10 +834,9 @@ public class AssetMapImportService {
             BufferedImage previewImage = renderer.renderImageWithDPI(0, 144);
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             ImageIO.write(previewImage, "png", outputStream);
-            String previewFileUrl = mediaStorageService.storeBytes(
+            String previewFileUrl = storeImportArtifact(
                     outputStream.toByteArray(),
-                    "image/png",
-                    "asset-map-import/previews",
+                    "previews",
                     "png"
             );
             return new PdfPreviewData(previewFileUrl, pageCount, previewImage.getWidth(), previewImage.getHeight());
