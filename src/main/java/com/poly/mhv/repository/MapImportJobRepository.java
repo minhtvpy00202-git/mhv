@@ -11,6 +11,6 @@ public interface MapImportJobRepository extends JpaRepository<MapImportJob, Long
     @EntityGraph(attributePaths = {"requestedBy"})
     List<MapImportJob> findAllByOrderByRequestedAtDescIdDesc();
 
-    @EntityGraph(attributePaths = {"requestedBy", "floors", "floors.suggestions"})
+    @EntityGraph(attributePaths = {"requestedBy", "floors"})
     Optional<MapImportJob> findWithDetailsById(Long id);
 }

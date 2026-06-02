@@ -511,8 +511,13 @@ public class AssetMapImportService {
         if (jobId == null) {
             throw new CustomException("Khong tim thay job import ban ve.");
         }
-        return mapImportJobRepository.findWithDetailsById(jobId)
+        MapImportJob job = mapImportJobRepository.findWithDetailsById(jobId)
                 .orElseThrow(() -> new CustomException("Khong tim thay job import ban ve."));
+        // Load suggestions in a second query to avoid Hibernate MultipleBagFetchException
+        // when a job contains both floors (List) and floor suggestions (List).
+        mapImportFloorRepository.findByJobIdOrderBySortOrderAscIdAsc(jobId);
+        Optional.ofNullable(job.getFloors()).orElse(List.of()).forEach(floor -> floor.getSuggestions().size());
+        return job;
     }
 
     private byte[] readFileBytes(MultipartFile file) {
