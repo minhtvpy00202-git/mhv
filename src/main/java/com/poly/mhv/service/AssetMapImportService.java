@@ -64,6 +64,8 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -73,6 +75,7 @@ import org.springframework.beans.factory.annotation.Value;
 @Service
 public class AssetMapImportService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AssetMapImportService.class);
     private static final Set<String> SUPPORTED_SOURCE_TYPES = Set.of("PDF", "DWG", "DXF");
     private static final Map<String, String> MIME_EXTENSION = Map.of(
             "application/pdf", "pdf",
@@ -264,13 +267,21 @@ public class AssetMapImportService {
             MapImportJob savedJob = mapImportJobRepository.save(job);
             return mapJobDetail(savedJob);
         } catch (Exception ex) {
+            String analyzeErrorMessage = buildAnalyzeErrorMessage(ex);
+            LOGGER.error(
+                    "Failed to analyze map import job. jobId={}, sourceFileName={}, sourceFileType={}",
+                    job.getId(),
+                    job.getSourceFileName(),
+                    job.getSourceFileType(),
+                    ex
+            );
             job.setStatus("FAILED");
-            job.setErrorMessage(ex instanceof CustomException ? ex.getMessage() : "Khong the khoi tao phan tich ban ve.");
+            job.setErrorMessage(analyzeErrorMessage);
             mapImportJobRepository.save(job);
             if (ex instanceof CustomException customException) {
                 throw customException;
             }
-            throw new CustomException("Khong the khoi tao phan tich ban ve.");
+            throw new CustomException(analyzeErrorMessage);
         }
     }
 
@@ -518,6 +529,29 @@ public class AssetMapImportService {
         mapImportFloorRepository.findByJobIdOrderBySortOrderAscIdAsc(jobId);
         Optional.ofNullable(job.getFloors()).orElse(List.of()).forEach(floor -> floor.getSuggestions().size());
         return job;
+    }
+
+    private String buildAnalyzeErrorMessage(Exception ex) {
+        if (ex instanceof CustomException && StringUtils.hasText(ex.getMessage())) {
+            return ex.getMessage();
+        }
+        String rootMessage = ex != null ? extractRootCauseMessage(ex) : null;
+        if (StringUtils.hasText(rootMessage)) {
+            return "Khong the khoi tao phan tich ban ve: " + rootMessage;
+        }
+        return "Khong the khoi tao phan tich ban ve.";
+    }
+
+    private String extractRootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        if (current == null) {
+            return null;
+        }
+        String message = current.getMessage();
+        return StringUtils.hasText(message) ? message.trim() : current.getClass().getSimpleName();
     }
 
     private byte[] readFileBytes(MultipartFile file) {
