@@ -146,7 +146,9 @@ public class AssetMapImportService {
         String sourceFileUrl = storeSourceFile(fileBytes, mimeType, extension);
         PdfPreviewData pdfPreview = "PDF".equals(sourceType) ? generatePdfPreview(fileBytes) : null;
         List<ParsedPdfLabel> parsedPdfLabels = pdfPreview != null ? extractPdfLabels(fileBytes, pdfPreview) : List.of();
-        List<String> extractedCadTexts = !"PDF".equals(sourceType) ? extractCadLikeTexts(fileBytes) : List.of();
+        // Avoid expensive heuristic text scanning for binary DWG during upload.
+        // DWG will be analyzed in the next step via ODA/DXF or CAD engine if available.
+        List<String> extractedCadTexts = "DXF".equals(sourceType) ? extractCadLikeTexts(fileBytes) : List.of();
         AppUser currentUser = currentUserProvider.getCurrentUser();
 
         Map<String, Object> metadata = new LinkedHashMap<>();
@@ -209,8 +211,12 @@ public class AssetMapImportService {
             List<ParsedPdfLabel> parsedPdfLabels = extractParsedPdfLabels(job.getRawMetadataJson());
             DxfPreparedData dxfPreparedData = !"PDF".equals(job.getSourceFileType()) ? prepareLocalCadData(job) : null;
             List<DxfTextLabel> dxfTextLabels = dxfPreparedData != null ? dxfPreparedData.labels() : List.of();
-            Integer cadCanvasWidthPx = dxfPreparedData != null ? dxfPreparedData.canvasWidthPx() : extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx");
-            Integer cadCanvasHeightPx = dxfPreparedData != null ? dxfPreparedData.canvasHeightPx() : extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasHeightPx");
+            Integer cadCanvasWidthPx = dxfPreparedData != null
+                    ? Integer.valueOf(dxfPreparedData.canvasWidthPx())
+                    : defaultIfNull(extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx"), 1600);
+            Integer cadCanvasHeightPx = dxfPreparedData != null
+                    ? Integer.valueOf(dxfPreparedData.canvasHeightPx())
+                    : defaultIfNull(extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasHeightPx"), 900);
             List<DetectedDrawingCandidate> discoveredFloors = "PDF".equals(job.getSourceFileType())
                     ? discoverPdfDrawingCandidates(job, previewWidthPx, previewHeightPx, parsedPdfLabels)
                     : !dxfTextLabels.isEmpty()
@@ -540,6 +546,10 @@ public class AssetMapImportService {
             return "Khong the khoi tao phan tich ban ve: " + rootMessage;
         }
         return "Khong the khoi tao phan tich ban ve.";
+    }
+
+    private Integer defaultIfNull(Integer value, int fallback) {
+        return value != null ? value : fallback;
     }
 
     private String extractRootCauseMessage(Throwable throwable) {
