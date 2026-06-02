@@ -392,12 +392,11 @@ public class AssetMapImportService {
         int totalSuggestionCount = 0;
         if (!"PDF".equals(job.getSourceFileType()) && !dxfTextLabels.isEmpty()) {
             for (MapImportFloor floor : selectedFloors) {
-                floor.getSuggestions().clear();
                 List<MapImportSuggestion> suggestions = buildSuggestionsForCadFloorFromDxfLabels(floor, dxfTextLabels);
                 if (suggestions.isEmpty()) {
                     suggestions = List.of(buildFallbackSuggestion(floor, job.getSourceFileType()));
                 }
-                floor.setSuggestions(new ArrayList<>(suggestions));
+                replaceFloorSuggestions(floor, suggestions);
                 floor.setScaleHint(buildScaleHint(suggestions.size()));
                 floor.setParseStatus("PARSED");
                 totalSuggestionCount += suggestions.size();
@@ -406,14 +405,13 @@ public class AssetMapImportService {
             totalSuggestionCount = applyCadEngineParsedSuggestions(job, selectedFloors);
         } else {
             for (MapImportFloor floor : selectedFloors) {
-                floor.getSuggestions().clear();
                 List<MapImportSuggestion> suggestions = "PDF".equals(job.getSourceFileType())
                         ? buildSuggestionsForDiscoveredPdfFloor(floor, parsedPdfLabels)
                         : buildSuggestionsForCadFloor(floor, cadTexts);
                 if (suggestions.isEmpty()) {
                     suggestions = List.of(buildFallbackSuggestion(floor, job.getSourceFileType()));
                 }
-                floor.setSuggestions(new ArrayList<>(suggestions));
+                replaceFloorSuggestions(floor, suggestions);
                 floor.setScaleHint(buildScaleHint(suggestions.size()));
                 floor.setParseStatus("PARSED");
                 totalSuggestionCount += suggestions.size();
@@ -1361,7 +1359,6 @@ public class AssetMapImportService {
         }
         int totalSuggestionCount = 0;
         for (MapImportFloor floor : selectedFloors) {
-            floor.getSuggestions().clear();
             CadEngineParsedSheetResult sheetResult = bySheetKey.get(floor.getSourceFloorKey());
             List<MapImportSuggestion> suggestions = new ArrayList<>();
             if (sheetResult != null && sheetResult.suggestions() != null) {
@@ -1395,12 +1392,26 @@ public class AssetMapImportService {
             if (suggestions.isEmpty()) {
                 suggestions.add(buildFallbackSuggestion(floor, job.getSourceFileType()));
             }
-            floor.setSuggestions(suggestions);
+            replaceFloorSuggestions(floor, suggestions);
             floor.setScaleHint(buildScaleHint(suggestions.size()));
             floor.setParseStatus("PARSED");
             totalSuggestionCount += suggestions.size();
         }
         return totalSuggestionCount;
+    }
+
+    private void replaceFloorSuggestions(MapImportFloor floor, List<MapImportSuggestion> nextSuggestions) {
+        List<MapImportSuggestion> managedSuggestions = floor.getSuggestions();
+        managedSuggestions.clear();
+        if (nextSuggestions == null || nextSuggestions.isEmpty()) {
+            return;
+        }
+        for (MapImportSuggestion suggestion : nextSuggestions) {
+            if (suggestion != null) {
+                suggestion.setImportFloor(floor);
+                managedSuggestions.add(suggestion);
+            }
+        }
     }
 
     private List<MapImportSuggestion> buildSuggestionsForDiscoveredPdfFloor(
