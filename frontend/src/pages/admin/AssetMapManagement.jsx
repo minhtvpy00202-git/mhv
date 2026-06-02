@@ -3368,7 +3368,7 @@ function AssetMapManagement() {
 
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-6xl rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
+          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import bản vẽ sơ đồ</h3>
@@ -3385,47 +3385,48 @@ function AssetMapManagement() {
               </button>
             </div>
 
-            <div className="mb-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 lg:grid-cols-[minmax(0,1fr)_220px_180px]">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">File bản vẽ</label>
-                <input
-                  type="file"
-                  accept=".pdf,.dwg,.dxf,application/pdf"
-                  onChange={(event) => setImportForm((previous) => ({ ...previous, file: event.target.files?.[0] || null }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                />
-                <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  {importForm.file
-                    ? `Đã chọn: ${importForm.file.name}`
-                    : 'Ưu tiên PDF ở Pha 1. DWG/DXF hiện được lưu job và chuẩn bị pipeline phân tích mở rộng.'}
-                </p>
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              <div className="mb-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 lg:grid-cols-[minmax(0,1fr)_220px_180px]">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">File bản vẽ</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.dwg,.dxf,application/pdf"
+                    onChange={(event) => setImportForm((previous) => ({ ...previous, file: event.target.files?.[0] || null }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                  <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                    {importForm.file
+                      ? `Đã chọn: ${importForm.file.name}`
+                      : 'Ưu tiên PDF ở Pha 1. DWG/DXF hiện được lưu job và chuẩn bị pipeline phân tích mở rộng.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Loại file</label>
+                  <select
+                    value={importForm.sourceType}
+                    onChange={(event) => setImportForm((previous) => ({ ...previous, sourceType: event.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  >
+                    <option value="">Tự nhận diện</option>
+                    <option value="PDF">PDF</option>
+                    <option value="DWG">DWG</option>
+                    <option value="DXF">DXF</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleUploadImportJob}
+                    disabled={uploadingImport}
+                    className="w-full rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                  >
+                    {uploadingImport ? 'Đang upload...' : 'Tạo import job'}
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Loại file</label>
-                <select
-                  value={importForm.sourceType}
-                  onChange={(event) => setImportForm((previous) => ({ ...previous, sourceType: event.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                >
-                  <option value="">Tự nhận diện</option>
-                  <option value="PDF">PDF</option>
-                  <option value="DWG">DWG</option>
-                  <option value="DXF">DXF</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={handleUploadImportJob}
-                  disabled={uploadingImport}
-                  className="w-full rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-                >
-                  {uploadingImport ? 'Đang upload...' : 'Tạo import job'}
-                </button>
-              </div>
-            </div>
 
-            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
               <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
                   <div>
@@ -4039,6 +4040,7 @@ function AssetMapManagement() {
                   </div>
                 )}
               </div>
+            </div>
             </div>
           </div>
         </div>

@@ -407,6 +407,8 @@ public class AssetMapImportService {
             for (MapImportFloor floor : selectedFloors) {
                 List<MapImportSuggestion> suggestions = "PDF".equals(job.getSourceFileType())
                         ? buildSuggestionsForDiscoveredPdfFloor(floor, parsedPdfLabels)
+                        : "DWG".equalsIgnoreCase(job.getSourceFileType())
+                        ? List.of()
                         : buildSuggestionsForCadFloor(floor, cadTexts);
                 if (suggestions.isEmpty()) {
                     suggestions = List.of(buildFallbackSuggestion(floor, job.getSourceFileType()));
@@ -1587,7 +1589,12 @@ public class AssetMapImportService {
         if (!StringUtils.hasText(text)) {
             return null;
         }
-        return text.trim().replaceAll("\\s+", " ");
+        String normalized = text
+                .replace('\u00A0', ' ')
+                .replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", " ")
+                .trim()
+                .replaceAll("\\s+", " ");
+        return StringUtils.hasText(normalized) ? normalized : null;
     }
 
     private boolean isLikelyLocationLabel(String text) {
@@ -1746,11 +1753,30 @@ public class AssetMapImportService {
         if (isLikelyDrawingTitle(candidate)) {
             return false;
         }
+        if (looksLikeMojibakeCadText(candidate, folded)) {
+            return false;
+        }
         if (folded.contains("truc") || folded.contains("cot") || folded.contains("scale") || folded.contains("ti le")) {
             return false;
         }
         return folded.matches(".*\\b(phong|p\\.|wc|bep|kho|hanh lang|san|cau thang|thang may|room|corridor|yard|gate)\\b.*")
                 || folded.matches(".*\\d{2,5}[a-z]?.*");
+    }
+
+    private boolean looksLikeMojibakeCadText(String candidate, String folded) {
+        if (!StringUtils.hasText(candidate)) {
+            return true;
+        }
+        long nonAsciiLetterCount = candidate.chars()
+                .filter(ch -> ch > 127 && Character.isLetter(ch))
+                .count();
+        if (nonAsciiLetterCount == 0) {
+            return false;
+        }
+        String foldedValue = StringUtils.hasText(folded) ? folded : foldToAscii(candidate).toLowerCase(Locale.ROOT);
+        boolean containsKnownKeyword = foldedValue.matches(".*\\b(phong|room|wc|bep|kho|hanh lang|san|cau thang|thang may|corridor|yard|gate)\\b.*");
+        double nonAsciiRatio = (double) nonAsciiLetterCount / Math.max(candidate.length(), 1);
+        return !containsKnownKeyword && nonAsciiRatio >= 0.3d;
     }
 
     private List<PdfLabelCluster> clusterPdfLabels(
