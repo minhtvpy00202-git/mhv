@@ -695,20 +695,25 @@ public class AssetMapImportService {
         List<DxfTextLabel> cachedLabels = extractDxfTextLabels(job.getRawMetadataJson());
         List<DxfGeometryBox> cachedGeometryBoxes = extractDxfGeometryBoxes(job.getRawMetadataJson());
         List<DxfInsertMarker> cachedInsertMarkers = extractDxfInsertMarkers(job.getRawMetadataJson());
+        Map<String, Integer> cachedEntityStats = extractDxfEntityStats(job.getRawMetadataJson());
         Integer cachedWidth = extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx");
         Integer cachedHeight = extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasHeightPx");
         String existingDxfUrl = extractMetadataString(job.getRawMetadataJson(), "effectiveDxfFileUrl");
         Integer cachedParseVersion = extractMetadataInteger(job.getRawMetadataJson(), "dxfParseVersion");
         if (StringUtils.hasText(existingDxfUrl)
                 && cachedParseVersion != null
-                && cachedParseVersion >= 3
+                && cachedParseVersion >= 6
                 && (!cachedLabels.isEmpty() || !cachedGeometryBoxes.isEmpty() || !cachedInsertMarkers.isEmpty())) {
             LOGGER.info(
-                    "CAD local data job {}: cacheHit=true, labels={}, geometryBoxes={}, insertMarkers={}, totalMs={}",
+                    "CAD local data job {}: cacheHit=true, labels={}, geometryBoxes={}, insertMarkers={}, entityStats={}, topEntities={}, topLayers={}, topBlocks={}, totalMs={}",
                     job.getId(),
                     cachedLabels.size(),
                     cachedGeometryBoxes.size(),
                     cachedInsertMarkers.size(),
+                    summarizeEntityStats(cachedEntityStats),
+                    summarizeTopEntityTypes(cachedEntityStats),
+                    summarizeTopLayers(cachedGeometryBoxes, cachedLabels),
+                    summarizeTopBlocks(cachedInsertMarkers),
                     elapsedMillis(startedAt, System.nanoTime())
             );
             return new DxfPreparedData(
@@ -742,20 +747,21 @@ public class AssetMapImportService {
             long parsedAt = System.nanoTime();
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("effectiveDxfFileUrl", effectiveDxfUrl);
-            metadata.put("dxfParseVersion", 3);
+            metadata.put("dxfParseVersion", 6);
             metadata.put("dxfCanvasWidthPx", parseResult.canvasWidthPx());
             metadata.put("dxfCanvasHeightPx", parseResult.canvasHeightPx());
             metadata.put("dxfTextLabelCount", parseResult.labels().size());
             metadata.put("dxfTextLabels", parseResult.labels().stream().map(this::toMetadataMap).toList());
             metadata.put("dxfGeometryBoxes", parseResult.geometryBoxes().stream().map(this::toMetadataMap).toList());
             metadata.put("dxfInsertMarkers", parseResult.insertMarkers().stream().map(this::toMetadataMap).toList());
+            metadata.put("dxfEntityStats", parseResult.entityStats());
             metadata.put("cadExtractedTexts", parseResult.labels().stream().map(DxfTextLabel::text).distinct().limit(200).toList());
             if (StringUtils.hasText(conversionLog)) {
                 metadata.put("odaConversionLog", conversionLog);
             }
             job.setRawMetadataJson(writeMetadata(mergeMetadata(job.getRawMetadataJson(), metadata)));
             LOGGER.info(
-                    "CAD local data job {}: cacheHit=false, sourceType={}, materializeMs={}, convertAndStoreMs={}, parseMs={}, labels={}, geometryBoxes={}, insertMarkers={}, effectiveDxfUrl={}",
+                    "CAD local data job {}: cacheHit=false, sourceType={}, materializeMs={}, convertAndStoreMs={}, parseMs={}, labels={}, geometryBoxes={}, insertMarkers={}, entityStats={}, topEntities={}, topLayers={}, topBlocks={}, effectiveDxfUrl={}",
                     job.getId(),
                     job.getSourceFileType(),
                     elapsedMillis(startedAt, materializedAt),
@@ -764,15 +770,22 @@ public class AssetMapImportService {
                     parseResult.labels().size(),
                     parseResult.geometryBoxes().size(),
                     parseResult.insertMarkers().size(),
+                    summarizeEntityStats(parseResult.entityStats()),
+                    summarizeTopEntityTypes(parseResult.entityStats()),
+                    summarizeTopLayers(parseResult.geometryBoxes(), parseResult.labels()),
+                    summarizeTopBlocks(parseResult.insertMarkers()),
                     effectiveDxfUrl
             );
             if (parseResult.geometryBoxes().isEmpty()) {
                 LOGGER.warn(
-                        "CAD local data job {}: DXF parse produced zero geometry boxes. labels={}, insertMarkers={}, sourceType={}",
+                        "CAD local data job {}: DXF parse produced zero geometry boxes. labels={}, insertMarkers={}, sourceType={}, topEntities={}, topLayers={}, topBlocks={}",
                         job.getId(),
                         parseResult.labels().size(),
                         parseResult.insertMarkers().size(),
-                        job.getSourceFileType()
+                        job.getSourceFileType(),
+                        summarizeTopEntityTypes(parseResult.entityStats()),
+                        summarizeTopLayers(parseResult.geometryBoxes(), parseResult.labels()),
+                        summarizeTopBlocks(parseResult.insertMarkers())
                 );
             }
             return new DxfPreparedData(
@@ -1393,6 +1406,8 @@ public class AssetMapImportService {
                 results.add(new DxfInsertMarker(
                         id,
                         asString(map.get("blockName")),
+                        asString(map.get("effectiveName")),
+                        asString(map.get("referenceKind")),
                         asString(map.get("titleHint")),
                         asString(map.get("layer")),
                         asString(map.get("layoutName")),
@@ -1400,6 +1415,7 @@ public class AssetMapImportService {
                         defaultIfNull(asDouble(map.get("rawY")), 0d),
                         defaultIfNull(asDouble(map.get("scaleX")), 1d),
                         defaultIfNull(asDouble(map.get("scaleY")), 1d),
+                        defaultIfNull(asDouble(map.get("rotationDegrees")), 0d),
                         x,
                         y
                 ));
@@ -1407,6 +1423,31 @@ public class AssetMapImportService {
             return results;
         } catch (Exception ex) {
             return List.of();
+        }
+    }
+
+    private Map<String, Integer> extractDxfEntityStats(String rawMetadataJson) {
+        if (!StringUtils.hasText(rawMetadataJson)) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(rawMetadataJson, new TypeReference<Map<String, Object>>() {
+            });
+            Object rawStats = metadata.get("dxfEntityStats");
+            if (!(rawStats instanceof Map<?, ?> map)) {
+                return Map.of();
+            }
+            Map<String, Integer> results = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = asString(entry.getKey());
+                Integer value = asInteger(entry.getValue());
+                if (StringUtils.hasText(key) && value != null) {
+                    results.put(key, value);
+                }
+            }
+            return results;
+        } catch (Exception ex) {
+            return Map.of();
         }
     }
 
@@ -1725,7 +1766,9 @@ public class AssetMapImportService {
                     .orElseGet(() -> insertMarkers.stream()
                             .filter(marker -> entry.getKey().equals(normalizeCadLayoutName(marker.layoutName())))
                             .filter(this::isLikelyTitleBlockInsert)
-                            .map(marker -> StringUtils.hasText(marker.titleHint()) ? marker.titleHint() : humanizeCadBlockName(marker.blockName()))
+                            .map(marker -> StringUtils.hasText(marker.titleHint())
+                                    ? marker.titleHint()
+                                    : humanizeCadBlockName(StringUtils.hasText(marker.effectiveName()) ? marker.effectiveName() : marker.blockName()))
                             .findFirst()
                             .orElse(entry.getKey()));
             String drawingType = classifyDrawingType(title);
@@ -1968,6 +2011,15 @@ public class AssetMapImportService {
                             : "Suggestion tao tu text DXF tai x=" + label.x() + ", y=" + label.y())
                     .build());
         }
+        if (suggestions.isEmpty()) {
+            suggestions.addAll(buildSuggestionsForCadFloorFromGeometry(
+                    floor,
+                    labels,
+                    geometryBoxes,
+                    activeFrame,
+                    frameLayoutName
+            ));
+        }
         LOGGER.info(
                 "CAD parse floor {} (job {}): sourceFloorKey={}, layout={}, frame={}, roomLabels={}, matchedGeometry={}, suggestions={}",
                 floor.getId(),
@@ -1980,6 +2032,131 @@ public class AssetMapImportService {
                 suggestions.size()
         );
         return suggestions;
+    }
+
+    private List<MapImportSuggestion> buildSuggestionsForCadFloorFromGeometry(
+            MapImportFloor floor,
+            List<DxfTextLabel> labels,
+            List<DxfGeometryBox> geometryBoxes,
+            DxfGeometryBox activeFrame,
+            String activeLayoutName
+    ) {
+        if (geometryBoxes == null || geometryBoxes.isEmpty()) {
+            return List.of();
+        }
+        double activeFrameArea = activeFrame != null
+                ? (double) activeFrame.width() * activeFrame.height()
+                : Math.max(1d, (double) defaultIfNull(floor.getWidthPx(), 1600) * defaultIfNull(floor.getHeightPx(), 900));
+        List<DxfGeometryBox> candidates = geometryBoxes.stream()
+                .filter(box -> box != null)
+                .filter(box -> activeFrame == null || isGeometryInsideFrame(box, activeFrame, 8))
+                .filter(box -> activeLayoutName == null || activeLayoutName.equals(normalizeCadLayoutName(box.layoutName())))
+                .filter(box -> activeFrame == null || box.id() != activeFrame.id())
+                .filter(box -> box.width() >= 32 && box.height() >= 24)
+                .filter(box -> box.width() <= 720 && box.height() <= 520)
+                .filter(box -> ((double) box.width() * box.height()) <= activeFrameArea * 0.68d)
+                .filter(box -> ((double) box.width() * box.height()) >= 900d)
+                .filter(box -> !isIgnorableCadLayer(box.layer()) || "HATCH".equalsIgnoreCase(box.entityType()))
+                .sorted(Comparator.comparingInt(DxfGeometryBox::y).thenComparingInt(DxfGeometryBox::x))
+                .toList();
+        List<DxfGeometryBox> selected = new ArrayList<>();
+        for (DxfGeometryBox candidate : candidates) {
+            boolean overlapped = selected.stream().anyMatch(existing -> isGeometrySubstantiallyCovered(candidate, existing));
+            if (!overlapped) {
+                selected.add(candidate);
+            }
+            if (selected.size() >= 24) {
+                break;
+            }
+        }
+        List<MapImportSuggestion> suggestions = new ArrayList<>();
+        for (int index = 0; index < selected.size(); index += 1) {
+            DxfGeometryBox box = selected.get(index);
+            String inferredLabel = chooseBestGeometryLabel(box, labels);
+            String fallbackText = StringUtils.hasText(inferredLabel)
+                    ? inferredLabel
+                    : buildGeometryFallbackName(inferGeometrySuggestionType(box), index + 1);
+            String suggestionType = classifySuggestionType(fallbackText);
+            suggestions.add(MapImportSuggestion.builder()
+                    .importFloor(floor)
+                    .suggestionType(suggestionType)
+                    .labelText(fallbackText)
+                    .normalizedName(buildNormalizedSuggestionName(fallbackText))
+                    .polygonJson(buildRectanglePolygonJson(box.x(), box.y(), box.width(), box.height()))
+                    .colorHex(resolveSuggestionColor(suggestionType))
+                    .hasAssetSuggested(resolveHasAssetSuggestion(suggestionType))
+                    .confidenceScore(StringUtils.hasText(inferredLabel) ? 0.64d : 0.46d)
+                    .sourceMethod(StringUtils.hasText(inferredLabel) ? "DXF_GEOMETRY_INFERRED" : "DXF_GEOMETRY_ONLY")
+                    .reviewStatus("PENDING")
+                    .notes(StringUtils.hasText(inferredLabel)
+                            ? "Suggestion suy ra tu hinh hoc DXF va text nam trong vung."
+                            : "Suggestion tao tu hinh hoc DXF khi file CAD khong co room label ro rang.")
+                    .build());
+        }
+        return suggestions;
+    }
+
+    private boolean isGeometryInsideFrame(DxfGeometryBox candidate, DxfGeometryBox frame, int padding) {
+        if (candidate == null || frame == null) {
+            return false;
+        }
+        return candidate.x() >= frame.x() - padding
+                && candidate.y() >= frame.y() - padding
+                && candidate.x() + candidate.width() <= frame.x() + frame.width() + padding
+                && candidate.y() + candidate.height() <= frame.y() + frame.height() + padding;
+    }
+
+    private boolean isGeometrySubstantiallyCovered(DxfGeometryBox candidate, DxfGeometryBox existing) {
+        if (candidate == null || existing == null) {
+            return false;
+        }
+        int intersectionLeft = Math.max(candidate.x(), existing.x());
+        int intersectionTop = Math.max(candidate.y(), existing.y());
+        int intersectionRight = Math.min(candidate.x() + candidate.width(), existing.x() + existing.width());
+        int intersectionBottom = Math.min(candidate.y() + candidate.height(), existing.y() + existing.height());
+        int intersectionWidth = Math.max(0, intersectionRight - intersectionLeft);
+        int intersectionHeight = Math.max(0, intersectionBottom - intersectionTop);
+        double candidateArea = Math.max(1d, (double) candidate.width() * candidate.height());
+        double intersectionArea = (double) intersectionWidth * intersectionHeight;
+        return (intersectionArea / candidateArea) >= 0.82d;
+    }
+
+    private String chooseBestGeometryLabel(DxfGeometryBox box, List<DxfTextLabel> labels) {
+        if (box == null || labels == null || labels.isEmpty()) {
+            return null;
+        }
+        return labels.stream()
+                .filter(label -> geometryContainsLabel(box, label, 4))
+                .map(DxfTextLabel::text)
+                .map(this::normalizePdfLabelText)
+                .filter(StringUtils::hasText)
+                .filter(text -> !isLikelyDrawingTitle(text))
+                .filter(text -> !looksLikeMojibakeCadText(text, foldToAscii(text).toLowerCase(Locale.ROOT)))
+                .sorted(Comparator
+                        .comparing((String text) -> !isLikelyCadRoomLabel(text))
+                        .thenComparingInt(String::length))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String inferGeometrySuggestionType(DxfGeometryBox box) {
+        if (box == null) {
+            return "ROOM";
+        }
+        String source = defaultText(box.layer(), box.entityType());
+        return classifySuggestionType(source);
+    }
+
+    private String buildGeometryFallbackName(String suggestionType, int ordinal) {
+        return switch (suggestionType) {
+            case "CORRIDOR" -> "Hanh lang CAD " + ordinal;
+            case "STAIR" -> "Cau thang CAD " + ordinal;
+            case "ELEVATOR" -> "Thang may CAD " + ordinal;
+            case "YARD" -> "San CAD " + ordinal;
+            case "ROAD" -> "Duong CAD " + ordinal;
+            case "GATE" -> "Cong CAD " + ordinal;
+            default -> "Khu vuc CAD " + ordinal;
+        };
     }
 
     private String summarizeCadCandidates(List<DetectedDrawingCandidate> candidates) {
@@ -2047,7 +2224,9 @@ public class AssetMapImportService {
         if (insideInsertMarkers != null) {
             Optional<String> titleBlockName = insideInsertMarkers.stream()
                     .filter(this::isLikelyTitleBlockInsert)
-                    .map(marker -> StringUtils.hasText(marker.titleHint()) ? marker.titleHint() : humanizeCadBlockName(marker.blockName()))
+                    .map(marker -> StringUtils.hasText(marker.titleHint())
+                            ? marker.titleHint()
+                            : humanizeCadBlockName(StringUtils.hasText(marker.effectiveName()) ? marker.effectiveName() : marker.blockName()))
                     .filter(StringUtils::hasText)
                     .findFirst();
             if (titleBlockName.isPresent()) {
@@ -2184,11 +2363,12 @@ public class AssetMapImportService {
         String normalized = StringUtils.hasText(entityType) ? entityType.trim().toUpperCase(Locale.ROOT) : "";
         return switch (normalized) {
             case "HATCH" -> 0;
-            case "INSERT_BLOCK" -> 1;
-            case "LINE_CLUSTER" -> 2;
-            case "LINE_RECT" -> 3;
-            case "LWPOLYLINE", "POLYLINE" -> 4;
-            default -> 5;
+            case "CURVE_CLUSTER" -> 1;
+            case "INSERT_BLOCK" -> 2;
+            case "LINE_CLUSTER" -> 3;
+            case "LINE_RECT" -> 4;
+            case "LWPOLYLINE", "POLYLINE" -> 5;
+            default -> 6;
         };
     }
 
@@ -2223,17 +2403,20 @@ public class AssetMapImportService {
     }
 
     private boolean isLikelyTitleBlockInsert(DxfInsertMarker marker) {
-        if (marker == null || (!StringUtils.hasText(marker.blockName()) && !StringUtils.hasText(marker.titleHint()))) {
+        if (marker == null || (!StringUtils.hasText(marker.blockName()) && !StringUtils.hasText(marker.effectiveName()) && !StringUtils.hasText(marker.titleHint()))) {
             return false;
         }
-        String sourceText = StringUtils.hasText(marker.titleHint()) ? marker.titleHint() : marker.blockName();
+        String sourceText = StringUtils.hasText(marker.titleHint())
+                ? marker.titleHint()
+                : (StringUtils.hasText(marker.effectiveName()) ? marker.effectiveName() : marker.blockName());
         String folded = foldToAscii(sourceText).toLowerCase(Locale.ROOT).replace('_', ' ').replace('-', ' ');
         return folded.contains("title")
                 || folded.contains("khung ten")
                 || folded.contains("title block")
                 || folded.contains("sheet")
                 || folded.contains("ban ve")
-                || folded.contains("template");
+                || folded.contains("template")
+                || "XREF".equalsIgnoreCase(marker.referenceKind());
     }
 
     private String humanizeCadBlockName(String blockName) {
@@ -2248,17 +2431,26 @@ public class AssetMapImportService {
     }
 
     private MapImportSuggestion buildFallbackSuggestion(MapImportFloor floor, String sourceFileType) {
+        String polygonJson = StringUtils.hasText(floor.getPreviewBoundsJson())
+                ? floor.getPreviewBoundsJson()
+                : buildRectanglePolygonJson(
+                        24,
+                        24,
+                        Math.max(120, defaultIfNull(floor.getWidthPx(), 1600) - 48),
+                        Math.max(80, defaultIfNull(floor.getHeightPx(), 900) - 48)
+                );
         return MapImportSuggestion.builder()
                 .importFloor(floor)
                 .suggestionType("UNKNOWN")
                 .labelText("Nen ban ve da san sang de review")
                 .normalizedName("Nen ban ve")
+                .polygonJson(polygonJson)
                 .colorHex("#94A3B8")
                 .hasAssetSuggested(false)
                 .confidenceScore(0.1d)
                 .sourceMethod("MANUAL")
                 .reviewStatus("PENDING")
-                .notes("Chua trich duoc room label hop le tu " + sourceFileType + ". Admin co the chon ban ve con khac hoac tiep tuc review thu cong.")
+                .notes("Chua trich duoc room label hop le tu " + sourceFileType + ". He thong da giu san bounding box cua ban ve con de admin review thu cong nhanh hon.")
                 .build();
     }
 
@@ -2640,6 +2832,8 @@ public class AssetMapImportService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("id", marker.id());
         metadata.put("blockName", marker.blockName());
+        metadata.put("effectiveName", marker.effectiveName());
+        metadata.put("referenceKind", marker.referenceKind());
         metadata.put("titleHint", marker.titleHint());
         metadata.put("layer", marker.layer());
         metadata.put("layoutName", marker.layoutName());
@@ -2647,9 +2841,84 @@ public class AssetMapImportService {
         metadata.put("rawY", marker.rawY());
         metadata.put("scaleX", marker.scaleX());
         metadata.put("scaleY", marker.scaleY());
+        metadata.put("rotationDegrees", marker.rotationDegrees());
         metadata.put("x", marker.x());
         metadata.put("y", marker.y());
         return metadata;
+    }
+
+    private String summarizeEntityStats(Map<String, Integer> entityStats) {
+        if (entityStats == null || entityStats.isEmpty()) {
+            return "{}";
+        }
+        return entityStats.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .limit(12)
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(", ", "{", "}"));
+    }
+
+    private String summarizeTopEntityTypes(Map<String, Integer> entityStats) {
+        if (entityStats == null || entityStats.isEmpty()) {
+            return "[]";
+        }
+        return entityStats.entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue() > 0)
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .limit(8)
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(", ", "[", "]"));
+    }
+
+    private String summarizeTopLayers(List<DxfGeometryBox> geometryBoxes, List<DxfTextLabel> labels) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (geometryBoxes != null) {
+            for (DxfGeometryBox box : geometryBoxes) {
+                String key = normalizeCadStatKey(box != null ? box.layer() : null, "no-layer");
+                counts.merge(key, 1, Integer::sum);
+            }
+        }
+        if (labels != null) {
+            for (DxfTextLabel label : labels) {
+                String key = normalizeCadStatKey(label != null ? label.layer() : null, "no-layer");
+                counts.merge(key, 1, Integer::sum);
+            }
+        }
+        return summarizeTopCountMap(counts);
+    }
+
+    private String summarizeTopBlocks(List<DxfInsertMarker> insertMarkers) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        if (insertMarkers != null) {
+            for (DxfInsertMarker marker : insertMarkers) {
+                String base = StringUtils.hasText(marker != null ? marker.effectiveName() : null)
+                        ? marker.effectiveName()
+                        : (marker != null ? marker.blockName() : null);
+                String normalized = normalizeCadStatKey(base, "unknown-block");
+                String kind = marker != null && StringUtils.hasText(marker.referenceKind()) ? marker.referenceKind() : "BLOCK";
+                counts.merge(kind + ":" + normalized, 1, Integer::sum);
+            }
+        }
+        return summarizeTopCountMap(counts);
+    }
+
+    private String summarizeTopCountMap(Map<String, Integer> counts) {
+        if (counts == null || counts.isEmpty()) {
+            return "[]";
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                .limit(8)
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(", ", "[", "]"));
+    }
+
+    private String normalizeCadStatKey(String value, String fallback) {
+        if (!StringUtils.hasText(value)) {
+            return fallback;
+        }
+        String normalized = value.trim().replace('\n', ' ').replace('\r', ' ');
+        return normalized.length() > 48 ? normalized.substring(0, 48) : normalized;
     }
 
     private String foldToAscii(String text) {

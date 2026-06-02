@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -30,8 +30,11 @@ public class DxfProcessingService {
             rawGeometryBoxes.addAll(extractGeometryBoxes(lines));
             rawGeometryBoxes.addAll(extractViewportBoxes(lines));
             rawGeometryBoxes.addAll(extractHatchBoxes(lines));
+            rawGeometryBoxes.addAll(extractCircularGeometryBoxes(lines));
+            rawGeometryBoxes.addAll(extractEllipseAndSplineGeometryBoxes(lines));
             rawGeometryBoxes.addAll(buildGeometryBoxesFromLines(rawLineEntities));
             rawGeometryBoxes.addAll(buildGeometryBoxesFromLineClusters(rawLineEntities));
+            rawGeometryBoxes.addAll(buildGeometryBoxesFromCurveClusters(rawGeometryBoxes));
             List<RawDxfInsertMarker> rawInsertMarkers = extractInsertMarkers(lines, blockDefinitions);
             rawGeometryBoxes.addAll(buildInsertedBlockGeometryBoxes(rawInsertMarkers));
             return normalize(rawTexts, deduplicateGeometryBoxes(rawGeometryBoxes), rawInsertMarkers);
@@ -141,6 +144,16 @@ public class DxfProcessingService {
             }
         }
         return deduplicateGeometryBoxes(results);
+    }
+
+    private String resolveInsertDisplayName(RawDxfInsertMarker marker) {
+        if (marker == null) {
+            return null;
+        }
+        if (StringUtils.hasText(marker.effectiveName())) {
+            return marker.effectiveName();
+        }
+        return marker.blockName();
     }
 
     private List<RawDxfGeometryBox> extractViewportBoxes(List<String> lines) {
@@ -283,6 +296,70 @@ public class DxfProcessingService {
         return results;
     }
 
+    private List<RawDxfGeometryBox> extractCircularGeometryBoxes(List<String> lines) {
+        List<RawDxfGeometryBox> results = new ArrayList<>();
+        RawDxfCircleArcBuilder current = null;
+        for (int index = 0; index + 1 < lines.size(); index += 2) {
+            String code = lines.get(index).trim();
+            String value = lines.get(index + 1);
+            if ("0".equals(code)) {
+                if (current != null) {
+                    RawDxfGeometryBox box = current.buildBox();
+                    if (box != null) {
+                        results.add(box);
+                    }
+                }
+                String entityType = normalizeEntityType(value);
+                current = "CIRCLE".equals(entityType) || "ARC".equals(entityType)
+                        ? new RawDxfCircleArcBuilder(entityType)
+                        : null;
+                continue;
+            }
+            if (current != null) {
+                current.accept(code, value);
+            }
+        }
+        if (current != null) {
+            RawDxfGeometryBox box = current.buildBox();
+            if (box != null) {
+                results.add(box);
+            }
+        }
+        return results;
+    }
+
+    private List<RawDxfGeometryBox> extractEllipseAndSplineGeometryBoxes(List<String> lines) {
+        List<RawDxfGeometryBox> results = new ArrayList<>();
+        RawDxfCurveBuilder current = null;
+        for (int index = 0; index + 1 < lines.size(); index += 2) {
+            String code = lines.get(index).trim();
+            String value = lines.get(index + 1);
+            if ("0".equals(code)) {
+                if (current != null) {
+                    RawDxfGeometryBox box = current.buildBox();
+                    if (box != null) {
+                        results.add(box);
+                    }
+                }
+                String entityType = normalizeEntityType(value);
+                current = "ELLIPSE".equals(entityType) || "SPLINE".equals(entityType)
+                        ? new RawDxfCurveBuilder(entityType)
+                        : null;
+                continue;
+            }
+            if (current != null) {
+                current.accept(code, value);
+            }
+        }
+        if (current != null) {
+            RawDxfGeometryBox box = current.buildBox();
+            if (box != null) {
+                results.add(box);
+            }
+        }
+        return results;
+    }
+
     private List<RawDxfGeometryBox> buildGeometryBoxesFromLineClusters(List<RawDxfLineEntity> lines) {
         if (lines == null || lines.size() < 4) {
             return List.of();
@@ -332,6 +409,57 @@ public class DxfProcessingService {
         return deduplicateGeometryBoxes(results);
     }
 
+    private List<RawDxfGeometryBox> buildGeometryBoxesFromCurveClusters(List<RawDxfGeometryBox> boxes) {
+        if (boxes == null || boxes.isEmpty()) {
+            return List.of();
+        }
+        List<RawDxfGeometryBox> filtered = boxes.stream()
+                .filter(this::isCurveLikeGeometryType)
+                .limit(2000)
+                .toList();
+        if (filtered.size() < 2) {
+            return List.of();
+        }
+        boolean[] visited = new boolean[filtered.size()];
+        List<RawDxfGeometryBox> results = new ArrayList<>();
+        for (int index = 0; index < filtered.size(); index += 1) {
+            if (visited[index]) {
+                continue;
+            }
+            RawDxfGeometryBox seed = filtered.get(index);
+            List<RawDxfGeometryBox> cluster = new ArrayList<>();
+            cluster.add(seed);
+            visited[index] = true;
+            boolean changed = true;
+            while (changed) {
+                changed = false;
+                for (int candidateIndex = 0; candidateIndex < filtered.size(); candidateIndex += 1) {
+                    if (visited[candidateIndex]) {
+                        continue;
+                    }
+                    RawDxfGeometryBox candidate = filtered.get(candidateIndex);
+                    if (!sameGroup(seed.layer(), candidate.layer()) || !sameGroup(seed.layoutName(), candidate.layoutName())) {
+                        continue;
+                    }
+                    boolean linked = cluster.stream().anyMatch(existing -> rawGeometryBoxesTouchOrOverlap(existing, candidate));
+                    if (linked) {
+                        cluster.add(candidate);
+                        visited[candidateIndex] = true;
+                        changed = true;
+                    }
+                }
+            }
+            if (cluster.size() < 2) {
+                continue;
+            }
+            RawDxfGeometryBox clusterBox = buildCurveClusterBox(seed.layer(), seed.layoutName(), cluster);
+            if (clusterBox != null) {
+                results.add(clusterBox);
+            }
+        }
+        return deduplicateGeometryBoxes(results);
+    }
+
     private RawDxfGeometryBox buildClusterBox(String layer, String layoutName, List<RawDxfLineEntity> cluster) {
         double minX = Double.POSITIVE_INFINITY;
         double maxX = Double.NEGATIVE_INFINITY;
@@ -352,6 +480,26 @@ public class DxfProcessingService {
         return new RawDxfGeometryBox("LINE_CLUSTER", layer, layoutName, minX, minY, maxX, maxY);
     }
 
+    private RawDxfGeometryBox buildCurveClusterBox(String layer, String layoutName, List<RawDxfGeometryBox> cluster) {
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        for (RawDxfGeometryBox box : cluster) {
+            minX = Math.min(minX, box.minX());
+            maxX = Math.max(maxX, box.maxX());
+            minY = Math.min(minY, box.minY());
+            maxY = Math.max(maxY, box.maxY());
+        }
+        if (!Double.isFinite(minX) || !Double.isFinite(maxX) || !Double.isFinite(minY) || !Double.isFinite(maxY)) {
+            return null;
+        }
+        if ((maxX - minX) < 1d || (maxY - minY) < 1d) {
+            return null;
+        }
+        return new RawDxfGeometryBox("CURVE_CLUSTER", layer, layoutName, minX, minY, maxX, maxY);
+    }
+
     private boolean areLinesConnected(RawDxfLineEntity first, RawDxfLineEntity second) {
         return pointsClose(first.x1(), first.y1(), second.x1(), second.y1())
                 || pointsClose(first.x1(), first.y1(), second.x2(), second.y2())
@@ -363,8 +511,31 @@ public class DxfProcessingService {
         return Math.abs(x1 - x2) <= 0.1d && Math.abs(y1 - y2) <= 0.1d;
     }
 
+    private boolean rawGeometryBoxesTouchOrOverlap(RawDxfGeometryBox first, RawDxfGeometryBox second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        double threshold = 2d;
+        return first.maxX() + threshold >= second.minX()
+                && second.maxX() + threshold >= first.minX()
+                && first.maxY() + threshold >= second.minY()
+                && second.maxY() + threshold >= first.minY();
+    }
+
+    private boolean isCurveLikeGeometryType(RawDxfGeometryBox box) {
+        if (box == null || !StringUtils.hasText(box.entityType())) {
+            return false;
+        }
+        String type = box.entityType().trim().toUpperCase(Locale.ROOT);
+        return "HATCH".equals(type)
+                || "CIRCLE".equals(type)
+                || "ARC".equals(type)
+                || "ELLIPSE".equals(type)
+                || "SPLINE".equals(type);
+    }
+
     private Map<String, RawDxfBlockDefinition> extractBlockDefinitions(List<String> lines) {
-        Map<String, RawDxfBlockDefinition> definitions = new HashMap<>();
+        Map<String, List<String>> sources = new LinkedHashMap<>();
         boolean insideBlock = false;
         String currentBlockName = null;
         List<String> currentBlockLines = new ArrayList<>();
@@ -380,9 +551,8 @@ public class DxfProcessingService {
                     continue;
                 }
                 if (insideBlock && "ENDBLK".equals(entityType)) {
-                    RawDxfBlockDefinition definition = buildBlockDefinition(currentBlockName, currentBlockLines);
-                    if (definition != null) {
-                        definitions.put(definition.name(), definition);
+                    if (StringUtils.hasText(currentBlockName) && !currentBlockLines.isEmpty()) {
+                        sources.put(currentBlockName.trim(), new ArrayList<>(currentBlockLines));
                     }
                     insideBlock = false;
                     currentBlockName = null;
@@ -399,10 +569,56 @@ public class DxfProcessingService {
                 currentBlockName = value.trim();
             }
         }
-        return definitions;
+        Map<String, RawDxfBlockDefinition> resolved = new LinkedHashMap<>();
+        for (String blockName : sources.keySet()) {
+            resolveBlockDefinition(blockName, sources, resolved, new LinkedHashSet<>());
+        }
+        return resolved;
     }
 
-    private RawDxfBlockDefinition buildBlockDefinition(String blockName, List<String> lines) {
+    private RawDxfBlockDefinition resolveBlockDefinition(
+            String blockName,
+            Map<String, List<String>> sources,
+            Map<String, RawDxfBlockDefinition> resolved,
+            Set<String> visiting
+    ) {
+        if (!StringUtils.hasText(blockName)) {
+            return null;
+        }
+        if (resolved.containsKey(blockName)) {
+            return resolved.get(blockName);
+        }
+        if (!visiting.add(blockName)) {
+            return null;
+        }
+        List<String> sourceLines = sources.get(blockName);
+        if (sourceLines == null || sourceLines.isEmpty()) {
+            visiting.remove(blockName);
+            return null;
+        }
+        Map<String, RawDxfBlockDefinition> nestedDefinitions = new LinkedHashMap<>();
+        for (String candidate : sources.keySet()) {
+            if (candidate.equals(blockName)) {
+                continue;
+            }
+            RawDxfBlockDefinition nested = resolveBlockDefinition(candidate, sources, resolved, visiting);
+            if (nested != null) {
+                nestedDefinitions.put(candidate, nested);
+            }
+        }
+        RawDxfBlockDefinition definition = buildBlockDefinition(blockName, sourceLines, nestedDefinitions);
+        if (definition != null) {
+            resolved.put(blockName, definition);
+        }
+        visiting.remove(blockName);
+        return definition;
+    }
+
+    private RawDxfBlockDefinition buildBlockDefinition(
+            String blockName,
+            List<String> lines,
+            Map<String, RawDxfBlockDefinition> resolvedDefinitions
+    ) {
         if (!StringUtils.hasText(blockName) || lines == null || lines.isEmpty()) {
             return null;
         }
@@ -411,8 +627,13 @@ public class DxfProcessingService {
         List<RawDxfGeometryBox> geometries = new ArrayList<>();
         geometries.addAll(extractGeometryBoxes(lines));
         geometries.addAll(extractHatchBoxes(lines));
+        geometries.addAll(extractCircularGeometryBoxes(lines));
+        geometries.addAll(extractEllipseAndSplineGeometryBoxes(lines));
         geometries.addAll(buildGeometryBoxesFromLines(blockLines));
         geometries.addAll(buildGeometryBoxesFromLineClusters(blockLines));
+        List<RawDxfInsertMarker> nestedInsertMarkers = extractInsertMarkers(lines, resolvedDefinitions);
+        geometries.addAll(buildInsertedBlockGeometryBoxes(nestedInsertMarkers));
+        geometries.addAll(buildGeometryBoxesFromCurveClusters(geometries));
         geometries = deduplicateGeometryBoxes(geometries);
         List<String> titleHints = blockTexts.stream()
                 .map(RawDxfTextEntity::text)
@@ -420,7 +641,17 @@ public class DxfProcessingService {
                 .filter(StringUtils::hasText)
                 .distinct()
                 .limit(8)
-                .toList();
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        nestedInsertMarkers.stream()
+                .map(marker -> {
+                    String candidate = StringUtils.hasText(marker.titleHint())
+                            ? marker.titleHint()
+                            : resolveInsertDisplayName(marker);
+                    return normalizeText(candidate);
+                })
+                .filter(StringUtils::hasText)
+                .forEach(titleHints::add);
+        titleHints = titleHints.stream().distinct().limit(8).toList();
         double minX = Double.POSITIVE_INFINITY;
         double maxX = Double.NEGATIVE_INFINITY;
         double minY = Double.POSITIVE_INFINITY;
@@ -484,10 +715,31 @@ public class DxfProcessingService {
             if (marker == null || marker.blockMinX() == null || marker.blockMaxX() == null || marker.blockMinY() == null || marker.blockMaxY() == null) {
                 continue;
             }
-            double minX = marker.rawX() + (marker.blockMinX() * marker.scaleX());
-            double maxX = marker.rawX() + (marker.blockMaxX() * marker.scaleX());
-            double minY = marker.rawY() + (marker.blockMinY() * marker.scaleY());
-            double maxY = marker.rawY() + (marker.blockMaxY() * marker.scaleY());
+            double[][] corners = new double[][]{
+                    {marker.blockMinX(), marker.blockMinY()},
+                    {marker.blockMinX(), marker.blockMaxY()},
+                    {marker.blockMaxX(), marker.blockMinY()},
+                    {marker.blockMaxX(), marker.blockMaxY()}
+            };
+            double minX = Double.POSITIVE_INFINITY;
+            double maxX = Double.NEGATIVE_INFINITY;
+            double minY = Double.POSITIVE_INFINITY;
+            double maxY = Double.NEGATIVE_INFINITY;
+            double radians = Math.toRadians(marker.rotationDegrees());
+            double cos = Math.cos(radians);
+            double sin = Math.sin(radians);
+            for (double[] corner : corners) {
+                double scaledX = corner[0] * marker.scaleX();
+                double scaledY = corner[1] * marker.scaleY();
+                double rotatedX = (scaledX * cos) - (scaledY * sin);
+                double rotatedY = (scaledX * sin) + (scaledY * cos);
+                double transformedX = marker.rawX() + rotatedX;
+                double transformedY = marker.rawY() + rotatedY;
+                minX = Math.min(minX, transformedX);
+                maxX = Math.max(maxX, transformedX);
+                minY = Math.min(minY, transformedY);
+                maxY = Math.max(maxY, transformedY);
+            }
             if (maxX - minX < 1d || maxY - minY < 1d) {
                 continue;
             }
@@ -525,7 +777,7 @@ public class DxfProcessingService {
             List<RawDxfInsertMarker> rawInsertMarkers
     ) {
         if (rawTexts.isEmpty() && rawGeometryBoxes.isEmpty() && rawInsertMarkers.isEmpty()) {
-            return new DxfParseResult(1600, 900, List.of(), List.of(), List.of());
+            return new DxfParseResult(1600, 900, List.of(), List.of(), List.of(), Map.of());
         }
         double minX = Double.POSITIVE_INFINITY;
         double maxX = Double.NEGATIVE_INFINITY;
@@ -551,7 +803,7 @@ public class DxfProcessingService {
             maxY = Math.max(maxY, rawInsert.rawY());
         }
         if (!Double.isFinite(minX) || !Double.isFinite(maxX) || !Double.isFinite(minY) || !Double.isFinite(maxY)) {
-            return new DxfParseResult(1600, 900, List.of(), List.of(), List.of());
+            return new DxfParseResult(1600, 900, List.of(), List.of(), List.of(), Map.of());
         }
         double rangeX = Math.max(maxX - minX, 1d);
         double rangeY = Math.max(maxY - minY, 1d);
@@ -610,6 +862,8 @@ public class DxfProcessingService {
             insertMarkers.add(new DxfInsertMarker(
                     nextInsertId++,
                     rawInsert.blockName(),
+                    rawInsert.effectiveName(),
+                    rawInsert.referenceKind(),
                     rawInsert.titleHint(),
                     rawInsert.layer(),
                     rawInsert.layoutName(),
@@ -617,11 +871,38 @@ public class DxfProcessingService {
                     rawInsert.rawY(),
                     rawInsert.scaleX(),
                     rawInsert.scaleY(),
+                    rawInsert.rotationDegrees(),
                     x,
                     y
             ));
         }
-        return new DxfParseResult(canvasWidth, canvasHeight, labels, geometryBoxes, insertMarkers);
+        return new DxfParseResult(
+                canvasWidth,
+                canvasHeight,
+                labels,
+                geometryBoxes,
+                insertMarkers,
+                summarizeEntityStats(rawTexts, rawGeometryBoxes, rawInsertMarkers)
+        );
+    }
+
+    private Map<String, Integer> summarizeEntityStats(
+            List<RawDxfTextEntity> rawTexts,
+            List<RawDxfGeometryBox> rawGeometryBoxes,
+            List<RawDxfInsertMarker> rawInsertMarkers
+    ) {
+        Map<String, Integer> stats = new LinkedHashMap<>();
+        stats.put("TEXT", rawTexts != null ? rawTexts.size() : 0);
+        stats.put("INSERT", rawInsertMarkers != null ? rawInsertMarkers.size() : 0);
+        if (rawGeometryBoxes != null) {
+            for (RawDxfGeometryBox box : rawGeometryBoxes) {
+                if (box == null || !StringUtils.hasText(box.entityType())) {
+                    continue;
+                }
+                stats.merge(box.entityType().trim().toUpperCase(Locale.ROOT), 1, Integer::sum);
+            }
+        }
+        return stats;
     }
 
     private boolean isHorizontalLine(RawDxfLineEntity line) {
@@ -971,6 +1252,7 @@ public class DxfProcessingService {
         private Double rawY;
         private Double scaleX;
         private Double scaleY;
+        private Double rotationDegrees;
 
         private void accept(String code, String value) {
             if ("2".equals(code)) {
@@ -999,6 +1281,10 @@ public class DxfProcessingService {
             }
             if ("42".equals(code) && scaleY == null) {
                 scaleY = parseDouble(value);
+                return;
+            }
+            if ("50".equals(code) && rotationDegrees == null) {
+                rotationDegrees = parseDouble(value);
             }
         }
 
@@ -1006,21 +1292,103 @@ public class DxfProcessingService {
             if (!StringUtils.hasText(blockName) || rawX == null || rawY == null) {
                 return null;
             }
-            RawDxfBlockDefinition definition = blockDefinitions != null ? blockDefinitions.get(blockName) : null;
+            RawDxfBlockDefinition definition = resolveBlockDefinition(blockDefinitions, blockName);
+            String effectiveName = resolveEffectiveInsertName(blockName, definition);
+            String referenceKind = resolveInsertReferenceKind(blockName);
+            String titleHint = definition != null && StringUtils.hasText(definition.primaryTitleHint())
+                    ? definition.primaryTitleHint()
+                    : humanizeBlockName(effectiveName);
             return new RawDxfInsertMarker(
                     blockName,
-                    definition != null ? definition.primaryTitleHint() : null,
+                    effectiveName,
+                    referenceKind,
+                    titleHint,
                     layer,
                     layoutName,
                     rawX,
                     rawY,
                     scaleX != null ? scaleX : 1d,
                     scaleY != null ? scaleY : 1d,
+                    rotationDegrees != null ? rotationDegrees : 0d,
                     definition != null ? definition.minX() : null,
                     definition != null ? definition.minY() : null,
                     definition != null ? definition.maxX() : null,
                     definition != null ? definition.maxY() : null
             );
+        }
+
+        private RawDxfBlockDefinition resolveBlockDefinition(
+                Map<String, RawDxfBlockDefinition> blockDefinitions,
+                String rawBlockName
+        ) {
+            if (blockDefinitions == null || blockDefinitions.isEmpty() || !StringUtils.hasText(rawBlockName)) {
+                return null;
+            }
+            RawDxfBlockDefinition exact = blockDefinitions.get(rawBlockName);
+            if (exact != null) {
+                return exact;
+            }
+            String normalized = normalizeBlockLookupKey(rawBlockName);
+            for (Map.Entry<String, RawDxfBlockDefinition> entry : blockDefinitions.entrySet()) {
+                if (normalizeBlockLookupKey(entry.getKey()).equals(normalized)) {
+                    return entry.getValue();
+                }
+            }
+            if (rawBlockName.contains("|")) {
+                String stripped = rawBlockName.substring(rawBlockName.lastIndexOf('|') + 1);
+                RawDxfBlockDefinition strippedExact = blockDefinitions.get(stripped);
+                if (strippedExact != null) {
+                    return strippedExact;
+                }
+                String strippedNormalized = normalizeBlockLookupKey(stripped);
+                for (Map.Entry<String, RawDxfBlockDefinition> entry : blockDefinitions.entrySet()) {
+                    if (normalizeBlockLookupKey(entry.getKey()).equals(strippedNormalized)) {
+                        return entry.getValue();
+                    }
+                }
+            }
+            return null;
+        }
+
+        private String resolveEffectiveInsertName(String rawBlockName, RawDxfBlockDefinition definition) {
+            String candidate = rawBlockName;
+            if (StringUtils.hasText(candidate) && candidate.contains("|")) {
+                candidate = candidate.substring(candidate.lastIndexOf('|') + 1);
+            }
+            if (isAnonymousCadBlockName(candidate)
+                    && definition != null && StringUtils.hasText(definition.primaryTitleHint())) {
+                return definition.primaryTitleHint();
+            }
+            return candidate;
+        }
+
+        private String resolveInsertReferenceKind(String rawBlockName) {
+            if (!StringUtils.hasText(rawBlockName)) {
+                return "BLOCK";
+            }
+            String normalized = rawBlockName.trim().toUpperCase(Locale.ROOT);
+            if (normalized.contains("|")) {
+                return "XREF";
+            }
+            if (normalized.startsWith("*U") || normalized.startsWith("*D") || normalized.startsWith("*E") || normalized.startsWith("*A")) {
+                return "DYNAMIC";
+            }
+            return "BLOCK";
+        }
+
+        private String humanizeBlockName(String value) {
+            if (!StringUtils.hasText(value)) {
+                return null;
+            }
+            return value.replace('_', ' ').replace('-', ' ').trim();
+        }
+
+        private boolean isAnonymousCadBlockName(String value) {
+            return StringUtils.hasText(value) && value.startsWith("*");
+        }
+
+        private String normalizeBlockLookupKey(String value) {
+            return StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : "";
         }
 
         private Double parseDouble(String value) {
@@ -1092,6 +1460,197 @@ public class DxfProcessingService {
         }
     }
 
+    private static class RawDxfCircleArcBuilder {
+        private final String entityType;
+        private String layer;
+        private String layoutName;
+        private Double centerX;
+        private Double centerY;
+        private Double radius;
+
+        private RawDxfCircleArcBuilder(String entityType) {
+            this.entityType = entityType;
+        }
+
+        private void accept(String code, String value) {
+            if ("8".equals(code)) {
+                layer = StringUtils.hasText(value) ? value.trim() : null;
+                return;
+            }
+            if ("410".equals(code)) {
+                layoutName = StringUtils.hasText(value) ? value.trim() : null;
+                return;
+            }
+            if ("10".equals(code) && centerX == null) {
+                centerX = parseDouble(value);
+                return;
+            }
+            if ("20".equals(code) && centerY == null) {
+                centerY = parseDouble(value);
+                return;
+            }
+            if ("40".equals(code) && radius == null) {
+                radius = parseDouble(value);
+            }
+        }
+
+        private RawDxfGeometryBox buildBox() {
+            if (centerX == null || centerY == null || radius == null || radius <= 0d) {
+                return null;
+            }
+            return new RawDxfGeometryBox(
+                    entityType,
+                    layer,
+                    layoutName,
+                    centerX - radius,
+                    centerY - radius,
+                    centerX + radius,
+                    centerY + radius
+            );
+        }
+
+        private Double parseDouble(String value) {
+            try {
+                return Double.parseDouble(value.trim());
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+    }
+
+    private static class RawDxfCurveBuilder {
+        private final String entityType;
+        private String layer;
+        private String layoutName;
+        private Double centerX;
+        private Double centerY;
+        private Double majorAxisX;
+        private Double majorAxisY;
+        private Double ratio;
+        private Double pendingX;
+        private final List<double[]> splinePoints = new ArrayList<>();
+
+        private RawDxfCurveBuilder(String entityType) {
+            this.entityType = entityType;
+        }
+
+        private void accept(String code, String value) {
+            if ("8".equals(code)) {
+                layer = StringUtils.hasText(value) ? value.trim() : null;
+                return;
+            }
+            if ("410".equals(code)) {
+                layoutName = StringUtils.hasText(value) ? value.trim() : null;
+                return;
+            }
+            if ("ELLIPSE".equals(entityType)) {
+                acceptEllipse(code, value);
+                return;
+            }
+            acceptSpline(code, value);
+        }
+
+        private void acceptEllipse(String code, String value) {
+            if ("10".equals(code) && centerX == null) {
+                centerX = parseDouble(value);
+                return;
+            }
+            if ("20".equals(code) && centerY == null) {
+                centerY = parseDouble(value);
+                return;
+            }
+            if ("11".equals(code) && majorAxisX == null) {
+                majorAxisX = parseDouble(value);
+                return;
+            }
+            if ("21".equals(code) && majorAxisY == null) {
+                majorAxisY = parseDouble(value);
+                return;
+            }
+            if ("40".equals(code) && ratio == null) {
+                ratio = parseDouble(value);
+            }
+        }
+
+        private void acceptSpline(String code, String value) {
+            if ("10".equals(code)) {
+                pendingX = parseDouble(value);
+                return;
+            }
+            if ("20".equals(code) && pendingX != null) {
+                Double y = parseDouble(value);
+                if (y != null) {
+                    splinePoints.add(new double[]{pendingX, y});
+                }
+                pendingX = null;
+            }
+        }
+
+        private RawDxfGeometryBox buildBox() {
+            return "ELLIPSE".equals(entityType) ? buildEllipseBox() : buildSplineBox();
+        }
+
+        private RawDxfGeometryBox buildEllipseBox() {
+            if (centerX == null || centerY == null || majorAxisX == null || majorAxisY == null) {
+                return null;
+            }
+            double semiMajor = Math.hypot(majorAxisX, majorAxisY);
+            double semiMinor = Math.max(0.01d, semiMajor * Math.max(0.01d, ratio != null ? Math.abs(ratio) : 1d));
+            if (semiMajor <= 0d) {
+                return null;
+            }
+            double ux = majorAxisX / semiMajor;
+            double uy = majorAxisY / semiMajor;
+            double vx = -uy;
+            double vy = ux;
+            double xRadius = Math.sqrt(Math.pow(semiMajor * ux, 2) + Math.pow(semiMinor * vx, 2));
+            double yRadius = Math.sqrt(Math.pow(semiMajor * uy, 2) + Math.pow(semiMinor * vy, 2));
+            if (xRadius < 0.5d || yRadius < 0.5d) {
+                return null;
+            }
+            return new RawDxfGeometryBox(
+                    entityType,
+                    layer,
+                    layoutName,
+                    centerX - xRadius,
+                    centerY - yRadius,
+                    centerX + xRadius,
+                    centerY + yRadius
+            );
+        }
+
+        private RawDxfGeometryBox buildSplineBox() {
+            if (splinePoints.size() < 3) {
+                return null;
+            }
+            double minX = Double.POSITIVE_INFINITY;
+            double maxX = Double.NEGATIVE_INFINITY;
+            double minY = Double.POSITIVE_INFINITY;
+            double maxY = Double.NEGATIVE_INFINITY;
+            for (double[] point : splinePoints) {
+                minX = Math.min(minX, point[0]);
+                maxX = Math.max(maxX, point[0]);
+                minY = Math.min(minY, point[1]);
+                maxY = Math.max(maxY, point[1]);
+            }
+            if (!Double.isFinite(minX) || !Double.isFinite(maxX) || !Double.isFinite(minY) || !Double.isFinite(maxY)) {
+                return null;
+            }
+            if ((maxX - minX) < 1d || (maxY - minY) < 1d) {
+                return null;
+            }
+            return new RawDxfGeometryBox(entityType, layer, layoutName, minX, minY, maxX, maxY);
+        }
+
+        private Double parseDouble(String value) {
+            try {
+                return Double.parseDouble(value.trim());
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+    }
+
     private static class RawDxfVertexBuilder {
         private Double x;
         private Double y;
@@ -1146,6 +1705,8 @@ public class DxfProcessingService {
 
     private record RawDxfInsertMarker(
             String blockName,
+            String effectiveName,
+            String referenceKind,
             String titleHint,
             String layer,
             String layoutName,
@@ -1153,6 +1714,7 @@ public class DxfProcessingService {
             double rawY,
             double scaleX,
             double scaleY,
+            double rotationDegrees,
             Double blockMinX,
             Double blockMinY,
             Double blockMaxX,
@@ -1204,6 +1766,8 @@ public class DxfProcessingService {
     public record DxfInsertMarker(
             int id,
             String blockName,
+            String effectiveName,
+            String referenceKind,
             String titleHint,
             String layer,
             String layoutName,
@@ -1211,6 +1775,7 @@ public class DxfProcessingService {
             double rawY,
             double scaleX,
             double scaleY,
+            double rotationDegrees,
             int x,
             int y
     ) {
@@ -1221,7 +1786,8 @@ public class DxfProcessingService {
             int canvasHeightPx,
             List<DxfTextLabel> labels,
             List<DxfGeometryBox> geometryBoxes,
-            List<DxfInsertMarker> insertMarkers
+            List<DxfInsertMarker> insertMarkers,
+            Map<String, Integer> entityStats
     ) {
     }
 }
