@@ -5,6 +5,7 @@ import {
   IconChevronUp as ChevronUp,
   IconDeviceFloppy as Save,
   IconEdit as Edit,
+  IconInfoCircle as InfoCircle,
   IconListDetails as ListDetails,
   IconPlus as Plus,
   IconRefresh as Refresh,
@@ -47,6 +48,117 @@ function createDefaultRoomDraft() {
     colorHex: DEFAULT_COLOR,
     hasAsset: true,
   }
+}
+
+function createDefaultImportForm() {
+  return {
+    sourceType: '',
+    file: null,
+  }
+}
+
+function createSuggestionDraft(suggestion) {
+  return {
+    labelText: suggestion?.labelText || '',
+    normalizedName: suggestion?.normalizedName || '',
+    suggestionType: suggestion?.suggestionType || 'ROOM',
+    colorHex: suggestion?.colorHex || '#F97316',
+    polygonJson: suggestion?.polygonJson || '',
+    hasAssetSuggested: suggestion?.hasAssetSuggested,
+    reviewStatus: suggestion?.reviewStatus || 'PENDING',
+    notes: suggestion?.notes || '',
+  }
+}
+
+function createImportFloorTargetDraft(floor) {
+  return {
+    importFloorId: floor?.id ?? null,
+    createNewFloor: floor?.suggestedTargetFloorId ? false : true,
+    targetFloorId: floor?.suggestedTargetFloorId || '',
+  }
+}
+
+function parseSuggestionBounds(polygonJson) {
+  if (!polygonJson) return null
+  try {
+    const parsed = JSON.parse(polygonJson)
+    const x = Number(parsed?.x)
+    const y = Number(parsed?.y)
+    const width = Number(parsed?.width)
+    const height = Number(parsed?.height)
+    if (![x, y, width, height].every(Number.isFinite)) return null
+    return { x, y, width, height }
+  } catch {
+    return null
+  }
+}
+
+function formatImportJobStatus(status) {
+  switch (String(status || '').toUpperCase()) {
+    case 'UPLOADED':
+      return 'Đã upload'
+    case 'PROCESSING':
+      return 'Đang phân tích'
+    case 'REVIEW_READY':
+      return 'Sẵn sàng review'
+    case 'FAILED':
+      return 'Thất bại'
+    case 'APPLIED':
+      return 'Đã áp dụng'
+    default:
+      return status || 'Chưa rõ'
+  }
+}
+
+function formatDrawingType(type) {
+  switch (String(type || '').toUpperCase()) {
+    case 'FLOOR_PLAN':
+      return 'Mặt bằng'
+    case 'DIMENSION_PLAN':
+      return 'Mặt bằng kích thước'
+    case 'SITE_PLAN':
+      return 'Mặt bằng định vị'
+    case 'STAIR_PLAN':
+      return 'Mặt bằng thang'
+    case 'MEP':
+      return 'Điện nước / MEP'
+    case 'ELEVATION':
+      return 'Mặt đứng'
+    case 'SECTION':
+      return 'Mặt cắt'
+    case 'PERSPECTIVE':
+      return 'Phối cảnh'
+    case 'DOOR_SCHEDULE':
+      return 'Bảng cửa'
+    default:
+      return type || 'Chưa rõ'
+  }
+}
+
+function formatParseStatus(status) {
+  switch (String(status || '').toUpperCase()) {
+    case 'DISCOVERED':
+      return 'Đã tách'
+    case 'PARSED':
+      return 'Đã parse'
+    case 'SKIPPED':
+      return 'Bỏ qua'
+    default:
+      return status || 'Chưa rõ'
+  }
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Chưa có'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString('vi-VN')
+}
+
+function formatConfidence(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return 'Chưa rõ'
+  return `${Math.round(numeric * 100)}%`
 }
 
 function extractQaCode(decodedText) {
@@ -302,6 +414,7 @@ function AssetMapManagement() {
   const bypassLeaveGuardRef = useRef(false)
   const contextMenuRef = useRef(null)
   const confirmActionRef = useRef(null)
+  const suggestionItemRefs = useRef({})
   const [loading, setLoading] = useState(true)
   const [floors, setFloors] = useState([])
   const [locations, setLocations] = useState([])
@@ -385,6 +498,28 @@ function AssetMapManagement() {
   const [roomAssetsLoading, setRoomAssetsLoading] = useState(false)
   const [roomAssets, setRoomAssets] = useState([])
   const [markerTooltip, setMarkerTooltip] = useState(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [loadingImportJobs, setLoadingImportJobs] = useState(false)
+  const [uploadingImport, setUploadingImport] = useState(false)
+  const [analyzingImportId, setAnalyzingImportId] = useState(null)
+  const [importJobs, setImportJobs] = useState([])
+  const [selectedImportJobId, setSelectedImportJobId] = useState(null)
+  const [selectedImportJobDetail, setSelectedImportJobDetail] = useState(null)
+  const [importForm, setImportForm] = useState(createDefaultImportForm)
+  const [importFloorTargets, setImportFloorTargets] = useState({})
+  const [suggestionDrafts, setSuggestionDrafts] = useState({})
+  const [selectedImportSuggestionId, setSelectedImportSuggestionId] = useState(null)
+  const [savingSuggestionId, setSavingSuggestionId] = useState(null)
+  const [applyingImportJobId, setApplyingImportJobId] = useState(null)
+  const [parsingSelectedImportId, setParsingSelectedImportId] = useState(null)
+  const [bboxEditState, setBboxEditState] = useState({
+    active: false,
+    suggestionId: null,
+    mode: null,
+    startX: 0,
+    startY: 0,
+    startBounds: null,
+  })
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -613,6 +748,388 @@ function AssetMapManagement() {
       setLoading(false)
     }
   }, [clearSelectedRooms])
+
+  const applyImportJobDetailState = useCallback((detail) => {
+    setSelectedImportJobDetail(detail || null)
+    setImportFloorTargets(() => {
+      const next = {}
+      ;(detail?.floors || []).forEach((floor) => {
+        next[floor.id] = createImportFloorTargetDraft(floor)
+      })
+      return next
+    })
+    setSuggestionDrafts(() => {
+      const next = {}
+      ;(detail?.floors || []).forEach((floor) => {
+        ;(floor?.suggestions || []).forEach((suggestion) => {
+          next[suggestion.id] = createSuggestionDraft(suggestion)
+        })
+      })
+      return next
+    })
+  }, [])
+
+  const loadImportJobDetail = useCallback(async (jobId) => {
+    if (!jobId) {
+      setSelectedImportJobDetail(null)
+      return null
+    }
+    try {
+      const response = await axiosClient.get(`/api/asset-map-import/jobs/${jobId}`)
+      const detail = response.data || null
+      applyImportJobDetailState(detail)
+      return detail
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải chi tiết job import.'
+      toast.error(message)
+      return null
+    }
+  }, [applyImportJobDetailState])
+
+  const loadImportJobs = useCallback(async (preferredJobId = null) => {
+    setLoadingImportJobs(true)
+    try {
+      const response = await axiosClient.get('/api/asset-map-import/jobs')
+      const nextJobs = response.data || []
+      setImportJobs(nextJobs)
+      const nextJobId =
+        preferredJobId && nextJobs.some((job) => Number(job.id) === Number(preferredJobId))
+          ? preferredJobId
+          : selectedImportJobId && nextJobs.some((job) => Number(job.id) === Number(selectedImportJobId))
+            ? selectedImportJobId
+            : nextJobs[0]?.id ?? null
+      setSelectedImportJobId(nextJobId)
+      if (nextJobId) {
+        await loadImportJobDetail(nextJobId)
+      } else {
+        setSelectedImportJobDetail(null)
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh sách import bản vẽ.'
+      toast.error(message)
+    } finally {
+      setLoadingImportJobs(false)
+    }
+  }, [loadImportJobDetail, selectedImportJobId])
+
+  const openImportModal = useCallback(() => {
+    setShowImportModal(true)
+    setImportForm(createDefaultImportForm())
+    void loadImportJobs(selectedImportJobId)
+  }, [loadImportJobs, selectedImportJobId])
+
+  const handleUploadImportJob = async () => {
+    if (!importForm.file) {
+      toast.error('Vui lòng chọn file bản vẽ PDF, DWG hoặc DXF.')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', importForm.file)
+    if (importForm.sourceType) {
+      formData.append('sourceType', importForm.sourceType)
+    }
+
+    setUploadingImport(true)
+    try {
+      const response = await axiosClient.post('/api/asset-map-import/jobs', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      const createdJob = response.data
+      toast.success('Đã upload bản vẽ và tạo import job.')
+      setImportForm(createDefaultImportForm())
+      await loadImportJobs(createdJob?.id)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể upload bản vẽ.'
+      toast.error(message)
+    } finally {
+      setUploadingImport(false)
+    }
+  }
+
+  const handleSelectImportJob = async (jobId) => {
+    setSelectedImportJobId(jobId)
+    await loadImportJobDetail(jobId)
+  }
+
+  const handleAnalyzeImportJob = async (jobId) => {
+    if (!jobId) return
+    setAnalyzingImportId(jobId)
+    try {
+      const response = await axiosClient.post(`/api/asset-map-import/jobs/${jobId}/analyze`)
+      const detail = response.data || null
+      setSelectedImportJobId(jobId)
+      applyImportJobDetailState(detail)
+      if (detail?.job) {
+        setImportJobs((previous) => {
+          const existed = previous.some((job) => Number(job.id) === Number(jobId))
+          if (!existed) {
+            return [detail.job, ...previous]
+          }
+          return previous.map((job) => (Number(job.id) === Number(jobId) ? { ...job, ...detail.job } : job))
+        })
+      }
+      toast.success('Đã tạo floor tạm cho bước review import.')
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể phân tích khởi tạo bản vẽ.'
+      toast.error(message)
+    } finally {
+      setAnalyzingImportId(null)
+    }
+  }
+
+  const handleToggleImportFloorSelection = async (jobId, floorId, selectedForAnalysis) => {
+    try {
+      const response = await axiosClient.put(`/api/asset-map-import/jobs/${jobId}/floors/${floorId}/selection`, {
+        selectedForAnalysis,
+      })
+      const updatedFloor = response.data || null
+      setSelectedImportJobDetail((previous) => {
+        if (!previous?.floors || !updatedFloor?.id) return previous
+        return {
+          ...previous,
+          floors: previous.floors.map((floor) => (
+            Number(floor.id) === Number(updatedFloor.id)
+              ? { ...floor, ...updatedFloor }
+              : floor
+          )),
+        }
+      })
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể cập nhật lựa chọn bản vẽ con.'
+      toast.error(message)
+    }
+  }
+
+  const handleParseSelectedDrawings = async (jobId) => {
+    if (!jobId) return
+    setParsingSelectedImportId(jobId)
+    try {
+      const response = await axiosClient.post(`/api/asset-map-import/jobs/${jobId}/parse-selected`)
+      const detail = response.data || null
+      setSelectedImportJobId(jobId)
+      applyImportJobDetailState(detail)
+      if (detail?.job) {
+        setImportJobs((previous) => previous.map((job) => (
+          Number(job.id) === Number(jobId) ? { ...job, ...detail.job } : job
+        )))
+      }
+      toast.success('Đã parse các bản vẽ con được chọn.')
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể parse các bản vẽ con đã chọn.'
+      toast.error(message)
+    } finally {
+      setParsingSelectedImportId(null)
+    }
+  }
+
+  const handleSuggestionDraftChange = (suggestionId, field, value) => {
+    setSuggestionDrafts((previous) => ({
+      ...previous,
+      [suggestionId]: {
+        ...(previous[suggestionId] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  const focusImportSuggestion = useCallback((suggestionId) => {
+    if (!suggestionId) return
+    setSelectedImportSuggestionId(suggestionId)
+    window.requestAnimationFrame(() => {
+      suggestionItemRefs.current[suggestionId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    })
+  }, [])
+
+  const updateSuggestionBoundsDraft = useCallback((suggestionId, nextBounds) => {
+    if (!nextBounds) return
+    const safeBounds = {
+      x: Math.max(0, Math.round(nextBounds.x || 0)),
+      y: Math.max(0, Math.round(nextBounds.y || 0)),
+      width: Math.max(12, Math.round(nextBounds.width || 12)),
+      height: Math.max(12, Math.round(nextBounds.height || 12)),
+    }
+    handleSuggestionDraftChange(suggestionId, 'polygonJson', JSON.stringify({
+      type: 'rect',
+      x: safeBounds.x,
+      y: safeBounds.y,
+      width: safeBounds.width,
+      height: safeBounds.height,
+    }))
+  }, [])
+
+  const handleOverlayPointerDown = (event, suggestionId, bounds, mode = 'move') => {
+    event.preventDefault()
+    event.stopPropagation()
+    focusImportSuggestion(suggestionId)
+    setBboxEditState({
+      active: true,
+      suggestionId,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      startBounds: bounds,
+    })
+  }
+
+  const handleImportFloorTargetChange = (floorId, field, value) => {
+    setImportFloorTargets((previous) => ({
+      ...previous,
+      [floorId]: {
+        ...(previous[floorId] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  const handleSaveSuggestionReview = async (jobId, suggestionId, overrides = {}) => {
+    const draft = {
+      ...(suggestionDrafts[suggestionId] || {}),
+      ...overrides,
+    }
+    setSavingSuggestionId(suggestionId)
+    try {
+      const response = await axiosClient.put(`/api/asset-map-import/jobs/${jobId}/suggestions/${suggestionId}`, draft)
+      const updatedSuggestion = response.data
+      setSelectedImportJobDetail((previous) => {
+        if (!previous?.floors) return previous
+        return {
+          ...previous,
+          floors: previous.floors.map((floor) => ({
+            ...floor,
+            suggestions: (floor.suggestions || []).map((suggestion) =>
+              Number(suggestion.id) === Number(suggestionId) ? { ...suggestion, ...updatedSuggestion } : suggestion,
+            ),
+          })),
+        }
+      })
+      setSuggestionDrafts((previous) => ({
+        ...previous,
+        [suggestionId]: createSuggestionDraft(updatedSuggestion),
+      }))
+      toast.success('Đã cập nhật suggestion.')
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể cập nhật suggestion.'
+      toast.error(message)
+    } finally {
+      setSavingSuggestionId(null)
+    }
+  }
+
+  const handleResetSuggestionReview = async (jobId, suggestionId) => {
+    setSavingSuggestionId(suggestionId)
+    try {
+      const response = await axiosClient.post(`/api/asset-map-import/jobs/${jobId}/suggestions/${suggestionId}/reset`)
+      const resetSuggestion = response.data
+      setSelectedImportJobDetail((previous) => {
+        if (!previous?.floors) return previous
+        return {
+          ...previous,
+          floors: previous.floors.map((floor) => ({
+            ...floor,
+            suggestions: (floor.suggestions || []).map((suggestion) =>
+              Number(suggestion.id) === Number(suggestionId) ? { ...suggestion, ...resetSuggestion } : suggestion,
+            ),
+          })),
+        }
+      })
+      setSuggestionDrafts((previous) => ({
+        ...previous,
+        [suggestionId]: createSuggestionDraft(resetSuggestion),
+      }))
+      toast.success('Đã reset suggestion về dữ liệu parser gốc.')
+      focusImportSuggestion(suggestionId)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể reset suggestion.'
+      toast.error(message)
+    } finally {
+      setSavingSuggestionId(null)
+    }
+  }
+
+  const handleApplyImportJob = (jobId) => {
+    openConfirmDialog({
+      title: 'Áp dụng vào sơ đồ thật',
+      message: 'Hệ thống sẽ tạo tầng, phòng và vùng phòng thật từ các suggestion đã duyệt. Bạn có muốn tiếp tục không?',
+      confirmLabel: 'Áp dụng',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          setConfirmDialog((previous) => ({ ...previous, busy: true }))
+          setApplyingImportJobId(jobId)
+          const response = await axiosClient.post(`/api/asset-map-import/jobs/${jobId}/apply`, {
+            floorTargets: Object.values(importFloorTargets || {}).map((item) => ({
+              importFloorId: item.importFloorId,
+              targetFloorId: item.createNewFloor ? null : Number(item.targetFloorId || 0) || null,
+              createNewFloor: Boolean(item.createNewFloor),
+            })),
+          })
+          const result = response.data
+          toast.success(result?.message || 'Đã áp dụng job import vào sơ đồ thật.')
+          await loadImportJobs(jobId)
+          await loadBootstrap(activeFloorId)
+          closeConfirmDialog()
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Không thể áp dụng import job vào sơ đồ thật.'
+          toast.error(message)
+          setConfirmDialog((previous) => ({ ...previous, busy: false }))
+        } finally {
+          setApplyingImportJobId(null)
+        }
+      },
+    })
+  }
+
+  useEffect(() => {
+    if (!bboxEditState.active || !bboxEditState.suggestionId || !bboxEditState.startBounds) return undefined
+
+    const handlePointerMove = (event) => {
+      const deltaX = event.clientX - bboxEditState.startX
+      const deltaY = event.clientY - bboxEditState.startY
+      const startBounds = bboxEditState.startBounds
+
+      if (bboxEditState.mode === 'resize-se') {
+        updateSuggestionBoundsDraft(bboxEditState.suggestionId, {
+          x: startBounds.x,
+          y: startBounds.y,
+          width: Math.max(12, startBounds.width + deltaX),
+          height: Math.max(12, startBounds.height + deltaY),
+        })
+        return
+      }
+
+      updateSuggestionBoundsDraft(bboxEditState.suggestionId, {
+        x: startBounds.x + deltaX,
+        y: startBounds.y + deltaY,
+        width: startBounds.width,
+        height: startBounds.height,
+      })
+    }
+
+    const handlePointerUp = () => {
+      setBboxEditState({
+        active: false,
+        suggestionId: null,
+        mode: null,
+        startX: 0,
+        startY: 0,
+        startBounds: null,
+      })
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [bboxEditState, updateSuggestionBoundsDraft])
 
   useEffect(() => {
     const bootstrapTimer = window.setTimeout(() => {
@@ -2043,6 +2560,14 @@ function AssetMapManagement() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              onClick={openImportModal}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Plus size={16} />
+              Import bản vẽ
+            </button>
+            <button
+              type="button"
               onClick={openCreateFloorModal}
               className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
             >
@@ -2838,6 +3363,684 @@ function AssetMapManagement() {
             <Move size={16} />
             Thay đổi kích thước canvas
           </button>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-6xl rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import bản vẽ sơ đồ</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Pha 1 cho phép upload bản vẽ PDF/DWG/DXF, tạo import job và sinh floor tạm để chuẩn bị review.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="mb-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 lg:grid-cols-[minmax(0,1fr)_220px_180px]">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">File bản vẽ</label>
+                <input
+                  type="file"
+                  accept=".pdf,.dwg,.dxf,application/pdf"
+                  onChange={(event) => setImportForm((previous) => ({ ...previous, file: event.target.files?.[0] || null }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                />
+                <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  {importForm.file
+                    ? `Đã chọn: ${importForm.file.name}`
+                    : 'Ưu tiên PDF ở Pha 1. DWG/DXF hiện được lưu job và chuẩn bị pipeline phân tích mở rộng.'}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Loại file</label>
+                <select
+                  value={importForm.sourceType}
+                  onChange={(event) => setImportForm((previous) => ({ ...previous, sourceType: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="">Tự nhận diện</option>
+                  <option value="PDF">PDF</option>
+                  <option value="DWG">DWG</option>
+                  <option value="DXF">DXF</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleUploadImportJob}
+                  disabled={uploadingImport}
+                  className="w-full rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                >
+                  {uploadingImport ? 'Đang upload...' : 'Tạo import job'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Import job gần đây</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Chọn một job để xem chi tiết và phân tích.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => loadImportJobs(selectedImportJobId)}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Làm mới
+                  </button>
+                </div>
+                <div className="max-h-[520px] overflow-auto">
+                  {loadingImportJobs && (
+                    <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">Đang tải import job...</div>
+                  )}
+                  {!loadingImportJobs && importJobs.length === 0 && (
+                    <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                      Chưa có import job nào. Hãy upload bản vẽ đầu tiên để bắt đầu.
+                    </div>
+                  )}
+                  {!loadingImportJobs && importJobs.map((job) => {
+                    const isSelected = Number(job.id) === Number(selectedImportJobId)
+                    return (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => handleSelectImportJob(job.id)}
+                        className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition last:border-b-0 dark:border-slate-800 ${
+                          isSelected ? 'bg-orange-50 dark:bg-orange-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-950/70'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{job.sourceFileName}</p>
+                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              {job.sourceFileType} · {formatDateTime(job.updatedAt)}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {formatImportJobStatus(job.status)}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                {!selectedImportJobDetail?.job ? (
+                  <div className="flex min-h-[320px] items-center justify-center text-center text-sm text-slate-500 dark:text-slate-400">
+                    Chọn một import job ở cột trái để xem thông tin chi tiết.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedImportJobDetail.job.sourceFileName}
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          Trạng thái: {formatImportJobStatus(selectedImportJobDetail.job.status)} · Người tạo:{' '}
+                          {selectedImportJobDetail.job.requestedByName || 'Chưa rõ'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <a
+                          href={selectedImportJobDetail.job.sourceFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          Mở file gốc
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleAnalyzeImportJob(selectedImportJobDetail.job.id)}
+                          disabled={
+                            analyzingImportId === selectedImportJobDetail.job.id ||
+                            selectedImportJobDetail.job.status === 'APPLIED'
+                          }
+                          className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                        >
+                          {analyzingImportId === selectedImportJobDetail.job.id ? 'Đang tách...' : 'Tách bản vẽ con'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleParseSelectedDrawings(selectedImportJobDetail.job.id)}
+                          disabled={
+                            parsingSelectedImportId === selectedImportJobDetail.job.id ||
+                            selectedImportJobDetail.job.status === 'APPLIED' ||
+                            (selectedImportJobDetail.floors || []).length === 0
+                          }
+                          className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+                        >
+                          {parsingSelectedImportId === selectedImportJobDetail.job.id ? 'Đang parse...' : 'Parse bản đã chọn'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyImportJob(selectedImportJobDetail.job.id)}
+                          disabled={
+                            applyingImportJobId === selectedImportJobDetail.job.id ||
+                            selectedImportJobDetail.job.status === 'APPLIED'
+                          }
+                          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                        >
+                          {applyingImportJobId === selectedImportJobDetail.job.id ? 'Đang áp dụng...' : 'Áp dụng vào sơ đồ thật'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Loại file</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedImportJobDetail.job.sourceFileType}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Floor tạm</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedImportJobDetail.job.detectedFloorCount ?? 0}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Số trang</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedImportJobDetail.job.pageCount ?? 'Chưa có'}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Upload lúc</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {formatDateTime(selectedImportJobDetail.job.requestedAt)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Cập nhật</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {formatDateTime(selectedImportJobDetail.job.updatedAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {selectedImportJobDetail.job.previewFileUrl && (
+                      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+                        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
+                          <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Preview bản vẽ</h5>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Ảnh preview này sẽ được dùng làm nền review ở Pha 1B cho PDF.
+                          </p>
+                        </div>
+                        <div className="bg-slate-100 p-4 dark:bg-slate-950">
+                          <div className="max-h-[440px] overflow-auto rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                            <div className="relative mx-auto w-fit">
+                              <img
+                                src={selectedImportJobDetail.job.previewFileUrl}
+                                alt={`Preview ${selectedImportJobDetail.job.sourceFileName}`}
+                                className="rounded-lg border border-slate-200 shadow-sm dark:border-slate-800"
+                                style={{
+                                  width: selectedImportJobDetail.floors?.[0]?.widthPx
+                                    ? `${selectedImportJobDetail.floors[0].widthPx}px`
+                                    : undefined,
+                                  maxWidth: 'none',
+                                }}
+                              />
+                              <div className="absolute inset-0">
+                                {(selectedImportJobDetail.floors || []).map((floor) => {
+                                  const bounds = parseSuggestionBounds(floor.previewBoundsJson)
+                                  if (!bounds) return null
+                                  return (
+                                    <div
+                                      key={`child-drawing-${floor.id}`}
+                                      className={`absolute rounded-md border-2 ${floor.selectedForAnalysis !== false ? 'bg-orange-400/10' : 'bg-slate-400/10'}`}
+                                      style={{
+                                        left: `${bounds.x}px`,
+                                        top: `${bounds.y}px`,
+                                        width: `${Math.max(bounds.width, 12)}px`,
+                                        height: `${Math.max(bounds.height, 12)}px`,
+                                        borderColor: floor.selectedForAnalysis !== false ? '#F97316' : '#94A3B8',
+                                      }}
+                                    >
+                                      <div className="absolute left-0 top-0 max-w-[260px] -translate-y-full rounded bg-slate-900/90 px-2 py-1 text-[10px] font-semibold text-white">
+                                        {floor.friendlyLabel || floor.suggestedName || 'Bản vẽ con'}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedImportJobDetail.job.errorMessage && (
+                      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {selectedImportJobDetail.job.errorMessage}
+                      </div>
+                    )}
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
+                      Luồng hiện tại cho phép hệ thống tách file thành nhiều bản vẽ con, tự gắn nhãn dễ hiểu, cho admin chọn bản cần dùng rồi mới
+                      parse phòng và khu vực theo luồng review hiện có. Với PDF, kết quả parse mạnh hơn; với DWG/DXF, hệ thống đang ưu tiên nhận diện
+                      bản vẽ con và text để hỗ trợ review trên nhiều trường hợp.
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bản vẽ con đã tách</h5>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {(selectedImportJobDetail.floors || []).length} bản vẽ
+                        </span>
+                      </div>
+                      {(selectedImportJobDetail.floors || []).length === 0 && (
+                        <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Job này chưa được tách bản vẽ con. Hãy bấm `Tách bản vẽ con` để hệ thống nhận diện trước khi parse.
+                        </div>
+                      )}
+                      {(selectedImportJobDetail.floors || []).map((floor) => {
+                        const floorTarget = importFloorTargets[floor.id] || createImportFloorTargetDraft(floor)
+                        const floorSuggestions = floor.suggestions || []
+                        const previewBounds = parseSuggestionBounds(floor.previewBoundsJson)
+                        return (
+                        <div key={floor.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                                {floor.friendlyLabel || floor.suggestedName}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                Page {floor.pageNumber || '-'} · {floor.widthPx || '-'} x {floor.heightPx || '-'} px
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  {formatDrawingType(floor.drawingType)}
+                                </span>
+                                <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                                  {formatParseStatus(floor.parseStatus)}
+                                </span>
+                                <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                  Tin cậy {formatConfidence(floor.detectionConfidence)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={floor.selectedForAnalysis !== false}
+                                  onChange={(event) =>
+                                    handleToggleImportFloorSelection(
+                                      selectedImportJobDetail.job.id,
+                                      floor.id,
+                                      event.target.checked,
+                                    )}
+                                  className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange dark:border-slate-700"
+                                />
+                                Dùng bản này để parse
+                              </label>
+                              {floor.backgroundImageUrl && (
+                                <a
+                                  href={floor.backgroundImageUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                >
+                                  Mở nền review
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
+                            {floor.scaleHint || 'Chưa có scale hint'}
+                            {previewBounds && (
+                              <span className="ml-2 inline-block">
+                                Vùng tách: x {previewBounds.x}, y {previewBounds.y}, rộng {previewBounds.width}, cao {previewBounds.height}.
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-3 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60 md:grid-cols-[180px_minmax(0,1fr)]">
+                            <div className="flex items-center">
+                              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(floorTarget.createNewFloor)}
+                                  onChange={(event) =>
+                                    handleImportFloorTargetChange(floor.id, 'createNewFloor', event.target.checked)
+                                  }
+                                  className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange dark:border-slate-700"
+                                />
+                                Tạo tầng mới
+                              </label>
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Áp dụng vào tầng có sẵn</label>
+                              <select
+                                value={floorTarget.targetFloorId || ''}
+                                disabled={Boolean(floorTarget.createNewFloor)}
+                                onChange={(event) => handleImportFloorTargetChange(floor.id, 'targetFloorId', event.target.value)}
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                              >
+                                <option value="">Chọn tầng đích</option>
+                                {(floor.availableTargetFloors || []).map((targetFloor) => (
+                                  <option key={targetFloor.id} value={targetFloor.id}>
+                                    {targetFloor.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          {floor.backgroundImageUrl && (
+                            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                              <div className="max-h-[320px] overflow-auto rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
+                                <div className="relative mx-auto w-fit">
+                                  <img
+                                    src={floor.backgroundImageUrl}
+                                    alt={`Nen review ${floor.suggestedName}`}
+                                    className="mx-auto rounded-lg border border-slate-200 dark:border-slate-800"
+                                    style={{
+                                      width: floor.widthPx ? `${floor.widthPx}px` : undefined,
+                                      maxWidth: 'none',
+                                    }}
+                                  />
+                                  <div className="absolute inset-0">
+                                    {floorSuggestions.map((suggestion) => {
+                                      const draft = suggestionDrafts[suggestion.id] || createSuggestionDraft(suggestion)
+                                      const bounds = parseSuggestionBounds(draft.polygonJson || suggestion.polygonJson)
+                                      if (!bounds) return null
+                                      const isApproved = ['APPROVED', 'EDITED'].includes(String(suggestion.reviewStatus || '').toUpperCase())
+                                      const isFocused = Number(selectedImportSuggestionId) === Number(suggestion.id)
+                                      const borderColor = suggestion.colorHex || (isApproved ? '#10B981' : '#F97316')
+                                      return (
+                                        <div
+                                          key={`overlay-${suggestion.id}`}
+                                          className="absolute cursor-move rounded-md bg-orange-400/10 transition"
+                                          style={{
+                                            left: `${bounds.x}px`,
+                                            top: `${bounds.y}px`,
+                                            width: `${Math.max(bounds.width, 12)}px`,
+                                            height: `${Math.max(bounds.height, 12)}px`,
+                                            border: `2px solid ${borderColor}`,
+                                            boxShadow: isFocused
+                                              ? `0 0 0 3px ${borderColor}55`
+                                              : isApproved
+                                                ? `0 0 0 2px ${borderColor}33`
+                                                : 'none',
+                                          }}
+                                          title={`${suggestion.labelText || suggestion.normalizedName || 'Suggestion'} - ${suggestion.reviewStatus || 'PENDING'}`}
+                                          onPointerDown={(event) => handleOverlayPointerDown(event, suggestion.id, bounds, 'move')}
+                                          onClick={(event) => {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            focusImportSuggestion(suggestion.id)
+                                          }}
+                                        >
+                                          <div
+                                            className="absolute left-0 top-0 max-w-[220px] -translate-y-full rounded bg-slate-900/90 px-2 py-1 text-[10px] font-semibold text-white"
+                                            style={{ transform: 'translateY(calc(-100% - 4px))' }}
+                                          >
+                                            {suggestion.labelText || suggestion.normalizedName || 'Suggestion'}
+                                          </div>
+                                          <div
+                                            className="absolute inset-0"
+                                            onDoubleClick={(event) => {
+                                              event.preventDefault()
+                                              event.stopPropagation()
+                                              focusImportSuggestion(suggestion.id)
+                                            }}
+                                          />
+                                          <button
+                                            type="button"
+                                            className="absolute bottom-[-6px] right-[-6px] h-3 w-3 rounded-full border border-white bg-fptOrange shadow"
+                                            onPointerDown={(event) => handleOverlayPointerDown(event, suggestion.id, bounds, 'resize-se')}
+                                            onClick={(event) => {
+                                              event.preventDefault()
+                                              event.stopPropagation()
+                                            }}
+                                            title="Kéo để đổi kích thước vùng"
+                                          />
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <div className="mt-3 space-y-2">
+                            {(floor.suggestions || []).length === 0 && (
+                              <p className="text-sm text-slate-500 dark:text-slate-400">Chưa có room suggestion tự động ở Pha 1.</p>
+                            )}
+                            {(floor.suggestions || []).map((suggestion) => (
+                              <div
+                                key={suggestion.id}
+                                ref={(element) => {
+                                  suggestionItemRefs.current[suggestion.id] = element
+                                }}
+                                className={`rounded-xl border bg-white px-4 py-3 text-sm transition dark:bg-slate-950 ${
+                                  Number(selectedImportSuggestionId) === Number(suggestion.id)
+                                    ? 'border-fptOrange ring-2 ring-orange-200 dark:border-orange-400 dark:ring-orange-500/20'
+                                    : 'border-slate-200 dark:border-slate-800'
+                                }`}
+                              >
+                                {(() => {
+                                  const draft = suggestionDrafts[suggestion.id] || createSuggestionDraft(suggestion)
+                                  const isSaving = Number(savingSuggestionId) === Number(suggestion.id)
+                                  const bounds = parseSuggestionBounds(draft.polygonJson || suggestion.polygonJson)
+                                  return (
+                                    <>
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                      {suggestion.labelText || suggestion.normalizedName || 'Suggestion'}
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                      Tên chuẩn hóa: {suggestion.normalizedName || 'Chưa có'}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => focusImportSuggestion(suggestion.id)}
+                                      className="mt-2 text-xs font-semibold text-fptOrange hover:underline"
+                                    >
+                                      Focus trên preview
+                                    </button>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                      {suggestion.reviewStatus || 'PENDING'}
+                                    </span>
+                                    <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-semibold text-orange-700 dark:bg-orange-500/10 dark:text-orange-300">
+                                      {suggestion.suggestionType || 'UNKNOWN'}
+                                    </span>
+                                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                      Tin cậy {formatConfidence(suggestion.confidenceScore)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Label gốc</label>
+                                    <input
+                                      value={draft.labelText}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'labelText', event.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Tên chuẩn hóa</label>
+                                    <input
+                                      value={draft.normalizedName}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'normalizedName', event.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Loại khu vực</label>
+                                    <select
+                                      value={draft.suggestionType}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'suggestionType', event.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                    >
+                                      <option value="ROOM">ROOM</option>
+                                      <option value="CORRIDOR">CORRIDOR</option>
+                                      <option value="STAIR">STAIR</option>
+                                      <option value="ELEVATOR">ELEVATOR</option>
+                                      <option value="YARD">YARD</option>
+                                      <option value="ROAD">ROAD</option>
+                                      <option value="GATE">GATE</option>
+                                      <option value="UNKNOWN">UNKNOWN</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Trạng thái review</label>
+                                    <select
+                                      value={draft.reviewStatus}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'reviewStatus', event.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                    >
+                                      <option value="PENDING">PENDING</option>
+                                      <option value="APPROVED">APPROVED</option>
+                                      <option value="REJECTED">REJECTED</option>
+                                      <option value="EDITED">EDITED</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Màu gợi ý</label>
+                                    <input
+                                      type="color"
+                                      value={draft.colorHex || '#F97316'}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'colorHex', event.target.value)}
+                                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                                    />
+                                  </div>
+                                  <div className="flex items-end">
+                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(draft.hasAssetSuggested)}
+                                        onChange={(event) =>
+                                          handleSuggestionDraftChange(suggestion.id, 'hasAssetSuggested', event.target.checked)
+                                        }
+                                        className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange dark:border-slate-700"
+                                      />
+                                      Khu vực chứa tài sản
+                                    </label>
+                                  </div>
+                                  <div className="md:col-span-2">
+                                    <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Ghi chú review</label>
+                                    <textarea
+                                      rows={2}
+                                      value={draft.notes}
+                                      onChange={(event) => handleSuggestionDraftChange(suggestion.id, 'notes', event.target.value)}
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Nguồn</p>
+                                    <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                      {suggestion.sourceMethod || 'Chưa rõ'}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Chứa tài sản</p>
+                                    <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                      {suggestion.hasAssetSuggested == null
+                                        ? 'Chưa gợi ý'
+                                        : suggestion.hasAssetSuggested
+                                          ? 'Có'
+                                          : 'Không'}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400">Vùng hình học</p>
+                                    <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                      {suggestion.polygonJson ? 'Có bounding box' : 'Chưa có'}
+                                    </p>
+                                  </div>
+                                </div>
+                                {bounds && (
+                                  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                    Vị trí preview: x={Math.round(bounds.x)}, y={Math.round(bounds.y)}, rộng={Math.round(bounds.width)}, cao={Math.round(bounds.height)}
+                                  </div>
+                                )}
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSaveSuggestionReview(selectedImportJobDetail.job.id, suggestion.id, {
+                                        ...draft,
+                                        reviewStatus: 'APPROVED',
+                                      })
+                                    }
+                                    disabled={isSaving}
+                                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                                  >
+                                    Duyệt
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSaveSuggestionReview(selectedImportJobDetail.job.id, suggestion.id, {
+                                        ...draft,
+                                        reviewStatus: 'REJECTED',
+                                      })
+                                    }
+                                    disabled={isSaving}
+                                    className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                                  >
+                                    Từ chối
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSaveSuggestionReview(selectedImportJobDetail.job.id, suggestion.id, {
+                                        polygonJson: draft.polygonJson,
+                                        reviewStatus: draft.reviewStatus === 'PENDING' ? 'EDITED' : draft.reviewStatus,
+                                      })
+                                    }
+                                    disabled={isSaving}
+                                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                  >
+                                    {isSaving ? 'Đang lưu...' : 'Lưu chỉnh sửa'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleResetSuggestionReview(selectedImportJobDetail.job.id, suggestion.id)}
+                                    disabled={isSaving}
+                                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                  >
+                                    Reset parser gốc
+                                  </button>
+                                </div>
+                                {suggestion.notes && (
+                                  <p className="mt-2 text-slate-500 dark:text-slate-400">{suggestion.notes}</p>
+                                )}
+                                    </>
+                                  )
+                                })()}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )})}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
