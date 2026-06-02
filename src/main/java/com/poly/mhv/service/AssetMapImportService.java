@@ -18,6 +18,7 @@ import com.poly.mhv.service.CadImportEngineClient.CadEngineParsedSheetResult;
 import com.poly.mhv.service.CadImportEngineClient.CadEngineParseResponse;
 import com.poly.mhv.service.CadImportEngineClient.CadEngineSheetResult;
 import com.poly.mhv.service.CadImportEngineClient.CadEngineSuggestionResult;
+import com.poly.mhv.service.DxfProcessingService.DxfGeometryBox;
 import com.poly.mhv.service.DxfProcessingService.DxfParseResult;
 import com.poly.mhv.service.DxfProcessingService.DxfTextLabel;
 import com.poly.mhv.service.OdaFileConverterService.OdaConversionResult;
@@ -211,6 +212,7 @@ public class AssetMapImportService {
             List<ParsedPdfLabel> parsedPdfLabels = extractParsedPdfLabels(job.getRawMetadataJson());
             DxfPreparedData dxfPreparedData = !"PDF".equals(job.getSourceFileType()) ? prepareLocalCadData(job) : null;
             List<DxfTextLabel> dxfTextLabels = dxfPreparedData != null ? dxfPreparedData.labels() : List.of();
+            List<DxfGeometryBox> dxfGeometryBoxes = dxfPreparedData != null ? dxfPreparedData.geometryBoxes() : List.of();
             Integer cadCanvasWidthPx = dxfPreparedData != null
                     ? Integer.valueOf(dxfPreparedData.canvasWidthPx())
                     : defaultIfNull(extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx"), 1600);
@@ -220,7 +222,7 @@ public class AssetMapImportService {
             List<DetectedDrawingCandidate> discoveredFloors = "PDF".equals(job.getSourceFileType())
                     ? discoverPdfDrawingCandidates(job, previewWidthPx, previewHeightPx, parsedPdfLabels)
                     : !dxfTextLabels.isEmpty()
-                    ? discoverCadDrawingCandidatesFromDxfLabels(job, dxfTextLabels, cadCanvasWidthPx, cadCanvasHeightPx)
+                    ? discoverCadDrawingCandidatesFromDxfData(job, dxfTextLabels, dxfGeometryBoxes, cadCanvasWidthPx, cadCanvasHeightPx)
                     : cadImportEngineClient.isEnabledFor(job.getSourceFileType())
                     ? discoverCadDrawingCandidatesFromEngine(job)
                     : discoverCadDrawingCandidates(job);
@@ -382,6 +384,7 @@ public class AssetMapImportService {
         List<ParsedPdfLabel> parsedPdfLabels = extractParsedPdfLabels(job.getRawMetadataJson());
         List<String> cadTexts = extractCadTextsFromMetadata(job.getRawMetadataJson());
         List<DxfTextLabel> dxfTextLabels = extractDxfTextLabels(job.getRawMetadataJson());
+        List<DxfGeometryBox> dxfGeometryBoxes = extractDxfGeometryBoxes(job.getRawMetadataJson());
         List<MapImportFloor> selectedFloors = Optional.ofNullable(job.getFloors()).orElse(List.of()).stream()
                 .filter(floor -> !Boolean.FALSE.equals(floor.getSelectedForAnalysis()))
                 .toList();
@@ -392,7 +395,7 @@ public class AssetMapImportService {
         int totalSuggestionCount = 0;
         if (!"PDF".equals(job.getSourceFileType()) && !dxfTextLabels.isEmpty()) {
             for (MapImportFloor floor : selectedFloors) {
-                List<MapImportSuggestion> suggestions = buildSuggestionsForCadFloorFromDxfLabels(floor, dxfTextLabels);
+                List<MapImportSuggestion> suggestions = buildSuggestionsForCadFloorFromDxfLabels(floor, dxfTextLabels, dxfGeometryBoxes);
                 if (suggestions.isEmpty()) {
                     suggestions = List.of(buildFallbackSuggestion(floor, job.getSourceFileType()));
                 }
@@ -453,6 +456,13 @@ public class AssetMapImportService {
             throw new CustomException("Chua co suggestion nao duoc duyet de ap dung vao so do that.");
         }
 
+        List<MapImportSuggestion> approvedSuggestionsWithGeometry = approvedSuggestions.stream()
+                .filter(this::hasApplicableGeometryForApply)
+                .toList();
+        if (approvedSuggestionsWithGeometry.isEmpty()) {
+            throw new CustomException("Chua co suggestion da duyet nao co vung hinh hoc hop le de ap dung vao so do that.");
+        }
+
         Map<Long, MapImportFloorApplyTargetRequest> floorTargetMap = buildFloorTargetMap(request);
         Map<Long, MapFloor> appliedFloors = new LinkedHashMap<>();
         int appliedLocationCount = 0;
@@ -470,6 +480,7 @@ public class AssetMapImportService {
                     .orElse(List.of())
                     .stream()
                     .filter(this::isSuggestionApprovedForApply)
+                    .filter(this::hasApplicableGeometryForApply)
                     .toList();
             if (floorApprovedSuggestions.isEmpty()) {
                 continue;
@@ -552,6 +563,10 @@ public class AssetMapImportService {
         return value != null ? value : fallback;
     }
 
+    private Double defaultIfNull(Double value, double fallback) {
+        return value != null ? value : fallback;
+    }
+
     private String extractRootCauseMessage(Throwable throwable) {
         Throwable current = throwable;
         while (current != null && current.getCause() != null && current.getCause() != current) {
@@ -585,11 +600,22 @@ public class AssetMapImportService {
             return null;
         }
         List<DxfTextLabel> cachedLabels = extractDxfTextLabels(job.getRawMetadataJson());
+        List<DxfGeometryBox> cachedGeometryBoxes = extractDxfGeometryBoxes(job.getRawMetadataJson());
         Integer cachedWidth = extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx");
         Integer cachedHeight = extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasHeightPx");
         String existingDxfUrl = extractMetadataString(job.getRawMetadataJson(), "effectiveDxfFileUrl");
-        if (!cachedLabels.isEmpty() && StringUtils.hasText(existingDxfUrl)) {
-            return new DxfPreparedData(existingDxfUrl, cachedWidth != null ? cachedWidth : 1600, cachedHeight != null ? cachedHeight : 900, cachedLabels);
+        Integer cachedParseVersion = extractMetadataInteger(job.getRawMetadataJson(), "dxfParseVersion");
+        if (StringUtils.hasText(existingDxfUrl)
+                && cachedParseVersion != null
+                && cachedParseVersion >= 2
+                && (!cachedLabels.isEmpty() || !cachedGeometryBoxes.isEmpty())) {
+            return new DxfPreparedData(
+                    existingDxfUrl,
+                    cachedWidth != null ? cachedWidth : 1600,
+                    cachedHeight != null ? cachedHeight : 900,
+                    cachedLabels,
+                    cachedGeometryBoxes
+            );
         }
         if ("DWG".equalsIgnoreCase(job.getSourceFileType()) && !odaFileConverterService.isEnabledFor(job.getSourceFileType())) {
             return null;
@@ -609,16 +635,24 @@ public class AssetMapImportService {
             DxfParseResult parseResult = dxfProcessingService.parse(dxfPath);
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("effectiveDxfFileUrl", effectiveDxfUrl);
+            metadata.put("dxfParseVersion", 2);
             metadata.put("dxfCanvasWidthPx", parseResult.canvasWidthPx());
             metadata.put("dxfCanvasHeightPx", parseResult.canvasHeightPx());
             metadata.put("dxfTextLabelCount", parseResult.labels().size());
             metadata.put("dxfTextLabels", parseResult.labels().stream().map(this::toMetadataMap).toList());
+            metadata.put("dxfGeometryBoxes", parseResult.geometryBoxes().stream().map(this::toMetadataMap).toList());
             metadata.put("cadExtractedTexts", parseResult.labels().stream().map(DxfTextLabel::text).distinct().limit(200).toList());
             if (StringUtils.hasText(conversionLog)) {
                 metadata.put("odaConversionLog", conversionLog);
             }
             job.setRawMetadataJson(writeMetadata(mergeMetadata(job.getRawMetadataJson(), metadata)));
-            return new DxfPreparedData(effectiveDxfUrl, parseResult.canvasWidthPx(), parseResult.canvasHeightPx(), parseResult.labels());
+            return new DxfPreparedData(
+                    effectiveDxfUrl,
+                    parseResult.canvasWidthPx(),
+                    parseResult.canvasHeightPx(),
+                    parseResult.labels(),
+                    parseResult.geometryBoxes()
+            );
         } catch (CustomException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -783,6 +817,10 @@ public class AssetMapImportService {
     private boolean isSuggestionApprovedForApply(MapImportSuggestion suggestion) {
         String reviewStatus = normalizeReviewStatus(suggestion.getReviewStatus());
         return "APPROVED".equals(reviewStatus) || "EDITED".equals(reviewStatus);
+    }
+
+    private boolean hasApplicableGeometryForApply(MapImportSuggestion suggestion) {
+        return suggestion != null && !parseRectBounds(suggestion.getPolygonJson()).isEmpty();
     }
 
     private Map<Long, MapImportFloorApplyTargetRequest> buildFloorTargetMap(MapImportApplyRequest request) {
@@ -1156,6 +1194,51 @@ public class AssetMapImportService {
         }
     }
 
+    private List<DxfGeometryBox> extractDxfGeometryBoxes(String rawMetadataJson) {
+        if (!StringUtils.hasText(rawMetadataJson)) {
+            return List.of();
+        }
+        try {
+            Map<String, Object> metadata = objectMapper.readValue(rawMetadataJson, new TypeReference<Map<String, Object>>() {
+            });
+            Object rawBoxes = metadata.get("dxfGeometryBoxes");
+            if (!(rawBoxes instanceof List<?> items)) {
+                return List.of();
+            }
+            List<DxfGeometryBox> results = new ArrayList<>();
+            for (Object item : items) {
+                if (!(item instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                Integer id = asInteger(map.get("id"));
+                Integer x = asInteger(map.get("x"));
+                Integer y = asInteger(map.get("y"));
+                Integer width = asInteger(map.get("width"));
+                Integer height = asInteger(map.get("height"));
+                if (id == null || x == null || y == null || width == null || height == null) {
+                    continue;
+                }
+                results.add(new DxfGeometryBox(
+                        id,
+                        asString(map.get("entityType")),
+                        asString(map.get("layer")),
+                        asString(map.get("layoutName")),
+                        defaultIfNull(asDouble(map.get("rawMinX")), 0d),
+                        defaultIfNull(asDouble(map.get("rawMinY")), 0d),
+                        defaultIfNull(asDouble(map.get("rawMaxX")), 0d),
+                        defaultIfNull(asDouble(map.get("rawMaxY")), 0d),
+                        x,
+                        y,
+                        width,
+                        height
+                ));
+            }
+            return results;
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
     private List<String> extractCadTextsFromMetadata(String rawMetadataJson) {
         if (!StringUtils.hasText(rawMetadataJson)) {
             return List.of();
@@ -1304,6 +1387,156 @@ public class AssetMapImportService {
                     .selectedForAnalysis(sheet.selectedByDefault() != null ? sheet.selectedByDefault() : isPrimaryDrawingType(classifyDrawingType(sheet.title())))
                     .scaleHint(StringUtils.hasText(sheet.notes()) ? sheet.notes() : "Da nhan dien bang CAD engine.")
                     .build());
+        }
+        return candidates;
+    }
+
+    private List<DetectedDrawingCandidate> discoverCadDrawingCandidatesFromDxfData(
+            MapImportJob job,
+            List<DxfTextLabel> labels,
+            List<DxfGeometryBox> geometryBoxes,
+            Integer canvasWidthPx,
+            Integer canvasHeightPx
+    ) {
+        List<DetectedDrawingCandidate> geometryCandidates = discoverCadDrawingCandidatesFromDxfGeometry(
+                job,
+                labels,
+                geometryBoxes,
+                canvasWidthPx,
+                canvasHeightPx
+        );
+        if (!geometryCandidates.isEmpty()) {
+            return geometryCandidates;
+        }
+        List<DetectedDrawingCandidate> layoutCandidates = discoverCadDrawingCandidatesFromDxfLayouts(labels, canvasWidthPx, canvasHeightPx);
+        if (!layoutCandidates.isEmpty()) {
+            return layoutCandidates;
+        }
+        return discoverCadDrawingCandidatesFromDxfLabels(job, labels, canvasWidthPx, canvasHeightPx);
+    }
+
+    private List<DetectedDrawingCandidate> discoverCadDrawingCandidatesFromDxfGeometry(
+            MapImportJob job,
+            List<DxfTextLabel> labels,
+            List<DxfGeometryBox> geometryBoxes,
+            Integer canvasWidthPx,
+            Integer canvasHeightPx
+    ) {
+        int canvasWidth = canvasWidthPx != null ? canvasWidthPx : 1600;
+        int canvasHeight = canvasHeightPx != null ? canvasHeightPx : 900;
+        List<DxfFrameAnalysis> analyses = new ArrayList<>();
+        for (DxfGeometryBox box : geometryBoxes) {
+            if (!isLikelyCadFrameGeometry(box, canvasWidth, canvasHeight)) {
+                continue;
+            }
+            List<DxfTextLabel> insideLabels = labels.stream()
+                    .filter(label -> geometryContainsLabel(box, label, 6))
+                    .toList();
+            long roomLabelCount = insideLabels.stream().filter(label -> isLikelyCadRoomLabel(label.text())).count();
+            List<DxfTextLabel> titleLabels = insideLabels.stream()
+                    .filter(label -> isLikelyDrawingTitle(label.text()))
+                    .sorted(Comparator.comparingInt(DxfTextLabel::y).thenComparingInt(DxfTextLabel::x))
+                    .toList();
+            if (insideLabels.size() < 2 && titleLabels.isEmpty() && roomLabelCount == 0) {
+                continue;
+            }
+            String title = chooseBestFrameTitle(titleLabels, insideLabels, box, job);
+            String drawingType = StringUtils.hasText(title) ? classifyDrawingType(title) : inferDrawingTypeFromLabels(insideLabels);
+            double score = estimateFrameScore(box, insideLabels.size(), roomLabelCount, titleLabels.size(), canvasWidth, canvasHeight);
+            analyses.add(new DxfFrameAnalysis(box, title, drawingType, insideLabels.size(), roomLabelCount, score));
+        }
+        analyses.sort(Comparator.comparingDouble(DxfFrameAnalysis::score).reversed()
+                .thenComparingInt(item -> item.box().width() * item.box().height()).reversed());
+        List<DxfFrameAnalysis> selectedAnalyses = new ArrayList<>();
+        for (DxfFrameAnalysis analysis : analyses) {
+            boolean covered = selectedAnalyses.stream().anyMatch(existing -> isFrameSubstantiallyCovered(analysis.box(), existing.box()));
+            if (!covered) {
+                selectedAnalyses.add(analysis);
+            }
+            if (selectedAnalyses.size() >= 12) {
+                break;
+            }
+        }
+        List<DetectedDrawingCandidate> candidates = new ArrayList<>();
+        for (int index = 0; index < selectedAnalyses.size(); index += 1) {
+            DxfFrameAnalysis analysis = selectedAnalyses.get(index);
+            DxfGeometryBox box = analysis.box();
+            String friendlyLabel = StringUtils.hasText(analysis.title())
+                    ? buildFriendlyDrawingLabel(analysis.title(), index)
+                    : buildFriendlyDrawingLabel("Ban ve tu file " + job.getSourceFileType(), index);
+            String drawingType = StringUtils.hasText(analysis.drawingType()) ? analysis.drawingType() : "UNKNOWN";
+            candidates.add(DetectedDrawingCandidate.builder()
+                    .sourceFloorKey("DXF_FRAME:" + box.id())
+                    .suggestedName(friendlyLabel)
+                    .friendlyLabel(friendlyLabel)
+                    .drawingType(drawingType)
+                    .sortOrder(index)
+                    .widthPx(canvasWidth)
+                    .heightPx(canvasHeight)
+                    .previewBoundsJson(buildRectanglePolygonJson(box.x(), box.y(), box.width(), box.height()))
+                    .detectionConfidence(Math.max(0.35d, Math.min(0.96d, analysis.score())))
+                    .selectedForAnalysis(isPrimaryDrawingType(drawingType) || analysis.roomLabelCount() > 0)
+                    .scaleHint(buildFrameScaleHint(box, analysis))
+                    .build());
+        }
+        return candidates;
+    }
+
+    private List<DetectedDrawingCandidate> discoverCadDrawingCandidatesFromDxfLayouts(
+            List<DxfTextLabel> labels,
+            Integer canvasWidthPx,
+            Integer canvasHeightPx
+    ) {
+        Map<String, List<DxfTextLabel>> byLayout = new LinkedHashMap<>();
+        for (DxfTextLabel label : labels) {
+            String layoutName = normalizeCadLayoutName(label.layoutName());
+            if (!StringUtils.hasText(layoutName)) {
+                continue;
+            }
+            byLayout.computeIfAbsent(layoutName, key -> new ArrayList<>()).add(label);
+        }
+        if (byLayout.isEmpty()) {
+            return List.of();
+        }
+        int canvasWidth = canvasWidthPx != null ? canvasWidthPx : 1600;
+        int canvasHeight = canvasHeightPx != null ? canvasHeightPx : 900;
+        List<DetectedDrawingCandidate> candidates = new ArrayList<>();
+        int sortOrder = 0;
+        for (Map.Entry<String, List<DxfTextLabel>> entry : byLayout.entrySet()) {
+            List<DxfTextLabel> layoutLabels = entry.getValue();
+            if (layoutLabels.isEmpty()) {
+                continue;
+            }
+            int minX = layoutLabels.stream().mapToInt(DxfTextLabel::x).min().orElse(60);
+            int maxX = layoutLabels.stream().mapToInt(DxfTextLabel::x).max().orElse(minX + 320);
+            int minY = layoutLabels.stream().mapToInt(DxfTextLabel::y).min().orElse(60);
+            int maxY = layoutLabels.stream().mapToInt(DxfTextLabel::y).max().orElse(minY + 220);
+            int paddingX = 180;
+            int paddingY = 140;
+            int x = Math.max(0, minX - paddingX);
+            int y = Math.max(0, minY - paddingY);
+            int width = Math.min(canvasWidth - x, Math.max(320, (maxX - minX) + (paddingX * 2)));
+            int height = Math.min(canvasHeight - y, Math.max(220, (maxY - minY) + (paddingY * 2)));
+            String title = layoutLabels.stream()
+                    .filter(label -> isLikelyDrawingTitle(label.text()))
+                    .map(DxfTextLabel::text)
+                    .findFirst()
+                    .orElse(entry.getKey());
+            String drawingType = classifyDrawingType(title);
+            candidates.add(DetectedDrawingCandidate.builder()
+                    .sourceFloorKey("DXF_LAYOUT:" + entry.getKey())
+                    .suggestedName(buildFriendlyDrawingLabel(title, sortOrder))
+                    .friendlyLabel(buildFriendlyDrawingLabel(title, sortOrder))
+                    .drawingType(drawingType)
+                    .sortOrder(sortOrder)
+                    .widthPx(canvasWidth)
+                    .heightPx(canvasHeight)
+                    .previewBoundsJson(buildRectanglePolygonJson(x, y, width, height))
+                    .detectionConfidence(isPrimaryDrawingType(drawingType) ? 0.72d : 0.58d)
+                    .selectedForAnalysis(isPrimaryDrawingType(drawingType))
+                    .scaleHint("Nhan dien theo layout DXF `" + entry.getKey() + "` khi file khong co nhieu sheet ro rang.")
+                    .build());
+            sortOrder += 1;
         }
         return candidates;
     }
@@ -1463,14 +1696,35 @@ public class AssetMapImportService {
         return suggestions;
     }
 
-    private List<MapImportSuggestion> buildSuggestionsForCadFloorFromDxfLabels(MapImportFloor floor, List<DxfTextLabel> labels) {
+    private List<MapImportSuggestion> buildSuggestionsForCadFloorFromDxfLabels(
+            MapImportFloor floor,
+            List<DxfTextLabel> labels,
+            List<DxfGeometryBox> geometryBoxes
+    ) {
         Map<String, Integer> bounds = parseRectBounds(floor.getPreviewBoundsJson());
         int minX = bounds.getOrDefault("x", Integer.MIN_VALUE);
         int minY = bounds.getOrDefault("y", Integer.MIN_VALUE);
         int maxX = bounds.isEmpty() ? Integer.MAX_VALUE : minX + bounds.getOrDefault("width", 0);
         int maxY = bounds.isEmpty() ? Integer.MAX_VALUE : minY + bounds.getOrDefault("height", 0);
+        Integer activeFrameId = extractDxfFrameId(floor.getSourceFloorKey());
+        String activeLayoutName = extractDxfLayoutKey(floor.getSourceFloorKey());
+        DxfGeometryBox activeFrame = activeFrameId != null ? findDxfGeometryBoxById(geometryBoxes, activeFrameId) : null;
+        if (activeFrame != null) {
+            activeLayoutName = normalizeCadLayoutName(activeFrame.layoutName());
+            minX = activeFrame.x();
+            minY = activeFrame.y();
+            maxX = activeFrame.x() + activeFrame.width();
+            maxY = activeFrame.y() + activeFrame.height();
+        }
+        final String frameLayoutName = activeLayoutName;
+        final int filterMinX = minX;
+        final int filterMinY = minY;
+        final int filterMaxX = maxX;
+        final int filterMaxY = maxY;
         List<DxfTextLabel> roomLabels = labels.stream()
-                .filter(label -> label.x() >= minX && label.x() <= maxX && label.y() >= minY && label.y() <= maxY)
+                .filter(label -> label.x() >= filterMinX && label.x() <= filterMaxX && label.y() >= filterMinY && label.y() <= filterMaxY)
+                .filter(label -> frameLayoutName == null || frameLayoutName.equals(normalizeCadLayoutName(label.layoutName())))
+                .filter(label -> !isIgnorableCadLayer(label.layer()))
                 .filter(label -> isLikelyCadRoomLabel(label.text()))
                 .limit(30)
                 .toList();
@@ -1479,10 +1733,11 @@ public class AssetMapImportService {
         for (DxfTextLabel label : roomLabels) {
             String normalizedText = normalizePdfLabelText(label.text());
             String suggestionType = classifySuggestionType(normalizedText);
-            int width = Math.max(72, Math.min(220, normalizedText.length() * 12));
-            int height = 56;
-            int x = Math.max(0, label.x() - (width / 2));
-            int y = Math.max(0, label.y() - (height / 2));
+            DxfGeometryBox matchedGeometry = findBestGeometryBoxForLabel(label, geometryBoxes, activeFrame, frameLayoutName);
+            int width = matchedGeometry != null ? matchedGeometry.width() : Math.max(72, Math.min(220, normalizedText.length() * 12));
+            int height = matchedGeometry != null ? matchedGeometry.height() : 56;
+            int x = matchedGeometry != null ? matchedGeometry.x() : Math.max(0, label.x() - (width / 2));
+            int y = matchedGeometry != null ? matchedGeometry.y() : Math.max(0, label.y() - (height / 2));
             String deduplicationKey = buildNormalizedSuggestionName(normalizedText) + "@" + Math.round(label.x() / 24.0) + ":" + Math.round(label.y() / 24.0);
             if (!deduplicationKeys.add(deduplicationKey)) {
                 continue;
@@ -1495,13 +1750,214 @@ public class AssetMapImportService {
                     .polygonJson(buildRectanglePolygonJson(x, y, width, height))
                     .colorHex(resolveSuggestionColor(suggestionType))
                     .hasAssetSuggested(resolveHasAssetSuggestion(suggestionType))
-                    .confidenceScore(0.72d)
-                    .sourceMethod("DXF_TEXT")
+                    .confidenceScore(matchedGeometry != null ? 0.84d : 0.72d)
+                    .sourceMethod(matchedGeometry != null ? "DXF_GEOMETRY" : "DXF_TEXT")
                     .reviewStatus("PENDING")
-                    .notes("Suggestion tao tu text DXF tai x=" + label.x() + ", y=" + label.y())
+                    .notes(matchedGeometry != null
+                            ? "Suggestion gan voi hinh hoc DXF tai layer `" + defaultText(matchedGeometry.layer(), "unknown") + "`."
+                            : "Suggestion tao tu text DXF tai x=" + label.x() + ", y=" + label.y())
                     .build());
         }
         return suggestions;
+    }
+
+    private boolean isLikelyCadFrameGeometry(DxfGeometryBox box, int canvasWidth, int canvasHeight) {
+        if (box == null) {
+            return false;
+        }
+        if (box.width() < Math.max(260, canvasWidth / 6) || box.height() < Math.max(180, canvasHeight / 6)) {
+            return false;
+        }
+        double aspectRatio = box.height() == 0 ? 0d : (double) box.width() / (double) box.height();
+        if (aspectRatio < 0.35d || aspectRatio > 4.5d) {
+            return false;
+        }
+        if (isIgnorableCadLayer(box.layer()) && !isPreferredCadFrameLayer(box.layer())) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean geometryContainsLabel(DxfGeometryBox box, DxfTextLabel label, int padding) {
+        if (box == null || label == null) {
+            return false;
+        }
+        return label.x() >= box.x() - padding
+                && label.x() <= box.x() + box.width() + padding
+                && label.y() >= box.y() - padding
+                && label.y() <= box.y() + box.height() + padding;
+    }
+
+    private String chooseBestFrameTitle(
+            List<DxfTextLabel> titleLabels,
+            List<DxfTextLabel> insideLabels,
+            DxfGeometryBox box,
+            MapImportJob job
+    ) {
+        if (titleLabels != null && !titleLabels.isEmpty()) {
+            return titleLabels.stream()
+                    .map(DxfTextLabel::text)
+                    .filter(StringUtils::hasText)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (StringUtils.hasText(normalizeCadLayoutName(box.layoutName()))) {
+            return box.layoutName();
+        }
+        return insideLabels.stream()
+                .map(DxfTextLabel::text)
+                .filter(this::isLikelyCadRoomLabel)
+                .findFirst()
+                .orElse(buildSuggestedFloorName(job));
+    }
+
+    private String inferDrawingTypeFromLabels(List<DxfTextLabel> labels) {
+        return labels.stream()
+                .map(DxfTextLabel::text)
+                .filter(StringUtils::hasText)
+                .map(this::classifyDrawingType)
+                .filter(type -> !"UNKNOWN".equals(type))
+                .findFirst()
+                .orElse("UNKNOWN");
+    }
+
+    private double estimateFrameScore(
+            DxfGeometryBox box,
+            int labelCount,
+            long roomLabelCount,
+            int titleCount,
+            int canvasWidth,
+            int canvasHeight
+    ) {
+        double areaRatio = (double) (box.width() * box.height()) / Math.max(1d, (double) canvasWidth * canvasHeight);
+        double layerBoost = isPreferredCadFrameLayer(box.layer()) ? 0.12d : 0d;
+        return Math.min(0.96d, 0.38d
+                + Math.min(titleCount, 2) * 0.16d
+                + Math.min(roomLabelCount, 6) * 0.05d
+                + Math.min(labelCount, 12) * 0.015d
+                + Math.min(areaRatio, 0.45d)
+                + layerBoost);
+    }
+
+    private boolean isFrameSubstantiallyCovered(DxfGeometryBox candidate, DxfGeometryBox selected) {
+        if (candidate == null || selected == null) {
+            return false;
+        }
+        int intersectionLeft = Math.max(candidate.x(), selected.x());
+        int intersectionTop = Math.max(candidate.y(), selected.y());
+        int intersectionRight = Math.min(candidate.x() + candidate.width(), selected.x() + selected.width());
+        int intersectionBottom = Math.min(candidate.y() + candidate.height(), selected.y() + selected.height());
+        int intersectionWidth = Math.max(0, intersectionRight - intersectionLeft);
+        int intersectionHeight = Math.max(0, intersectionBottom - intersectionTop);
+        double intersectionArea = (double) intersectionWidth * intersectionHeight;
+        double candidateArea = Math.max(1d, (double) candidate.width() * candidate.height());
+        return (intersectionArea / candidateArea) >= 0.86d;
+    }
+
+    private String buildFrameScaleHint(DxfGeometryBox box, DxfFrameAnalysis analysis) {
+        String layoutText = StringUtils.hasText(normalizeCadLayoutName(box.layoutName()))
+                ? "layout `" + box.layoutName() + "`"
+                : "model space / layer";
+        return "Nhan dien tu geometry DXF tren " + layoutText
+                + ", layer `" + defaultText(box.layer(), "unknown") + "`, "
+                + analysis.labelCount() + " text, "
+                + analysis.roomLabelCount() + " room label.";
+    }
+
+    private String normalizeCadLayoutName(String layoutName) {
+        if (!StringUtils.hasText(layoutName)) {
+            return null;
+        }
+        String normalized = layoutName.trim();
+        if ("Model".equalsIgnoreCase(normalized) || "Model_Space".equalsIgnoreCase(normalized)) {
+            return "MODEL";
+        }
+        return normalized;
+    }
+
+    private Integer extractDxfFrameId(String sourceFloorKey) {
+        if (!StringUtils.hasText(sourceFloorKey) || !sourceFloorKey.startsWith("DXF_FRAME:")) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(sourceFloorKey.substring("DXF_FRAME:".length()).trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String extractDxfLayoutKey(String sourceFloorKey) {
+        if (!StringUtils.hasText(sourceFloorKey) || !sourceFloorKey.startsWith("DXF_LAYOUT:")) {
+            return null;
+        }
+        return normalizeCadLayoutName(sourceFloorKey.substring("DXF_LAYOUT:".length()).trim());
+    }
+
+    private DxfGeometryBox findDxfGeometryBoxById(List<DxfGeometryBox> geometryBoxes, Integer boxId) {
+        if (geometryBoxes == null || geometryBoxes.isEmpty() || boxId == null) {
+            return null;
+        }
+        return geometryBoxes.stream()
+                .filter(box -> box != null && box.id() == boxId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private DxfGeometryBox findBestGeometryBoxForLabel(
+            DxfTextLabel label,
+            List<DxfGeometryBox> geometryBoxes,
+            DxfGeometryBox activeFrame,
+            String activeLayoutName
+    ) {
+        if (label == null || geometryBoxes == null || geometryBoxes.isEmpty()) {
+            return null;
+        }
+        double activeFrameArea = activeFrame != null ? (double) activeFrame.width() * activeFrame.height() : Double.MAX_VALUE;
+        return geometryBoxes.stream()
+                .filter(box -> box != null)
+                .filter(box -> activeFrame == null || isFrameSubstantiallyCovered(box, activeFrame) || geometryContainsLabel(activeFrame, label, 8))
+                .filter(box -> activeLayoutName == null || activeLayoutName.equals(normalizeCadLayoutName(box.layoutName())))
+                .filter(box -> geometryContainsLabel(box, label, 6))
+                .filter(box -> box.width() >= 36 && box.height() >= 24)
+                .filter(box -> box.width() <= 640 && box.height() <= 360)
+                .filter(box -> !isIgnorableCadLayer(box.layer()))
+                .filter(box -> ((double) box.width() * box.height()) <= activeFrameArea * 0.72d)
+                .min(Comparator.comparingInt(box -> box.width() * box.height()))
+                .orElse(null);
+    }
+
+    private boolean isIgnorableCadLayer(String layerName) {
+        if (!StringUtils.hasText(layerName)) {
+            return false;
+        }
+        String folded = foldToAscii(layerName).toLowerCase(Locale.ROOT);
+        return folded.contains("defpoints")
+                || folded.contains("dim")
+                || folded.contains("kich thuoc")
+                || folded.contains("axis")
+                || folded.contains("truc")
+                || folded.contains("grid")
+                || folded.contains("hatch")
+                || folded.contains("center")
+                || folded.contains("hidden")
+                || folded.contains("temp");
+    }
+
+    private boolean isPreferredCadFrameLayer(String layerName) {
+        if (!StringUtils.hasText(layerName)) {
+            return false;
+        }
+        String folded = foldToAscii(layerName).toLowerCase(Locale.ROOT);
+        return folded.contains("khung")
+                || folded.contains("frame")
+                || folded.contains("sheet")
+                || folded.contains("title")
+                || folded.contains("viewport")
+                || folded.contains("layout");
+    }
+
+    private String defaultText(String value, String fallback) {
+        return StringUtils.hasText(value) ? value : fallback;
     }
 
     private MapImportSuggestion buildFallbackSuggestion(MapImportFloor floor, String sourceFileType) {
@@ -1876,6 +2332,23 @@ public class AssetMapImportService {
         return metadata;
     }
 
+    private Map<String, Object> toMetadataMap(DxfGeometryBox box) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("id", box.id());
+        metadata.put("entityType", box.entityType());
+        metadata.put("layer", box.layer());
+        metadata.put("layoutName", box.layoutName());
+        metadata.put("rawMinX", box.rawMinX());
+        metadata.put("rawMinY", box.rawMinY());
+        metadata.put("rawMaxX", box.rawMaxX());
+        metadata.put("rawMaxY", box.rawMaxY());
+        metadata.put("x", box.x());
+        metadata.put("y", box.y());
+        metadata.put("width", box.width());
+        metadata.put("height", box.height());
+        return metadata;
+    }
+
     private String foldToAscii(String text) {
         if (!StringUtils.hasText(text)) {
             return "";
@@ -2126,7 +2599,18 @@ public class AssetMapImportService {
             String effectiveDxfFileUrl,
             int canvasWidthPx,
             int canvasHeightPx,
-            List<DxfTextLabel> labels
+            List<DxfTextLabel> labels,
+            List<DxfGeometryBox> geometryBoxes
+    ) {
+    }
+
+    private record DxfFrameAnalysis(
+            DxfGeometryBox box,
+            String title,
+            String drawingType,
+            int labelCount,
+            long roomLabelCount,
+            double score
     ) {
     }
 

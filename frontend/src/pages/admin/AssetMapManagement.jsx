@@ -93,6 +93,11 @@ function parseSuggestionBounds(polygonJson) {
   }
 }
 
+function isSuggestionApprovedForApply(reviewStatus) {
+  const normalized = String(reviewStatus || '').trim().toUpperCase()
+  return normalized === 'APPROVED' || normalized === 'EDITED'
+}
+
 function formatImportJobStatus(status) {
   switch (String(status || '').toUpperCase()) {
     case 'UPLOADED':
@@ -565,6 +570,28 @@ function AssetMapManagement() {
   const showGridLines = floorInteractionMode === 'add' || floorInteractionMode === 'edit'
 
   const editableShapeId = floorInteractionMode === 'edit' ? Number(selectedShapeId) : null
+
+  const approvedImportSuggestions = useMemo(
+    () =>
+      (selectedImportJobDetail?.floors || []).flatMap((floor) =>
+        (floor?.suggestions || []).filter((suggestion) => {
+          const draft = suggestionDrafts[suggestion.id]
+          return isSuggestionApprovedForApply(draft?.reviewStatus || suggestion.reviewStatus)
+        }),
+      ),
+    [selectedImportJobDetail, suggestionDrafts],
+  )
+
+  const approvedImportSuggestionsWithGeometry = useMemo(
+    () =>
+      approvedImportSuggestions.filter((suggestion) => {
+        const draft = suggestionDrafts[suggestion.id]
+        return Boolean(parseSuggestionBounds(draft?.polygonJson || suggestion.polygonJson))
+      }),
+    [approvedImportSuggestions, suggestionDrafts],
+  )
+
+  const canApplyImportJob = approvedImportSuggestionsWithGeometry.length > 0
 
   const clearSelectedRooms = useCallback(() => {
     setSelectedShapeId(null)
@@ -1053,6 +1080,10 @@ function AssetMapManagement() {
   }
 
   const handleApplyImportJob = (jobId) => {
+    if (!canApplyImportJob) {
+      toast.error('Job này chưa có suggestion đã duyệt nào kèm vùng hình học hợp lệ để áp dụng.')
+      return
+    }
     openConfirmDialog({
       title: 'Áp dụng vào sơ đồ thật',
       message: 'Hệ thống sẽ tạo tầng, phòng và vùng phòng thật từ các suggestion đã duyệt. Bạn có muốn tiếp tục không?',
@@ -3532,7 +3563,8 @@ function AssetMapManagement() {
                           onClick={() => handleApplyImportJob(selectedImportJobDetail.job.id)}
                           disabled={
                             applyingImportJobId === selectedImportJobDetail.job.id ||
-                            selectedImportJobDetail.job.status === 'APPLIED'
+                            selectedImportJobDetail.job.status === 'APPLIED' ||
+                            !canApplyImportJob
                           }
                           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                         >
@@ -3636,6 +3668,12 @@ function AssetMapManagement() {
                       parse phòng và khu vực theo luồng review hiện có. Với PDF, kết quả parse mạnh hơn; với DWG/DXF, hệ thống đang ưu tiên nhận diện
                       bản vẽ con và text để hỗ trợ review trên nhiều trường hợp.
                     </div>
+                    {!canApplyImportJob && selectedImportJobDetail.job.status !== 'APPLIED' && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                        Job này chưa có suggestion đã duyệt nào kèm vùng hình học hợp lệ, nên chưa thể áp dụng vào sơ đồ thật. Hãy chỉnh bounding box
+                        trong phần review hoặc parse lại từ nguồn bản vẽ tốt hơn trước khi áp dụng.
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
