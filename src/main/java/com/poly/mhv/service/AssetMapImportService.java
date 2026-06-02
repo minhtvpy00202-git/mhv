@@ -249,6 +249,7 @@ public class AssetMapImportService {
             List<DxfTextLabel> dxfTextLabels = dxfPreparedData != null ? dxfPreparedData.labels() : List.of();
             List<DxfGeometryBox> dxfGeometryBoxes = dxfPreparedData != null ? dxfPreparedData.geometryBoxes() : List.of();
             List<DxfInsertMarker> dxfInsertMarkers = dxfPreparedData != null ? dxfPreparedData.insertMarkers() : List.of();
+            boolean hasLocalCadData = !dxfTextLabels.isEmpty() || !dxfGeometryBoxes.isEmpty() || !dxfInsertMarkers.isEmpty();
             Integer cadCanvasWidthPx = dxfPreparedData != null
                     ? Integer.valueOf(dxfPreparedData.canvasWidthPx())
                     : defaultIfNull(extractMetadataInteger(job.getRawMetadataJson(), "dxfCanvasWidthPx"), 1600);
@@ -269,7 +270,7 @@ public class AssetMapImportService {
             }
             List<DetectedDrawingCandidate> discoveredFloors = "PDF".equals(job.getSourceFileType())
                     ? discoverPdfDrawingCandidates(job, previewWidthPx, previewHeightPx, parsedPdfLabels)
-                    : !dxfTextLabels.isEmpty()
+                    : hasLocalCadData
                     ? discoverCadDrawingCandidatesFromDxfData(job, dxfTextLabels, dxfGeometryBoxes, dxfInsertMarkers, cadCanvasWidthPx, cadCanvasHeightPx)
                     : cadImportEngineClient.isEnabledFor(job.getSourceFileType())
                     ? discoverCadDrawingCandidatesFromEngine(job)
@@ -433,6 +434,8 @@ public class AssetMapImportService {
         List<String> cadTexts = extractCadTextsFromMetadata(job.getRawMetadataJson());
         List<DxfTextLabel> dxfTextLabels = extractDxfTextLabels(job.getRawMetadataJson());
         List<DxfGeometryBox> dxfGeometryBoxes = extractDxfGeometryBoxes(job.getRawMetadataJson());
+        List<DxfInsertMarker> dxfInsertMarkers = extractDxfInsertMarkers(job.getRawMetadataJson());
+        boolean hasLocalCadData = !dxfTextLabels.isEmpty() || !dxfGeometryBoxes.isEmpty() || !dxfInsertMarkers.isEmpty();
         List<MapImportFloor> selectedFloors = Optional.ofNullable(job.getFloors()).orElse(List.of()).stream()
                 .filter(floor -> !Boolean.FALSE.equals(floor.getSelectedForAnalysis()))
                 .toList();
@@ -441,7 +444,7 @@ public class AssetMapImportService {
         }
 
         int totalSuggestionCount = 0;
-        if (!"PDF".equals(job.getSourceFileType()) && !dxfTextLabels.isEmpty()) {
+        if (!"PDF".equals(job.getSourceFileType()) && hasLocalCadData) {
             for (MapImportFloor floor : selectedFloors) {
                 List<MapImportSuggestion> suggestions = buildSuggestionsForCadFloorFromDxfLabels(floor, dxfTextLabels, dxfGeometryBoxes);
                 if (suggestions.isEmpty()) {
@@ -483,7 +486,7 @@ public class AssetMapImportService {
                 "parsedFloorCount", selectedFloors.size(),
                 "generatedSuggestionCount", totalSuggestionCount,
                 "cadEngineUsed", cadImportEngineClient.isEnabledFor(job.getSourceFileType()),
-                "localCadUsed", !dxfTextLabels.isEmpty()
+                "localCadUsed", hasLocalCadData
         ))));
         return mapJobDetail(mapImportJobRepository.save(job));
     }
