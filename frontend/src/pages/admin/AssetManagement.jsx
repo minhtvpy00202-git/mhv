@@ -318,6 +318,9 @@ function getFieldClass(hasError) {
 
 function AssetManagement({ restrictToConsumable = false }) {
   const specEntryIdRef = useRef(0)
+  const categoryFilterRef = useRef(null)
+  const locationFilterRef = useRef(null)
+  const supplierOptionsRef = useRef(null)
   const { user } = useAuth()
   const [assets, setAssets] = useState([])
   const [locations, setLocations] = useState([])
@@ -416,6 +419,7 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [formMode, setFormMode] = useState('create')
   const [selectedQaCode, setSelectedQaCode] = useState(null)
   const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
+  const [showLocationFilterOptions, setShowLocationFilterOptions] = useState(false)
   const [showSupplierOptions, setShowSupplierOptions] = useState(false)
   const [supplierKeyword, setSupplierKeyword] = useState('')
   const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false)
@@ -437,6 +441,7 @@ function AssetManagement({ restrictToConsumable = false }) {
     categoryId: '',
     locationId: '',
     categoryKeyword: '',
+    locationKeyword: '',
   })
   const [form, setForm] = useState({
     trackingMode: restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED',
@@ -469,6 +474,12 @@ function AssetManagement({ restrictToConsumable = false }) {
     if (!keyword) return matchingCategories
     return matchingCategories.filter((category) => getCategoryLabel(category).toLowerCase().includes(keyword))
   }, [activeTrackingMode, categories, filters.categoryKeyword])
+  const filteredLocationFilterOptions = useMemo(() => {
+    const keyword = filters.locationKeyword.trim().toLowerCase()
+    const sortedLocations = [...locations].sort((left, right) => left.roomName.localeCompare(right.roomName, 'vi'))
+    if (!keyword) return sortedLocations
+    return sortedLocations.filter((location) => String(location?.roomName || '').toLowerCase().includes(keyword))
+  }, [filters.locationKeyword, locations])
   const formCategoryOptions = useMemo(
     () => categories.filter((category) => categoryMatchesTrackingMode(category, form.trackingMode)),
     [categories, form.trackingMode],
@@ -483,6 +494,26 @@ function AssetManagement({ restrictToConsumable = false }) {
     if (!keyword) return suppliers
     return suppliers.filter((supplier) => getSupplierLabel(supplier).toLowerCase().includes(keyword))
   }, [supplierKeyword, suppliers])
+
+  useEffect(() => {
+    const handlePointerDownOutside = (event) => {
+      const target = event.target
+      if (showCategoryFilterOptions && categoryFilterRef.current && !categoryFilterRef.current.contains(target)) {
+        setShowCategoryFilterOptions(false)
+      }
+      if (showLocationFilterOptions && locationFilterRef.current && !locationFilterRef.current.contains(target)) {
+        setShowLocationFilterOptions(false)
+      }
+      if (showSupplierOptions && supplierOptionsRef.current && !supplierOptionsRef.current.contains(target)) {
+        setShowSupplierOptions(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDownOutside)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside)
+    }
+  }, [showCategoryFilterOptions, showLocationFilterOptions, showSupplierOptions])
 
   const selectedSpecsEntries = useMemo(() => parseSpecsToEntries(selectedSpecsAsset?.specs), [selectedSpecsAsset])
   const isEditing = formMode === 'update' && Boolean(selectedQaCode)
@@ -834,6 +865,7 @@ function AssetManagement({ restrictToConsumable = false }) {
             categoryId: '',
             locationId: '',
             categoryKeyword: '',
+            locationKeyword: '',
           })
         } else {
           setConsumableStatusCounts(defaultConsumableStatusCounts)
@@ -909,6 +941,7 @@ function AssetManagement({ restrictToConsumable = false }) {
       categoryId: '',
       locationId: '',
       categoryKeyword: '',
+      locationKeyword: '',
     }
     setActiveTab(nextTab)
     setFilters(nextFilters)
@@ -1298,7 +1331,15 @@ function AssetManagement({ restrictToConsumable = false }) {
   }
 
   const handleResetFilters = async () => {
-    const reset = { name: '', status: '', trackingMode: activeTrackingMode, categoryId: '', locationId: '', categoryKeyword: '' }
+    const reset = {
+      name: '',
+      status: '',
+      trackingMode: activeTrackingMode,
+      categoryId: '',
+      locationId: '',
+      categoryKeyword: '',
+      locationKeyword: '',
+    }
     setFilters(reset)
     await loadAssets(0, reset)
   }
@@ -2983,7 +3024,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                 placeholder="Tên thiết bị"
               />
-              <div className="relative">
+              <div ref={categoryFilterRef} className="relative">
                 <input
                   value={filters.categoryKeyword}
                   onFocus={() => setShowCategoryFilterOptions(true)}
@@ -3041,18 +3082,52 @@ function AssetManagement({ restrictToConsumable = false }) {
                   </option>
                 ))}
               </select>
-              <select
-                value={filters.locationId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, locationId: e.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              >
-                <option value="">Tất cả phòng</option>
-                {locations.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.roomName}
-                  </option>
-                ))}
-              </select>
+              <div ref={locationFilterRef} className="relative">
+                <input
+                  value={filters.locationKeyword}
+                  onFocus={() => setShowLocationFilterOptions(true)}
+                  onChange={(e) => {
+                    setFilters((prev) => ({ ...prev, locationKeyword: e.target.value, locationId: '' }))
+                    setShowLocationFilterOptions(true)
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Phòng (gõ để lọc)"
+                />
+                {showLocationFilterOptions && (
+                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilters((prev) => ({ ...prev, locationId: '', locationKeyword: '' }))
+                        setShowLocationFilterOptions(false)
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
+                    >
+                      Tất cả phòng
+                    </button>
+                    {filteredLocationFilterOptions.map((location) => (
+                      <button
+                        key={location.id}
+                        type="button"
+                        onClick={() => {
+                          setFilters((prev) => ({
+                            ...prev,
+                            locationId: String(location.id),
+                            locationKeyword: location.roomName || '',
+                          }))
+                          setShowLocationFilterOptions(false)
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
+                      >
+                        {location.roomName}
+                      </button>
+                    ))}
+                    {filteredLocationFilterOptions.length === 0 && (
+                      <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               <button
@@ -3515,7 +3590,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                     +
                   </button>
                 </div>
-                <div className="relative">
+                <div ref={supplierOptionsRef} className="relative">
                   <input
                     value={supplierKeyword}
                     onFocus={() => setShowSupplierOptions(true)}

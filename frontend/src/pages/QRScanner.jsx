@@ -11,6 +11,7 @@ function QRScanner() {
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
+  const locationOptionsRef = useRef(null)
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
   const [scannedLocationId, setScannedLocationId] = useState(null)
@@ -32,6 +33,20 @@ function QRScanner() {
     if (!keyword) return locations
     return locations.filter((location) => location.roomName.toLowerCase().startsWith(keyword))
   }, [locationQuery, locations])
+
+  useEffect(() => {
+    const handlePointerDownOutside = (event) => {
+      const target = event.target
+      if (showLocationOptions && locationOptionsRef.current && !locationOptionsRef.current.contains(target)) {
+        setShowLocationOptions(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDownOutside)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside)
+    }
+  }, [showLocationOptions])
 
   useEffect(() => {
     if (!showActionModal && keepScannerAliveRef.current) {
@@ -252,7 +267,7 @@ function QRScanner() {
             {canCheckout && (
               <div className="mt-3 space-y-2">
                 <label className="text-sm font-medium text-slate-700">Phòng đích</label>
-                <div className="relative">
+                <div ref={locationOptionsRef} className="relative">
                   <input
                     type="text"
                     value={locationQuery}

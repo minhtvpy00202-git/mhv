@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { getTechnicalStatusLabel } from '../../utils/assetStatus'
@@ -16,6 +16,7 @@ const defaultSortState = {
 }
 
 function UsageHistoryManagement() {
+  const locationFilterRef = useRef(null)
   const [histories, setHistories] = useState([])
   const [locations, setLocations] = useState([])
   const [users, setUsers] = useState([])
@@ -74,6 +75,20 @@ function UsageHistoryManagement() {
   const filteredLocations = locations.filter((location) =>
     location.roomName.toLowerCase().includes(filters.borrowedLocationKeyword.trim().toLowerCase()),
   )
+
+  useEffect(() => {
+    const handlePointerDownOutside = (event) => {
+      const target = event.target
+      if (showLocationOptions && locationFilterRef.current && !locationFilterRef.current.contains(target)) {
+        setShowLocationOptions(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDownOutside)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside)
+    }
+  }, [showLocationOptions])
 
   const buildHistoryQueryParams = (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
     const params = {
@@ -193,7 +208,7 @@ function UsageHistoryManagement() {
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
           placeholder="Tên thiết bị"
         />
-        <div className="relative">
+        <div ref={locationFilterRef} className="relative">
           <input
             value={filters.borrowedLocationKeyword}
             onFocus={() => setShowLocationOptions(true)}
