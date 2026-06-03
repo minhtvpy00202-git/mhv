@@ -23,6 +23,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
 import {
@@ -64,6 +65,19 @@ const defaultConsumableStatusCounts = {
 const defaultSortState = {
   key: 'qaCode',
   direction: 'asc',
+}
+
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
 }
 
 function getCategoryLabel(category) {
@@ -337,6 +351,7 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [qrModalLoading, setQrModalLoading] = useState(false)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineAsset, setTimelineAsset] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [showFormModal, setShowFormModal] = useState(false)
   const [showSpecsModal, setShowSpecsModal] = useState(false)
   const [selectedSpecsAsset, setSelectedSpecsAsset] = useState(null)
@@ -1198,27 +1213,53 @@ function AssetManagement({ restrictToConsumable = false }) {
 
   const handleDeleteAsset = async (qaCode = selectedQaCode) => {
     if (!qaCode) return
-    const confirmed = window.confirm(`Bạn có chắc muốn xóa thiết bị ${qaCode}?`)
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/assets/${qaCode}`)
-      toast.success('Xóa thiết bị thành công.')
-      if (qaCode === selectedQaCode) {
-        resetForm()
-      }
-      setAssetDetailsByQaCode((prev) => {
-        const next = { ...prev }
-        delete next[qaCode]
-        return next
-      })
-      await loadAssets(pageInfo.page)
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa thiết bị thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa thiết bị',
+      message: `Bạn có chắc muốn xóa thiết bị ${qaCode}?`,
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/assets/${qaCode}`)
+          toast.success('Xóa thiết bị thành công.')
+          if (qaCode === selectedQaCode) {
+            resetForm()
+          }
+          setAssetDetailsByQaCode((prev) => {
+            const next = { ...prev }
+            delete next[qaCode]
+            return next
+          })
+          await loadAssets(pageInfo.page)
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa thiết bị thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleSelectAsset = async (asset) => {
@@ -2247,26 +2288,26 @@ function AssetManagement({ restrictToConsumable = false }) {
                     <table className="min-w-[1080px] text-sm">
                       <thead className="bg-fptOrange text-white">
                         <tr>
-                          <th className="w-[22%] px-3 py-2 text-left font-semibold text-white">
-                            <button type="button" onClick={() => handleSort('name')} className="transition-colors hover:text-orange-100">
+                          <th className="w-[22%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               {getSortLabel('name', 'Tên vật tư')}
                             </button>
                           </th>
-                          <th className="w-[14%] px-3 py-2 text-left font-semibold text-white">
-                            <button type="button" onClick={() => handleSort('category')} className="transition-colors hover:text-orange-100">
+                          <th className="w-[14%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('category')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               {getSortLabel('category', 'Loại')}
                             </button>
                           </th>
-                          <th className="w-[14%] px-3 py-2 text-left font-semibold text-white">
-                            <button type="button" onClick={() => handleSort('quantityOnHand')} className="transition-colors hover:text-orange-100">
+                          <th className="w-[14%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
+                            <button type="button" onClick={() => handleSort('quantityOnHand')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               Tồn theo HSD
                             </button>
                           </th>
-                          <th className="w-[10%] px-3 py-2 text-right font-semibold text-white">Ngưỡng báo</th>
-                          <th className="w-[12%] px-3 py-2 text-right font-semibold text-white">Đơn giá</th>
-                          <th className="w-[12%] px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
-                          <th className="w-[8%] px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
-                          <th className="w-[8%] px-3 py-2 text-right font-semibold text-white">Hành động</th>
+                          <th className="w-[10%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Ngưỡng báo</th>
+                          <th className="w-[12%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Đơn giá</th>
+                          <th className="w-[12%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
+                          <th className="w-[8%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
+                          <th className="w-[8%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Hành động</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
@@ -2510,17 +2551,17 @@ function AssetManagement({ restrictToConsumable = false }) {
                   {selectedOverviewLocationId && (
                     <div className="overflow-hidden rounded-2xl border border-slate-200">
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <table className="min-w-max divide-y divide-slate-200 text-sm">
                         <thead className="bg-slate-100/80">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên vật tư</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Đơn vị</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Lần cấp gần nhất</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Tồn tại phòng</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Đã cấp</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Đã dùng</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
-                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Hành động</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tên vật tư</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đơn vị</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Lần cấp gần nhất</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tồn tại phòng</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã cấp</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã dùng</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
+                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hành động</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -2762,14 +2803,14 @@ function AssetManagement({ restrictToConsumable = false }) {
                     <table className="min-w-[1120px] text-sm">
                       <thead className="bg-slate-100/80 dark:bg-slate-900/70">
                         <tr>
-                          <th className="w-[8%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Phiếu</th>
-                          <th className="w-[20%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Vật tư</th>
-                          <th className="w-[12%] px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng</th>
-                          <th className="w-[10%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Số lô</th>
-                          <th className="w-[16%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Người đề nghị</th>
-                          <th className="w-[10%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>
-                          <th className="w-[14%] px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Xử lý</th>
-                          <th className="w-[10%] px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Hành động</th>
+                          <th className="w-[8%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Phiếu</th>
+                          <th className="w-[20%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Vật tư</th>
+                          <th className="w-[12%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng</th>
+                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Số lô</th>
+                          <th className="w-[16%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Người đề nghị</th>
+                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>
+                          <th className="w-[14%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Xử lý</th>
+                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Hành động</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -3164,38 +3205,38 @@ function AssetManagement({ restrictToConsumable = false }) {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <table className="min-w-max divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('qaCode')} className="hover:text-fptOrange">
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                    <button type="button" onClick={() => handleSort('qaCode')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('qaCode', 'Mã QA')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                    <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('name', 'Tên thiết bị')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('category')} className="hover:text-fptOrange">
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                    <button type="button" onClick={() => handleSort('category')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('category', 'Loại')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('homeLocationName')} className="hover:text-fptOrange">
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                    <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('homeLocationName', 'Vị trí')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('status')} className="hover:text-fptOrange">
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                    <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('status', 'Tình trạng kỹ thuật')}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>
-                  <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -3217,12 +3258,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                         <td className="px-3 py-2">{asset.category}</td>
                         <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>
                         <td className="px-3 py-2">
-                          <div className="space-y-1">
-                            <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
-                            {asset.status && asset.status !== asset.technicalStatus && asset.status !== 'Hoạt động tốt' && (
-                              <p className="text-xs text-slate-500">Hiển thị: {getAssetStatusLabel(asset.status)}</p>
-                            )}
-                          </div>
+                          <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
                         </td>
                         <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>
                         <td className="px-3 py-2">
@@ -4870,6 +4906,17 @@ function AssetManagement({ restrictToConsumable = false }) {
         }}
         assetQaCode={timelineAsset?.qaCode}
         assetName={timelineAsset?.name}
+      />
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
       />
     </div>
   )

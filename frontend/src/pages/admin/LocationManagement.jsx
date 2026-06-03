@@ -1,19 +1,36 @@
-import { IconInfoCircle as InfoCircle, IconLayersIntersect as Layers, IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
+import { IconInfoCircle as InfoCircle, IconLayersIntersect as Layers, IconPlus as Plus, IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
 
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
+
 function LocationManagement() {
   const [locations, setLocations] = useState([])
+  const [selectedLocationIds, setSelectedLocationIds] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
   const [showFloorModal, setShowFloorModal] = useState(false)
+  const [autoSelectCreatedFloor, setAutoSelectCreatedFloor] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [selectedLocationId, setSelectedLocationId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [floors, setFloors] = useState([])
@@ -42,6 +59,11 @@ function LocationManagement() {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedLocations.slice(start, start + PAGE_SIZE)
   }, [sortedLocations, currentPage])
+  const selectedLocationIdSet = useMemo(() => new Set(selectedLocationIds), [selectedLocationIds])
+  const paginatedLocationIds = useMemo(() => paginatedLocations.map((location) => location.id), [paginatedLocations])
+  const selectedLocationCount = selectedLocationIds.length
+  const allPaginatedLocationsSelected = paginatedLocationIds.length > 0
+    && paginatedLocationIds.every((id) => selectedLocationIdSet.has(id))
 
   const loadLocations = useCallback(async (nextFilters = filters) => {
     setLoading(true)
@@ -80,6 +102,10 @@ function LocationManagement() {
     }
   }, [loadFloors, loadLocations])
 
+  useEffect(() => {
+    setSelectedLocationIds((previous) => previous.filter((id) => locations.some((location) => location.id === id)))
+  }, [locations])
+
   const resetForm = () => {
     setSelectedLocationId(null)
     setForm({ roomName: '', floorId: '', hasAsset: true })
@@ -88,6 +114,13 @@ function LocationManagement() {
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
+  }
+
+  const openCreateFloorModal = (options = {}) => {
+    const shouldAutoSelect = options.autoSelect === true
+    setAutoSelectCreatedFloor(shouldAutoSelect)
+    setFloorForm({ name: '', gridRows: 12, gridCols: 20 })
+    setShowFloorModal(true)
   }
 
   const openCreateModal = () => {
@@ -103,6 +136,26 @@ function LocationManagement() {
       hasAsset: location.hasAsset !== false,
     })
     setShowFormModal(true)
+  }
+
+  const toggleLocationSelection = (locationId) => {
+    setSelectedLocationIds((previous) => (
+      previous.includes(locationId)
+        ? previous.filter((id) => id !== locationId)
+        : [...previous, locationId]
+    ))
+  }
+
+  const togglePaginatedLocationSelection = () => {
+    if (allPaginatedLocationsSelected) {
+      setSelectedLocationIds((previous) => previous.filter((id) => !paginatedLocationIds.includes(id)))
+      return
+    }
+    setSelectedLocationIds((previous) => {
+      const nextIds = new Set(previous)
+      paginatedLocationIds.forEach((id) => nextIds.add(id))
+      return Array.from(nextIds)
+    })
   }
 
   const handleCreate = async () => {
@@ -154,22 +207,83 @@ function LocationManagement() {
 
   const handleDelete = async (id = selectedLocationId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa phòng hoặc khu vực này?')
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/locations/${id}`)
-      toast.success('Xóa phòng thành công.')
-      if (id === selectedLocationId) {
-        closeFormModal()
-      }
-      await loadLocations()
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa phòng thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa phòng hoặc khu vực',
+      message: 'Bạn có chắc muốn xóa phòng hoặc khu vực này?',
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/locations/${id}`)
+          toast.success('Xóa phòng thành công.')
+          if (id === selectedLocationId) {
+            closeFormModal()
+          }
+          await loadLocations()
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa phòng thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const handleBulkDelete = async () => {
+    if (!selectedLocationIds.length) return
+    const idsToDelete = [...selectedLocationIds]
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa nhiều phòng hoặc khu vực',
+      message: `Bạn có chắc muốn xóa ${idsToDelete.length} phòng hoặc khu vực đã chọn?`,
+      confirmLabel: 'Xóa hàng loạt',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          const response = await axiosClient.post('/api/locations/bulk-delete', {
+            ids: idsToDelete,
+          })
+          toast.success(response?.data?.message || `Xóa ${idsToDelete.length} phòng thành công.`)
+          if (selectedLocationId && idsToDelete.includes(selectedLocationId)) {
+            closeFormModal()
+          }
+          setSelectedLocationIds([])
+          await loadLocations()
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa hàng loạt phòng thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleResetFilters = async () => {
@@ -185,15 +299,20 @@ function LocationManagement() {
     }
     setSubmitting(true)
     try {
-      await axiosClient.post('/api/asset-map/floors', {
+      const response = await axiosClient.post('/api/asset-map/floors', {
         name: floorForm.name.trim(),
         gridRows: Number(floorForm.gridRows) || 12,
         gridCols: Number(floorForm.gridCols) || 20,
       })
+      const createdFloor = response.data
       toast.success('Thêm tầng thành công.')
       setShowFloorModal(false)
       setFloorForm({ name: '', gridRows: 12, gridCols: 20 })
       await loadFloors()
+      if (autoSelectCreatedFloor && createdFloor?.id != null) {
+        setForm((prev) => ({ ...prev, floorId: String(createdFloor.id) }))
+      }
+      setAutoSelectCreatedFloor(false)
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm tầng thất bại.'
       toast.error(message)
@@ -213,7 +332,7 @@ function LocationManagement() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setShowFloorModal(true)}
+              onClick={() => openCreateFloorModal()}
               disabled={submitting}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -238,6 +357,30 @@ function LocationManagement() {
             </button>
           </div>
         </div>
+
+        {selectedLocationCount > 0 && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <span>Đã chọn {selectedLocationCount} dòng.</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedLocationIds([])}
+                className="rounded-lg border border-amber-300 px-3 py-1.5 font-semibold hover:bg-amber-100"
+              >
+                Bỏ chọn
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                <Trash2 size={16} />
+                Xóa đã chọn
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr]">
           <input
@@ -273,27 +416,40 @@ function LocationManagement() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/70">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={allPaginatedLocationsSelected}
+                    onChange={togglePaginatedLocationSelection}
+                    disabled={!paginatedLocationIds.length}
+                    aria-label="Chọn tất cả dòng trong trang hiện tại"
+                    className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                  />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('id', 'ID')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('roomName')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('roomName')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('roomName', 'Tên phòng / khu vực')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tầng</th>
-                <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tầng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading &&
                 Array.from({ length: 5 }).map((_, index) => (
                   <tr key={`location-skeleton-${index}`} className="animate-pulse">
+                    <td className="px-3 py-2">
+                      <div className="h-4 w-4 rounded bg-slate-200" />
+                    </td>
                     <td className="px-3 py-2">
                       <div className="h-4 w-12 rounded bg-slate-200" />
                     </td>
@@ -311,6 +467,15 @@ function LocationManagement() {
               {!loading &&
                 paginatedLocations.map((location) => (
                   <tr key={location.id}>
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedLocationIdSet.has(location.id)}
+                        onChange={() => toggleLocationSelection(location.id)}
+                        aria-label={`Chọn phòng ${location.roomName}`}
+                        className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                      />
+                    </td>
                     <td className="px-3 py-2">{location.id}</td>
                     <td className="px-3 py-2">{location.roomName}</td>
                     <td className="px-3 py-2">
@@ -342,7 +507,7 @@ function LocationManagement() {
                 ))}
               {!loading && locations.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có phòng hoặc khu vực phù hợp.
                   </td>
                 </tr>
@@ -438,7 +603,18 @@ function LocationManagement() {
             </div>
 
             <div className="mt-3">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Tầng</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="block text-sm font-medium text-slate-700">Tầng</label>
+                <button
+                  type="button"
+                  onClick={() => openCreateFloorModal({ autoSelect: true })}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700 transition hover:bg-slate-100"
+                  title="Thêm tầng mới"
+                  aria-label="Thêm tầng mới"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
               <select
                 value={form.floorId}
                 onChange={(e) => setForm((prev) => ({ ...prev, floorId: e.target.value }))}
@@ -496,13 +672,16 @@ function LocationManagement() {
       )}
 
       {showFloorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900">
             <div className="mb-3 flex items-center justify-between">
               <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">Thêm tầng mới</h4>
               <button
                 type="button"
-                onClick={() => setShowFloorModal(false)}
+                onClick={() => {
+                  setShowFloorModal(false)
+                  setAutoSelectCreatedFloor(false)
+                }}
                 className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Đóng
@@ -554,6 +733,18 @@ function LocationManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

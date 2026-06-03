@@ -21,6 +21,11 @@ public class RoomShapeSaveRequest {
     @Builder.Default
     private List<String> cells = List.of();
 
+    @Builder.Default
+    private List<AssetMapPointDto> points = List.of();
+
+    private AssetMapBoundsDto bounds;
+
     @Size(max = 20, message = "Mau phong khong hop le.")
     private String colorHex;
 

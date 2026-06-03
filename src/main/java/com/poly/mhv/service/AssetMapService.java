@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poly.mhv.dto.assetmap.AssetMapAssetResponse;
+import com.poly.mhv.dto.assetmap.AssetMapBoundsDto;
 import com.poly.mhv.dto.assetmap.AssetMapBootstrapResponse;
+import com.poly.mhv.dto.assetmap.AssetMapPointDto;
 import com.poly.mhv.dto.assetmap.FloorLayoutSaveRequest;
 import com.poly.mhv.dto.assetmap.MapFloorCreateRequest;
 import com.poly.mhv.dto.assetmap.MapFloorResponse;
@@ -13,6 +15,7 @@ import com.poly.mhv.dto.assetmap.RoomShapeResponse;
 import com.poly.mhv.dto.assetmap.RoomShapeSaveRequest;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.MapFloor;
+import com.poly.mhv.entity.MapFloorMode;
 import com.poly.mhv.entity.RoomShape;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
@@ -89,13 +92,19 @@ public class AssetMapService {
         if (mapFloorRepository.existsByNameIgnoreCase(normalizedName)) {
             throw new CustomException("Ten tang da ton tai.");
         }
+        MapFloorMode floorMode = normalizeFloorMode(request.getMode(), MapFloorMode.GRID);
         MapFloor floor = MapFloor.builder()
                 .name(normalizedName)
                 .gridRows(normalizeGridSize(request.getGridRows(), 12, "So hang"))
                 .gridCols(normalizeGridSize(request.getGridCols(), 20, "So cot"))
                 .canvasBackgroundColor(normalizeColor(request.getCanvasBackgroundColor(), "#FFFFFF", "Mau nen canvas"))
+                .mode(floorMode)
+                .backgroundImageUrl(StringUtils.hasText(request.getBackgroundImageUrl()) ? request.getBackgroundImageUrl().trim() : null)
+                .imageWidth(request.getImageWidth())
+                .imageHeight(request.getImageHeight())
                 .sortOrder(resolveSortOrder(request.getSortOrder()))
                 .build();
+        validateFloorMetadata(floor);
         return mapFloor(mapFloorRepository.save(floor), List.of());
     }
 
@@ -108,7 +117,9 @@ public class AssetMapService {
         }
         Integer nextGridRows = normalizeGridSize(request.getGridRows(), floor.getGridRows(), "So hang");
         Integer nextGridCols = normalizeGridSize(request.getGridCols(), floor.getGridCols(), "So cot");
-        validateFloorBounds(floorId, nextGridRows, nextGridCols);
+        if (!isImageFloor(floor)) {
+            validateFloorBounds(floorId, nextGridRows, nextGridCols);
+        }
         floor.setName(normalizedName);
         floor.setGridRows(nextGridRows);
         floor.setGridCols(nextGridCols);
@@ -117,7 +128,13 @@ public class AssetMapService {
                 floor.getCanvasBackgroundColor(),
                 "Mau nen canvas"
         ));
+        floor.setBackgroundImageUrl(StringUtils.hasText(request.getBackgroundImageUrl())
+                ? request.getBackgroundImageUrl().trim()
+                : floor.getBackgroundImageUrl());
+        floor.setImageWidth(request.getImageWidth() != null ? request.getImageWidth() : floor.getImageWidth());
+        floor.setImageHeight(request.getImageHeight() != null ? request.getImageHeight() : floor.getImageHeight());
         floor.setSortOrder(resolveSortOrder(request.getSortOrder(), floor.getSortOrder()));
+        validateFloorMetadata(floor);
         MapFloor savedFloor = mapFloorRepository.save(floor);
         List<RoomShapeResponse> roomShapes = roomShapeRepository.findByFloorIdOrderByIdAsc(floorId).stream()
                 .map(this::mapRoomShape)
@@ -128,11 +145,16 @@ public class AssetMapService {
     @Transactional
     public void deleteFloor(Integer floorId) {
         MapFloor floor = getFloorOrThrow(floorId);
-        if (locationRepository.countByFloorId(floorId) > 0) {
-            throw new CustomException("Khong the xoa tang dang duoc gan cho phong.");
+        List<RoomShape> roomShapes = roomShapeRepository.findByFloorIdOrderByIdAsc(floorId);
+        if (!roomShapes.isEmpty()) {
+            roomShapeRepository.deleteAll(roomShapes);
         }
-        if (roomShapeRepository.countByFloorId(floorId) > 0) {
-            throw new CustomException("Khong the xoa tang dang co so do phong.");
+        List<Location> locations = locationRepository.findByFloorIdOrderByRoomNameAsc(floorId);
+        for (Location location : locations) {
+            location.setFloor(null);
+        }
+        if (!locations.isEmpty()) {
+            locationRepository.saveAll(locations);
         }
         mapFloorRepository.delete(floor);
     }
@@ -150,17 +172,24 @@ public class AssetMapService {
         Set<Integer> usedLocationIds = new HashSet<>();
         Set<Long> retainedShapeIds = new HashSet<>();
         List<RoomShape> shapesToSave = new ArrayList<>();
+        boolean imageFloor = isImageFloor(floor);
         List<RoomShapeSaveRequest> shapeRequests = request != null && request.getRoomShapes() != null
                 ? request.getRoomShapes()
                 : List.of();
 
         for (RoomShapeSaveRequest shapeRequest : shapeRequests) {
-            List<String> cells = normalizeCells(shapeRequest.getCells(), floor.getGridRows(), floor.getGridCols());
-            for (String cell : cells) {
-                if (!usedCells.add(cell)) {
-                    throw new CustomException("Co o vuong bi trung giua nhieu phong.");
+            List<String> cells = imageFloor
+                    ? List.of()
+                    : normalizeCells(shapeRequest.getCells(), floor.getGridRows(), floor.getGridCols());
+            if (!imageFloor) {
+                for (String cell : cells) {
+                    if (!usedCells.add(cell)) {
+                        throw new CustomException("Co o vuong bi trung giua nhieu phong.");
+                    }
                 }
             }
+            List<AssetMapPointDto> points = imageFloor ? normalizeImagePoints(shapeRequest.getPoints()) : List.of();
+            AssetMapBoundsDto bounds = imageFloor ? normalizeImageBounds(shapeRequest.getBounds(), points) : null;
 
             Location location = resolveLocation(shapeRequest, floor);
             if (!usedLocationIds.add(location.getId())) {
@@ -171,6 +200,8 @@ public class AssetMapService {
             roomShape.setFloor(floor);
             roomShape.setLocation(location);
             roomShape.setCellsJson(writeCells(cells));
+            roomShape.setPolygonJson(imageFloor ? writePoints(points) : null);
+            roomShape.setBoundsJson(imageFloor ? writeBounds(bounds) : null);
             roomShape.setColorHex(normalizeColor(shapeRequest.getColorHex(), null, "Mau phong"));
             shapesToSave.add(roomShape);
             if (roomShape.getId() != null) {
@@ -335,6 +366,33 @@ public class AssetMapService {
         return resolved;
     }
 
+    private MapFloorMode normalizeFloorMode(String value, MapFloorMode fallback) {
+        if (!StringUtils.hasText(value)) {
+            return fallback;
+        }
+        try {
+            return MapFloorMode.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new CustomException("Che do tang khong hop le.");
+        }
+    }
+
+    private void validateFloorMetadata(MapFloor floor) {
+        if (floor == null || !isImageFloor(floor)) {
+            return;
+        }
+        if (!StringUtils.hasText(floor.getBackgroundImageUrl())) {
+            throw new CustomException("Tang kieu anh phai co anh nen so do.");
+        }
+        if (floor.getImageWidth() == null || floor.getImageWidth() < 1 || floor.getImageHeight() == null || floor.getImageHeight() < 1) {
+            throw new CustomException("Kich thuoc anh nen so do khong hop le.");
+        }
+    }
+
+    private boolean isImageFloor(MapFloor floor) {
+        return floor != null && floor.getMode() == MapFloorMode.IMAGE;
+    }
+
     private Integer resolveSortOrder(Integer requestedSortOrder) {
         return resolveSortOrder(requestedSortOrder, nextSortOrder());
     }
@@ -366,6 +424,8 @@ public class AssetMapService {
                 .roomName(shape.getLocation().getRoomName())
                 .hasAsset(resolveHasAsset(shape.getLocation()))
                 .cells(readCells(shape.getCellsJson()))
+                .points(readPoints(shape.getPolygonJson()))
+                .bounds(readBounds(shape.getBoundsJson()))
                 .colorHex(shape.getColorHex())
                 .build();
     }
@@ -375,9 +435,13 @@ public class AssetMapService {
                 .id(floor.getId())
                 .name(floor.getName())
                 .sortOrder(floor.getSortOrder())
+                .mode((floor.getMode() != null ? floor.getMode() : MapFloorMode.GRID).name())
                 .gridRows(floor.getGridRows())
                 .gridCols(floor.getGridCols())
                 .canvasBackgroundColor(normalizeColor(floor.getCanvasBackgroundColor(), "#FFFFFF", "Mau nen canvas"))
+                .backgroundImageUrl(floor.getBackgroundImageUrl())
+                .imageWidth(floor.getImageWidth())
+                .imageHeight(floor.getImageHeight())
                 .roomShapes(roomShapes)
                 .build();
     }
@@ -398,6 +462,98 @@ public class AssetMapService {
             return objectMapper.writeValueAsString(cells);
         } catch (JsonProcessingException ex) {
             throw new CustomException("Khong the luu du lieu o vuong cua so do.");
+        }
+    }
+
+    private List<AssetMapPointDto> normalizeImagePoints(List<AssetMapPointDto> points) {
+        if (points == null || points.isEmpty()) {
+            return List.of();
+        }
+        List<AssetMapPointDto> normalized = new ArrayList<>();
+        for (AssetMapPointDto point : points) {
+            if (point == null || !Double.isFinite(point.getX()) || !Double.isFinite(point.getY())) {
+                throw new CustomException("Toa do diem cua phong tren anh khong hop le.");
+            }
+            normalized.add(AssetMapPointDto.builder()
+                    .x(point.getX())
+                    .y(point.getY())
+                    .build());
+        }
+        return List.copyOf(normalized);
+    }
+
+    private AssetMapBoundsDto normalizeImageBounds(AssetMapBoundsDto bounds, List<AssetMapPointDto> points) {
+        if (bounds != null && isValidBounds(bounds)) {
+            return AssetMapBoundsDto.builder()
+                    .minX(bounds.getMinX())
+                    .minY(bounds.getMinY())
+                    .maxX(bounds.getMaxX())
+                    .maxY(bounds.getMaxY())
+                    .build();
+        }
+        if (points != null && !points.isEmpty()) {
+            double minX = points.stream().mapToDouble(AssetMapPointDto::getX).min().orElse(0d);
+            double minY = points.stream().mapToDouble(AssetMapPointDto::getY).min().orElse(0d);
+            double maxX = points.stream().mapToDouble(AssetMapPointDto::getX).max().orElse(0d);
+            double maxY = points.stream().mapToDouble(AssetMapPointDto::getY).max().orElse(0d);
+            AssetMapBoundsDto derived = AssetMapBoundsDto.builder()
+                    .minX(minX)
+                    .minY(minY)
+                    .maxX(maxX)
+                    .maxY(maxY)
+                    .build();
+            if (isValidBounds(derived)) {
+                return derived;
+            }
+        }
+        throw new CustomException("Moi phong tren anh phai co vung hinh hoc hop le.");
+    }
+
+    private boolean isValidBounds(AssetMapBoundsDto bounds) {
+        return bounds != null
+                && Double.isFinite(bounds.getMinX())
+                && Double.isFinite(bounds.getMinY())
+                && Double.isFinite(bounds.getMaxX())
+                && Double.isFinite(bounds.getMaxY())
+                && bounds.getMaxX() > bounds.getMinX()
+                && bounds.getMaxY() > bounds.getMinY();
+    }
+
+    private List<AssetMapPointDto> readPoints(String polygonJson) {
+        if (!StringUtils.hasText(polygonJson)) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(polygonJson, new TypeReference<List<AssetMapPointDto>>() {});
+        } catch (JsonProcessingException ex) {
+            throw new CustomException("Khong the doc du lieu vung da ve tren anh.");
+        }
+    }
+
+    private String writePoints(List<AssetMapPointDto> points) {
+        try {
+            return objectMapper.writeValueAsString(points != null ? points : List.of());
+        } catch (JsonProcessingException ex) {
+            throw new CustomException("Khong the luu du lieu vung da ve tren anh.");
+        }
+    }
+
+    private AssetMapBoundsDto readBounds(String boundsJson) {
+        if (!StringUtils.hasText(boundsJson)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(boundsJson, AssetMapBoundsDto.class);
+        } catch (JsonProcessingException ex) {
+            throw new CustomException("Khong the doc khung vung phong tren anh.");
+        }
+    }
+
+    private String writeBounds(AssetMapBoundsDto bounds) {
+        try {
+            return objectMapper.writeValueAsString(bounds);
+        } catch (JsonProcessingException ex) {
+            throw new CustomException("Khong the luu khung vung phong tren anh.");
         }
     }
 

@@ -98,18 +98,18 @@ function MaintenanceHistoryManagement() {
           <table className="w-max min-w-[1500px] text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left">Mã thiết bị</th>
-                <th className="px-3 py-2 text-left">Tên thiết bị</th>
-                <th className="px-3 py-2 text-left">Phòng gốc</th>
-                <th className="px-3 py-2 text-left">Phòng hiện tại</th>
-                <th className="px-3 py-2 text-left">Người báo hỏng</th>
-                <th className="px-3 py-2 text-left">Chi tiết hỏng</th>
-                <th className="px-3 py-2 text-left">Ngày giờ báo hỏng</th>
-                <th className="px-3 py-2 text-left">Tình trạng kỹ thuật</th>
-                <th className="px-3 py-2 text-left">Trạng thái sử dụng</th>
-                <th className="px-3 py-2 text-left">Trạng thái hiển thị</th>
-                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="px-3 py-2 text-left">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Mã thiết bị</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Tên thiết bị</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng gốc</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng hiện tại</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Người báo hỏng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Chi tiết hỏng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ngày giờ báo hỏng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Tình trạng kỹ thuật</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái sử dụng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái hiển thị</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Ảnh lỗi</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
             <tbody>

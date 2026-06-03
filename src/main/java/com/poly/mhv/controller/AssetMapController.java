@@ -6,6 +6,10 @@ import com.poly.mhv.dto.assetmap.FloorLayoutSaveRequest;
 import com.poly.mhv.dto.assetmap.MapFloorCreateRequest;
 import com.poly.mhv.dto.assetmap.MapFloorResponse;
 import com.poly.mhv.dto.assetmap.MapFloorUpdateRequest;
+import com.poly.mhv.dto.assetmapimport.AssetMapImportAnalyzeResponse;
+import com.poly.mhv.dto.assetmapimport.AssetMapImportApplyRequest;
+import com.poly.mhv.dto.assetmapimport.AssetMapImportApplyResponse;
+import com.poly.mhv.service.AssetMapImportService;
 import com.poly.mhv.service.AssetMapService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/api/asset-map", "/asset-map"})
@@ -36,9 +41,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AssetMapController {
 
     private final AssetMapService assetMapService;
+    private final AssetMapImportService assetMapImportService;
 
-    public AssetMapController(AssetMapService assetMapService) {
+    public AssetMapController(AssetMapService assetMapService, AssetMapImportService assetMapImportService) {
         this.assetMapService = assetMapService;
+        this.assetMapImportService = assetMapImportService;
     }
 
     @GetMapping("/bootstrap")
@@ -98,5 +105,27 @@ public class AssetMapController {
             @RequestParam(required = false) String trackingMode
     ) {
         return ResponseEntity.ok(assetMapService.searchAssets(keyword, categoryId, locationId, floorId, trackingMode));
+    }
+
+    @PostMapping("/imports/analyze")
+    @Operation(summary = "Upload anh nen so do", description = "Nhan anh PNG/JPG/JPEG, luu preview va metadata kich thuoc de admin tao tang IMAGE roi tu ve phong tren anh.")
+    public ResponseEntity<AssetMapImportAnalyzeResponse> analyzeImport(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(assetMapImportService.analyzeImportImage(file));
+    }
+
+    @PostMapping("/imports/{sessionId}/apply")
+    @Operation(summary = "Tao tang IMAGE tu anh da chon", description = "Dung anh da upload lam nen so do, tao MapFloor kieu IMAGE va khong tu sinh phong/vung nao.")
+    public ResponseEntity<AssetMapImportApplyResponse> applyImport(
+            @PathVariable String sessionId,
+            @Valid @RequestBody AssetMapImportApplyRequest request
+    ) {
+        return ResponseEntity.ok(assetMapImportService.applyImportSession(sessionId, request.getDrawingIds()));
+    }
+
+    @DeleteMapping("/imports/{sessionId}")
+    @Operation(summary = "Xoa phien import tam", description = "Xoa du lieu import tam tren local disk sau khi dong modal hoac tao so do xong.")
+    public ResponseEntity<Void> deleteImportSession(@PathVariable String sessionId) {
+        assetMapImportService.deleteSession(sessionId);
+        return ResponseEntity.noContent().build();
     }
 }

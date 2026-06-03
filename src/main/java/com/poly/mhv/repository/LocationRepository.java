@@ -14,6 +14,7 @@ public interface LocationRepository extends JpaRepository<Location, Integer> {
     boolean existsByRoomNameIgnoreCase(String roomName);
     boolean existsByRoomNameIgnoreCaseAndIdNot(String roomName, Integer id);
     long countByFloorId(Integer floorId);
+    List<Location> findByFloorIdOrderByRoomNameAsc(Integer floorId);
 
     List<Location> findByHasAssetTrueOrderByRoomNameAsc();
 

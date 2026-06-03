@@ -43,6 +43,12 @@ public class RoomShape {
     @Column(name = "cells_json", columnDefinition = "TEXT", nullable = false)
     private String cellsJson;
 
+    @Column(name = "polygon_json", columnDefinition = "TEXT")
+    private String polygonJson;
+
+    @Column(name = "bounds_json", columnDefinition = "TEXT")
+    private String boundsJson;
+
     @Column(name = "color_hex", length = 20)
     private String colorHex;
 

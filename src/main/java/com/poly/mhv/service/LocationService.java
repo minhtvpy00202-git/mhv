@@ -6,11 +6,13 @@ import com.poly.mhv.dto.location.LocationUpdateRequest;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.MapFloor;
 import com.poly.mhv.exception.CustomException;
+import java.util.LinkedHashSet;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.MapFloorRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
 import java.util.List;
+import java.util.Set;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -106,19 +108,30 @@ public class LocationService {
 
     @Transactional
     public void deleteLocation(Integer id) {
-        Location location = getLocationOrThrow(id);
-        long linkedAssets = assetRepository.countByLocationIdOrHomeLocationId(id, id);
-        if (linkedAssets > 0) {
-            throw new CustomException("Không thể xóa phòng đang được gán cho " + linkedAssets + " thiết bị.");
-        }
-
-        long linkedUsageHistories = usageHistoryRepository.countByFromLocationIdOrToLocationId(id, id);
-        if (linkedUsageHistories > 0) {
-            throw new CustomException("Không thể xóa phòng đã phát sinh lịch sử mượn trả.");
-        }
-
-        locationRepository.delete(location);
+        deleteLocationInternal(getLocationOrThrow(id));
         invalidateLocationCache();
+    }
+
+    @Transactional
+    public int deleteLocations(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new CustomException("Can chon it nhat mot phong de xoa.");
+        }
+
+        Set<Integer> uniqueIds = new LinkedHashSet<>(ids.stream()
+                .filter(id -> id != null)
+                .toList());
+        if (uniqueIds.isEmpty()) {
+            throw new CustomException("Can chon it nhat mot phong hop le de xoa.");
+        }
+
+        List<Location> locations = uniqueIds.stream()
+                .map(this::getLocationOrThrow)
+                .toList();
+        locations.forEach(this::validateLocationDeletion);
+        locationRepository.deleteAll(locations);
+        invalidateLocationCache();
+        return locations.size();
     }
 
     private void invalidateLocationCache() {
@@ -138,6 +151,24 @@ public class LocationService {
     private Location getLocationOrThrow(Integer id) {
         return locationRepository.findById(id)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + id));
+    }
+
+    private void deleteLocationInternal(Location location) {
+        validateLocationDeletion(location);
+        locationRepository.delete(location);
+    }
+
+    private void validateLocationDeletion(Location location) {
+        Integer id = location.getId();
+        long linkedAssets = assetRepository.countByLocationIdOrHomeLocationId(id, id);
+        if (linkedAssets > 0) {
+            throw new CustomException("Không thể xóa phòng đang được gán cho " + linkedAssets + " thiết bị.");
+        }
+
+        long linkedUsageHistories = usageHistoryRepository.countByFromLocationIdOrToLocationId(id, id);
+        if (linkedUsageHistories > 0) {
+            throw new CustomException("Không thể xóa phòng đã phát sinh lịch sử mượn trả.");
+        }
     }
 
     private MapFloor resolveFloor(Integer floorId) {

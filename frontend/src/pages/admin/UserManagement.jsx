@@ -4,6 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDate } from '../../utils/datetime'
 
@@ -28,12 +29,26 @@ function getUserSortValue(user, key) {
 const statusOptions = ['Hoạt động', 'Khóa']
 const PAGE_SIZE = 10
 
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
+
 function UserManagement() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [showFormModal, setShowFormModal] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [techRoleOptions, setTechRoleOptions] = useState([])
   const [pageInfo, setPageInfo] = useState({
     page: 0,
@@ -224,22 +239,48 @@ function UserManagement() {
 
   const handleDelete = async (id = selectedUserId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa tài khoản này?')
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/users/${id}`)
-      toast.success('Xóa tài khoản thành công.')
-      if (id === selectedUserId) {
-        closeFormModal()
-      }
-      await loadUsers(pageInfo.page)
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa tài khoản thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa tài khoản',
+      message: 'Bạn có chắc muốn xóa tài khoản này?',
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/users/${id}`)
+          toast.success('Xóa tài khoản thành công.')
+          if (id === selectedUserId) {
+            closeFormModal()
+          }
+          await loadUsers(pageInfo.page)
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa tài khoản thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const currentPage = pageInfo.page + 1
@@ -312,45 +353,45 @@ function UserManagement() {
         </div>
 
         <div className="overflow-auto rounded-lg border border-slate-200">
-          <table className="min-w-full text-sm">
+          <table className="min-w-max text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('username')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('username')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('username', 'Username')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('fullName')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('fullName')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('fullName', 'Họ tên')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('birthday')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('birthday')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('birthday', 'Ngày sinh')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('phone')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('phone')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('phone', 'Số điện thoại')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('roleLabel')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('roleLabel')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('roleLabel', 'Vai trò')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('techTypeDisplay')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('techTypeDisplay')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('techTypeDisplay', 'Chuyên môn kỹ thuật')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('status')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left">
+                  <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('status', 'Trạng thái')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -598,6 +639,18 @@ function UserManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

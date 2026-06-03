@@ -1,6 +1,7 @@
 package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.location.LocationCreateRequest;
+import com.poly.mhv.dto.location.LocationBulkDeleteRequest;
 import com.poly.mhv.dto.location.LocationResponse;
 import com.poly.mhv.dto.location.LocationUpdateRequest;
 import com.poly.mhv.service.LocationService;
@@ -96,5 +97,15 @@ public class LocationController {
     public ResponseEntity<Map<String, String>> deleteLocation(@PathVariable Integer id) {
         locationService.deleteLocation(id);
         return ResponseEntity.ok(Map.of("message", "Xóa phòng thành công."));
+    }
+
+    @PostMapping("/bulk-delete")
+    @Operation(summary = "Xóa nhiều phòng", description = "Xóa hàng loạt phòng nếu tất cả phòng đã chọn đều không bị ràng buộc bởi thiết bị hoặc lịch sử mượn trả.")
+    public ResponseEntity<Map<String, Object>> bulkDeleteLocations(@Valid @RequestBody LocationBulkDeleteRequest request) {
+        int deletedCount = locationService.deleteLocations(request.getIds());
+        return ResponseEntity.ok(Map.of(
+                "message", "Xóa " + deletedCount + " phòng thành công.",
+                "deletedCount", deletedCount
+        ));
     }
 }

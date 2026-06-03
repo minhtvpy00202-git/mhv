@@ -3,10 +3,24 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useTableSort } from '../../hooks/useTableSort'
 import { validateSupplierForm } from '../../utils/validation'
 
 const PAGE_SIZE = 10
+
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
 
 function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
@@ -18,6 +32,7 @@ function SupplierManagement() {
   const [submitting, setSubmitting] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState({ keyword: '' })
   const [form, setForm] = useState({ name: '', address: '', phoneNumber: '' })
@@ -134,22 +149,48 @@ function SupplierManagement() {
 
   const handleDelete = async (id = selectedId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa nhà cung cấp này?')
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/suppliers/${id}`)
-      toast.success('Xóa nhà cung cấp thành công.')
-      if (id === selectedId) {
-        closeFormModal()
-      }
-      await loadItems()
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa nhà cung cấp thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa nhà cung cấp',
+      message: 'Bạn có chắc muốn xóa nhà cung cấp này?',
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/suppliers/${id}`)
+          toast.success('Xóa nhà cung cấp thành công.')
+          if (id === selectedId) {
+            closeFormModal()
+          }
+          await loadItems()
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa nhà cung cấp thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleResetFilters = async () => {
@@ -219,35 +260,35 @@ function SupplierManagement() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('id', 'ID')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('name', 'Tên nhà cung cấp')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('phoneNumber')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('phoneNumber')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('phoneNumber', 'Số điện thoại')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('address')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('address')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('address', 'Địa chỉ')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('assetCount')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('assetCount')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('assetCount', 'Thiết bị đang dùng')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -403,6 +444,18 @@ function SupplierManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

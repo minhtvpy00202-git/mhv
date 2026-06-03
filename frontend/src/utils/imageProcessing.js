@@ -7,15 +7,6 @@ function canvasToBlob(canvas, quality) {
   })
 }
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('read-failed'))
-    reader.readAsDataURL(blob)
-  })
-}
-
 async function fileToBitmapOrImage(file) {
   if (typeof createImageBitmap === 'function') {
     try {
@@ -48,11 +39,6 @@ async function fileToBitmapOrImage(file) {
     }
     img.src = url
   })
-}
-
-export async function compressImageForUpload(file) {
-  const blob = await compressImageToBlob(file)
-  return blobToDataUrl(blob)
 }
 
 export async function compressImageToBlob(file) {

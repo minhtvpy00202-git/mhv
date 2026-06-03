@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { formatVietnamDateTime, getFutureDateTimeLocalValue } from '../../utils/datetime'
 
 const PAGE_SIZE = 10
@@ -11,10 +12,24 @@ const defaultPageInfo = {
   totalItems: 0,
 }
 
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xác nhận',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
+
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
   const [audits, setAudits] = useState([])
   const [selectedAudit, setSelectedAudit] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [form, setForm] = useState({ locationId: '', dueDate: getFutureDateTimeLocalValue(24), notes: '' })
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -119,16 +134,42 @@ function InventoryAuditManagement() {
   }
 
   const handleResolveLost = async (qaCode) => {
-    const confirmed = window.confirm(`Xác nhận mất hẳn thiết bị ${qaCode}? Thiết bị sẽ bị xóa khỏi hệ thống.`)
-    if (!confirmed) return
-    try {
-      const response = await axiosClient.post(`/api/inventory-audits/${selectedAudit.summary.id}/missing/${qaCode}/lost`)
-      setSelectedAudit(response.data)
-      toast.success(`Đã chốt mất hẳn thiết bị ${qaCode}.`)
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể chốt mất hẳn thiết bị.'
-      toast.error(message)
+    setConfirmDialog({
+      open: true,
+      title: 'Xác nhận mất hẳn thiết bị',
+      message: `Bạn có chắc muốn chốt mất hẳn thiết bị ${qaCode}? Thiết bị sẽ bị xóa khỏi hệ thống.`,
+      confirmLabel: 'Xác nhận mất',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        try {
+          const response = await axiosClient.post(`/api/inventory-audits/${selectedAudit.summary.id}/missing/${qaCode}/lost`)
+          setSelectedAudit(response.data)
+          toast.success(`Đã chốt mất hẳn thiết bị ${qaCode}.`)
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Không thể chốt mất hẳn thiết bị.'
+          toast.error(message)
+          return false
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleExportReport = async () => {
@@ -198,16 +239,16 @@ function InventoryAuditManagement() {
           <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã phiên</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Bắt đầu</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Hạn hoàn tất</th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Kết thúc</th>
-                <th className="px-3 py-2 text-right font-semibold text-slate-600">Chi tiết</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Mã phiên</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Phòng</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Bắt đầu</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hạn hoàn tất</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Kết thúc</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -371,6 +412,18 @@ function InventoryAuditManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

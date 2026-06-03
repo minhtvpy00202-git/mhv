@@ -3,9 +3,23 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
+
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
 
 function TechSupportTypeManagement() {
   const [items, setItems] = useState([])
@@ -13,6 +27,7 @@ function TechSupportTypeManagement() {
   const [submitting, setSubmitting] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState({
     keyword: '',
@@ -115,22 +130,48 @@ function TechSupportTypeManagement() {
 
   const handleDelete = async (id = selectedId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa loại kỹ thuật viên này?')
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/tech-support-types/${id}`)
-      toast.success('Xóa loại kỹ thuật viên thành công.')
-      if (id === selectedId) {
-        closeFormModal()
-      }
-      await loadItems()
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa loại kỹ thuật viên thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa loại kỹ thuật viên',
+      message: 'Bạn có chắc muốn xóa loại kỹ thuật viên này?',
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/tech-support-types/${id}`)
+          toast.success('Xóa loại kỹ thuật viên thành công.')
+          if (id === selectedId) {
+            closeFormModal()
+          }
+          await loadItems()
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa loại kỹ thuật viên thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleResetFilters = async () => {
@@ -200,30 +241,30 @@ function TechSupportTypeManagement() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('id', 'ID')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('name', 'Tên loại kỹ thuật viên')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('categoryCount')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('categoryCount')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('categoryCount', 'Loại thiết bị đang dùng')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('techSupportUserCount')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('techSupportUserCount')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('techSupportUserCount', 'Tài khoản kỹ thuật viên')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -347,6 +388,18 @@ function TechSupportTypeManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

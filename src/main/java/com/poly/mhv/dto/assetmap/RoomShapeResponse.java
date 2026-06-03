@@ -18,5 +18,7 @@ public class RoomShapeResponse {
     private String roomName;
     private Boolean hasAsset;
     private List<String> cells;
+    private List<AssetMapPointDto> points;
+    private AssetMapBoundsDto bounds;
     private String colorHex;
 }

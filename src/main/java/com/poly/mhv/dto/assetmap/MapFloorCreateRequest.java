@@ -33,5 +33,14 @@ public class MapFloorCreateRequest {
     @Builder.Default
     private String canvasBackgroundColor = "#FFFFFF";
 
+    @Builder.Default
+    private String mode = "GRID";
+
+    private String backgroundImageUrl;
+
+    private Integer imageWidth;
+
+    private Integer imageHeight;
+
     private Integer sortOrder;
 }

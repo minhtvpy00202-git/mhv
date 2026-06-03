@@ -30,5 +30,11 @@ public class MapFloorUpdateRequest {
     @Size(max = 20, message = "Mau nen canvas khong hop le.")
     private String canvasBackgroundColor;
 
+    private String backgroundImageUrl;
+
+    private Integer imageWidth;
+
+    private Integer imageHeight;
+
     private Integer sortOrder;
 }

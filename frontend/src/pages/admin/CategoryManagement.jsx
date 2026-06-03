@@ -4,6 +4,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useTableSort } from '../../hooks/useTableSort'
 import { normalizeSpecTemplates } from '../../utils/assetSpecs'
 import { validateCategoryForm } from '../../utils/validation'
@@ -37,6 +38,19 @@ function getSpecTemplatesPreview(specTemplates = [], limit = 3) {
   return specTemplates.slice(0, limit)
 }
 
+function createDefaultConfirmDialog() {
+  return {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Xóa',
+    cancelLabel: 'Hủy',
+    tone: 'danger',
+    busy: false,
+    onConfirm: null,
+  }
+}
+
 function CategoryManagement() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +58,7 @@ function CategoryManagement() {
   const [showFormModal, setShowFormModal] = useState(false)
   const [showSpecsPreviewModal, setShowSpecsPreviewModal] = useState(false)
   const [selectedCategoryForSpecs, setSelectedCategoryForSpecs] = useState(null)
+  const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
   const [selectedCategoryId, setSelectedCategoryId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [techSupportTypeOptions, setTechSupportTypeOptions] = useState([])
@@ -206,22 +221,48 @@ function CategoryManagement() {
 
   const handleDelete = async (id = selectedCategoryId) => {
     if (!id) return
-    const confirmed = window.confirm('Bạn có chắc muốn xóa loại thiết bị này?')
-    if (!confirmed) return
-    setSubmitting(true)
-    try {
-      await axiosClient.delete(`/api/categories/${id}`)
-      toast.success('Xóa loại thiết bị thành công.')
-      if (id === selectedCategoryId) {
-        closeFormModal()
-      }
-      await loadCategories()
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Xóa loại thiết bị thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
+    setConfirmDialog({
+      open: true,
+      title: 'Xóa loại thiết bị',
+      message: 'Bạn có chắc muốn xóa loại thiết bị này?',
+      confirmLabel: 'Xóa',
+      cancelLabel: 'Hủy',
+      tone: 'danger',
+      busy: false,
+      onConfirm: async () => {
+        setSubmitting(true)
+        try {
+          await axiosClient.delete(`/api/categories/${id}`)
+          toast.success('Xóa loại thiết bị thành công.')
+          if (id === selectedCategoryId) {
+            closeFormModal()
+          }
+          await loadCategories()
+          return true
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Xóa loại thiết bị thất bại.'
+          toast.error(message)
+          return false
+        } finally {
+          setSubmitting(false)
+        }
+      },
+    })
+  }
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
+  }
+
+  const handleConfirmDialogAccept = async () => {
+    if (!confirmDialog.onConfirm || confirmDialog.busy) return
+    setConfirmDialog((previous) => ({ ...previous, busy: true }))
+    const shouldClose = await confirmDialog.onConfirm()
+    if (shouldClose === false) {
+      setConfirmDialog((previous) => ({ ...previous, busy: false }))
+      return
     }
+    setConfirmDialog(createDefaultConfirmDialog())
   }
 
   const handleResetFilters = async () => {
@@ -332,35 +373,35 @@ function CategoryManagement() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('id', 'ID')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('name')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('name', 'Tên loại thiết bị')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('categoryKind')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('categoryKind')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('categoryKind', 'Cách quản lý')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('techTypeName')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('techTypeName')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('specTemplateCount')} className="hover:text-fptOrange">
+                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  <button type="button" onClick={() => handleSort('specTemplateCount')} className="whitespace-nowrap hover:text-fptOrange">
                     {getSortLabel('specTemplateCount', 'Mẫu thông số kỹ thuật')}
                   </button>
                 </th>
-                <th className="px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -633,6 +674,18 @@ function CategoryManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        tone={confirmDialog.tone}
+        busy={confirmDialog.busy}
+        onConfirm={handleConfirmDialogAccept}
+        onClose={closeConfirmDialog}
+      />
     </div>
   )
 }

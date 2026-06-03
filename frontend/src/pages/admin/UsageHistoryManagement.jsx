@@ -310,43 +310,43 @@ function UsageHistoryManagement() {
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <table className="min-w-max divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">STT</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('assetQaCode')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">STT</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('assetQaCode')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('assetQaCode', 'Mã thiết bị')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('assetName')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('assetName')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('assetName', 'Tên thiết bị')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('homeLocationName')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('homeLocationName', 'Vị trí gốc')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('borrowedLocationName')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('borrowedLocationName')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('borrowedLocationName', 'Phòng mượn')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('startTime')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('startTime')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('startTime', 'Ngày mượn')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('endTime')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('endTime')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('endTime', 'Ngày trả')}
                 </button>
               </th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">Tình trạng kỹ thuật</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('borrowerFullName')} className="hover:text-fptOrange">
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tình trạng kỹ thuật</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                <button type="button" onClick={() => handleSort('borrowerFullName')} className="whitespace-nowrap hover:text-fptOrange">
                   {getSortLabel('borrowerFullName', 'Người mượn')}
                 </button>
               </th>
