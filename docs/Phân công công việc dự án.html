@@ -6,16 +6,17 @@
   <title>Phân công nhóm theo tính năng</title>
   <style>
     :root {
-      --bg: #f3f6fb;
-      --panel: #ffffff;
-      --panel-soft: #f8fbff;
-      --line: #d9e3f0;
-      --line-strong: #c5d4e8;
-      --text: #152033;
-      --muted: #5e6b82;
-      --primary: #2563eb;
-      --primary-soft: #dbeafe;
-      --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      --bg: #eef3f9;
+      --panel: rgba(255, 255, 255, 0.92);
+      --line: #d7e2f0;
+      --line-strong: #c3d3e7;
+      --text: #102033;
+      --muted: #5b6b82;
+      --primary: #1d4ed8;
+      --primary-soft: #e6efff;
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+      --header-bg: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+      --table-head: linear-gradient(180deg, #f8fbff 0%, #e6efff 100%);
     }
 
     * {
@@ -26,115 +27,69 @@
       margin: 0;
       font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 24rem),
-        radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 22rem),
-        var(--bg);
+        radial-gradient(circle at top left, rgba(29, 78, 216, 0.14), transparent 24rem),
+        radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 22rem),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
       color: var(--text);
     }
 
     .page {
-      max-width: 1700px;
+      max-width: 1760px;
       margin: 0 auto;
-      padding: 32px 20px 40px;
-    }
-
-    .hero {
-      background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
-      color: #fff;
-      border-radius: 24px;
-      padding: 28px 30px;
-      box-shadow: var(--shadow);
-      margin-bottom: 24px;
-    }
-
-    .hero h1 {
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4vw, 38px);
-      line-height: 1.15;
-    }
-
-    .hero p {
-      margin: 0;
-      max-width: 980px;
-      color: rgba(255, 255, 255, 0.88);
-      font-size: 15px;
-      line-height: 1.7;
-    }
-
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 18px;
-    }
-
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      font-size: 13px;
-      color: #fff;
-      backdrop-filter: blur(8px);
+      padding: 28px 18px 34px;
     }
 
     .card {
       background: var(--panel);
-      border: 1px solid rgba(197, 212, 232, 0.7);
-      border-radius: 24px;
+      border: 1px solid rgba(195, 211, 231, 0.9);
+      border-radius: 28px;
       box-shadow: var(--shadow);
       overflow: hidden;
+      backdrop-filter: blur(14px);
     }
 
     .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      padding: 22px 24px 16px;
-      border-bottom: 1px solid var(--line);
-      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      padding: 24px 28px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--header-bg);
     }
 
     .card-header h2 {
-      margin: 0 0 6px;
-      font-size: 22px;
-    }
-
-    .card-header p {
       margin: 0;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.65;
-      max-width: 900px;
-    }
-
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .legend .chip {
-      color: var(--primary);
-      background: var(--primary-soft);
-      border-color: rgba(37, 99, 235, 0.1);
-      font-weight: 600;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: #ffffff;
     }
 
     .table-shell {
-      padding: 16px;
+      padding: 18px;
     }
 
     .table-scroll {
       overflow: auto;
-      max-height: 72vh;
+      max-height: 78vh;
       border: 1px solid var(--line);
-      border-radius: 18px;
-      background: var(--panel-soft);
+      border-radius: 22px;
+      background: #ffffff;
+      scrollbar-width: thin;
+      scrollbar-color: #b9c8dc #eef4fb;
+    }
+
+    .table-scroll::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+
+    .table-scroll::-webkit-scrollbar-track {
+      background: #eef4fb;
+      border-radius: 999px;
+    }
+
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: #b9c8dc;
+      border-radius: 999px;
+      border: 2px solid #eef4fb;
     }
 
     table {
@@ -149,33 +104,33 @@
       position: sticky;
       top: 0;
       z-index: 3;
-      background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-      color: #0f172a;
+      background: var(--table-head);
+      color: #173056;
       text-align: left;
-      padding: 16px 14px;
-      font-size: 13px;
+      padding: 18px 16px;
+      font-size: 12px;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.08em;
       border-bottom: 1px solid var(--line-strong);
       white-space: nowrap;
     }
 
     tbody td {
       vertical-align: top;
-      padding: 16px 14px;
-      border-bottom: 1px solid #e8eef7;
-      border-right: 1px solid #eef3fa;
+      padding: 18px 16px;
+      border-bottom: 1px solid #e9f0f8;
+      border-right: 1px solid #eef4fb;
       font-size: 14px;
-      line-height: 1.65;
+      line-height: 1.7;
       background: #fff;
     }
 
     tbody tr:nth-child(even) td {
-      background: #fcfdff;
+      background: #fbfdff;
     }
 
     tbody tr:hover td {
-      background: #f8fbff;
+      background: #f4f8ff;
     }
 
     tbody td:last-child,
@@ -188,24 +143,24 @@
       text-align: center;
       font-weight: 700;
       color: var(--primary);
-      background: #f8fbff;
+      background: #f7faff;
     }
 
     .col-ten {
-      width: 140px;
+      width: 150px;
       font-weight: 700;
       white-space: nowrap;
     }
 
     .col-main {
-      width: 220px;
+      width: 260px;
       font-weight: 700;
       color: #10213f;
     }
 
     .cell-title {
       display: inline-block;
-      padding: 6px 10px;
+      padding: 8px 12px;
       border-radius: 999px;
       background: var(--primary-soft);
       color: var(--primary);
@@ -225,81 +180,43 @@
     code {
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 12px;
-      background: #eff4fb;
-      border: 1px solid #dde7f5;
-      padding: 2px 6px;
+      background: #f3f7fd;
+      border: 1px solid #dce7f5;
+      padding: 3px 7px;
       border-radius: 8px;
       color: #16335f;
       word-break: break-all;
     }
 
-    .note {
-      margin-top: 16px;
-      padding: 16px 18px;
-      border-top: 1px solid var(--line);
-      background: #fbfdff;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.7;
-    }
-
-    .note strong {
-      color: var(--text);
-    }
-
     @media (max-width: 900px) {
       .page {
-        padding: 18px 12px 28px;
+        padding: 12px 10px 22px;
       }
 
-      .hero,
       .card {
-        border-radius: 18px;
+        border-radius: 20px;
       }
 
       .card-header {
-        flex-direction: column;
+        padding: 18px 18px 16px;
       }
 
-      .legend {
-        justify-content: flex-start;
+      .table-shell {
+        padding: 10px;
+      }
+
+      tbody td,
+      thead th {
+        padding: 14px 12px;
       }
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <section class="hero">
-      <h1>Phân công nhóm theo tính năng</h1>
-      <p>
-        Bảng này chia việc theo từng mảng chức năng sau khi đã rà soát lại toàn bộ các nghiệp vụ
-        chính trong hệ thống: tài sản cố định, tài sản tiêu hao, mượn/trả, báo hỏng, sửa chữa,
-        đánh giá hài lòng, KPI helpdesk, kiểm kê, sơ đồ, người dùng và cấu hình. Mỗi thành viên
-        phụ trách trọn gói backend, frontend và tự kiểm thử end-to-end trong phạm vi của mình,
-        bao gồm cả các màn desktop, mobile, realtime và báo cáo liên quan.
-      </p>
-      <div class="meta">
-        <span class="chip">5 thành viên</span>
-        <span class="chip">Chia theo tính năng</span>
-        <span class="chip">Có file backend + frontend</span>
-        <span class="chip">Có luồng test cần tự kiểm tra</span>
-      </div>
-    </section>
-
     <section class="card">
       <div class="card-header">
-        <div>
-          <h2>Bảng phân công chi tiết</h2>
-          <p>
-            Đây là bản đã bổ sung các mảng còn thiếu so với lần phân công trước và đã đối chiếu lại
-            theo route, page, controller, service, entity, repository và các phần dùng chung của hệ thống.
-          </p>
-        </div>
-        <div class="legend">
-          <span class="chip">Header cố định</span>
-          <span class="chip">Cuộn ngang</span>
-          <span class="chip">Cuộn dọc</span>
-        </div>
+        <h2>Bảng phân công chi tiết</h2>
       </div>
 
       <div class="table-shell">
@@ -647,15 +564,6 @@
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div class="note">
-        <strong>Ghi chú:</strong> Bảng hiện đã gán tên thật cho 4 thành viên còn lại và sắp theo mức độ
-        khó, độ phức tạp giảm dần là: Hiếu, Khoa, Hào, Văn. Đồng thời bảng này đã bổ sung lại các mảng
-        từng bị thiếu ở lần trước như: tài sản cố định, tài sản tiêu hao, mượn/trả, báo hỏng, sửa chữa,
-        đánh giá, KPI helpdesk, kiểm kê, luồng nhân viên mobile, luồng kỹ thuật viên desktop/mobile,
-        chat realtime, thông báo và các dữ liệu nền. Nếu cần dùng để họp nhóm hoặc báo cáo, có thể
-        mở file HTML này trực tiếp trên trình duyệt để xem bảng đẹp hơn và dễ cuộn hơn so với Word.
       </div>
     </section>
   </div>
