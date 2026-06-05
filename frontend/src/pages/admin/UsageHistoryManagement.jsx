@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { getTechnicalStatusLabel } from '../../utils/assetStatus'
 import { formatVietnamDateTime } from '../../utils/datetime'
 const PAGE_SIZE = 10
@@ -14,6 +17,18 @@ const defaultSortState = {
   key: 'startTime',
   direction: 'desc',
 }
+const usageHistoryColumnOptions = [
+  { key: 'index', label: 'STT' },
+  { key: 'assetQaCode', label: 'Mã thiết bị' },
+  { key: 'assetName', label: 'Tên thiết bị' },
+  { key: 'homeLocationName', label: 'Vị trí gốc' },
+  { key: 'borrowedLocationName', label: 'Phòng mượn' },
+  { key: 'startTime', label: 'Ngày mượn' },
+  { key: 'endTime', label: 'Ngày trả' },
+  { key: 'assetTechnicalStatus', label: 'Tình trạng kỹ thuật' },
+  { key: 'borrowerFullName', label: 'Người mượn' },
+]
+const defaultUsageHistoryVisibleColumnKeys = ['index', 'assetQaCode', 'assetName', 'borrowedLocationName', 'startTime', 'endTime', 'borrowerFullName']
 
 function UsageHistoryManagement() {
   const locationFilterRef = useRef(null)
@@ -33,6 +48,19 @@ function UsageHistoryManagement() {
   const [exporting, setExporting] = useState(false)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [sortState, setSortState] = useState(defaultSortState)
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-usage-history-visible-columns',
+    columns: usageHistoryColumnOptions,
+    defaultVisibleKeys: defaultUsageHistoryVisibleColumnKeys,
+  })
 
   useEffect(() => {
     const initializePage = async () => {
@@ -89,6 +117,26 @@ function UsageHistoryManagement() {
       document.removeEventListener('pointerdown', handlePointerDownOutside)
     }
   }, [showLocationOptions])
+
+  useDebouncedEffect(() => {
+    void loadHistories(0, filters)
+  }, [filters.assetName, filters.borrowedLocationId, filters.userId, filters.startDate, filters.endDate], 300, true)
+
+  const tableColumns = useMemo(() => ([
+    { key: 'index', label: 'STT', headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (_history, index) => pageInfo.page * pageInfo.size + index + 1 },
+    { key: 'assetQaCode', label: <button type="button" onClick={() => handleSort('assetQaCode')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('assetQaCode', 'Mã thiết bị')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.assetQaCode },
+    { key: 'assetName', label: <button type="button" onClick={() => handleSort('assetName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('assetName', 'Tên thiết bị')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.assetName },
+    { key: 'homeLocationName', label: <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('homeLocationName', 'Vị trí gốc')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.homeLocationName },
+    { key: 'borrowedLocationName', label: <button type="button" onClick={() => handleSort('borrowedLocationName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('borrowedLocationName', 'Phòng mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.borrowedLocationName },
+    { key: 'startTime', label: <button type="button" onClick={() => handleSort('startTime')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('startTime', 'Ngày mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => formatVietnamDateTime(history.startTime, '') },
+    { key: 'endTime', label: <button type="button" onClick={() => handleSort('endTime')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('endTime', 'Ngày trả')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => (history.endTime ? formatVietnamDateTime(history.endTime, '') : '') },
+    { key: 'assetTechnicalStatus', label: 'Tình trạng kỹ thuật', headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => getTechnicalStatusLabel(history.assetTechnicalStatus) },
+    { key: 'borrowerFullName', label: <button type="button" onClick={() => handleSort('borrowerFullName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('borrowerFullName', 'Người mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.borrowerFullName },
+  ]), [getSortLabel, handleSort, pageInfo.page, pageInfo.size])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   const buildHistoryQueryParams = (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
     const params = {
@@ -308,55 +356,38 @@ function UsageHistoryManagement() {
         >
           Xuất Excel
         </button>
+        <ColumnVisibilityDropdown
+          columns={usageHistoryColumnOptions}
+          visibleColumns={visibleColumns}
+          selectedCount={selectedCount}
+          allSelected={allSelected}
+          onToggleColumn={(columnKey) => {
+            if (visibleColumns[columnKey] && selectedCount === 1) {
+              toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+              return
+            }
+            toggleColumn(columnKey)
+          }}
+          onSelectAll={selectAllColumns}
+          onResetDefault={resetDefaultColumns}
+        />
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-max divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">STT</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('assetQaCode')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('assetQaCode', 'Mã thiết bị')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('assetName')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('assetName', 'Tên thiết bị')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('homeLocationName', 'Vị trí gốc')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('borrowedLocationName')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('borrowedLocationName', 'Phòng mượn')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('startTime')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('startTime', 'Ngày mượn')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('endTime')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('endTime', 'Ngày trả')}
-                </button>
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tình trạng kỹ thuật</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                <button type="button" onClick={() => handleSort('borrowerFullName')} className="whitespace-nowrap hover:text-fptOrange">
-                  {getSortLabel('borrowerFullName', 'Người mượn')}
-                </button>
-              </th>
+              {renderedColumns.map((column) => (
+                <th key={column.key} className={column.headClassName}>
+                  {column.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading &&
               Array.from({ length: 9 }).map((_, index) => (
                 <tr key={`history-loading-${index}`} className="animate-pulse">
-                  <td className="px-3 py-2" colSpan={9}>
+                  <td className="px-3 py-2" colSpan={Math.max(renderedColumns.length, 1)}>
                     <div className="h-4 w-full rounded bg-slate-200" />
                   </td>
                 </tr>
@@ -364,15 +395,11 @@ function UsageHistoryManagement() {
             {!loading &&
               histories.map((history, index) => (
                 <tr key={history.id}>
-                  <td className="px-3 py-2">{pageInfo.page * pageInfo.size + index + 1}</td>
-                  <td className="px-3 py-2">{history.assetQaCode}</td>
-                  <td className="px-3 py-2">{history.assetName}</td>
-                  <td className="px-3 py-2">{history.homeLocationName}</td>
-                  <td className="px-3 py-2">{history.borrowedLocationName}</td>
-                  <td className="px-3 py-2">{formatVietnamDateTime(history.startTime, '')}</td>
-                  <td className="px-3 py-2">{history.endTime ? formatVietnamDateTime(history.endTime, '') : ''}</td>
-                  <td className="px-3 py-2">{getTechnicalStatusLabel(history.assetTechnicalStatus)}</td>
-                  <td className="px-3 py-2">{history.borrowerFullName}</td>
+                  {renderedColumns.map((column) => (
+                    <td key={`${history.id}-${column.key}`} className={column.cellClassName}>
+                      {column.render(history, index)}
+                    </td>
+                  ))}
                 </tr>
               ))}
           </tbody>

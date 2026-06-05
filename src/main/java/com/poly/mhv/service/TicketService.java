@@ -2,7 +2,7 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
-import com.poly.mhv.dto.notification.RealtimeNotificationResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
@@ -15,6 +15,7 @@ import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +38,6 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
-    private final AsyncRealtimePushService asyncRealtimePushService;
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
     private final TicketEventService ticketEventService;
@@ -119,13 +119,8 @@ public class TicketService {
                         "Trạng thái", saved.getStatus(),
                         "Người thực hiện", reporterDisplayName,
                         "Phòng gốc", asset.getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_CREATED",
-                "Ticket #" + saved.getId() + " đã được tạo.",
-                saved,
-                eligibleTechSupports
+                ),
+                buildTicketNotificationTargets(saved, eligibleTechSupports, true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -201,12 +196,8 @@ public class TicketService {
                         "Trạng thái", toVietnameseStatus("IN_PROGRESS"),
                         "Người thao tác", actorDisplayName,
                         "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_ASSIGNED",
-                "Ticket #" + saved.getId() + " đã được gán cho " + assignee.getUsername() + ".",
-                saved
+                ),
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -276,12 +267,8 @@ public class TicketService {
                         "Trạng thái", toVietnameseStatus(saved.getStatus()),
                         "Người thao tác", actorDisplayName,
                         "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_RESOLVED",
-                "Ticket #" + saved.getId() + " đã được xử lý xong.",
-                saved
+                ),
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -331,6 +318,16 @@ public class TicketService {
         if (normalizedComment != null) {
             detail.put("Nhận xét", normalizedComment);
         }
+        notificationService.createNotification(
+                "TICKET_SATISFACTION_RATED",
+                "Có đánh giá sau xử lý ticket",
+                getActorDisplayName(actor) + " đã đánh giá ticket #" + saved.getId() + ".",
+                actor.getUsername(),
+                saved.getAsset().getQaCode(),
+                saved.getAsset().getName(),
+                detail,
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
+        );
         ticketEventService.recordEvent(
                 saved,
                 "TICKET_SATISFACTION_RATED",
@@ -579,29 +576,28 @@ public class TicketService {
         return priority;
     }
 
-    private void pushNotification(String type, String message, Ticket ticket) {
-        pushNotification(type, message, ticket, List.of());
-    }
-
-    private void pushNotification(String type, String message, Ticket ticket, List<AppUser> receivers) {
-        RealtimeNotificationResponse payload = RealtimeNotificationResponse.builder()
-                .type(type)
-                .message(message)
-                .ticketId(ticket.getId())
-                .assetQaCode(ticket.getAsset().getQaCode())
-                .status(ticket.getStatus())
-                .timestamp(LocalDateTime.now())
-                .build();
-        if ("TICKET_CREATED".equals(type)) {
-            for (AppUser receiver : receivers) {
-                asyncRealtimePushService.pushToDestination("/topic/users/" + receiver.getId() + "/notifications", payload);
-            }
-            for (AppUser admin : appUserRepository.findByRole("Admin")) {
-                asyncRealtimePushService.pushToDestination("/topic/users/" + admin.getId() + "/notifications", payload);
-            }
-            return;
+    private List<NotificationTarget> buildTicketNotificationTargets(
+            Ticket ticket,
+            List<AppUser> techSupportReceivers,
+            boolean includeAdmin,
+            boolean includeReporter
+    ) {
+        List<NotificationTarget> targets = new ArrayList<>();
+        if (includeAdmin) {
+            targets.add(NotificationTarget.forRole("Admin", "/admin/tickets/" + ticket.getId()));
         }
-        asyncRealtimePushService.pushToDestination("/topic/notifications", payload);
+        for (AppUser receiver : techSupportReceivers) {
+            if (receiver != null && receiver.getId() != null) {
+                targets.add(NotificationTarget.forUser(receiver.getId(), "/tech/tickets/" + ticket.getId()));
+            }
+        }
+        if (ticket.getAssignee() != null && ticket.getAssignee().getId() != null) {
+            targets.add(NotificationTarget.forUser(ticket.getAssignee().getId(), "/tech/tickets/" + ticket.getId()));
+        }
+        if (includeReporter && ticket.getReporter() != null && ticket.getReporter().getId() != null) {
+            targets.add(NotificationTarget.forUser(ticket.getReporter().getId(), "/mobile/tickets/" + ticket.getId()));
+        }
+        return targets;
     }
 
     private String getActorDisplayName(AppUser user) {

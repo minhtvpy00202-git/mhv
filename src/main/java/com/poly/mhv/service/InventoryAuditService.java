@@ -7,6 +7,7 @@ import com.poly.mhv.dto.inventory.InventoryAuditMissingResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditScanRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditScanResultResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditSummaryResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
@@ -300,6 +301,10 @@ public class InventoryAuditService {
                         "Số lượng đã quét", audit.getScannedCount(),
                         "Số lượng thất lạc", missingCount,
                         "Người thực hiện", actorDisplayName
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/inventory-audits"),
+                        NotificationTarget.forRole("TechSupport", "/tech/inventory-audits/history")
                 )
         );
 

@@ -6,12 +6,15 @@ import {
   IconLogout as LogOut,
   IconMessageCircle as MessageCircle,
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import axiosClient from '../api/axiosClient'
 import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
+import { formatVietnamDateTime } from '../utils/datetime'
 import {
   getTechSupportTicketPath,
   isNarrowViewport,
@@ -35,7 +38,22 @@ function MobileTechSupportLayout() {
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [chatNotifications, setChatNotifications] = useState([])
   const [unreadChatCount, setUnreadChatCount] = useState(0)
+  const [notifications, setNotifications] = useState([])
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const readingNotificationIdsRef = useRef(new Set())
+
+  const loadFeed = useCallback(async (suppressError = false) => {
+    try {
+      const response = await axiosClient.get('/api/notifications')
+      setNotifications(response.data?.items || [])
+      setUnreadNotificationCount(response.data?.unreadCount || 0)
+    } catch (error) {
+      if (suppressError) return
+      const message = error?.response?.data?.message || 'Không tải được thông báo.'
+      toast.error(message)
+    }
+  }, [])
 
   useEffect(() => {
     const syncViewportRoute = () => {
@@ -98,6 +116,15 @@ function MobileTechSupportLayout() {
     return () => window.removeEventListener('mhv-chat-notification', handleChatNotification)
   }, [])
 
+  useEffect(() => {
+    void loadFeed(true)
+    const handleRefresh = () => {
+      void loadFeed(true)
+    }
+    window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+  }, [loadFeed])
+
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
@@ -113,10 +140,25 @@ function MobileTechSupportLayout() {
     }
   }
 
+  const markNotificationAsRead = useCallback(async (notification) => {
+    if (!notification?.id || notification.isRead) return
+    if (readingNotificationIdsRef.current.has(notification.id)) return
+    readingNotificationIdsRef.current.add(notification.id)
+    try {
+      await axiosClient.post(`/api/notifications/${notification.id}/read`)
+      setUnreadNotificationCount((prev) => (prev > 0 ? prev - 1 : 0))
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item)),
+      )
+    } finally {
+      readingNotificationIdsRef.current.delete(notification.id)
+    }
+  }, [])
+
   return (
     <div className="brand-theme mx-auto min-h-[100dvh] w-full max-w-md bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header
-        className="sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3 text-white shadow"
+        className="sticky top-0 z-[200] flex items-center justify-between border-b px-4 py-3 text-white shadow"
         style={{ backgroundColor: primaryColor, borderColor: toRgba(primaryColor, 0.28) }}
       >
         <div>
@@ -125,28 +167,37 @@ function MobileTechSupportLayout() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle compact className="border-white/20 bg-white/10 px-2.5 text-white hover:bg-white/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20" />
-          <div className="relative">
+          <div className="relative z-[120]">
             <button
               type="button"
-              onClick={() => setShowNotificationDropdown((prev) => !prev)}
+                onClick={() => {
+                  const nextValue = !showNotificationDropdown
+                  setShowNotificationDropdown(nextValue)
+                  if (nextValue) {
+                    void loadFeed(true)
+                  }
+                }}
               className="relative inline-flex items-center rounded-lg bg-white/15 p-2 hover:bg-white/25"
             >
               <Bell size={14} />
-              {unreadChatCount > 0 && (
+              {unreadChatCount + unreadNotificationCount > 0 && (
                 <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold text-white">
-                  {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                  {unreadChatCount + unreadNotificationCount > 99 ? '99+' : unreadChatCount + unreadNotificationCount}
                 </span>
               )}
             </button>
             {showNotificationDropdown && (
-              <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-blue-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+              <div className="absolute right-0 z-[120] mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-lg border border-blue-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-center justify-between border-b border-blue-100 px-3 py-2 dark:border-slate-800">
-                  <p className="text-sm font-semibold">Tin nhắn mới</p>
+                  <p className="text-sm font-semibold">Thông báo</p>
                   <button
                     type="button"
                     onClick={() => {
                       setChatNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
                       setUnreadChatCount(0)
+                      setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })))
+                      setUnreadNotificationCount(0)
+                      void axiosClient.post('/api/notifications/read-all')
                     }}
                       className="text-[11px] font-semibold"
                       style={{ color: primaryColor }}
@@ -155,8 +206,41 @@ function MobileTechSupportLayout() {
                   </button>
                 </div>
                 <div className="max-h-80 overflow-auto">
-                  {chatNotifications.length === 0 && (
-                    <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo chat.</p>
+                  {chatNotifications.length === 0 && notifications.length === 0 && (
+                    <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo.</p>
+                  )}
+                  {notifications.length > 0 && (
+                    <div className="border-b border-blue-100 px-3 py-2 dark:border-slate-800">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Thông báo hệ thống</p>
+                    </div>
+                  )}
+                  {notifications.map((notification) => (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onMouseEnter={() => {
+                        void markNotificationAsRead(notification)
+                      }}
+                      onClick={async () => {
+                        await markNotificationAsRead(notification)
+                        setShowNotificationDropdown(false)
+                        navigate(notification.linkPath || '/tech-mobile/tickets')
+                      }}
+                      className={`block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-orange-50 dark:border-slate-800 dark:hover:bg-orange-500/10 ${
+                        notification.isRead ? 'text-slate-600 dark:text-slate-300' : 'font-semibold text-slate-800 dark:text-slate-100'
+                      }`}
+                    >
+                      <p>{notification.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
+                      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                        {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
+                      </p>
+                    </button>
+                  ))}
+                  {chatNotifications.length > 0 && (
+                    <div className="border-b border-blue-100 px-3 py-2 dark:border-slate-800">
+                      <p className="text-xs font-semibold text-orange-700 dark:text-orange-300">Tin nhắn mới</p>
+                    </div>
                   )}
                   {chatNotifications.map((notification) => (
                     <button

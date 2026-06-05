@@ -44,22 +44,23 @@ public class AssetMapImportService {
 
     private final AssetMapService assetMapService;
     private final MapFloorRepository mapFloorRepository;
+    private final MediaStorageService mediaStorageService;
     private final ObjectMapper objectMapper;
     private final Path sessionRootDir;
-    private final Path floorBackgroundRootDir;
 
     public AssetMapImportService(
             AssetMapService assetMapService,
             MapFloorRepository mapFloorRepository,
+            MediaStorageService mediaStorageService,
             ObjectMapper objectMapper,
             @org.springframework.beans.factory.annotation.Value("${app.upload-dir:uploads}") String uploadDir
     ) {
         this.assetMapService = assetMapService;
         this.mapFloorRepository = mapFloorRepository;
+        this.mediaStorageService = mediaStorageService;
         this.objectMapper = objectMapper;
         Path uploadRootDir = Paths.get(uploadDir).toAbsolutePath().normalize();
         this.sessionRootDir = uploadRootDir.resolve("asset-map-import-sessions");
-        this.floorBackgroundRootDir = uploadRootDir.resolve("asset-map-floor-backgrounds");
     }
 
     public AssetMapImportAnalyzeResponse analyzeImportImage(MultipartFile file) {
@@ -238,19 +239,41 @@ public class AssetMapImportService {
 
     private String persistFloorBackground(ImportSessionData sessionData, Path sessionDir) {
         try {
-            Files.createDirectories(floorBackgroundRootDir);
             String originalFileName = firstNonBlank(sessionData.getSourceFileName(), "drawing.png");
-            String storedFileName = UUID.randomUUID() + "-" + sanitizeFileName(originalFileName);
             Path sourceFilePath = sessionDir.resolve("source-" + sanitizeFileName(originalFileName)).normalize();
             if (!sourceFilePath.startsWith(sessionDir) || !Files.exists(sourceFilePath)) {
                 throw new CustomException("Khong tim thay anh import de tao nen so do.");
             }
-            Path targetFilePath = floorBackgroundRootDir.resolve(storedFileName).normalize();
-            Files.copy(sourceFilePath, targetFilePath);
-            return "/uploads/asset-map-floor-backgrounds/" + storedFileName;
+            String sourceFileType = firstNonBlank(sessionData.getSourceFileType(), detectSupportedFileType(originalFileName));
+            String mimeType = resolveImageMimeType(sourceFileType);
+            String extension = resolveImageExtension(sourceFileType);
+            return mediaStorageService.storeBytes(
+                    Files.readAllBytes(sourceFilePath),
+                    mimeType,
+                    "asset-map/backgrounds",
+                    extension
+            );
         } catch (IOException ex) {
             throw new CustomException("Khong the luu anh nen cho so do import.");
         }
+    }
+
+    private String resolveImageMimeType(String sourceFileType) {
+        String normalized = sourceFileType == null ? "" : sourceFileType.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "PNG" -> "image/png";
+            case "JPG", "JPEG" -> "image/jpeg";
+            default -> throw new CustomException("Dinh dang anh nen so do khong hop le.");
+        };
+    }
+
+    private String resolveImageExtension(String sourceFileType) {
+        String normalized = sourceFileType == null ? "" : sourceFileType.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "PNG" -> "png";
+            case "JPG", "JPEG" -> "jpg";
+            default -> throw new CustomException("Dinh dang anh nen so do khong hop le.");
+        };
     }
 
     private GridDimension resolveGridDimension(ImportDrawing drawing) {

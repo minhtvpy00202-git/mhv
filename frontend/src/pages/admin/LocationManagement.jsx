@@ -4,10 +4,20 @@ import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
+const locationColumnOptions = [
+  { key: 'id', label: 'ID' },
+  { key: 'roomName', label: 'Tên phòng / khu vực' },
+  { key: 'floorName', label: 'Tầng' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultLocationVisibleColumnKeys = ['id', 'roomName', 'floorName', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -52,6 +62,19 @@ function LocationManagement() {
     initialDirection: 'asc',
     onSortChange: () => setCurrentPage(1),
   })
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-locations-visible-columns',
+    columns: locationColumnOptions,
+    defaultVisibleKeys: defaultLocationVisibleColumnKeys,
+  })
 
   const isEditing = Boolean(selectedLocationId)
   const totalPages = Math.max(1, Math.ceil(sortedLocations.length / PAGE_SIZE))
@@ -61,6 +84,71 @@ function LocationManagement() {
   }, [sortedLocations, currentPage])
   const selectedLocationIdSet = useMemo(() => new Set(selectedLocationIds), [selectedLocationIds])
   const paginatedLocationIds = useMemo(() => paginatedLocations.map((location) => location.id), [paginatedLocations])
+  const tableColumns = useMemo(() => ([
+    {
+      key: 'id',
+      label: (
+        <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('id', 'ID')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (location) => location.id,
+    },
+    {
+      key: 'roomName',
+      label: (
+        <button type="button" onClick={() => handleSort('roomName')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('roomName', 'Tên phòng / khu vực')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (location) => location.roomName,
+    },
+    {
+      key: 'floorName',
+      label: 'Tầng',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (location) => (
+        location.floorName ? (
+          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+            {location.floorName}
+          </span>
+        ) : (
+          <span className="text-slate-400">Chưa gán</span>
+        )
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (location) => (
+        <div className="flex justify-end gap-2">
+          <ActionIconButton
+            icon={Wrench}
+            label="Sửa phòng"
+            variant="primary"
+            onClick={() => handleSelectLocation(location)}
+          />
+          <ActionIconButton
+            icon={Trash2}
+            label="Xóa phòng"
+            variant="danger"
+            onClick={() => handleDelete(location.id)}
+          />
+        </div>
+      ),
+    },
+  ]), [getSortLabel, handleSort])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
   const selectedLocationCount = selectedLocationIds.length
   const allPaginatedLocationsSelected = paginatedLocationIds.length > 0
     && paginatedLocationIds.every((id) => selectedLocationIdSet.has(id))
@@ -101,6 +189,10 @@ function LocationManagement() {
       window.clearTimeout(bootstrapTimer)
     }
   }, [loadFloors, loadLocations])
+
+  useDebouncedEffect(() => {
+    void loadLocations(filters)
+  }, [filters.keyword], 300, true)
 
   useEffect(() => {
     setSelectedLocationIds((previous) => previous.filter((id) => locations.some((location) => location.id === id)))
@@ -410,9 +502,26 @@ function LocationManagement() {
 
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
         <div className="rounded-xl bg-white p-4 shadow-sm dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Danh sách phòng</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Tổng: {locations.length}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Tổng: {locations.length}</p>
+            <ColumnVisibilityDropdown
+              columns={locationColumnOptions}
+              visibleColumns={visibleColumns}
+              selectedCount={selectedCount}
+              allSelected={allSelected}
+              onToggleColumn={(columnKey) => {
+                if (visibleColumns[columnKey] && selectedCount === 1) {
+                  toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                  return
+                }
+                toggleColumn(columnKey)
+              }}
+              onSelectAll={selectAllColumns}
+              onResetDefault={resetDefaultColumns}
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -429,18 +538,11 @@ function LocationManagement() {
                     className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
                   />
                 </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('id', 'ID')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('roomName')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('roomName', 'Tên phòng / khu vực')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tầng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -476,38 +578,16 @@ function LocationManagement() {
                         className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
                       />
                     </td>
-                    <td className="px-3 py-2">{location.id}</td>
-                    <td className="px-3 py-2">{location.roomName}</td>
-                    <td className="px-3 py-2">
-                      {location.floorName ? (
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-                          {location.floorName}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">Chưa gán</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-2">
-                        <ActionIconButton
-                          icon={Wrench}
-                          label="Sửa phòng"
-                          variant="primary"
-                          onClick={() => handleSelectLocation(location)}
-                        />
-                        <ActionIconButton
-                          icon={Trash2}
-                          label="Xóa phòng"
-                          variant="danger"
-                          onClick={() => handleDelete(location.id)}
-                        />
-                      </div>
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${location.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(location)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               {!loading && locations.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length + 1, 1)} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có phòng hoặc khu vực phù hợp.
                   </td>
                 </tr>

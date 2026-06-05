@@ -23,6 +23,7 @@ import com.poly.mhv.dto.asset.ExpiredConsumableLotResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
 import com.poly.mhv.dto.common.PagedResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
@@ -209,7 +210,10 @@ public class AssetService {
                         "Phòng gốc", saved.getHomeLocation().getRoomName(),
                         "Trạng thái", saved.getStatus(),
                         "Người thực hiện", actorDisplayName
-                )
+                ),
+                isConsumableMode(saved.getTrackingMode())
+                        ? consumableNotificationTargets(null, null)
+                        : adminNotificationTargets("/admin/assets")
         );
         notifyLowStockIfNeeded(saved, actor);
         return mapToAssetResponse(saved, isItemizedMode(saved.getTrackingMode()), true);
@@ -402,7 +406,10 @@ public class AssetService {
                         Map.entry("Phòng gốc cũ", oldHome),
                         Map.entry("Phòng gốc mới", updated.getHomeLocation().getRoomName()),
                         Map.entry("Người thực hiện", actorDisplayName)
-                )
+                ),
+                isConsumableMode(trackingMode)
+                        ? consumableNotificationTargets(null, null)
+                        : adminNotificationTargets("/admin/assets")
         );
         notifyLowStockIfNeeded(updated, actor);
         AssetResponse response = mapToAssetResponse(updated, false, true);
@@ -475,7 +482,8 @@ public class AssetService {
                         "Phòng nhận", issuedToLocation.getRoomName(),
                         "Tồn còn lại", safeInteger(updated.getQuantityOnHand()),
                         "Người thực hiện", actorDisplayName
-                )
+                ),
+                consumableNotificationTargets(null, null)
         );
         notifyLowStockIfNeeded(updated, actor);
         return mapToConsumableIssueResponse(savedIssue);
@@ -543,7 +551,8 @@ public class AssetService {
                         "Nhà cung cấp", supplier.getName(),
                         "Tồn sau nhập", nextQuantity + " " + safeUnit(updated),
                         "Người thực hiện", actorDisplayName
-                )
+                ),
+                consumableNotificationTargets(null, null)
         );
         return mapToAssetResponse(updated, false, true);
     }
@@ -668,7 +677,8 @@ public class AssetService {
                         "Tổng số lượng tiêu huỷ", totalQuantityRequested + " " + safeUnit(asset),
                         "Người đề nghị", getActorDisplayName(requester),
                         "Lý do", reason
-                )
+                ),
+                consumableNotificationTargets(requester.getId(), "/mobile/home")
         );
         return mapToConsumableDisposalRequestResponse(savedRequest);
     }
@@ -750,6 +760,10 @@ public class AssetService {
                         "Tổng số lượng tiêu huỷ", totalQuantityToDispose + " " + safeUnit(updatedAsset),
                         "Người duyệt", getActorDisplayName(actor),
                         "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
+                ),
+                consumableNotificationTargets(
+                        disposalRequest.getRequestedBy() != null ? disposalRequest.getRequestedBy().getId() : null,
+                        "/mobile/home"
                 )
         );
         notifyLowStockIfNeeded(updatedAsset, actor);
@@ -788,6 +802,10 @@ public class AssetService {
                         "Số lô trong phiếu", String.valueOf(getEffectiveDisposalRequestItems(disposalRequest).size()),
                         "Người duyệt", getActorDisplayName(actor),
                         "Lý do từ chối", decisionNote
+                ),
+                consumableNotificationTargets(
+                        disposalRequest.getRequestedBy() != null ? disposalRequest.getRequestedBy().getId() : null,
+                        "/mobile/home"
                 )
         );
         return mapToConsumableDisposalRequestResponse(savedRequest);
@@ -837,7 +855,8 @@ public class AssetService {
                         "Số lượng yêu cầu", request.getQuantityRequested(),
                         "Lý do", request.getReason().trim(),
                         "Người yêu cầu", getActorDisplayName(requester)
-                )
+                ),
+                consumableNotificationTargets(requester.getId(), "/mobile/home")
         );
         return mapToConsumableRequestResponse(savedRequest);
     }
@@ -915,6 +934,10 @@ public class AssetService {
                         "Số lượng cấp phát", consumableRequest.getQuantityRequested(),
                         "Người duyệt", actorDisplayName,
                         "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
+                ),
+                consumableNotificationTargets(
+                        consumableRequest.getRequestedBy() != null ? consumableRequest.getRequestedBy().getId() : null,
+                        "/mobile/home"
                 )
         );
         notifyLowStockIfNeeded(updated, actor);
@@ -956,6 +979,10 @@ public class AssetService {
                         "Số lượng yêu cầu", consumableRequest.getQuantityRequested(),
                         "Người duyệt", actorDisplayName,
                         "Lý do từ chối", decisionNote
+                ),
+                consumableNotificationTargets(
+                        consumableRequest.getRequestedBy() != null ? consumableRequest.getRequestedBy().getId() : null,
+                        "/mobile/home"
                 )
         );
         return mapToConsumableRequestResponse(savedRequest);
@@ -1020,7 +1047,10 @@ public class AssetService {
                         "Loại", categoryName,
                         "Phòng gốc", homeLocationName,
                         "Người thực hiện", actorDisplayName
-                )
+                ),
+                isConsumableMode(asset.getTrackingMode())
+                        ? consumableNotificationTargets(null, null)
+                        : adminNotificationTargets("/admin/assets")
         );
     }
 
@@ -1871,8 +1901,23 @@ public class AssetService {
                         "Ngưỡng cảnh báo", minimumStock,
                         "Đơn vị tính", safeUnit(asset),
                         "Phòng lưu", asset.getHomeLocation().getRoomName()
-                )
+                ),
+                consumableNotificationTargets(null, null)
         );
+    }
+
+    private List<NotificationTarget> adminNotificationTargets(String adminPath) {
+        return List.of(NotificationTarget.forRole("Admin", adminPath));
+    }
+
+    private List<NotificationTarget> consumableNotificationTargets(Integer requesterUserId, String requesterPath) {
+        List<NotificationTarget> targets = new ArrayList<>();
+        targets.add(NotificationTarget.forRole("Admin", "/admin/assets"));
+        targets.add(NotificationTarget.forRole("ConsumableManager", "/supply/consumables"));
+        if (requesterUserId != null) {
+            targets.add(NotificationTarget.forUser(requesterUserId, requesterPath));
+        }
+        return targets;
     }
 
     private ConsumableIssueResponse mapToConsumableIssueResponse(ConsumableIssue issue) {

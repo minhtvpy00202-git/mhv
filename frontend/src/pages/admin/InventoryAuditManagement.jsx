@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime, getFutureDateTimeLocalValue } from '../../utils/datetime'
 
 const PAGE_SIZE = 10
@@ -11,6 +13,16 @@ const defaultPageInfo = {
   totalPages: 1,
   totalItems: 0,
 }
+const inventoryAuditColumnOptions = [
+  { key: 'id', label: 'Mã phiên' },
+  { key: 'locationName', label: 'Phòng' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'startedAt', label: 'Bắt đầu' },
+  { key: 'dueDate', label: 'Hạn hoàn tất' },
+  { key: 'completedAt', label: 'Kết thúc' },
+  { key: 'actions', label: 'Chi tiết' },
+]
+const defaultInventoryAuditVisibleColumnKeys = ['id', 'locationName', 'status', 'startedAt', 'dueDate', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -36,6 +48,82 @@ function InventoryAuditManagement() {
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
 
   const sortedAudits = useMemo(() => [...audits], [audits])
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-inventory-audits-visible-columns',
+    columns: inventoryAuditColumnOptions,
+    defaultVisibleKeys: defaultInventoryAuditVisibleColumnKeys,
+  })
+  const tableColumns = useMemo(() => ([
+    {
+      key: 'id',
+      label: 'Mã phiên',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => `#${audit.id}`,
+    },
+    {
+      key: 'locationName',
+      label: 'Phòng',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => audit.locationName,
+    },
+    {
+      key: 'status',
+      label: 'Trạng thái',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => audit.status,
+    },
+    {
+      key: 'startedAt',
+      label: 'Bắt đầu',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => formatVietnamDateTime(audit.startedAt, ''),
+    },
+    {
+      key: 'dueDate',
+      label: 'Hạn hoàn tất',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => formatVietnamDateTime(audit.dueDate, ''),
+    },
+    {
+      key: 'completedAt',
+      label: 'Kết thúc',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (audit) => formatVietnamDateTime(audit.completedAt, ''),
+    },
+    {
+      key: 'actions',
+      label: 'Chi tiết',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2 text-right',
+      render: (audit) => (
+        <button
+          type="button"
+          onClick={() => loadAuditDetail(audit.id)}
+          className="rounded border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+        >
+          Xem
+        </button>
+      ),
+    },
+  ]), [])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   const loadInitialData = async (page = 0) => {
     setLoading(true)
@@ -236,26 +324,41 @@ function InventoryAuditManagement() {
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-800">Danh sách phiên kiểm kê</h3>
-          <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
+            <ColumnVisibilityDropdown
+              columns={inventoryAuditColumnOptions}
+              visibleColumns={visibleColumns}
+              selectedCount={selectedCount}
+              allSelected={allSelected}
+              onToggleColumn={(columnKey) => {
+                if (visibleColumns[columnKey] && selectedCount === 1) {
+                  toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                  return
+                }
+                toggleColumn(columnKey)
+              }}
+              onSelectAll={selectAllColumns}
+              onResetDefault={resetDefaultColumns}
+            />
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Mã phiên</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Phòng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Bắt đầu</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hạn hoàn tất</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Kết thúc</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Chi tiết</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading &&
                 Array.from({ length: 6 }).map((_, index) => (
                   <tr key={`audit-loading-${index}`} className="animate-pulse">
-                    <td className="px-3 py-2" colSpan={7}>
+                    <td className="px-3 py-2" colSpan={Math.max(renderedColumns.length, 1)}>
                       <div className="h-4 w-full rounded bg-slate-200" />
                     </td>
                   </tr>
@@ -263,21 +366,11 @@ function InventoryAuditManagement() {
               {!loading &&
                 sortedAudits.map((audit) => (
                   <tr key={audit.id}>
-                    <td className="px-3 py-2">#{audit.id}</td>
-                    <td className="px-3 py-2">{audit.locationName}</td>
-                    <td className="px-3 py-2">{audit.status}</td>
-                    <td className="px-3 py-2">{formatVietnamDateTime(audit.startedAt, '')}</td>
-                    <td className="px-3 py-2">{formatVietnamDateTime(audit.dueDate, '')}</td>
-                    <td className="px-3 py-2">{formatVietnamDateTime(audit.completedAt, '')}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => loadAuditDetail(audit.id)}
-                        className="rounded border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                      >
-                        Xem
-                      </button>
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${audit.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(audit)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
             </tbody>

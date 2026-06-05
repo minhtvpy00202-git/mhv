@@ -23,8 +23,11 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AssetRepairTimelineModal from '../../components/AssetRepairTimelineModal'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import { useAuth } from '../../context/AuthContext'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
 import {
   getAssetStatusLabel,
@@ -66,6 +69,73 @@ const defaultSortState = {
   key: 'qaCode',
   direction: 'asc',
 }
+const consumableOverviewColumnOptions = [
+  { key: 'name', label: 'Tên vật tư' },
+  { key: 'category', label: 'Loại' },
+  { key: 'quantityOnHand', label: 'Tồn theo HSD' },
+  { key: 'minimumStock', label: 'Ngưỡng báo' },
+  { key: 'purchasePrice', label: 'Đơn giá' },
+  { key: 'expirationDate', label: 'Hạn sử dụng' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'actions', label: 'Hành động' },
+]
+const defaultConsumableOverviewVisibleColumnKeys = ['name', 'category', 'quantityOnHand', 'minimumStock', 'expirationDate', 'status', 'actions']
+const locationStockColumnOptions = [
+  { key: 'assetName', label: 'Tên vật tư' },
+  { key: 'unit', label: 'Đơn vị' },
+  { key: 'lastIssuedAt', label: 'Lần cấp gần nhất' },
+  { key: 'quantityRemaining', label: 'Tồn tại phòng' },
+  { key: 'quantityIssued', label: 'Đã cấp' },
+  { key: 'quantityConsumed', label: 'Đã dùng' },
+  { key: 'expirationDate', label: 'Hạn sử dụng' },
+  { key: 'actions', label: 'Hành động' },
+]
+const defaultLocationStockVisibleColumnKeys = ['assetName', 'quantityRemaining', 'quantityIssued', 'quantityConsumed', 'expirationDate', 'actions']
+const disposalRequestColumnOptions = [
+  { key: 'ticket', label: 'Phiếu' },
+  { key: 'asset', label: 'Vật tư' },
+  { key: 'quantity', label: 'Số lượng' },
+  { key: 'lot', label: 'Số lô' },
+  { key: 'requester', label: 'Người đề nghị' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'resolved', label: 'Xử lý' },
+  { key: 'actions', label: 'Hành động' },
+]
+const defaultDisposalRequestVisibleColumnKeys = ['ticket', 'asset', 'quantity', 'requester', 'status', 'resolved', 'actions']
+const itemizedAssetColumnOptions = [
+  { key: 'qaCode', label: 'Mã QA' },
+  { key: 'name', label: 'Tên thiết bị' },
+  { key: 'category', label: 'Loại' },
+  { key: 'homeLocationName', label: 'Vị trí' },
+  { key: 'status', label: 'Tình trạng kỹ thuật' },
+  { key: 'usageStatus', label: 'Trạng thái sử dụng' },
+  { key: 'specs', label: 'Thuộc tính' },
+  { key: 'origin', label: 'Nguồn gốc tài sản' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultItemizedAssetVisibleColumnKeys = ['qaCode', 'name', 'category', 'homeLocationName', 'status', 'usageStatus', 'actions']
+const disposalModalLotColumnOptions = [
+  { key: 'selected', label: 'Chọn' },
+  { key: 'lotCode', label: 'Lô hàng' },
+  { key: 'receivedDate', label: 'Ngày nhập' },
+  { key: 'expirationDate', label: 'Hạn sử dụng' },
+  { key: 'quantityRemaining', label: 'Còn lại' },
+  { key: 'quantityRequested', label: 'Số lượng huỷ' },
+]
+const defaultDisposalModalLotVisibleColumnKeys = ['selected', 'lotCode', 'expirationDate', 'quantityRemaining', 'quantityRequested']
+const disposalDecisionLotColumnOptions = [
+  { key: 'lotCode', label: 'Lô' },
+  { key: 'expirationDate', label: 'HSD' },
+  { key: 'quantityRequested', label: 'Số lượng huỷ' },
+]
+const defaultDisposalDecisionLotVisibleColumnKeys = ['lotCode', 'expirationDate', 'quantityRequested']
+const disposalHistoryLotColumnOptions = [
+  { key: 'lotCode', label: 'Lô' },
+  { key: 'receivedDate', label: 'Ngày nhập' },
+  { key: 'expirationDate', label: 'HSD' },
+  { key: 'quantityRequested', label: 'Số lượng huỷ' },
+]
+const defaultDisposalHistoryLotVisibleColumnKeys = ['lotCode', 'receivedDate', 'expirationDate', 'quantityRequested']
 
 function createDefaultConfirmDialog() {
   return {
@@ -78,6 +148,14 @@ function createDefaultConfirmDialog() {
     busy: false,
     onConfirm: null,
   }
+}
+
+function handleColumnToggleWithGuard(columnKey, visibleColumns, selectedCount, toggleColumn) {
+  if (visibleColumns[columnKey] && selectedCount === 1) {
+    toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+    return
+  }
+  toggleColumn(columnKey)
 }
 
 function getCategoryLabel(category) {
@@ -482,6 +560,41 @@ function AssetManagement({ restrictToConsumable = false }) {
   const isConsumableTab = isConsumableMode(activeTrackingMode)
   const isAdmin = user?.role === 'Admin'
   const isConsumableManager = user?.role === 'ConsumableManager'
+  const consumableOverviewColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-consumable-overview-columns',
+    columns: consumableOverviewColumnOptions,
+    defaultVisibleKeys: defaultConsumableOverviewVisibleColumnKeys,
+  })
+  const locationStockColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-location-stock-columns',
+    columns: locationStockColumnOptions,
+    defaultVisibleKeys: defaultLocationStockVisibleColumnKeys,
+  })
+  const disposalRequestColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-disposal-request-columns',
+    columns: disposalRequestColumnOptions,
+    defaultVisibleKeys: defaultDisposalRequestVisibleColumnKeys,
+  })
+  const itemizedAssetColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-itemized-columns',
+    columns: itemizedAssetColumnOptions,
+    defaultVisibleKeys: defaultItemizedAssetVisibleColumnKeys,
+  })
+  const disposalModalLotColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-disposal-modal-lots-columns',
+    columns: disposalModalLotColumnOptions,
+    defaultVisibleKeys: defaultDisposalModalLotVisibleColumnKeys,
+  })
+  const disposalDecisionLotColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-disposal-decision-lots-columns',
+    columns: disposalDecisionLotColumnOptions,
+    defaultVisibleKeys: defaultDisposalDecisionLotVisibleColumnKeys,
+  })
+  const disposalHistoryLotColumns = useColumnVisibility({
+    storageKey: 'mhv-admin-assets-disposal-history-lots-columns',
+    columns: disposalHistoryLotColumnOptions,
+    defaultVisibleKeys: defaultDisposalHistoryLotVisibleColumnKeys,
+  })
 
   const filteredCategoryOptions = useMemo(() => {
     const keyword = filters.categoryKeyword.trim().toLowerCase()
@@ -894,6 +1007,10 @@ function AssetManagement({ restrictToConsumable = false }) {
     }
     void initializePage()
   }, [loadConsumableStatusCounts, restrictToConsumable])
+
+  useDebouncedEffect(() => {
+    void loadAssets(0, filters)
+  }, [filters.name, filters.status, filters.trackingMode, filters.categoryId, filters.locationId], 300, true)
 
   useEffect(() => {
     if (!isConsumableTab || !isAdmin) return
@@ -2283,38 +2400,60 @@ function AssetManagement({ restrictToConsumable = false }) {
                     </div>
                   </div>
 
+                  <div className="mt-4 flex justify-end">
+                    <ColumnVisibilityDropdown
+                      columns={consumableOverviewColumnOptions}
+                      visibleColumns={consumableOverviewColumns.visibleColumns}
+                      selectedCount={consumableOverviewColumns.selectedCount}
+                      allSelected={consumableOverviewColumns.allSelected}
+                      onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                        columnKey,
+                        consumableOverviewColumns.visibleColumns,
+                        consumableOverviewColumns.selectedCount,
+                        consumableOverviewColumns.toggleColumn,
+                      )}
+                      onSelectAll={consumableOverviewColumns.selectAllColumns}
+                      onResetDefault={consumableOverviewColumns.resetDefaultColumns}
+                    />
+                  </div>
                   <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
                     <div className="overflow-x-auto">
                     <table className="min-w-[1080px] text-sm">
                       <thead className="bg-fptOrange text-white">
                         <tr>
+                          {consumableOverviewColumns.visibleColumns.name && (
                           <th className="w-[22%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               {getSortLabel('name', 'Tên vật tư')}
                             </button>
                           </th>
+                          )}
+                          {consumableOverviewColumns.visibleColumns.category && (
                           <th className="w-[14%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('category')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               {getSortLabel('category', 'Loại')}
                             </button>
                           </th>
+                          )}
+                          {consumableOverviewColumns.visibleColumns.quantityOnHand && (
                           <th className="w-[14%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">
                             <button type="button" onClick={() => handleSort('quantityOnHand')} className="whitespace-nowrap transition-colors hover:text-orange-100">
                               Tồn theo HSD
                             </button>
                           </th>
-                          <th className="w-[10%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Ngưỡng báo</th>
-                          <th className="w-[12%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Đơn giá</th>
-                          <th className="w-[12%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>
-                          <th className="w-[8%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Trạng thái</th>
-                          <th className="w-[8%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Hành động</th>
+                          )}
+                          {consumableOverviewColumns.visibleColumns.minimumStock && <th className="w-[10%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Ngưỡng báo</th>}
+                          {consumableOverviewColumns.visibleColumns.purchasePrice && <th className="w-[12%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Đơn giá</th>}
+                          {consumableOverviewColumns.visibleColumns.expirationDate && <th className="w-[12%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Hạn sử dụng</th>}
+                          {consumableOverviewColumns.visibleColumns.status && <th className="w-[8%] whitespace-nowrap px-3 py-2 text-left font-semibold text-white">Trạng thái</th>}
+                          {consumableOverviewColumns.visibleColumns.actions && <th className="w-[8%] whitespace-nowrap px-3 py-2 text-right font-semibold text-white">Hành động</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 bg-white">
                         {loading &&
                           Array.from({ length: 6 }).map((_, index) => (
                             <tr key={`skeleton-consumable-${index}`} className="animate-pulse">
-                              {Array.from({ length: 8 }).map((__, cellIndex) => (
+                              {Array.from({ length: consumableOverviewColumns.activeColumns.length }).map((__, cellIndex) => (
                                 <td key={`cell-consumable-${cellIndex}`} className="px-3 py-2 align-top">
                                   <div className="h-4 w-24 rounded bg-slate-200" />
                                 </td>
@@ -2332,7 +2471,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                               })
                               return (
                                 <tr key={group.key} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/80">
-                                  {groupIndex === 0 && (
+                                  {groupIndex === 0 && consumableOverviewColumns.visibleColumns.name && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
                                       <div className="font-medium text-slate-700">{asset.name}</div>
                                       <div className="text-xs text-slate-500">{asset.qaCode}</div>
@@ -2341,21 +2480,21 @@ function AssetManagement({ restrictToConsumable = false }) {
                                       )}
                                     </td>
                                   )}
-                                  {groupIndex === 0 && <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{asset.category}</td>}
-                                  <td className="px-3 py-3 align-top">
+                                  {groupIndex === 0 && consumableOverviewColumns.visibleColumns.category && <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">{asset.category}</td>}
+                                  {consumableOverviewColumns.visibleColumns.quantityOnHand && <td className="px-3 py-3 align-top">
                                     <div className="whitespace-nowrap font-medium tabular-nums text-slate-700">{`${group.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
                                     <div className="whitespace-nowrap text-xs tabular-nums text-slate-500">{`Tổng mặt hàng: ${asset.quantityOnHand ?? 0} ${asset.unit || ''}`.trim()}</div>
-                                  </td>
-                                  {groupIndex === 0 && (
+                                  </td>}
+                                  {groupIndex === 0 && consumableOverviewColumns.visibleColumns.minimumStock && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 text-right align-top">
                                       <span className="whitespace-nowrap tabular-nums">{`${asset.minimumStock ?? 0} ${asset.unit || ''}`.trim()}</span>
                                     </td>
                                   )}
-                                  <td className="px-3 py-3 text-right align-top">
+                                  {consumableOverviewColumns.visibleColumns.purchasePrice && <td className="px-3 py-3 text-right align-top">
                                     <div className="whitespace-nowrap font-medium tabular-nums text-slate-700">{formatCurrency(group.purchasePrice)}</div>
                                     {group.lotCount > 1 && <div className="whitespace-nowrap text-xs text-slate-500">{`Gộp ${group.lotCount} lô cùng HSD`}</div>}
-                                  </td>
-                                  <td className={`px-3 py-3 ${asset.expiryTrackingEnabled ? 'align-top' : 'text-center align-middle'}`}>
+                                  </td>}
+                                  {consumableOverviewColumns.visibleColumns.expirationDate && <td className={`px-3 py-3 ${asset.expiryTrackingEnabled ? 'align-top' : 'text-center align-middle'}`}>
                                     {asset.expiryTrackingEnabled ? (
                                       <div className="flex flex-col gap-1">
                                         <span className="whitespace-nowrap text-xs text-slate-500">{expiryState.dateLabel}</span>
@@ -2371,15 +2510,15 @@ function AssetManagement({ restrictToConsumable = false }) {
                                         –
                                       </span>
                                     )}
-                                  </td>
-                                  {groupIndex === 0 && (
+                                  </td>}
+                                  {groupIndex === 0 && consumableOverviewColumns.visibleColumns.status && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
                                       <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(stockState.tone)}`}>
                                         {stockState.label}
                                       </span>
                                     </td>
                                   )}
-                                  {groupIndex === 0 && (
+                                  {groupIndex === 0 && consumableOverviewColumns.visibleColumns.actions && (
                                     <td rowSpan={expiryGroups.length} className="px-3 py-3 align-top">
                                       <div className="flex justify-end gap-2">
                                         <ActionIconButton
@@ -2417,7 +2556,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                           })}
                         {!loading && assets.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
+                            <td colSpan={Math.max(consumableOverviewColumns.activeColumns.length, 1)} className="px-3 py-8 text-center text-sm text-slate-500">
                               Chưa có vật tư tiêu hao phù hợp.
                             </td>
                           </tr>
@@ -2549,26 +2688,43 @@ function AssetManagement({ restrictToConsumable = false }) {
                   )}
 
                   {selectedOverviewLocationId && (
+                    <>
+                    <div className="flex justify-end">
+                      <ColumnVisibilityDropdown
+                        columns={locationStockColumnOptions}
+                        visibleColumns={locationStockColumns.visibleColumns}
+                        selectedCount={locationStockColumns.selectedCount}
+                        allSelected={locationStockColumns.allSelected}
+                        onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                          columnKey,
+                          locationStockColumns.visibleColumns,
+                          locationStockColumns.selectedCount,
+                          locationStockColumns.toggleColumn,
+                        )}
+                        onSelectAll={locationStockColumns.selectAllColumns}
+                        onResetDefault={locationStockColumns.resetDefaultColumns}
+                      />
+                    </div>
                     <div className="overflow-hidden rounded-2xl border border-slate-200">
                     <div className="overflow-x-auto">
                       <table className="min-w-max divide-y divide-slate-200 text-sm">
                         <thead className="bg-slate-100/80">
                           <tr>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tên vật tư</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đơn vị</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Lần cấp gần nhất</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tồn tại phòng</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã cấp</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã dùng</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>
-                            <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hành động</th>
+                            {locationStockColumns.visibleColumns.assetName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tên vật tư</th>}
+                            {locationStockColumns.visibleColumns.unit && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đơn vị</th>}
+                            {locationStockColumns.visibleColumns.lastIssuedAt && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Lần cấp gần nhất</th>}
+                            {locationStockColumns.visibleColumns.quantityRemaining && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Tồn tại phòng</th>}
+                            {locationStockColumns.visibleColumns.quantityIssued && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã cấp</th>}
+                            {locationStockColumns.visibleColumns.quantityConsumed && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Đã dùng</th>}
+                            {locationStockColumns.visibleColumns.expirationDate && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hạn sử dụng</th>}
+                            {locationStockColumns.visibleColumns.actions && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Hành động</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {locationOverviewLoading &&
                             Array.from({ length: 5 }).map((_, index) => (
                               <tr key={`room-stock-skeleton-${index}`} className="animate-pulse">
-                                {Array.from({ length: 8 }).map((__, cellIndex) => (
+                                {Array.from({ length: locationStockColumns.activeColumns.length }).map((__, cellIndex) => (
                                   <td key={`room-stock-cell-${cellIndex}`} className="px-3 py-3">
                                     <div className="h-4 w-24 rounded bg-slate-200" />
                                   </td>
@@ -2581,16 +2737,16 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 const expiryState = getConsumableExpiryState(stock)
                                 return (
                                   <tr key={`${stock.assetQaCode}-${stock.locationId}`} className="hover:bg-slate-50/70">
-                                    <td className="px-3 py-3">
+                                    {locationStockColumns.visibleColumns.assetName && <td className="px-3 py-3">
                                       <div className="font-medium text-slate-700">{stock.assetName}</div>
                                       <div className="text-xs text-slate-500">{stock.categoryName}</div>
-                                    </td>
-                                    <td className="px-3 py-3">{stock.unit || 'đơn vị'}</td>
-                                    <td className="px-3 py-3">
+                                    </td>}
+                                    {locationStockColumns.visibleColumns.unit && <td className="px-3 py-3">{stock.unit || 'đơn vị'}</td>}
+                                    {locationStockColumns.visibleColumns.lastIssuedAt && <td className="px-3 py-3">
                                       <div>{formatDateTime(stock.lastIssuedAt)}</div>
                                       <div className="text-xs text-slate-500">{getActorName(stock)}</div>
-                                    </td>
-                                    <td className="px-3 py-3">
+                                    </td>}
+                                    {locationStockColumns.visibleColumns.quantityRemaining && <td className="px-3 py-3">
                                       <div
                                         className={`inline-flex min-w-[72px] justify-end rounded-md px-2 py-1 font-semibold ${
                                           stock.quantityRemaining <= 0
@@ -2602,10 +2758,10 @@ function AssetManagement({ restrictToConsumable = false }) {
                                       >
                                         {stock.quantityRemaining}
                                       </div>
-                                    </td>
-                                    <td className="px-3 py-3">{stock.quantityIssued}</td>
-                                    <td className="px-3 py-3">{stock.quantityConsumed}</td>
-                                    <td className={`px-3 py-3 ${stock.expiryTrackingEnabled ? '' : 'text-center align-middle'}`}>
+                                    </td>}
+                                    {locationStockColumns.visibleColumns.quantityIssued && <td className="px-3 py-3">{stock.quantityIssued}</td>}
+                                    {locationStockColumns.visibleColumns.quantityConsumed && <td className="px-3 py-3">{stock.quantityConsumed}</td>}
+                                    {locationStockColumns.visibleColumns.expirationDate && <td className={`px-3 py-3 ${stock.expiryTrackingEnabled ? '' : 'text-center align-middle'}`}>
                                       {stock.expiryTrackingEnabled ? (
                                         <div className="flex flex-col gap-1">
                                           <span className="text-xs text-slate-500">{expiryState.dateLabel}</span>
@@ -2621,8 +2777,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                                           –
                                         </span>
                                       )}
-                                    </td>
-                                    <td className="px-3 py-3">
+                                    </td>}
+                                    {locationStockColumns.visibleColumns.actions && <td className="px-3 py-3">
                                       <div className="flex gap-2">
                                         <ActionIconButton
                                           icon={Package}
@@ -2637,14 +2793,14 @@ function AssetManagement({ restrictToConsumable = false }) {
                                           onClick={() => handleOpenStockAdjustModal(stock)}
                                         />
                                       </div>
-                                    </td>
+                                    </td>}
                                   </tr>
                                 )
                               })()
                             ))}
                           {!locationOverviewLoading && selectedOverviewLocationId && (locationOverview?.stocks || []).length === 0 && (
                             <tr>
-                              <td colSpan={8} className="px-3 py-10 text-center text-sm text-slate-500">
+                              <td colSpan={Math.max(locationStockColumns.activeColumns.length, 1)} className="px-3 py-10 text-center text-sm text-slate-500">
                                 Phòng này chưa có vật tư tiêu hao được cấp phát.
                               </td>
                             </tr>
@@ -2653,6 +2809,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                       </table>
                     </div>
                     </div>
+                    </>
                   )}
                 </div>
 
@@ -2799,18 +2956,35 @@ function AssetManagement({ restrictToConsumable = false }) {
                   </div>
                 )}
                 {!disposalRequestsLoading && (
+                  <>
+                  <div className="flex justify-end p-4 pb-0">
+                    <ColumnVisibilityDropdown
+                      columns={disposalRequestColumnOptions}
+                      visibleColumns={disposalRequestColumns.visibleColumns}
+                      selectedCount={disposalRequestColumns.selectedCount}
+                      allSelected={disposalRequestColumns.allSelected}
+                      onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                        columnKey,
+                        disposalRequestColumns.visibleColumns,
+                        disposalRequestColumns.selectedCount,
+                        disposalRequestColumns.toggleColumn,
+                      )}
+                      onSelectAll={disposalRequestColumns.selectAllColumns}
+                      onResetDefault={disposalRequestColumns.resetDefaultColumns}
+                    />
+                  </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-[1120px] text-sm">
                       <thead className="bg-slate-100/80 dark:bg-slate-900/70">
                         <tr>
-                          <th className="w-[8%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Phiếu</th>
-                          <th className="w-[20%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Vật tư</th>
-                          <th className="w-[12%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng</th>
-                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Số lô</th>
-                          <th className="w-[16%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Người đề nghị</th>
-                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>
-                          <th className="w-[14%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Xử lý</th>
-                          <th className="w-[10%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Hành động</th>
+                          {disposalRequestColumns.visibleColumns.ticket && <th className="w-[8%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Phiếu</th>}
+                          {disposalRequestColumns.visibleColumns.asset && <th className="w-[20%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Vật tư</th>}
+                          {disposalRequestColumns.visibleColumns.quantity && <th className="w-[12%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng</th>}
+                          {disposalRequestColumns.visibleColumns.lot && <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Số lô</th>}
+                          {disposalRequestColumns.visibleColumns.requester && <th className="w-[16%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Người đề nghị</th>}
+                          {disposalRequestColumns.visibleColumns.status && <th className="w-[10%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>}
+                          {disposalRequestColumns.visibleColumns.resolved && <th className="w-[14%] whitespace-nowrap px-3 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Xử lý</th>}
+                          {disposalRequestColumns.visibleColumns.actions && <th className="w-[10%] whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Hành động</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -2818,33 +2992,33 @@ function AssetManagement({ restrictToConsumable = false }) {
                           const statusMeta = getConsumableDisposalStatusMeta(item.status)
                           return (
                             <tr key={item.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-slate-900/60">
-                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                              {disposalRequestColumns.visibleColumns.ticket && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
                                 <div className="font-semibold">#{item.id}</div>
                                 <div className="text-xs text-slate-500 dark:text-slate-400">{item.assetQaCode}</div>
-                              </td>
-                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.asset && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
                                 <div className="font-medium">{item.assetName}</div>
                                 <div className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{item.reason}</div>
-                              </td>
-                              <td className="px-3 py-3 text-right tabular-nums text-slate-700 dark:text-slate-200">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.quantity && <td className="px-3 py-3 text-right tabular-nums text-slate-700 dark:text-slate-200">
                                 <div className="font-medium whitespace-nowrap">{item.quantityRequested} {item.unit || ''}</div>
-                              </td>
-                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.lot && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
                                 <div className="font-medium">{item.itemCount || item.items?.length || 1} lô</div>
                                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                   {(item.items || []).slice(0, 2).map((lotItem) => lotItem.lotCode || `Lô #${lotItem.receiptLotId}`).join(', ') || (item.lotCode || `Lô #${item.receiptLotId}`)}
                                 </div>
-                              </td>
-                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.requester && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
                                 <div className="font-medium">{item.requestedByFullName || item.requestedByUsername}</div>
                                 <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDateTime(item.createdAt)}</div>
-                              </td>
-                              <td className="px-3 py-3">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.status && <td className="px-3 py-3">
                                 <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusMeta.className}`}>
                                   {statusMeta.label}
                                 </span>
-                              </td>
-                              <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.resolved && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">
                                 {item.resolvedAt ? (
                                   <>
                                     <div className="font-medium">{item.resolvedByFullName || item.resolvedByUsername}</div>
@@ -2853,8 +3027,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                                 ) : (
                                   <span className="text-sm text-slate-500 dark:text-slate-400">Đang chờ xử lý</span>
                                 )}
-                              </td>
-                              <td className="px-3 py-3">
+                              </td>}
+                              {disposalRequestColumns.visibleColumns.actions && <td className="px-3 py-3">
                                 <div className="flex justify-end gap-2">
                                   <ActionIconButton
                                     icon={Detail}
@@ -2892,13 +3066,13 @@ function AssetManagement({ restrictToConsumable = false }) {
                                     />
                                   )}
                                 </div>
-                              </td>
+                              </td>}
                             </tr>
                           )
                         })}
                         {filteredDisposalRequests.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                            <td colSpan={Math.max(disposalRequestColumns.activeColumns.length, 1)} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                               Không có phiếu tiêu huỷ nào khớp với bộ lọc hiện tại.
                             </td>
                           </tr>
@@ -2906,6 +3080,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                       </tbody>
                     </table>
                   </div>
+                  </>
                 )}
               </div>
             </div>
@@ -3199,51 +3374,67 @@ function AssetManagement({ restrictToConsumable = false }) {
           </div>
 
           <div className="rounded-xl bg-white p-4 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-800">Danh sách tài sản cố định</h2>
-              <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
+                <ColumnVisibilityDropdown
+                  columns={itemizedAssetColumnOptions}
+                  visibleColumns={itemizedAssetColumns.visibleColumns}
+                  selectedCount={itemizedAssetColumns.selectedCount}
+                  allSelected={itemizedAssetColumns.allSelected}
+                  onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                    columnKey,
+                    itemizedAssetColumns.visibleColumns,
+                    itemizedAssetColumns.selectedCount,
+                    itemizedAssetColumns.toggleColumn,
+                  )}
+                  onSelectAll={itemizedAssetColumns.selectAllColumns}
+                  onResetDefault={itemizedAssetColumns.resetDefaultColumns}
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="min-w-max divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  {itemizedAssetColumns.visibleColumns.qaCode && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('qaCode')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('qaCode', 'Mã QA')}
                     </button>
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  </th>}
+                  {itemizedAssetColumns.visibleColumns.name && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('name', 'Tên thiết bị')}
                     </button>
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  </th>}
+                  {itemizedAssetColumns.visibleColumns.category && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('category')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('category', 'Loại')}
                     </button>
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  </th>}
+                  {itemizedAssetColumns.visibleColumns.homeLocationName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('homeLocationName', 'Vị trí')}
                     </button>
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                  </th>}
+                  {itemizedAssetColumns.visibleColumns.status && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('status', 'Tình trạng kỹ thuật')}
                     </button>
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>
-                  <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                  </th>}
+                  {itemizedAssetColumns.visibleColumns.usageStatus && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>}
+                  {itemizedAssetColumns.visibleColumns.specs && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>}
+                  {itemizedAssetColumns.visibleColumns.origin && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>}
+                  {itemizedAssetColumns.visibleColumns.actions && <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>}
                 </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading &&
                     Array.from({ length: 6 }).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="animate-pulse">
-                        {Array.from({ length: 9 }).map((__, cellIndex) => (
+                        {Array.from({ length: itemizedAssetColumns.activeColumns.length }).map((__, cellIndex) => (
                           <td key={`cell-${cellIndex}`} className="px-3 py-2">
                             <div className="h-4 w-24 rounded bg-slate-200" />
                           </td>
@@ -3253,15 +3444,15 @@ function AssetManagement({ restrictToConsumable = false }) {
                   {!loading &&
                     assets.map((asset) => (
                       <tr key={asset.qaCode}>
-                        <td className="px-3 py-2">{asset.qaCode}</td>
-                        <td className="px-3 py-2">{asset.name}</td>
-                        <td className="px-3 py-2">{asset.category}</td>
-                        <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>
-                        <td className="px-3 py-2">
+                        {itemizedAssetColumns.visibleColumns.qaCode && <td className="px-3 py-2">{asset.qaCode}</td>}
+                        {itemizedAssetColumns.visibleColumns.name && <td className="px-3 py-2">{asset.name}</td>}
+                        {itemizedAssetColumns.visibleColumns.category && <td className="px-3 py-2">{asset.category}</td>}
+                        {itemizedAssetColumns.visibleColumns.homeLocationName && <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>}
+                        {itemizedAssetColumns.visibleColumns.status && <td className="px-3 py-2">
                           <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
-                        </td>
-                        <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>
-                        <td className="px-3 py-2">
+                        </td>}
+                        {itemizedAssetColumns.visibleColumns.usageStatus && <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>}
+                        {itemizedAssetColumns.visibleColumns.specs && <td className="px-3 py-2">
                           <ActionIconButton
                             icon={Detail}
                             label="Xem đặc tính kỹ thuật"
@@ -3277,8 +3468,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                               }
                             }}
                           />
-                        </td>
-                        <td className="px-3 py-2">
+                        </td>}
+                        {itemizedAssetColumns.visibleColumns.origin && <td className="px-3 py-2">
                           <ActionIconButton
                             icon={Search}
                             label="Xem nguồn gốc tài sản"
@@ -3294,8 +3485,8 @@ function AssetManagement({ restrictToConsumable = false }) {
                               }
                             }}
                           />
-                        </td>
-                        <td className="px-3 py-2">
+                        </td>}
+                        {itemizedAssetColumns.visibleColumns.actions && <td className="px-3 py-2">
                           <div className="flex justify-end gap-2">
                             <ActionIconButton
                               icon={QrCode}
@@ -3326,12 +3517,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                               onClick={() => handleDeleteAsset(asset.qaCode)}
                             />
                           </div>
-                        </td>
+                        </td>}
                       </tr>
                     ))}
                   {!loading && assets.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-3 py-6 text-center text-sm text-slate-500">
+                      <td colSpan={Math.max(itemizedAssetColumns.activeColumns.length, 1)} className="px-3 py-6 text-center text-sm text-slate-500">
                         Chưa có tài sản cố định phù hợp.
                       </td>
                     </tr>
@@ -4325,22 +4516,38 @@ function AssetManagement({ restrictToConsumable = false }) {
                 <p><span className="font-semibold">Mã vật tư:</span> {selectedExpiredLot.assetQaCode}</p>
                 <p><span className="font-semibold">Số lô hết hạn đang có:</span> {disposalRequestForm.items.length}</p>
               </div>
+              <div className="flex justify-end">
+                <ColumnVisibilityDropdown
+                  columns={disposalModalLotColumnOptions}
+                  visibleColumns={disposalModalLotColumns.visibleColumns}
+                  selectedCount={disposalModalLotColumns.selectedCount}
+                  allSelected={disposalModalLotColumns.allSelected}
+                  onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                    columnKey,
+                    disposalModalLotColumns.visibleColumns,
+                    disposalModalLotColumns.selectedCount,
+                    disposalModalLotColumns.toggleColumn,
+                  )}
+                  onSelectAll={disposalModalLotColumns.selectAllColumns}
+                  onResetDefault={disposalModalLotColumns.resetDefaultColumns}
+                />
+              </div>
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-900/70">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Chọn</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô hàng</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Hạn sử dụng</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Còn lại</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                      {disposalModalLotColumns.visibleColumns.selected && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Chọn</th>}
+                      {disposalModalLotColumns.visibleColumns.lotCode && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô hàng</th>}
+                      {disposalModalLotColumns.visibleColumns.receivedDate && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>}
+                      {disposalModalLotColumns.visibleColumns.expirationDate && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Hạn sử dụng</th>}
+                      {disposalModalLotColumns.visibleColumns.quantityRemaining && <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Còn lại</th>}
+                      {disposalModalLotColumns.visibleColumns.quantityRequested && <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {disposalRequestForm.items.map((item) => (
                       <tr key={item.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
-                        <td className="px-3 py-3">
+                        {disposalModalLotColumns.visibleColumns.selected && <td className="px-3 py-3">
                           <input
                             type="checkbox"
                             checked={Boolean(item.selected)}
@@ -4360,12 +4567,12 @@ function AssetManagement({ restrictToConsumable = false }) {
                               }))
                             }}
                           />
-                        </td>
-                        <td className="px-3 py-3 text-slate-700 dark:text-slate-200">{item.lotCode}</td>
-                        <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.receivedDate)}</td>
-                        <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>
-                        <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-200">{item.quantityRemaining} {item.unit || ''}</td>
-                        <td className="px-3 py-3">
+                        </td>}
+                        {disposalModalLotColumns.visibleColumns.lotCode && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">{item.lotCode}</td>}
+                        {disposalModalLotColumns.visibleColumns.receivedDate && <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.receivedDate)}</td>}
+                        {disposalModalLotColumns.visibleColumns.expirationDate && <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>}
+                        {disposalModalLotColumns.visibleColumns.quantityRemaining && <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-200">{item.quantityRemaining} {item.unit || ''}</td>}
+                        {disposalModalLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-3">
                           <input
                             type="number"
                             min="1"
@@ -4386,7 +4593,7 @@ function AssetManagement({ restrictToConsumable = false }) {
                             className={`${getFieldClass(false)} text-right`}
                             placeholder="0"
                           />
-                        </td>
+                        </td>}
                       </tr>
                     ))}
                   </tbody>
@@ -4510,21 +4717,37 @@ function AssetManagement({ restrictToConsumable = false }) {
                 <div className="border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200">
                   Danh sách lô trong phiếu
                 </div>
+                <div className="flex justify-end px-3 pt-3">
+                  <ColumnVisibilityDropdown
+                    columns={disposalDecisionLotColumnOptions}
+                    visibleColumns={disposalDecisionLotColumns.visibleColumns}
+                    selectedCount={disposalDecisionLotColumns.selectedCount}
+                    allSelected={disposalDecisionLotColumns.allSelected}
+                    onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                      columnKey,
+                      disposalDecisionLotColumns.visibleColumns,
+                      disposalDecisionLotColumns.selectedCount,
+                      disposalDecisionLotColumns.toggleColumn,
+                    )}
+                    onSelectAll={disposalDecisionLotColumns.selectAllColumns}
+                    onResetDefault={disposalDecisionLotColumns.resetDefaultColumns}
+                  />
+                </div>
                 <div className="max-h-52 overflow-auto">
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 dark:bg-slate-900/70">
                       <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                        {disposalDecisionLotColumns.visibleColumns.lotCode && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>}
+                        {disposalDecisionLotColumns.visibleColumns.expirationDate && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>}
+                        {disposalDecisionLotColumns.visibleColumns.quantityRequested && <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {(selectedDisposalRequest.items || []).map((item) => (
                         <tr key={item.id || item.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
-                          <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{item.lotCode || `Lô #${item.receiptLotId}`}</td>
-                          <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>
-                          <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{item.quantityRequested}</td>
+                          {disposalDecisionLotColumns.visibleColumns.lotCode && <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{item.lotCode || `Lô #${item.receiptLotId}`}</td>}
+                          {disposalDecisionLotColumns.visibleColumns.expirationDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>}
+                          {disposalDecisionLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{item.quantityRequested}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -4605,22 +4828,38 @@ function AssetManagement({ restrictToConsumable = false }) {
               </div>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex justify-end p-3 pb-0">
+                  <ColumnVisibilityDropdown
+                    columns={disposalHistoryLotColumnOptions}
+                    visibleColumns={disposalHistoryLotColumns.visibleColumns}
+                    selectedCount={disposalHistoryLotColumns.selectedCount}
+                    allSelected={disposalHistoryLotColumns.allSelected}
+                    onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
+                      columnKey,
+                      disposalHistoryLotColumns.visibleColumns,
+                      disposalHistoryLotColumns.selectedCount,
+                      disposalHistoryLotColumns.toggleColumn,
+                    )}
+                    onSelectAll={disposalHistoryLotColumns.selectAllColumns}
+                    onResetDefault={disposalHistoryLotColumns.resetDefaultColumns}
+                  />
+                </div>
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 dark:bg-slate-900/70">
                     <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>
+                      {disposalHistoryLotColumns.visibleColumns.lotCode && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Lô</th>}
+                      {disposalHistoryLotColumns.visibleColumns.receivedDate && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">Ngày nhập</th>}
+                      {disposalHistoryLotColumns.visibleColumns.expirationDate && <th className="px-3 py-2 text-left font-semibold text-slate-700 dark:text-slate-200">HSD</th>}
+                      {disposalHistoryLotColumns.visibleColumns.quantityRequested && <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">Số lượng huỷ</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {(selectedDisposalHistoryRequest.items || []).map((lotItem) => (
                       <tr key={lotItem.id || lotItem.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
-                        <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{lotItem.lotCode || `Lô #${lotItem.receiptLotId}`}</td>
-                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.receivedDate)}</td>
-                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.expirationDate)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{lotItem.quantityRequested}</td>
+                        {disposalHistoryLotColumns.visibleColumns.lotCode && <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{lotItem.lotCode || `Lô #${lotItem.receiptLotId}`}</td>}
+                        {disposalHistoryLotColumns.visibleColumns.receivedDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.receivedDate)}</td>}
+                        {disposalHistoryLotColumns.visibleColumns.expirationDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.expirationDate)}</td>}
+                        {disposalHistoryLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{lotItem.quantityRequested}</td>}
                       </tr>
                     ))}
                   </tbody>

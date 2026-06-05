@@ -51,48 +51,41 @@ function GlobalNotification() {
     }
   }
 
-  const showToastByType = useCallback((type, message) => {
-    if (user?.role === 'TechSupport' && type !== 'TICKET_CREATED') {
-      return
+  const showToastByType = useCallback((payload) => {
+    const type = payload?.type || payload?.eventType || ''
+    const message = payload?.message || 'Có thông báo mới.'
+    const toastOptions = {
+      icon: false,
+      autoClose: 5000,
+      toastId: payload?.notificationId ? `notification-${payload.notificationId}` : `${type}-${message}`,
     }
+
     if (type === 'TICKET_CREATED') {
-      toast.error(message, { icon: false, autoClose: 5000 })
+      toast.error(message, toastOptions)
       return
     }
     if (type === 'TICKET_ASSIGNED') {
-      toast.info(message, { icon: false, autoClose: 5000 })
+      toast.info(message, toastOptions)
       return
     }
     if (type === 'TICKET_RESOLVED') {
-      toast.success(message, { icon: false, autoClose: 5000 })
+      toast.success(message, toastOptions)
       return
     }
-    if (user?.role === 'Admin' || user?.role === 'ConsumableManager') {
-      toast(message, { icon: false, autoClose: 5000 })
-    }
-  }, [user?.role])
-
-  useEffect(() => {
-    if (!isAuthenticated || !connected) return undefined
-    const unsubscribe = subscribe('/topic/notifications', (payload) => {
-      const type = payload?.type || ''
-      const message = payload?.message || 'Có cập nhật sự cố mới.'
-      showToastByType(type, message)
-      requestNotificationFeedRefresh()
-    })
-    return () => unsubscribe()
-  }, [connected, isAuthenticated, subscribe, user?.role])
+    toast(message, toastOptions)
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
     const unsubscribe = subscribe(`/topic/users/${user.userId}/notifications`, (payload) => {
-      const type = payload?.type || ''
-      const message = payload?.message || 'Có cập nhật sự cố mới.'
-      showToastByType(type, message)
+      if (payload?.notificationId != null) {
+        seenNotificationIdsRef.current.add(payload.notificationId)
+      }
+      showToastByType(payload)
       requestNotificationFeedRefresh()
     })
     return () => unsubscribe()
-  }, [connected, isAuthenticated, subscribe, user?.role, user?.userId])
+  }, [connected, isAuthenticated, showToastByType, subscribe, user?.userId])
 
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
@@ -125,7 +118,6 @@ function GlobalNotification() {
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
-    if (user?.role === 'Admin' || user?.role === 'ConsumableManager') return undefined
     let mounted = true
     const syncNotifications = async () => {
       if (document.hidden) return
@@ -143,12 +135,11 @@ function GlobalNotification() {
         const newItems = items.filter((item) => !seenNotificationIdsRef.current.has(item.id))
         newItems.forEach((item) => {
           seenNotificationIdsRef.current.add(item.id)
-          if (connected && String(item.eventType || '').startsWith('TICKET_')) {
-            return
-          }
-          const type = item.eventType || ''
-          const message = item.message || 'Có thông báo mới.'
-          showToastByType(type, message)
+          showToastByType({
+            notificationId: item.id,
+            type: item.eventType || '',
+            message: item.message || 'Có thông báo mới.',
+          })
         })
         if (newItems.length > 0) {
           requestNotificationFeedRefresh()
@@ -164,12 +155,12 @@ function GlobalNotification() {
       }
     }
     syncNotifications()
-    const timer = setInterval(syncNotifications, 60000)
+    const timer = setInterval(syncNotifications, 10000)
     return () => {
       mounted = false
       clearInterval(timer)
     }
-  }, [connected, isAuthenticated, user?.role])
+  }, [connected, isAuthenticated, showToastByType])
 
   return null
 }
