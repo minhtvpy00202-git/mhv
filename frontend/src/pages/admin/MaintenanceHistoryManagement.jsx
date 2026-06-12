@@ -1,9 +1,11 @@
 import { IconFileDescription as Detail, IconMessageCircle as MessageCircle } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { getAssetStatusMeta, getTechnicalStatusMeta, getUsageStatusMeta } from '../../utils/assetStatus'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
@@ -15,6 +17,21 @@ const defaultPageInfo = {
   totalPages: 1,
   totalItems: 0,
 }
+const maintenanceColumnOptions = [
+  { key: 'assetQaCode', label: 'Mã thiết bị' },
+  { key: 'assetName', label: 'Tên thiết bị' },
+  { key: 'homeLocationName', label: 'Phòng gốc' },
+  { key: 'currentLocationName', label: 'Phòng hiện tại' },
+  { key: 'reporterFullName', label: 'Người báo hỏng' },
+  { key: 'description', label: 'Chi tiết hỏng' },
+  { key: 'reportTime', label: 'Ngày giờ báo hỏng' },
+  { key: 'technicalStatus', label: 'Tình trạng kỹ thuật' },
+  { key: 'usageStatus', label: 'Trạng thái sử dụng' },
+  { key: 'assetStatus', label: 'Trạng thái hiển thị' },
+  { key: 'image', label: 'Ảnh lỗi' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultMaintenanceVisibleColumnKeys = ['assetQaCode', 'assetName', 'reporterFullName', 'description', 'reportTime', 'technicalStatus', 'actions']
 
 function getRowKey(item) {
   return `${item.id}-${item.assetQaCode}-${item.reportTime}`
@@ -34,6 +51,19 @@ function MaintenanceHistoryManagement() {
   const [loading, setLoading] = useState(true)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-maintenance-history-visible-columns',
+    columns: maintenanceColumnOptions,
+    defaultVisibleKeys: defaultMaintenanceVisibleColumnKeys,
+  })
 
   const loadData = async (page = pageInfo.page) => {
     setLoading(true)
@@ -84,6 +114,25 @@ function MaintenanceHistoryManagement() {
     }
   }
 
+  const tableColumns = useMemo(() => ([
+    { key: 'assetQaCode', label: 'Mã thiết bị', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.assetQaCode },
+    { key: 'assetName', label: 'Tên thiết bị', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.assetName },
+    { key: 'homeLocationName', label: 'Phòng gốc', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.homeLocationName },
+    { key: 'currentLocationName', label: 'Phòng hiện tại', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.currentLocationName },
+    { key: 'reporterFullName', label: 'Người báo hỏng', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.reporterFullName },
+    { key: 'description', label: 'Chi tiết hỏng', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => item.description },
+    { key: 'reportTime', label: 'Ngày giờ báo hỏng', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => formatVietnamDateTime(item.reportTime) },
+    { key: 'technicalStatus', label: 'Tình trạng kỹ thuật', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => { const meta = getTechnicalStatusMeta(item.technicalStatus); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(meta.tone)}`}>{meta.label}</span> } },
+    { key: 'usageStatus', label: 'Trạng thái sử dụng', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => { const meta = getUsageStatusMeta(item.usageStatus); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(meta.tone)}`}>{meta.label}</span> } },
+    { key: 'assetStatus', label: 'Trạng thái hiển thị', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => { const meta = getAssetStatusMeta(item.assetStatus); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(meta.tone)}`}>{meta.label}</span> } },
+    { key: 'image', label: 'Ảnh lỗi', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => <ActionIconButton icon={Detail} label="Xem ảnh lỗi" onClick={() => { if (!item.imageUrl) { toast.info('Bản ghi này chưa có ảnh lỗi.'); return } setPreviewImageUrl(item.imageUrl) }} /> },
+    { key: 'actions', label: 'Thao tác', headClassName: 'whitespace-nowrap px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (item) => <ActionIconButton icon={MessageCircle} label="Mở ticket hoặc chat" variant="primary" onClick={() => handleOpenTicketChat(item)} /> },
+  ]), [])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
+
   return (
     <div className="min-w-0 space-y-4">
       <section className="rounded-2xl bg-white p-4 shadow-sm">
@@ -94,22 +143,32 @@ function MaintenanceHistoryManagement() {
       </section>
 
       <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="mb-3 flex justify-end">
+          <ColumnVisibilityDropdown
+            columns={maintenanceColumnOptions}
+            visibleColumns={visibleColumns}
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            onToggleColumn={(columnKey) => {
+              if (visibleColumns[columnKey] && selectedCount === 1) {
+                toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                return
+              }
+              toggleColumn(columnKey)
+            }}
+            onSelectAll={selectAllColumns}
+            onResetDefault={resetDefaultColumns}
+          />
+        </div>
         <div className="w-full max-w-full overflow-x-auto overflow-y-hidden rounded border border-slate-200">
           <table className="w-max min-w-[1500px] text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Mã thiết bị</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Tên thiết bị</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng gốc</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng hiện tại</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Người báo hỏng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Chi tiết hỏng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ngày giờ báo hỏng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Tình trạng kỹ thuật</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái sử dụng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái hiển thị</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -121,54 +180,16 @@ function MaintenanceHistoryManagement() {
                   const usageStatusMeta = getUsageStatusMeta(item.usageStatus)
                   return (
                   <tr key={rowKey} className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-2">{item.assetQaCode}</td>
-                    <td className="px-3 py-2">{item.assetName}</td>
-                    <td className="px-3 py-2">{item.homeLocationName}</td>
-                    <td className="px-3 py-2">{item.currentLocationName}</td>
-                    <td className="px-3 py-2">{item.reporterFullName}</td>
-                    <td className="px-3 py-2">{item.description}</td>
-                    <td className="px-3 py-2">{formatVietnamDateTime(item.reportTime)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(technicalStatusMeta.tone)}`}>
-                        {technicalStatusMeta.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(usageStatusMeta.tone)}`}>
-                        {usageStatusMeta.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getBadgeClassName(assetStatusMeta.tone)}`}>
-                        {assetStatusMeta.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <ActionIconButton
-                        icon={Detail}
-                        label="Xem ảnh lỗi"
-                        onClick={() => {
-                          if (!item.imageUrl) {
-                            toast.info('Bản ghi này chưa có ảnh lỗi.')
-                            return
-                          }
-                          setPreviewImageUrl(item.imageUrl)
-                        }}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <ActionIconButton
-                        icon={MessageCircle}
-                        label="Mở ticket hoặc chat"
-                        variant="primary"
-                        onClick={() => handleOpenTicketChat(item)}
-                      />
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${rowKey}-${column.key}`} className={column.cellClassName}>
+                        {column.render(item)}
+                      </td>
+                    ))}
                   </tr>
                 )})}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-3 text-center text-slate-500">
                     Chưa có dữ liệu báo hỏng.
                   </td>
                 </tr>

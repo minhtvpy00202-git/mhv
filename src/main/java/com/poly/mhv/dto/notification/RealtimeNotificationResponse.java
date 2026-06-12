@@ -11,8 +11,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class RealtimeNotificationResponse {
+    private Integer notificationId;
     private String type;
+    private String title;
     private String message;
+    private String linkPath;
     private Integer ticketId;
     private String assetQaCode;
     private String status;

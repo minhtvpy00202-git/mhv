@@ -4,12 +4,24 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
 import { normalizeSpecTemplates } from '../../utils/assetSpecs'
 import { validateCategoryForm } from '../../utils/validation'
 
 const PAGE_SIZE = 10
+const categoryColumnOptions = [
+  { key: 'id', label: 'ID' },
+  { key: 'name', label: 'Tên loại thiết bị' },
+  { key: 'categoryKind', label: 'Cách quản lý' },
+  { key: 'techTypeName', label: 'Nhóm kỹ thuật phụ trách' },
+  { key: 'specTemplateCount', label: 'Mẫu thông số kỹ thuật' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultCategoryVisibleColumnKeys = ['id', 'name', 'categoryKind', 'techTypeName', 'specTemplateCount', 'actions']
 const categoryKindOptions = [
   { value: 'ITEMIZED', label: 'Tài sản cố định' },
   { value: 'CONSUMABLE', label: 'Vật tư tiêu hao (quản lý theo số lượng)' },
@@ -82,10 +94,76 @@ function CategoryManagement() {
 
   const isEditing = Boolean(selectedCategoryId)
   const totalPages = Math.max(1, Math.ceil(sortedCategories.length / PAGE_SIZE))
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-categories-visible-columns',
+    columns: categoryColumnOptions,
+    defaultVisibleKeys: defaultCategoryVisibleColumnKeys,
+  })
   const paginatedCategories = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedCategories.slice(start, start + PAGE_SIZE)
   }, [sortedCategories, currentPage])
+  const tableColumns = useMemo(() => ([
+    { key: 'id', label: <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('id', 'ID')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (category) => category.id },
+    { key: 'name', label: <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('name', 'Tên loại thiết bị')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (category) => category.name },
+    { key: 'categoryKind', label: <button type="button" onClick={() => handleSort('categoryKind')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('categoryKind', 'Cách quản lý')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (category) => getCategoryKindLabel(category.categoryKind) },
+    { key: 'techTypeName', label: <button type="button" onClick={() => handleSort('techTypeName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (category) => category.techTypeName || '-' },
+    {
+      key: 'specTemplateCount',
+      label: <button type="button" onClick={() => handleSort('specTemplateCount')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('specTemplateCount', 'Mẫu thông số kỹ thuật')}</button>,
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (category) => (
+        category.specTemplateCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {getSpecTemplatesPreview(category.specTemplates).map((template) => (
+              <span key={`${category.id}-${template}`} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
+                {template}
+              </span>
+            ))}
+            {category.specTemplateCount > 3 && (
+              <ActionIconButton
+                icon={Detail}
+                label="Xem mẫu thông số"
+                variant="violet"
+                className="h-7 w-7"
+                onClick={() => {
+                  setSelectedCategoryForSpecs(category)
+                  setShowSpecsPreviewModal(true)
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-slate-500">Chưa cấu hình</span>
+        )
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (category) => (
+        <div className="flex justify-end gap-2">
+          <ActionIconButton icon={Wrench} label="Sửa loại thiết bị" variant="primary" onClick={() => handleSelectCategory(category)} />
+          <ActionIconButton icon={Trash2} label="Xóa loại thiết bị" variant="danger" onClick={() => handleDelete(category.id)} />
+        </div>
+      ),
+    },
+  ]), [getSortLabel, handleSort])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   const loadCategories = useCallback(async (nextFilters = filters) => {
     setLoading(true)
@@ -121,6 +199,10 @@ function CategoryManagement() {
     }, 0)
     return () => window.clearTimeout(timerId)
   }, [loadCategories, loadTechSupportTypes])
+
+  useDebouncedEffect(() => {
+    void loadCategories(filters)
+  }, [filters.keyword, filters.techTypeId], 300, true)
 
   const resetForm = () => {
     setSelectedCategoryId(null)
@@ -367,41 +449,37 @@ function CategoryManagement() {
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold text-slate-800">Danh sách loại thiết bị</h3>
-          <p className="text-sm text-slate-500">Tổng: {categories.length}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500">Tổng: {categories.length}</p>
+            <ColumnVisibilityDropdown
+              columns={categoryColumnOptions}
+              visibleColumns={visibleColumns}
+              selectedCount={selectedCount}
+              allSelected={allSelected}
+              onToggleColumn={(columnKey) => {
+                if (visibleColumns[columnKey] && selectedCount === 1) {
+                  toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                  return
+                }
+                toggleColumn(columnKey)
+              }}
+              onSelectAll={selectAllColumns}
+              onResetDefault={resetDefaultColumns}
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('id', 'ID')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('name', 'Tên loại thiết bị')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('categoryKind')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('categoryKind', 'Cách quản lý')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('techTypeName')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('techTypeName', 'Nhóm kỹ thuật phụ trách')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('specTemplateCount')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('specTemplateCount', 'Mẫu thông số kỹ thuật')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -431,59 +509,16 @@ function CategoryManagement() {
               {!loading &&
                 paginatedCategories.map((category) => (
                   <tr key={category.id}>
-                    <td className="px-3 py-2">{category.id}</td>
-                    <td className="px-3 py-2">{category.name}</td>
-                    <td className="px-3 py-2">{getCategoryKindLabel(category.categoryKind)}</td>
-                    <td className="px-3 py-2">{category.techTypeName || '-'}</td>
-                    <td className="px-3 py-2">
-                      {category.specTemplateCount > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {getSpecTemplatesPreview(category.specTemplates).map((template) => (
-                            <span
-                              key={`${category.id}-${template}`}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
-                            >
-                              {template}
-                            </span>
-                          ))}
-                          {category.specTemplateCount > 3 && (
-                            <ActionIconButton
-                              icon={Detail}
-                              label="Xem mẫu thông số"
-                              variant="violet"
-                              className="h-7 w-7"
-                              onClick={() => {
-                                setSelectedCategoryForSpecs(category)
-                                setShowSpecsPreviewModal(true)
-                              }}
-                            />
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-500">Chưa cấu hình</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-2">
-                        <ActionIconButton
-                          icon={Wrench}
-                          label="Sửa loại thiết bị"
-                          variant="primary"
-                          onClick={() => handleSelectCategory(category)}
-                        />
-                        <ActionIconButton
-                          icon={Trash2}
-                          label="Xóa loại thiết bị"
-                          variant="danger"
-                          onClick={() => handleDelete(category.id)}
-                        />
-                      </div>
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${category.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(category)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               {!loading && categories.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có loại thiết bị phù hợp.
                   </td>
                 </tr>

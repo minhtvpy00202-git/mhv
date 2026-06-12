@@ -7,6 +7,7 @@ import com.poly.mhv.dto.inventory.InventoryAuditMissingResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditScanRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditScanResultResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditSummaryResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
@@ -87,9 +88,9 @@ public class InventoryAuditService {
             throw new CustomException("Không thể tạo phiên kiểm kê cho khu vực không chứa tài sản.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime startedAt = LocalDateTime.now();
+        LocalDateTime startedAt = request.getStartedAt() != null ? request.getStartedAt() : LocalDateTime.now();
         if (!request.getDueDate().isAfter(startedAt)) {
-            throw new CustomException("Hạn kiểm kê phải sau thời điểm tạo phiên.");
+            throw new CustomException("Hạn kiểm kê phải sau thời gian bắt đầu.");
         }
         AuditMetrics metrics = calculateAuditMetrics(request.getLocationId());
         InventoryAudit audit = InventoryAudit.builder()
@@ -318,6 +319,10 @@ public class InventoryAuditService {
                         "Số lượng đã quét", audit.getScannedCount(),
                         "Số lượng thất lạc", missingCount,
                         "Người thực hiện", actorDisplayName
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/inventory-audits"),
+                        NotificationTarget.forRole("TechSupport", "/tech/inventory-audits/history")
                 )
         );
 

@@ -3,10 +3,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
 
 const PAGE_SIZE = 10
+const techSupportTypeColumnOptions = [
+  { key: 'id', label: 'ID' },
+  { key: 'name', label: 'Tên loại kỹ thuật viên' },
+  { key: 'categoryCount', label: 'Loại thiết bị đang dùng' },
+  { key: 'techSupportUserCount', label: 'Tài khoản kỹ thuật viên' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultTechSupportTypeVisibleColumnKeys = ['id', 'name', 'categoryCount', 'techSupportUserCount', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -40,6 +51,19 @@ function TechSupportTypeManagement() {
     initialDirection: 'asc',
     onSortChange: () => setCurrentPage(1),
   })
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-tech-support-types-visible-columns',
+    columns: techSupportTypeColumnOptions,
+    defaultVisibleKeys: defaultTechSupportTypeVisibleColumnKeys,
+  })
 
   const isEditing = Boolean(selectedId)
   const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE_SIZE))
@@ -47,6 +71,78 @@ function TechSupportTypeManagement() {
     const start = (currentPage - 1) * PAGE_SIZE
     return sortedItems.slice(start, start + PAGE_SIZE)
   }, [sortedItems, currentPage])
+  const tableColumns = useMemo(() => ([
+    {
+      key: 'id',
+      label: (
+        <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('id', 'ID')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (item) => item.id,
+    },
+    {
+      key: 'name',
+      label: (
+        <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('name', 'Tên loại kỹ thuật viên')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (item) => item.name,
+    },
+    {
+      key: 'categoryCount',
+      label: (
+        <button type="button" onClick={() => handleSort('categoryCount')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('categoryCount', 'Loại thiết bị đang dùng')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (item) => item.categoryCount,
+    },
+    {
+      key: 'techSupportUserCount',
+      label: (
+        <button type="button" onClick={() => handleSort('techSupportUserCount')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('techSupportUserCount', 'Tài khoản kỹ thuật viên')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (item) => item.techSupportUserCount,
+    },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (item) => (
+        <div className="flex justify-end gap-2">
+          <ActionIconButton
+            icon={Wrench}
+            label="Sửa loại kỹ thuật viên"
+            variant="primary"
+            onClick={() => handleSelect(item)}
+          />
+          <ActionIconButton
+            icon={Trash2}
+            label="Xóa loại kỹ thuật viên"
+            variant="danger"
+            onClick={() => handleDelete(item.id)}
+          />
+        </div>
+      ),
+    },
+  ]), [getSortLabel, handleSort])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   const loadItems = async (nextFilters = filters) => {
     setLoading(true)
@@ -67,6 +163,10 @@ function TechSupportTypeManagement() {
   useEffect(() => {
     loadItems()
   }, [])
+
+  useDebouncedEffect(() => {
+    void loadItems(filters)
+  }, [filters.keyword], 300, true)
 
   const resetForm = () => {
     setSelectedId(null)
@@ -235,36 +335,37 @@ function TechSupportTypeManagement() {
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-semibold text-slate-800">Danh sách loại kỹ thuật viên</h3>
-          <p className="text-sm text-slate-500">Tổng: {items.length}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500">Tổng: {items.length}</p>
+            <ColumnVisibilityDropdown
+              columns={techSupportTypeColumnOptions}
+              visibleColumns={visibleColumns}
+              selectedCount={selectedCount}
+              allSelected={allSelected}
+              onToggleColumn={(columnKey) => {
+                if (visibleColumns[columnKey] && selectedCount === 1) {
+                  toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                  return
+                }
+                toggleColumn(columnKey)
+              }}
+              onSelectAll={selectAllColumns}
+              onResetDefault={resetDefaultColumns}
+            />
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="min-w-max divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('id')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('id', 'ID')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('name', 'Tên loại kỹ thuật viên')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('categoryCount')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('categoryCount', 'Loại thiết bị đang dùng')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                  <button type="button" onClick={() => handleSort('techSupportUserCount')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('techSupportUserCount', 'Tài khoản kỹ thuật viên')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -281,31 +382,16 @@ function TechSupportTypeManagement() {
               {!loading &&
                 paginatedItems.map((item) => (
                   <tr key={item.id}>
-                    <td className="px-3 py-2">{item.id}</td>
-                    <td className="px-3 py-2">{item.name}</td>
-                    <td className="px-3 py-2">{item.categoryCount}</td>
-                    <td className="px-3 py-2">{item.techSupportUserCount}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-2">
-                        <ActionIconButton
-                          icon={Wrench}
-                          label="Sửa loại kỹ thuật viên"
-                          variant="primary"
-                          onClick={() => handleSelect(item)}
-                        />
-                        <ActionIconButton
-                          icon={Trash2}
-                          label="Xóa loại kỹ thuật viên"
-                          variant="danger"
-                          onClick={() => handleDelete(item.id)}
-                        />
-                      </div>
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${item.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(item)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-6 text-center text-sm text-slate-500">
                     Chưa có loại kỹ thuật viên phù hợp.
                   </td>
                 </tr>
