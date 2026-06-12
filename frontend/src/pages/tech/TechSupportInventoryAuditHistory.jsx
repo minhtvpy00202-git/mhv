@@ -1,4 +1,8 @@
-import { IconClipboardList as ClipboardList, IconRefresh as RefreshCcw } from '@tabler/icons-react'
+import {
+  IconClipboardList as ClipboardList,
+  IconRefresh as RefreshCcw,
+  IconSearch as Search,
+} from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -10,15 +14,23 @@ const STATUS_MAP = {
 }
 
 function getAuditStatusMeta(audit) {
-  const requiredScanCount = Number(audit.requiredScanCount ?? audit.expectedCount ?? 0)
+  const expectedCount = Number(audit.expectedCount ?? 0)
   const scannedCount = Number(audit.scannedCount ?? 0)
   if (audit.status === 'COMPLETED') {
     return { label: STATUS_MAP.COMPLETED, className: 'bg-emerald-100 text-emerald-700' }
   }
-  if (scannedCount >= requiredScanCount) {
+  if (scannedCount >= expectedCount) {
     return { label: 'ĐỦ ĐIỀU KIỆN HOÀN TẤT', className: 'bg-blue-100 text-blue-700' }
   }
   return { label: STATUS_MAP[audit.status] || audit.status || 'Đang theo dõi', className: 'bg-amber-100 text-amber-700' }
+}
+
+const MODAL_TITLES = {
+  scanned: 'Danh sách thiết bị đã quét',
+  lent: 'Danh sách thiết bị đang cho mượn',
+  borrowed: 'Danh sách thiết bị đang mượn',
+  repairing: 'Danh sách thiết bị đang sửa chữa',
+  missing: 'Danh sách thiết bị thất lạc',
 }
 
 function TechSupportInventoryAuditHistory() {
@@ -27,6 +39,7 @@ function TechSupportInventoryAuditHistory() {
   const [modalState, setModalState] = useState({
     open: false,
     title: '',
+    type: '',
     items: [],
     loading: false,
   })
@@ -61,17 +74,26 @@ function TechSupportInventoryAuditHistory() {
   const openItemsModal = async (auditId, type) => {
     setModalState({
       open: true,
-      title: type === 'borrowed' ? 'Danh sách thiết bị đang cho mượn' : 'Danh sách thiết bị cần quét',
+      title: MODAL_TITLES[type] || 'Danh sách thiết bị',
+      type,
       items: [],
       loading: true,
     })
     try {
       const response = await axiosClient.get(`/api/inventory-audits/${auditId}`)
       const detail = response.data || {}
+      const itemsByType = {
+        scanned: detail.scannedItems || [],
+        lent: detail.lentItems || [],
+        borrowed: detail.borrowedItems || [],
+        repairing: detail.repairingItems || [],
+        missing: detail.missingItems || [],
+      }
       setModalState({
         open: true,
-        title: type === 'borrowed' ? 'Danh sách thiết bị đang cho mượn' : 'Danh sách thiết bị cần quét',
-        items: type === 'borrowed' ? (detail.borrowedItems || []) : (detail.requiredScanItems || []),
+        title: MODAL_TITLES[type] || 'Danh sách thiết bị',
+        type,
+        items: itemsByType[type] || [],
         loading: false,
       })
     } catch (error) {
@@ -80,6 +102,7 @@ function TechSupportInventoryAuditHistory() {
       setModalState({
         open: false,
         title: '',
+        type: '',
         items: [],
         loading: false,
       })
@@ -90,6 +113,7 @@ function TechSupportInventoryAuditHistory() {
     setModalState({
       open: false,
       title: '',
+      type: '',
       items: [],
       loading: false,
     })
@@ -153,7 +177,7 @@ function TechSupportInventoryAuditHistory() {
 
             {!loading && auditHistory.map((audit) => {
               const statusMeta = getAuditStatusMeta(audit)
-              const requiredScanCount = Number(audit.requiredScanCount ?? audit.expectedCount ?? 0)
+              const expectedCount = Number(audit.expectedCount ?? 0)
 
               return (
                   <div key={audit.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -167,7 +191,7 @@ function TechSupportInventoryAuditHistory() {
                   </span>
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-xl bg-white px-3 py-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Bắt đầu</p>
                         <p className="mt-1 text-sm text-slate-700">{formatVietnamDateTime(audit.startedAt, '')}</p>
@@ -180,25 +204,76 @@ function TechSupportInventoryAuditHistory() {
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Hạn hoàn tất</p>
                         <p className="mt-1 text-sm text-slate-700">{formatVietnamDateTime(audit.dueDate, 'Chưa đặt hạn')}</p>
                       </div>
-
                       <div className="rounded-xl bg-white px-3 py-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Thiết bị cần quét</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{requiredScanCount}</p>
-                        <button
-                            type="button"
-                            onClick={() => openItemsModal(audit.id, 'required')}
-                            className="mt-2 text-xs font-semibold text-blue-700 hover:underline"
-                        >
-                          Xem danh sách
-                        </button>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tổng thiết bị</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{audit.totalAssetCount ?? 0}</p>
                       </div>
                       <div className="rounded-xl bg-white px-3 py-2">
                         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Thiết bị đã quét</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{audit.scannedCount ?? 0} / {requiredScanCount}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{audit.scannedCount ?? 0} / {expectedCount}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cần quét</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-800">{expectedCount}</p>
                       </div>
                       <div className="rounded-xl bg-white px-3 py-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Thất lạc</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{audit.missingCount ?? 0}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Đang sửa chữa</p>
+                          <button
+                            type="button"
+                            onClick={() => openItemsModal(audit.id, 'repairing')}
+                            className="rounded border border-amber-200 bg-amber-50 p-1 text-amber-700 transition hover:bg-amber-100"
+                            title="Xem danh sách đang sửa chữa"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-violet-700">{audit.repairingCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Đang cho mượn</p>
+                          <button
+                            type="button"
+                            onClick={() => openItemsModal(audit.id, 'lent')}
+                            className="rounded border border-amber-200 bg-amber-50 p-1 text-amber-700 transition hover:bg-amber-100"
+                            title="Xem danh sách đang cho mượn"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-sky-700">{audit.lentCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Đang mượn</p>
+                          <button
+                            type="button"
+                            onClick={() => openItemsModal(audit.id, 'borrowed')}
+                            className="rounded border border-amber-200 bg-amber-50 p-1 text-amber-700 transition hover:bg-amber-100"
+                            title="Xem danh sách đang mượn"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-amber-700">{audit.borrowedCount ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Thất lạc</p>
+                          <button
+                            type="button"
+                            onClick={() => openItemsModal(audit.id, 'missing')}
+                            className="rounded border border-amber-200 bg-amber-50 p-1 text-amber-700 transition hover:bg-amber-100"
+                            title="Xem danh sách thất lạc"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <p className="mt-1 text-sm font-semibold text-red-700">{audit.missingCount ?? 0}</p>
                       </div>
                     </div>
                   </div>
@@ -235,29 +310,79 @@ function TechSupportInventoryAuditHistory() {
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã QA</th>
                       <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng hiện tại</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                      {modalState.type === 'scanned' && (
+                        <>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Người quét</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian quét</th>
+                        </>
+                      )}
+                      {(modalState.type === 'lent' || modalState.type === 'borrowed') && (
+                        <>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng hiện tại</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                        </>
+                      )}
+                      {modalState.type === 'repairing' && (
+                        <>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng hiện tại</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
+                        </>
+                      )}
+                      {modalState.type === 'missing' && (
+                        <>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng ghi nhận</th>
+                          <th className="px-3 py-2 text-left font-semibold text-slate-600">Xử lý</th>
+                        </>
+                      )}
                     </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                     {modalState.loading && (
                         <tr>
-                          <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
+                          <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                             Đang tải danh sách thiết bị...
                           </td>
                         </tr>
                     )}
                     {!modalState.loading && modalState.items.map((item) => (
-                        <tr key={`${item.assetQaCode}-${item.currentLocationName}-${item.homeLocationName}`}>
+                        <tr key={`${item.assetQaCode}-${item.currentLocationName || item.locationName || ''}-${item.homeLocationName || ''}`}>
                           <td className="px-3 py-2">{item.assetQaCode}</td>
                           <td className="px-3 py-2">{item.assetName}</td>
-                          <td className="px-3 py-2">{item.currentLocationName || 'Không xác định'}</td>
-                          <td className="px-3 py-2">{item.homeLocationName || 'Không xác định'}</td>
+                          {modalState.type === 'scanned' && (
+                            <>
+                              <td className="px-3 py-2">{item.scannedByUsername || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{formatVietnamDateTime(item.scannedAt, '-')}</td>
+                            </>
+                          )}
+                          {(modalState.type === 'lent' || modalState.type === 'borrowed') && (
+                            <>
+                              <td className="px-3 py-2">{item.toLocationName || item.currentLocationName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{item.homeLocationName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{item.borrowerName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                            </>
+                          )}
+                          {modalState.type === 'repairing' && (
+                            <>
+                              <td className="px-3 py-2">{item.currentLocationName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{item.homeLocationName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{item.displayStatus || item.technicalStatus || 'Không xác định'}</td>
+                            </>
+                          )}
+                          {modalState.type === 'missing' && (
+                            <>
+                              <td className="px-3 py-2">{item.locationName || 'Không xác định'}</td>
+                              <td className="px-3 py-2">{item.resolutionStatus || 'PENDING'}</td>
+                            </>
+                          )}
                         </tr>
                     ))}
                     {!modalState.loading && modalState.items.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
+                          <td colSpan={6} className="px-3 py-4 text-center text-slate-500">
                             Không có thiết bị nào trong danh sách này.
                           </td>
                         </tr>

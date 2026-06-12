@@ -35,10 +35,8 @@ function InventoryAuditScanner() {
   const selectedAuditIdRef = useRef('')
   const [activeAudits, setActiveAudits] = useState([])
   const [selectedAuditId, setSelectedAuditId] = useState('')
+  const [selectedAuditDetail, setSelectedAuditDetail] = useState(null)
   const [scannedCount, setScannedCount] = useState(0)
-  const [requiredScanCount, setRequiredScanCount] = useState(0)
-  const [totalAssetCount, setTotalAssetCount] = useState(0)
-  const [borrowedCount, setBorrowedCount] = useState(0)
   const [recentScans, setRecentScans] = useState([])
   const [manualQaCode, setManualQaCode] = useState('')
   const [loadingAudits, setLoadingAudits] = useState(true)
@@ -58,11 +56,9 @@ function InventoryAuditScanner() {
       setActiveAudits(data)
       if (data.length === 0) {
         setSelectedAuditId('')
+        setSelectedAuditDetail(null)
         setRecentScans([])
         setScannedCount(0)
-        setRequiredScanCount(0)
-        setTotalAssetCount(0)
-        setBorrowedCount(0)
         return
       }
       const hasSelectedAudit = data.some((audit) => String(audit.id) === String(selectedAuditIdRef.current))
@@ -94,28 +90,22 @@ function InventoryAuditScanner() {
   useEffect(() => {
     const loadAuditDetail = async () => {
       if (!selectedAuditId) {
+        setSelectedAuditDetail(null)
         setRecentScans([])
         setScannedCount(0)
-        setRequiredScanCount(0)
-        setTotalAssetCount(0)
-        setBorrowedCount(0)
         return
       }
       setLoadingDetail(true)
       try {
         const response = await axiosClient.get(`/api/inventory-audits/${selectedAuditId}`)
         const detail = response.data
+        setSelectedAuditDetail(detail || null)
         setRecentScans(detail?.scannedItems || [])
         setScannedCount(detail?.summary?.scannedCount || 0)
-        setRequiredScanCount(detail?.summary?.requiredScanCount ?? detail?.summary?.expectedCount ?? 0)
-        setTotalAssetCount(detail?.summary?.totalAssetCount || 0)
-        setBorrowedCount(detail?.summary?.borrowedCount || 0)
       } catch {
+        setSelectedAuditDetail(null)
         setRecentScans([])
         setScannedCount(0)
-        setRequiredScanCount(0)
-        setTotalAssetCount(0)
-        setBorrowedCount(0)
       } finally {
         setLoadingDetail(false)
       }
@@ -127,20 +117,20 @@ function InventoryAuditScanner() {
       () => activeAudits.find((audit) => String(audit.id) === String(selectedAuditId)) || null,
       [activeAudits, selectedAuditId],
   )
+  const selectedSummary = selectedAuditDetail?.summary || selectedAudit || null
+  const expectedCount = Number(selectedSummary?.expectedCount ?? 0)
 
-  const progressPercent = requiredScanCount > 0
-      ? Math.min(100, Math.round((scannedCount / requiredScanCount) * 100))
+  const progressPercent = expectedCount > 0
+      ? Math.min(100, Math.round((scannedCount / expectedCount) * 100))
       : selectedAuditId
           ? 100
           : 0
 
   const resetSelectedAuditState = () => {
     setManualQaCode('')
+    setSelectedAuditDetail(null)
     setRecentScans([])
     setScannedCount(0)
-    setRequiredScanCount(0)
-    setTotalAssetCount(0)
-    setBorrowedCount(0)
   }
 
   const handleScanSubmit = async (qaCodeInput) => {
@@ -155,7 +145,14 @@ function InventoryAuditScanner() {
       })
       const data = response.data
       setScannedCount(data.scannedCount || 0)
-      setRequiredScanCount(data.expectedCount || 0)
+      setSelectedAuditDetail((prev) => prev ? ({
+        ...prev,
+        summary: {
+          ...prev.summary,
+          scannedCount: data.scannedCount || 0,
+          expectedCount: data.expectedCount || prev.summary?.expectedCount || 0,
+        },
+      }) : prev)
       setRecentScans((prev) => [
         {
           assetQaCode: data.assetQaCode,
@@ -191,10 +188,14 @@ function InventoryAuditScanner() {
 
       if (type === 'scanned') {
         setModalData(detail?.scannedItems || [])
+      } else if (type === 'lent') {
+        setModalData(detail?.lentItems || [])
       } else if (type === 'borrowed') {
-        setModalData(detail?.borrowedItems || []) // Đảm bảo API trả về mảng này tương ứng với ảnh image_2f479e.png
+        setModalData(detail?.borrowedItems || [])
+      } else if (type === 'repairing') {
+        setModalData(detail?.repairingItems || [])
       } else if (type === 'missing') {
-        setModalData(detail?.missingItems || []) // Hoặc danh sách thiết bị thất lạc nếu có
+        setModalData(detail?.missingItems || [])
       }
     } catch {
       setModalData([])
@@ -206,7 +207,7 @@ function InventoryAuditScanner() {
 
   const scanStatusLabel = !selectedAuditId
       ? 'Chưa chọn phiên'
-      : scannedCount >= requiredScanCount
+      : scannedCount >= expectedCount
           ? 'Đủ điều kiện hoàn tất'
           : 'Đang quét kiểm kê'
 
@@ -294,7 +295,7 @@ function InventoryAuditScanner() {
           <div className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Tiến độ</p>
             <p className="mt-2 text-2xl font-bold text-slate-800">{progressPercent}%</p>
-            <p className="mt-1 text-xs text-slate-500">Dựa trên {requiredScanCount || 0} thiết bị thực sự cần quét.</p>
+            <p className="mt-1 text-xs text-slate-500">Dựa trên {expectedCount || 0} thiết bị thực sự cần quét.</p>
           </div>
         </section>
 
@@ -338,40 +339,57 @@ function InventoryAuditScanner() {
               )}
 
               {/* KHỐI HIỂN THỊ CHI TIẾT PHIÊN ĐƯỢC CHỌN VÀ NÚT XEM CHI TIẾT MODAL */}
-              {!loadingAudits && selectedAudit && (
+              {!loadingAudits && selectedSummary && (
                   <div className="mt-4">
                     <div className="rounded-2xl border border-blue-400 bg-blue-50/50 p-4 text-left shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-blue-900">Thông tin chi tiết phiên được chọn</p>
-                          <p className="mt-1 text-lg font-semibold text-slate-800">Phiên #{selectedAudit.id} - {selectedAudit.locationName}</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-800">Phiên #{selectedSummary.id} - {selectedSummary.locationName}</p>
                         </div>
                         <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white uppercase">
-                          {selectedAudit.status}
+                          {selectedSummary.status}
                         </span>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-700 border-t border-blue-100 pt-3">
-                        <p><span className="font-medium text-slate-500">Tổng thiết bị gốc:</span> {totalAssetCount}</p>
-
-                        {/* Mục Đang cho mượn có nút kính lúp */}
+                      <div className="mt-4 grid gap-3 border-t border-blue-100 pt-3 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-3">
+                        <p><span className="font-medium text-slate-500">Tổng thiết bị:</span> {selectedSummary.totalAssetCount || 0}</p>
+                        <p><span className="font-medium text-slate-500">Cần quét:</span> {selectedSummary.expectedCount || 0}</p>
                         <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đang cho mượn:</span> <span className="font-semibold text-amber-700">{borrowedCount}</span></p>
+                          <p><span className="font-medium text-slate-500">Đang sửa chữa:</span> <span className="font-semibold text-violet-700">{selectedSummary.repairingCount || 0}</span></p>
                           <button
-                              type="button"
-                              onClick={() => handleOpenModal('borrowed')}
-                              className="rounded border border-amber-200 p-0.5 bg-white text-amber-700 hover:bg-amber-50 transition"
-                              title="Xem danh sách thiết bị đang mượn"
+                            type="button"
+                            onClick={() => handleOpenModal('repairing')}
+                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
+                            title="Xem danh sách thiết bị đang sửa chữa"
                           >
                             <Search size={14} />
                           </button>
                         </div>
-
-                        <p><span className="font-medium text-slate-500">Cần quét (Dự kiến):</span> {requiredScanCount}</p>
-
-                        {/* Mục Đã quét tại quầy có nút kính lúp */}
                         <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đã quét tại quầy:</span> <span className="font-semibold text-emerald-700">{scannedCount}</span></p>
+                          <p><span className="font-medium text-slate-500">Đang cho mượn:</span> <span className="font-semibold text-sky-700">{selectedSummary.lentCount || 0}</span></p>
+                          <button
+                              type="button"
+                              onClick={() => handleOpenModal('lent')}
+                              className="rounded border border-amber-200 p-0.5 bg-white text-amber-700 hover:bg-amber-50 transition"
+                              title="Xem danh sách thiết bị đang cho mượn"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p><span className="font-medium text-slate-500">Đang mượn:</span> <span className="font-semibold text-amber-700">{selectedSummary.borrowedCount || 0}</span></p>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenModal('borrowed')}
+                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
+                            title="Xem danh sách thiết bị đang mượn"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p><span className="font-medium text-slate-500">Đã quét:</span> <span className="font-semibold text-emerald-700">{selectedSummary.scannedCount || 0}</span></p>
                           <button
                               type="button"
                               onClick={() => handleOpenModal('scanned')}
@@ -381,10 +399,20 @@ function InventoryAuditScanner() {
                             <Search size={14} />
                           </button>
                         </div>
-
-                        <p><span className="font-medium text-slate-500">Người tạo:</span> {selectedAudit.createdByUsername || '-'}</p>
-                        <p><span className="font-medium text-slate-500">Bắt đầu lúc:</span> {formatVietnamDateTime(selectedAudit.startedAt, '')}</p>
-                        <p className="col-span-2"><span className="font-medium text-slate-500">Hạn hoàn tất:</span> {formatVietnamDateTime(selectedAudit.dueDate, 'Chưa đặt hạn')}</p>
+                        <div className="flex items-center gap-2">
+                          <p><span className="font-medium text-slate-500">Thất lạc:</span> <span className="font-semibold text-red-700">{selectedSummary.missingCount || 0}</span></p>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenModal('missing')}
+                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
+                            title="Xem danh sách thiết bị thất lạc"
+                          >
+                            <Search size={14} />
+                          </button>
+                        </div>
+                        <p><span className="font-medium text-slate-500">Người tạo:</span> {selectedSummary.createdByUsername || '-'}</p>
+                        <p><span className="font-medium text-slate-500">Bắt đầu lúc:</span> {formatVietnamDateTime(selectedSummary.startedAt, '')}</p>
+                        <p className="sm:col-span-2 xl:col-span-3"><span className="font-medium text-slate-500">Hạn hoàn tất:</span> {formatVietnamDateTime(selectedSummary.dueDate, 'Chưa đặt hạn')}</p>
                       </div>
                     </div>
                   </div>
@@ -438,8 +466,8 @@ function InventoryAuditScanner() {
                     <p className="font-semibold text-slate-800">Trạng thái phiên</p>
                     <p className="mt-2">Phòng: {selectedAudit?.locationName || 'Chưa chọn'}</p>
 
-                    <p className="mt-1">Thiết bị cần quét: {requiredScanCount}</p>
-                    <p className="mt-1">Thiết bị đã quét: {scannedCount} / {requiredScanCount || 0}</p>
+                    <p className="mt-1">Thiết bị cần quét: {expectedCount}</p>
+                    <p className="mt-1">Thiết bị đã quét: {scannedCount} / {expectedCount || 0}</p>
                   </div>
                   <button
                       type="button"
@@ -519,7 +547,9 @@ function InventoryAuditScanner() {
                 <div className="flex items-center justify-between border-b border-slate-100 p-4">
                   <h3 className="text-lg font-bold text-slate-800">
                     {modalType === 'scanned' && `Danh sách thiết bị đã quét `}
+                    {modalType === 'lent' && `Danh sách thiết bị đang cho mượn `}
                     {modalType === 'borrowed' && `Danh sách thiết bị đang mượn `}
+                    {modalType === 'repairing' && `Danh sách thiết bị đang sửa chữa `}
                     {modalType === 'missing' && `Danh sách thiết bị thất lạc (${modalData.length})`}
                   </h3>
                   <button
@@ -552,11 +582,25 @@ function InventoryAuditScanner() {
                                 <th className="p-3">Thời gian quét</th>
                               </>
                           )}
-                          {modalType === 'borrowed' && (
+                          {(modalType === 'lent' || modalType === 'borrowed') && (
+                              <>
+                                <th className="p-3">{modalType === 'lent' ? 'Đang ở phòng' : 'Vị trí hiện tại'}</th>
+                                <th className="p-3">Phòng gốc</th>
+                                <th className="p-3">Người mượn</th>
+                                <th className="p-3">Thời gian mượn</th>
+                              </>
+                          )}
+                          {modalType === 'repairing' && (
                               <>
                                 <th className="p-3">Vị trí hiện tại</th>
-                                <th className="p-3">Người mượn</th>
-                                <th className="p-3">Hạn trả thực tế</th>
+                                <th className="p-3">Phòng gốc</th>
+                                <th className="p-3">Trạng thái</th>
+                              </>
+                          )}
+                          {modalType === 'missing' && (
+                              <>
+                                <th className="p-3">Phòng ghi nhận</th>
+                                <th className="p-3">Xử lý</th>
                               </>
                           )}
                         </tr>
@@ -575,11 +619,25 @@ function InventoryAuditScanner() {
                                     <td className="p-3 text-slate-500">{formatVietnamDateTime(item.scannedAt, '-')}</td>
                                   </>
                               )}
-                              {modalType === 'borrowed' && (
+                              {(modalType === 'lent' || modalType === 'borrowed') && (
+                                  <>
+                                    <td className="p-3 text-slate-600">{item.toLocationName || item.currentLocationName || 'N/A'}</td>
+                                    <td className="p-3 text-slate-600">{item.homeLocationName || 'N/A'}</td>
+                                    <td className="p-3 text-slate-600">{item.borrowerName || 'N/A'}</td>
+                                    <td className="p-3 text-slate-400 italic">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                                  </>
+                              )}
+                              {modalType === 'repairing' && (
                                   <>
                                     <td className="p-3 text-slate-600">{item.currentLocationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.borrowerName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-400 italic">{item.expectedReturnDate ? formatVietnamDateTime(item.expectedReturnDate) : 'Chưa xác định'}</td>
+                                    <td className="p-3 text-slate-600">{item.homeLocationName || 'N/A'}</td>
+                                    <td className="p-3 text-slate-600">{item.displayStatus || item.technicalStatus || 'N/A'}</td>
+                                  </>
+                              )}
+                              {modalType === 'missing' && (
+                                  <>
+                                    <td className="p-3 text-slate-600">{item.locationName || 'N/A'}</td>
+                                    <td className="p-3 text-slate-600">{item.resolutionStatus || 'PENDING'}</td>
                                   </>
                               )}
                             </tr>
