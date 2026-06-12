@@ -88,9 +88,9 @@ public class InventoryAuditService {
             throw new CustomException("Không thể tạo phiên kiểm kê cho khu vực không chứa tài sản.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime startedAt = LocalDateTime.now();
+        LocalDateTime startedAt = request.getStartedAt() != null ? request.getStartedAt() : LocalDateTime.now();
         if (!request.getDueDate().isAfter(startedAt)) {
-            throw new CustomException("Hạn kiểm kê phải sau thời điểm tạo phiên.");
+            throw new CustomException("Hạn kiểm kê phải sau thời gian bắt đầu.");
         }
         InventoryAudit audit = InventoryAudit.builder()
                 .location(location)

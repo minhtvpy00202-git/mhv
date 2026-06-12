@@ -4,7 +4,7 @@ import axiosClient from '../../api/axiosClient'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
-import { formatVietnamDateTime, getFutureDateTimeLocalValue } from '../../utils/datetime'
+import { formatVietnamDateTime, toDateTimeLocalValue } from '../../utils/datetime'
 
 const PAGE_SIZE = 10
 const defaultPageInfo = {
@@ -37,12 +37,22 @@ function createDefaultConfirmDialog() {
   }
 }
 
+function createDefaultAuditForm() {
+  const now = new Date()
+  return {
+    locationId: '',
+    startedAt: toDateTimeLocalValue(now),
+    dueDate: toDateTimeLocalValue(new Date(now.getTime() + 24 * 60 * 60 * 1000)),
+    notes: '',
+  }
+}
+
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
   const [audits, setAudits] = useState([])
   const [selectedAudit, setSelectedAudit] = useState(null)
   const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
-  const [form, setForm] = useState({ locationId: '', dueDate: getFutureDateTimeLocalValue(24), notes: '' })
+  const [form, setForm] = useState(createDefaultAuditForm)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
@@ -174,19 +184,28 @@ function InventoryAuditManagement() {
       toast.error('Vui lòng chọn phòng kiểm kê.')
       return
     }
+    if (!form.startedAt) {
+      toast.error('Vui lòng nhập thời gian bắt đầu kiểm kê.')
+      return
+    }
     if (!form.dueDate) {
       toast.error('Vui lòng nhập hạn hoàn tất kiểm kê.')
+      return
+    }
+    if (new Date(form.dueDate).getTime() <= new Date(form.startedAt).getTime()) {
+      toast.error('Hạn hoàn tất phải sau thời gian bắt đầu.')
       return
     }
     setCreating(true)
     try {
       const response = await axiosClient.post('/api/inventory-audits', {
         locationId: Number(form.locationId),
+        startedAt: form.startedAt,
         dueDate: form.dueDate,
         notes: form.notes,
       })
       toast.success('Tạo phiên kiểm kê thành công.')
-      setForm({ locationId: '', dueDate: getFutureDateTimeLocalValue(24), notes: '' })
+      setForm(createDefaultAuditForm())
       await loadInitialData(0)
       await loadAuditDetail(response.data.id)
     } catch (error) {
@@ -285,31 +304,49 @@ function InventoryAuditManagement() {
     <div className="space-y-4">
       <div className="rounded-xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Tạo phiên kiểm kê định kỳ</h2>
-        <div className="grid gap-3 md:grid-cols-3">
-          <select
-            value={form.locationId}
-            onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-          >
-            <option value="">Chọn phòng kiểm kê</option>
-            {locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.roomName}
-              </option>
-            ))}
-          </select>
-          <input
-            type="datetime-local"
-            value={form.dueDate}
-            onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-          />
-          <input
-            value={form.notes}
-            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            placeholder="Ghi chú phiên kiểm kê"
-          />
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-slate-500">Phòng kiểm kê</span>
+            <select
+              value={form.locationId}
+              onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+            >
+              <option value="">Chọn phòng kiểm kê</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.roomName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-slate-500">Thời gian bắt đầu</span>
+            <input
+              type="datetime-local"
+              value={form.startedAt}
+              onChange={(e) => setForm((prev) => ({ ...prev, startedAt: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-slate-500">Thời gian kết thúc</span>
+            <input
+              type="datetime-local"
+              value={form.dueDate}
+              onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium text-slate-500">Ghi chú</span>
+            <input
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+              placeholder="Ghi chú phiên kiểm kê"
+            />
+          </label>
         </div>
         <button
           type="button"

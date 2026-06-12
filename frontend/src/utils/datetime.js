@@ -8,7 +8,9 @@ function normalizeServerDateTimeInput(value) {
   if (!trimmed) return trimmed
 
   if (SERVER_LOCAL_DATETIME_REGEX.test(trimmed)) {
-    return `${trimmed}Z`
+    // Spring LocalDateTime responses do not include a timezone suffix.
+    // Treat them as wall-clock local time instead of coercing them to UTC.
+    return trimmed
   }
 
   return trimmed

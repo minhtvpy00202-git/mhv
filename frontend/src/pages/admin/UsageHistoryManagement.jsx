@@ -138,7 +138,7 @@ function UsageHistoryManagement() {
     [activeColumns, tableColumns],
   )
 
-  const buildHistoryQueryParams = (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
+  function buildHistoryQueryParams(page = pageInfo.page, nextFilters = filters, nextSort = sortState) {
     const params = {
       page,
       size: pageInfo.size || PAGE_SIZE,
@@ -153,7 +153,7 @@ function UsageHistoryManagement() {
     return params
   }
 
-  const loadHistories = async (page = pageInfo.page, nextFilters = filters, nextSort = sortState) => {
+  async function loadHistories(page = pageInfo.page, nextFilters = filters, nextSort = sortState) {
     setLoading(true)
     try {
       const response = await axiosClient.get('/api/usage/history', {
@@ -188,7 +188,7 @@ function UsageHistoryManagement() {
     await loadHistories(0, reset)
   }
 
-  const handleSort = async (key) => {
+  async function handleSort(key) {
     const nextSort = {
       key,
       direction: sortState.key === key && sortState.direction === 'asc' ? 'desc' : 'asc',
@@ -197,7 +197,7 @@ function UsageHistoryManagement() {
     await loadHistories(0, filters, nextSort)
   }
 
-  const getSortLabel = (key, label) => {
+  function getSortLabel(key, label) {
     if (sortState.key !== key) return label
     return `${label} ${sortState.direction === 'asc' ? '▲' : '▼'}`
   }
