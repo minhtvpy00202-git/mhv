@@ -92,6 +92,7 @@ public class InventoryAuditService {
         if (!request.getDueDate().isAfter(startedAt)) {
             throw new CustomException("Hạn kiểm kê phải sau thời gian bắt đầu.");
         }
+        AuditMetrics metrics = calculateAuditMetrics(request.getLocationId());
         InventoryAudit audit = InventoryAudit.builder()
                 .location(location)
                 .createdBy(actor)
@@ -99,13 +100,13 @@ public class InventoryAuditService {
                 .dueDate(request.getDueDate())
                 .status("OPEN")
                 .notes(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
-                .expectedCount((int) assetRepository.countByHomeLocationIdAndTrackingMode(request.getLocationId(), "ITEMIZED"))
+                .expectedCount(metrics.requiredCount())
                 .scannedCount(0)
                 .missingCount(0)
                 .build();
         InventoryAudit saved = inventoryAuditRepository.save(audit);
         helpdeskKpiService.invalidateCaches();
-        return mapSummary(saved);
+        return mapSummary(saved, metrics);
     }
 
     @Transactional(readOnly = true)
@@ -147,6 +148,7 @@ public class InventoryAuditService {
     public InventoryAuditDetailResponse getDetail(Integer auditId) {
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));
+        AuditMetrics metrics = calculateAuditMetrics(audit.getLocation().getId());
         List<InventoryAuditItem> auditItems = inventoryAuditItemRepository.findByAuditIdOrderByScannedAtDesc(auditId);
         List<String> qaCodes = auditItems.stream()
                 .map(InventoryAuditItem::getAssetQaCode)
@@ -169,6 +171,12 @@ public class InventoryAuditService {
                             .build();
                 })
                 .toList();
+        List<InventoryAuditItemResponse> borrowedItems = metrics.borrowedAssets().stream()
+                .map(this::mapAssetItemResponse)
+                .toList();
+        List<InventoryAuditItemResponse> requiredScanItems = metrics.requiredAssets().stream()
+                .map(this::mapAssetItemResponse)
+                .toList();
         List<InventoryAuditMissingResponse> missingItems = inventoryAuditMissingRepository.findByAuditIdOrderByAssetQaCodeAsc(auditId).stream()
                 .map(missing -> InventoryAuditMissingResponse.builder()
                         .assetQaCode(missing.getAssetQaCode())
@@ -180,8 +188,10 @@ public class InventoryAuditService {
                         .build())
                 .toList();
         return InventoryAuditDetailResponse.builder()
-                .summary(mapSummary(audit))
+                .summary(mapSummary(audit, metrics))
                 .scannedItems(scannedItems)
+                .borrowedItems(borrowedItems)
+                .requiredScanItems(requiredScanItems)
                 .missingItems(missingItems)
                 .build();
     }
@@ -205,6 +215,10 @@ public class InventoryAuditService {
         if (!asset.getHomeLocation().getId().equals(audit.getLocation().getId())) {
             throw new CustomException("Tài sản này thuộc " + asset.getHomeLocation().getRoomName());
         }
+        if (asset.getLocation() == null || !audit.getLocation().getId().equals(asset.getLocation().getId())) {
+            throw new CustomException("Thiết bị này hiện đang ở " + (asset.getLocation() != null ? asset.getLocation().getRoomName() : "vị trí khác")
+                    + " và không thuộc danh sách cần quét của phòng này.");
+        }
         if (inventoryAuditItemRepository.existsByAuditIdAndAssetQaCode(auditId, qaCode)) {
             throw new CustomException("Thiết bị " + qaCode + " đã được quét trong phiên này.");
         }
@@ -220,9 +234,8 @@ public class InventoryAuditService {
         inventoryAuditItemRepository.save(item);
 
         int scannedCount = (audit.getScannedCount() == null ? 0 : audit.getScannedCount()) + 1;
-        int expectedCount = audit.getExpectedCount() != null
-                ? audit.getExpectedCount()
-                : (int) assetRepository.countByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
+        AuditMetrics metrics = calculateAuditMetrics(audit.getLocation().getId());
+        int expectedCount = metrics.requiredCount();
         audit.setScannedCount(scannedCount);
         audit.setExpectedCount(expectedCount);
         inventoryAuditRepository.save(audit);
@@ -245,7 +258,8 @@ public class InventoryAuditService {
         if (!"OPEN".equals(audit.getStatus())) {
             throw new CustomException("Phiên kiểm kê đã được hoàn thành.");
         }
-        List<Asset> expectedAssets = assetRepository.findByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
+        AuditMetrics metrics = calculateAuditMetrics(audit.getLocation().getId());
+        List<Asset> expectedAssets = metrics.requiredAssets();
         Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(auditId).stream()
                 .collect(Collectors.toSet());
 
@@ -275,8 +289,12 @@ public class InventoryAuditService {
         assetRepository.saveAll(missingAssets);
         int missingCount = missingItems.size();
 
+        int scannedRequiredCount = (int) expectedAssets.stream()
+                .map(Asset::getQaCode)
+                .filter(scannedQaCodes::contains)
+                .count();
         audit.setExpectedCount(expectedAssets.size());
-        audit.setScannedCount(scannedQaCodes.size());
+        audit.setScannedCount(scannedRequiredCount);
         audit.setMissingCount(missingCount);
         audit.setCompletedAt(LocalDateTime.now());
         audit.setStatus("COMPLETED");
@@ -353,6 +371,10 @@ public class InventoryAuditService {
     }
 
     private InventoryAuditSummaryResponse mapSummary(InventoryAudit audit) {
+        return mapSummary(audit, calculateAuditMetrics(audit.getLocation().getId()));
+    }
+
+    private InventoryAuditSummaryResponse mapSummary(InventoryAudit audit, AuditMetrics metrics) {
         return InventoryAuditSummaryResponse.builder()
                 .id(audit.getId())
                 .locationId(audit.getLocation().getId())
@@ -362,10 +384,22 @@ public class InventoryAuditService {
                 .completedAt(audit.getCompletedAt())
                 .dueDate(audit.getDueDate())
                 .status(audit.getStatus())
+                .totalAssetCount(metrics.totalCount())
+                .borrowedCount(metrics.borrowedCount())
+                .requiredScanCount(metrics.requiredCount())
                 .expectedCount(audit.getExpectedCount())
                 .scannedCount(audit.getScannedCount())
                 .missingCount(audit.getMissingCount())
                 .notes(audit.getNotes())
+                .build();
+    }
+
+    private InventoryAuditItemResponse mapAssetItemResponse(Asset asset) {
+        return InventoryAuditItemResponse.builder()
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .currentLocationName(asset.getLocation() != null ? asset.getLocation().getRoomName() : null)
+                .homeLocationName(asset.getHomeLocation() != null ? asset.getHomeLocation().getRoomName() : null)
                 .build();
     }
 
@@ -412,5 +446,37 @@ public class InventoryAuditService {
                 locationId,
                 homeLocationId
         );
+    }
+
+    private AuditMetrics calculateAuditMetrics(Integer locationId) {
+        List<Asset> totalAssets = assetRepository.findByHomeLocationIdAndTrackingMode(locationId, "ITEMIZED");
+        List<Asset> borrowedAssets = new ArrayList<>();
+        List<Asset> requiredAssets = new ArrayList<>();
+        for (Asset asset : totalAssets) {
+            if (AssetStatusSupport.USAGE_STATUS_BORROWED.equals(resolveUsageStatus(asset))) {
+                borrowedAssets.add(asset);
+            } else {
+                requiredAssets.add(asset);
+            }
+        }
+        return new AuditMetrics(totalAssets, borrowedAssets, requiredAssets);
+    }
+
+    private record AuditMetrics(
+            List<Asset> totalAssets,
+            List<Asset> borrowedAssets,
+            List<Asset> requiredAssets
+    ) {
+        private int totalCount() {
+            return totalAssets.size();
+        }
+
+        private int borrowedCount() {
+            return borrowedAssets.size();
+        }
+
+        private int requiredCount() {
+            return requiredAssets.size();
+        }
     }
 }

@@ -13,5 +13,7 @@ import lombok.NoArgsConstructor;
 public class InventoryAuditDetailResponse {
     private InventoryAuditSummaryResponse summary;
     private List<InventoryAuditItemResponse> scannedItems;
+    private List<InventoryAuditItemResponse> borrowedItems;
+    private List<InventoryAuditItemResponse> requiredScanItems;
     private List<InventoryAuditMissingResponse> missingItems;
 }
