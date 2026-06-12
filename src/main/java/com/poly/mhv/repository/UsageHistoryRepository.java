@@ -19,6 +19,8 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
             select uh from UsageHistory uh
             join fetch uh.asset a
             join fetch a.homeLocation hl
+            join fetch a.location al
+            join fetch uh.fromLocation fl
             join fetch uh.toLocation tl
             join fetch uh.user u
             where u.id = :userId
@@ -29,11 +31,27 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
             select uh from UsageHistory uh
             join fetch uh.asset a
             join fetch a.homeLocation hl
+            join fetch a.location al
+            join fetch uh.fromLocation fl
             join fetch uh.toLocation tl
             join fetch uh.user u
             order by uh.startTime desc, uh.id desc
             """)
     List<UsageHistory> findAllForAdminOrderByStartTimeDesc();
+
+    @Query("""
+            select uh from UsageHistory uh
+            join fetch uh.asset a
+            join fetch a.homeLocation hl
+            join fetch a.location al
+            join fetch uh.fromLocation fl
+            join fetch uh.toLocation tl
+            join fetch uh.user u
+            where uh.endTime is null
+              and (fl.id = :locationId or tl.id = :locationId)
+            order by uh.startTime desc, uh.id desc
+            """)
+    List<UsageHistory> findOpenByLocationId(@Param("locationId") Integer locationId);
 
     @Query("""
             select uh.asset.qaCode, count(uh)
