@@ -127,7 +127,6 @@ function InventoryAuditManagement() {
   const [openBorrowedModal, setOpenBorrowedModal] = useState(false)
   const [openRepairingModal, setOpenRepairingModal] = useState(false)
   const [openMissingModal, setOpenMissingModal] = useState(false)
-
   const [form, setForm] = useState(createDefaultAuditForm)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)

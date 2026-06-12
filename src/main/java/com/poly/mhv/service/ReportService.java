@@ -223,6 +223,8 @@ public class ReportService {
             createCell(summarySheet.getRow(5), 1, String.valueOf(audit.getScannedCount()));
             createCell(summarySheet.createRow(6), 0, "Số lượng thất lạc");
             createCell(summarySheet.getRow(6), 1, String.valueOf(audit.getMissingCount()));
+            createCell(summarySheet.createRow(7), 0, "Ghi chú");
+            createCell(summarySheet.getRow(7), 1, StringUtils.hasText(audit.getNotes()) ? audit.getNotes() : "Không có ghi chú");
 
             XSSFSheet scannedSheet = workbook.createSheet("Da quet");
             createCell(scannedSheet.createRow(0), 0, "STT");
