@@ -9,6 +9,7 @@ import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
 import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableInventorySummaryResponse;
 import com.poly.mhv.dto.asset.ConsumableDisposalRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableDisposalRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
@@ -158,6 +159,20 @@ public class AssetController {
                 categoryService.getCategoryOptions(),
                 supplierService.getAll(null)
         ));
+    }
+
+    @GetMapping("/consumables/summary")
+    @Operation(summary = "Tổng hợp KPI vật tư tiêu hao", description = "Trả về số tổng vật tư, tồn đủ, cần nhập, lô hết hạn và giá trị tồn theo bộ lọc hiện tại.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy KPI vật tư thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<ConsumableInventorySummaryResponse> getConsumableInventorySummary(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer locationId
+    ) {
+        return ResponseEntity.ok(assetService.getConsumableInventorySummary(name, categoryId, locationId));
     }
 
     @PostMapping("/{qaCode}/issues")

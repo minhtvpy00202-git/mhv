@@ -22,6 +22,7 @@ function ActionIconButton({
     <button
       type={type}
       aria-label={label}
+      title={label}
       className={`group relative inline-flex h-8 w-8 items-center justify-center rounded-md border bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 ${variantClass} ${className}`.trim()}
       {...props}
     >

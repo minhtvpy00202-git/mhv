@@ -9,7 +9,7 @@ import { getTechSupportHomePath } from '../utils/navigation'
 import { validateLoginForm } from '../utils/validation'
 
 function getFieldClass(hasError) {
-  return `w-full rounded-lg border px-3 py-2 outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
+  return `w-full rounded-lg border bg-white px-3 py-2 text-slate-900 caret-slate-900 outline-none ring-fptOrange placeholder:text-slate-400 focus:ring-2 dark:bg-slate-950 dark:text-slate-100 dark:caret-slate-100 dark:placeholder:text-slate-500 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
 }
 
 function Login() {
@@ -86,6 +86,7 @@ function Login() {
                 setErrors((prev) => ({ ...prev, username: '' }))
               }}
               className={getFieldClass(Boolean(errors.username))}
+              autoComplete="username"
               placeholder="Nhập username"
             />
             {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username}</p>}
@@ -100,6 +101,7 @@ function Login() {
                 setErrors((prev) => ({ ...prev, password: '' }))
               }}
               className={getFieldClass(Boolean(errors.password))}
+              autoComplete="current-password"
               placeholder="Nhập password"
             />
             {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
