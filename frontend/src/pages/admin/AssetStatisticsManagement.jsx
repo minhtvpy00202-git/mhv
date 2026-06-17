@@ -240,6 +240,7 @@ function AssetStatisticsManagement() {
   const [locations, setLocations] = useState([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
 
   const loadStatistics = useCallback(async (nextFilters = filters, suppressError = false) => {
     setLoading(true)
@@ -332,6 +333,13 @@ function AssetStatisticsManagement() {
     }
   }
 
+  const tabs = [
+    { id: 'overview', label: 'Tổng quan' },
+    { id: 'fixed-assets', label: 'Tài sản cố định' },
+    { id: 'consumables', label: 'Vật tư' },
+    { id: 'operations', label: 'Vận hành' },
+  ]
+
   return (
     <div className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -352,6 +360,25 @@ function AssetStatisticsManagement() {
             <IconDownload size={17} />
             {exporting ? 'Đang xuất...' : 'Xuất Excel'}
           </button>
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-fptOrange text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <form onSubmit={handleFilterSubmit} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 md:grid-cols-5">
@@ -430,161 +457,193 @@ function AssetStatisticsManagement() {
         </div>
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <KpiCard label="Tài sản cố định" value={formatNumber(summary.fixedAssetCount)} helper={formatCurrency(summary.fixedAssetValue)} tone="blue" />
-            <KpiCard label="Vật tư tiêu hao" value={formatNumber(summary.consumableCount)} helper={formatCurrency(summary.consumableInventoryValue)} tone="green" />
-            <KpiCard label="Đang mượn" value={formatNumber(summary.borrowedAssetCount)} helper={`${formatNumber(summary.borrowEventCount)} lượt trong kỳ`} tone="orange" />
-            <KpiCard label="Cần xử lý" value={formatNumber((summary.brokenAssetCount || 0) + (summary.repairingAssetCount || 0) + (summary.lostAssetCount || 0))} helper="Hỏng, sửa chữa hoặc thất lạc" tone="red" />
-            <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper={`${formatNumber(summary.pendingConsumableRequestCount)} phiếu cấp phát chờ duyệt`} />
-            <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" />
-            <KpiCard label="Ticket trong kỳ" value={formatNumber(summary.ticketCount)} helper="Theo ngày tạo ticket" />
-            <KpiCard label="Kiểm kê trong kỳ" value={formatNumber(summary.auditCount)} helper={`${formatNumber(summary.auditMissingCount)} thiết bị thiếu`} />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <Section title="Tài sản cố định theo trạng thái" subtitle="Tình trạng kỹ thuật và trạng thái sử dụng đã được backend chuẩn hóa.">
-              <div className="h-80">
-                {fixedStatusData.some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={fixedStatusData} dataKey="count" nameKey="label" innerRadius={56} outerRadius={104} paddingAngle={3}>
-                        {fixedStatusData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Pie>
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có dữ liệu tài sản cố định." />}
+          {activeTab === 'overview' && (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <KpiCard label="Tài sản cố định" value={formatNumber(summary.fixedAssetCount)} helper={formatCurrency(summary.fixedAssetValue)} tone="blue" />
+                <KpiCard label="Vật tư tiêu hao" value={formatNumber(summary.consumableCount)} helper={formatCurrency(summary.consumableInventoryValue)} tone="green" />
+                <KpiCard label="Đang mượn" value={formatNumber(summary.borrowedAssetCount)} helper={`${formatNumber(summary.borrowEventCount)} lượt trong kỳ`} tone="orange" />
+                <KpiCard label="Cần xử lý" value={formatNumber((summary.brokenAssetCount || 0) + (summary.repairingAssetCount || 0) + (summary.lostAssetCount || 0))} helper="Hỏng, sửa chữa hoặc thất lạc" tone="red" />
+                <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper={`${formatNumber(summary.pendingConsumableRequestCount)} phiếu cấp phát chờ duyệt`} />
+                <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" />
+                <KpiCard label="Ticket trong kỳ" value={formatNumber(summary.ticketCount)} helper="Theo ngày tạo ticket" />
+                <KpiCard label="Kiểm kê trong kỳ" value={formatNumber(summary.auditCount)} helper={`${formatNumber(summary.auditMissingCount)} thiết bị thiếu`} />
               </div>
-            </Section>
 
-            <Section title="Xu hướng vận hành" subtitle="Lượt mượn và ticket phát sinh trong khoảng thời gian đang lọc.">
-              <div className="h-80">
-                {trendData.some((item) => item.borrow > 0 || item.ticket > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData} margin={{ top: 12, right: 16, left: -20, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend />
-                      <Line type="monotone" dataKey="borrow" name="Lượt mượn" stroke="#f97316" strokeWidth={2.5} dot={false} />
-                      <Line type="monotone" dataKey="ticket" name="Ticket" stroke="#2563eb" strokeWidth={2.5} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có lượt mượn hoặc ticket trong kỳ." />}
+              <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                <Section title="Tài sản cố định theo trạng thái" subtitle="Tình trạng kỹ thuật và trạng thái sử dụng đã được backend chuẩn hóa.">
+                  <div className="h-80">
+                    {fixedStatusData.some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={fixedStatusData} dataKey="count" nameKey="label" innerRadius={56} outerRadius={104} paddingAngle={3}>
+                            {fixedStatusData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu tài sản cố định." />}
+                  </div>
+                </Section>
+
+                <Section title="Xu hướng vận hành" subtitle="Lượt mượn và ticket phát sinh trong khoảng thời gian đang lọc.">
+                  <div className="h-80">
+                    {trendData.some((item) => item.borrow > 0 || item.ticket > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={trendData} margin={{ top: 12, right: 16, left: -20, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                          <Line type="monotone" dataKey="borrow" name="Lượt mượn" stroke="#f97316" strokeWidth={2.5} dot={false} />
+                          <Line type="monotone" dataKey="ticket" name="Ticket" stroke="#2563eb" strokeWidth={2.5} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có lượt mượn hoặc ticket trong kỳ." />}
+                  </div>
+                </Section>
               </div>
-            </Section>
-          </div>
+            </>
+          )}
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Section title="Tồn kho vật tư" subtitle="Đủ dùng, cần nhập và hết hàng.">
-              <div className="h-72">
-                {consumableStockData.some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={consumableStockData} margin={{ top: 12, right: 12, left: -20, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
-                      <Bar dataKey="count" name="Số vật tư" radius={[8, 8, 0, 0]}>
-                        {consumableStockData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có dữ liệu vật tư." />}
+          {activeTab === 'fixed-assets' && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                <Section title="Tài sản cố định theo trạng thái" subtitle="Tình trạng kỹ thuật và trạng thái sử dụng đã được backend chuẩn hóa.">
+                  <div className="h-80">
+                    {fixedStatusData.some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={fixedStatusData} dataKey="count" nameKey="label" innerRadius={56} outerRadius={104} paddingAngle={3}>
+                            {fixedStatusData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu tài sản cố định." />}
+                  </div>
+                </Section>
+
+                <Section title="Top thiết bị được mượn" subtitle="Các thiết bị có lượt mượn cao nhất trong kỳ.">
+                  <RankingTable rows={statistics?.topBorrowedAssets || []} emptyText="Chưa có dữ liệu mượn thiết bị." />
+                </Section>
               </div>
-            </Section>
 
-            <Section title="Hạn dùng theo lô" subtitle="Tính trên lô còn số lượng tồn.">
-              <div className="h-72">
-                {expiryData.some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={expiryData} layout="vertical" margin={{ top: 8, right: 16, left: 30, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                      <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
-                      <Bar dataKey="count" name="Số lô" radius={[0, 8, 8, 0]}>
-                        {expiryData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có dữ liệu hạn dùng." />}
+              <Section title="Tài sản theo loại" subtitle="Phân bổ tài sản cố định.">
+                <div className="h-72">
+                  {(statistics?.fixedAssetsByCategory || []).some((item) => item.count > 0) ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={withColors(statistics.fixedAssetsByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                        <Bar dataKey="count" name="Tài sản" radius={[8, 8, 0, 0]}>
+                          {withColors(statistics.fixedAssetsByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyState text="Chưa có dữ liệu loại tài sản." />}
+                </div>
+              </Section>
+            </>
+          )}
+
+          {activeTab === 'consumables' && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-3">
+                <Section title="Tồn kho vật tư" subtitle="Đủ dùng, cần nhập và hết hàng.">
+                  <div className="h-72">
+                    {consumableStockData.some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={consumableStockData} margin={{ top: 12, right: 12, left: -20, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                          <Bar dataKey="count" name="Số vật tư" radius={[8, 8, 0, 0]}>
+                            {consumableStockData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu vật tư." />}
+                  </div>
+                </Section>
+
+                <Section title="Hạn dùng theo lô" subtitle="Tính trên lô còn số lượng tồn.">
+                  <div className="h-72">
+                    {expiryData.some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={expiryData} layout="vertical" margin={{ top: 8, right: 16, left: 30, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                          <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                          <Bar dataKey="count" name="Số lô" radius={[0, 8, 8, 0]}>
+                            {expiryData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu hạn dùng." />}
+                  </div>
+                </Section>
+
+                <Section title="Vật tư theo loại" subtitle="Phân bổ vật tư tiêu hao.">
+                  <div className="h-72">
+                    {(statistics?.consumablesByCategory || []).some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={withColors(statistics.consumablesByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                          <Bar dataKey="count" name="Vật tư" radius={[8, 8, 0, 0]}>
+                            {withColors(statistics.consumablesByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu loại vật tư." />}
+                  </div>
+                </Section>
               </div>
-            </Section>
 
-            <Section title="Ticket theo trạng thái" subtitle="Theo ticket phát sinh trong kỳ.">
-              <div className="h-72">
-                {(statistics?.ticketStatus || []).some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={withColors(statistics.ticketStatus)} dataKey="count" nameKey="label" outerRadius={96}>
-                        {withColors(statistics.ticketStatus).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Pie>
-                      <Tooltip content={<ChartTooltip />} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có ticket trong kỳ." />}
+              <Section title="Vật tư cần nhập" subtitle="Các vật tư có tồn hiện tại dưới hoặc bằng ngưỡng cảnh báo.">
+                <LowStockTable rows={statistics?.topLowStockConsumables || []} />
+              </Section>
+            </>
+          )}
+
+          {activeTab === 'operations' && (
+            <>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Section title="Top thiết bị phát sinh ticket" subtitle="Các thiết bị có nhiều ticket nhất trong kỳ.">
+                  <RankingTable rows={statistics?.topProblemAssets || []} valueLabel="Ticket" emptyText="Chưa có dữ liệu ticket thiết bị." />
+                </Section>
+                <Section title="Ticket theo trạng thái" subtitle="Theo ticket phát sinh trong kỳ.">
+                  <div className="h-72">
+                    {(statistics?.ticketStatus || []).some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={withColors(statistics.ticketStatus)} dataKey="count" nameKey="label" outerRadius={96}>
+                            {withColors(statistics.ticketStatus).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có ticket trong kỳ." />}
+                  </div>
+                </Section>
               </div>
-            </Section>
-          </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Section title="Top thiết bị được mượn" subtitle="Các thiết bị có lượt mượn cao nhất trong kỳ.">
-              <RankingTable rows={statistics?.topBorrowedAssets || []} emptyText="Chưa có dữ liệu mượn thiết bị." />
-            </Section>
-            <Section title="Top thiết bị phát sinh ticket" subtitle="Các thiết bị có nhiều ticket nhất trong kỳ.">
-              <RankingTable rows={statistics?.topProblemAssets || []} valueLabel="Ticket" emptyText="Chưa có dữ liệu ticket thiết bị." />
-            </Section>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <Section title="Vật tư cần nhập" subtitle="Các vật tư có tồn hiện tại dưới hoặc bằng ngưỡng cảnh báo.">
-              <LowStockTable rows={statistics?.topLowStockConsumables || []} />
-            </Section>
-            <Section title="Kiểm kê gần đây" subtitle="Các phiên kiểm kê trong khoảng thời gian lọc.">
-              <AuditList rows={statistics?.recentAudits || []} />
-            </Section>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Section title="Tài sản theo loại" subtitle="Phân bổ tài sản cố định.">
-              <div className="h-72">
-                {(statistics?.fixedAssetsByCategory || []).some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={withColors(statistics.fixedAssetsByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
-                      <Bar dataKey="count" name="Tài sản" radius={[8, 8, 0, 0]}>
-                        {withColors(statistics.fixedAssetsByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có dữ liệu loại tài sản." />}
-              </div>
-            </Section>
-            <Section title="Vật tư theo loại" subtitle="Phân bổ vật tư tiêu hao.">
-              <div className="h-72">
-                {(statistics?.consumablesByCategory || []).some((item) => item.count > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={withColors(statistics.consumablesByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                      <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
-                      <Bar dataKey="count" name="Vật tư" radius={[8, 8, 0, 0]}>
-                        {withColors(statistics.consumablesByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <EmptyState text="Chưa có dữ liệu loại vật tư." />}
-              </div>
-            </Section>
-          </div>
+              <Section title="Kiểm kê gần đây" subtitle="Các phiên kiểm kê trong khoảng thời gian lọc.">
+                <AuditList rows={statistics?.recentAudits || []} />
+              </Section>
+            </>
+          )}
         </>
       )}
     </div>
