@@ -45,6 +45,12 @@ public class Notification {
     @Column(name = "asset_name", length = 255)
     private String assetName;
 
+    @Column(name = "receiver_user_id")
+    private Integer receiverUserId;
+
+    @Column(name = "receiver_role", length = 20)
+    private String receiverRole;
+
     @Column(name = "detail_json", nullable = false, length = 4000)
     private String detailJson;
 

@@ -10,13 +10,27 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
 import { useAuth } from '../../context/AuthContext'
 
 const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
+const techTicketColumnOptions = [
+  { key: 'ticket', label: 'Ticket' },
+  { key: 'assetQaCode', label: 'Mã thiết bị' },
+  { key: 'assetName', label: 'Tên TB' },
+  { key: 'description', label: 'Mô tả' },
+  { key: 'priority', label: 'Ưu tiên' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'image', label: 'Ảnh lỗi' },
+  { key: 'dueDate', label: 'Hạn xử lý' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultTechTicketVisibleColumnKeys = ['ticket', 'assetQaCode', 'assetName', 'priority', 'status', 'dueDate', 'actions']
 
 function toVietnamesePriority(priority) {
   if (priority === 'HIGH') return 'Cao'
@@ -56,6 +70,19 @@ function TechSupportTickets() {
   const [timelineTicket, setTimelineTicket] = useState(null)
   const [kpis, setKpis] = useState(null)
   const [kpiLoading, setKpiLoading] = useState(false)
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-tech-tickets-visible-columns',
+    columns: techTicketColumnOptions,
+    defaultVisibleKeys: defaultTechTicketVisibleColumnKeys,
+  })
 
   const loadTickets = async (nextStatus = statusFilter) => {
     setLoading(true)
@@ -114,6 +141,37 @@ function TechSupportTickets() {
     ).length,
     pending: tickets.filter((ticket) => ticket.status === 'PENDING').length,
   }), [tickets, user?.userId])
+  const tableColumns = useMemo(() => ([
+    { key: 'ticket', label: 'Ticket', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => `#${ticket.id}` },
+    { key: 'assetQaCode', label: 'Mã thiết bị', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetQaCode },
+    { key: 'assetName', label: 'Tên TB', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetName || '-' },
+    { key: 'description', label: 'Mô tả', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.description },
+    { key: 'priority', label: 'Ưu tiên', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => toVietnamesePriority(ticket.priority) },
+    { key: 'status', label: 'Trạng thái', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ticket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-800' : ticket.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{toVietnameseStatus(ticket.status)}</span> },
+    { key: 'image', label: 'Ảnh lỗi', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <ActionIconButton icon={Detail} label="Xem ảnh lỗi" onClick={() => { if (!ticket.imageUrl) { toast.info('Ticket này chưa có ảnh lỗi.'); return } setPreviewImageUrl(ticket.imageUrl) }} /> },
+    { key: 'dueDate', label: 'Hạn xử lý', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => formatVietnamDateTime(ticket.dueDate) },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      headClassName: 'px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (ticket) => {
+        const isMine = Number(ticket.assigneeId) === Number(user?.userId)
+        return (
+          <div className="flex flex-wrap gap-2">
+            {ticket.status === 'PENDING' && <ActionIconButton icon={Play} label="Nhận xử lý" variant="primary" onClick={() => handleTakeTicket(ticket.id)} disabled={submittingId === ticket.id} />}
+            {ticket.status === 'IN_PROGRESS' && isMine && <ActionIconButton icon={Check} label="Hoàn tất xử lý" variant="success" onClick={() => handleResolve(ticket.id)} disabled={submittingId === ticket.id} />}
+            <ActionIconButton icon={MessageCircle} label="Mở chat ticket" onClick={() => navigate(`/tech/tickets/${ticket.id}`)} />
+            <ActionIconButton icon={History} label="Xem timeline ticket" variant="violet" onClick={() => { setTimelineTicket({ id: ticket.id, qaCode: ticket.assetQaCode, assetQaCode: ticket.assetQaCode, name: ticket.assetName, assetName: ticket.assetName }); setShowTimelineModal(true) }} />
+          </div>
+        )
+      },
+    },
+  ]), [navigate, submittingId, user?.userId])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   const handleTakeTicket = async (ticketId) => {
     setSubmittingId(ticketId)
@@ -199,105 +257,50 @@ function TechSupportTickets() {
           </button>
         </div>
 
+        <div className="mb-3 flex justify-end">
+          <ColumnVisibilityDropdown
+            columns={techTicketColumnOptions}
+            visibleColumns={visibleColumns}
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            onToggleColumn={(columnKey) => {
+              if (visibleColumns[columnKey] && selectedCount === 1) {
+                toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                return
+              }
+              toggleColumn(columnKey)
+            }}
+            onSelectAll={selectAllColumns}
+            onResetDefault={resetDefaultColumns}
+          />
+        </div>
+
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="min-w-[1250px] text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left">Ticket</th>
-                <th className="px-3 py-2 text-left">Mã thiết bị</th>
-                <th className="px-3 py-2 text-left">Tên TB</th>
-                <th className="px-3 py-2 text-left">Mô tả</th>
-                <th className="px-3 py-2 text-left">Ưu tiên</th>
-                <th className="px-3 py-2 text-left">Trạng thái</th>
-                <th className="px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="px-3 py-2 text-left">Hạn xử lý</th>
-                <th className="px-3 py-2 text-left">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {!loading && tickets.map((ticket) => {
-                const isMine = Number(ticket.assigneeId) === Number(user?.userId)
                 return (
                   <tr key={ticket.id} className="border-t border-slate-100 align-top">
-                    <td className="px-3 py-2">#{ticket.id}</td>
-                    <td className="px-3 py-2">{ticket.assetQaCode}</td>
-                    <td className="px-3 py-2">{ticket.assetName || '-'}</td>
-                    <td className="px-3 py-2">{ticket.description}</td>
-                    <td className="px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        ticket.status === 'RESOLVED'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : ticket.status === 'IN_PROGRESS'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                      }`}
-                      >
-                        {toVietnameseStatus(ticket.status)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <ActionIconButton
-                        icon={Detail}
-                        label="Xem ảnh lỗi"
-                        onClick={() => {
-                          if (!ticket.imageUrl) {
-                            toast.info('Ticket này chưa có ảnh lỗi.')
-                            return
-                          }
-                          setPreviewImageUrl(ticket.imageUrl)
-                        }}
-                      />
-                    </td>
-                    <td className="px-3 py-2">{formatVietnamDateTime(ticket.dueDate)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {ticket.status === 'PENDING' && (
-                          <ActionIconButton
-                            icon={Play}
-                            label="Nhận xử lý"
-                            variant="primary"
-                            onClick={() => handleTakeTicket(ticket.id)}
-                            disabled={submittingId === ticket.id}
-                          />
-                        )}
-                        {ticket.status === 'IN_PROGRESS' && isMine && (
-                          <ActionIconButton
-                            icon={Check}
-                            label="Hoàn tất xử lý"
-                            variant="success"
-                            onClick={() => handleResolve(ticket.id)}
-                            disabled={submittingId === ticket.id}
-                          />
-                        )}
-                        <ActionIconButton
-                          icon={MessageCircle}
-                          label="Mở chat ticket"
-                          onClick={() => navigate(`/tech/tickets/${ticket.id}`)}
-                        />
-                        <ActionIconButton
-                          icon={History}
-                          label="Xem timeline ticket"
-                          variant="violet"
-                          onClick={() => {
-                            setTimelineTicket({
-                              id: ticket.id,
-                              qaCode: ticket.assetQaCode,
-                              assetQaCode: ticket.assetQaCode,
-                              name: ticket.assetName,
-                              assetName: ticket.assetName,
-                            })
-                            setShowTimelineModal(true)
-                          }}
-                        />
-                      </div>
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${ticket.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(ticket)}
+                      </td>
+                    ))}
                   </tr>
                 )
               })}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-3 text-center text-slate-500">
                     Không có ticket cần xử lý.
                   </td>
                 </tr>

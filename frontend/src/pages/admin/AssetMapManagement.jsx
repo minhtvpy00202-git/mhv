@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useBeforeUnload, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
 const CELL_SIZE = 32
@@ -2468,6 +2469,22 @@ function AssetMapManagement() {
     })
     setSearchResults([])
   }
+
+  useDebouncedEffect(() => {
+    const hasSearchFilter = [
+      searchFilters.keyword,
+      searchFilters.categoryId,
+      searchFilters.floorId,
+      searchFilters.locationId,
+    ].some((value) => String(value || '').trim())
+
+    if (!hasSearchFilter) {
+      setSearchResults([])
+      return
+    }
+
+    void handleSearch()
+  }, [searchFilters.keyword, searchFilters.categoryId, searchFilters.floorId, searchFilters.locationId], 300, true)
 
   const stopScanner = useCallback(async () => {
     const scanner = scannerRef.current

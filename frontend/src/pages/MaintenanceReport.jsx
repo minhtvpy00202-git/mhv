@@ -175,33 +175,33 @@ function MaintenanceReport() {
     scannerRef.current = scanner
     try {
       await scanner.start(
-        { facingMode: 'environment' },
-        scannerConfig,
-        async (decodedText) => {
-          const qaCode = extractQaCode(decodedText)
-          if (!qaCode) return
-          await stopScanner()
-          try {
-            const response = await axiosClient.get(`/api/assets/${qaCode}`)
-            setAssetQaCode(qaCode)
-            setAssetName(response.data?.name || '')
-            setAssetLocationName(response.data?.locationName || '')
-            setAssetHomeLocationName(response.data?.homeLocationName || '')
-            setAssetSpecs(parseSpecsToEntries(response.data?.specs))
-            setFormErrors({})
-            setShowScannerModal(false)
-            setShowModal(true)
-          } catch {
-            setAssetQaCode('')
-            setAssetName('')
-            setAssetLocationName('')
-            setAssetHomeLocationName('')
-            setAssetSpecs([])
-            toast.error('Mã tài sản không tồn tại')
-            startScanner()
-          }
-        },
-        () => {},
+          { facingMode: 'environment' },
+          scannerConfig,
+          async (decodedText) => {
+            const qaCode = extractQaCode(decodedText)
+            if (!qaCode) return
+            await stopScanner()
+            try {
+              const response = await axiosClient.get(`/api/assets/${qaCode}`)
+              setAssetQaCode(qaCode)
+              setAssetName(response.data?.name || '')
+              setAssetLocationName(response.data?.locationName || '')
+              setAssetHomeLocationName(response.data?.homeLocationName || '')
+              setAssetSpecs(parseSpecsToEntries(response.data?.specs))
+              setFormErrors({})
+              setShowScannerModal(false)
+              setShowModal(true)
+            } catch {
+              setAssetQaCode('')
+              setAssetName('')
+              setAssetLocationName('')
+              setAssetHomeLocationName('')
+              setAssetSpecs([])
+              toast.error('Mã tài sản không tồn tại')
+              startScanner()
+            }
+          },
+          () => {},
       )
       isScanningRef.current = true
       setScannerError('')
@@ -209,8 +209,8 @@ function MaintenanceReport() {
       const message = error?.message || ''
       const denied = /denied|permission|notallowed|secure/i.test(message)
       const blockedMessage = denied
-        ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
-        : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
+          ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
+          : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
       setScannerError(blockedMessage)
       toast.error(blockedMessage)
       await stopScanner()
@@ -361,12 +361,12 @@ function MaintenanceReport() {
     cameraInputRef.current?.click()
   }
   return (
-    <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.15),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.2),transparent_60%)]" />
-        <div className="relative flex flex-col items-center text-center space-y-5">
-          <div className="flex flex-col items-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
+      <div className="space-y-5">
+        <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.2),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.26),transparent_62%)]" />
+          <div className="relative grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div>
+            <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
               <Bolt size={14} />
               Báo hỏng thiết bị
             </span>
@@ -410,8 +410,7 @@ function MaintenanceReport() {
               <p className="text-[11px] text-slate-400 dark:text-slate-500">Chưa có ticket nào được gửi gần đây.</p>
             )}
           </div>
-        </div>
-      </section>
+        </section>
 
       {/* Sleek Collapsible Accordion Guide */}
       <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden">
@@ -459,13 +458,8 @@ function MaintenanceReport() {
               <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 {scannerError}
               </div>
-            )}
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-              Giữ camera ổn định trong 1-2 giây. Nếu không quét được, hãy tăng ánh sáng hoặc đưa mã QR gần hơn.
             </div>
-          </div>
-        </div>
-      )}
+        )}
 
       {showModal && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
@@ -665,10 +659,8 @@ function MaintenanceReport() {
                 Đóng
               </button>
             </div>
-          </form>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
   )
 }
 

@@ -19,7 +19,11 @@ public class InventoryAuditSummaryResponse {
     private LocalDateTime completedAt;
     private LocalDateTime dueDate;
     private String status;
+    private Integer totalAssetCount;
     private Integer expectedCount;
+    private Integer repairingCount;
+    private Integer lentCount;
+    private Integer borrowedCount;
     private Integer scannedCount;
     private Integer missingCount;
     private String notes;

@@ -4,7 +4,10 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
+import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
 import { formatVietnamDate } from '../../utils/datetime'
 
@@ -28,6 +31,17 @@ function getUserSortValue(user, key) {
 
 const statusOptions = ['Hoạt động', 'Khóa']
 const PAGE_SIZE = 10
+const userColumnOptions = [
+  { key: 'username', label: 'Username' },
+  { key: 'fullName', label: 'Họ tên' },
+  { key: 'birthday', label: 'Ngày sinh' },
+  { key: 'phone', label: 'Số điện thoại' },
+  { key: 'role', label: 'Vai trò' },
+  { key: 'techTypeDisplay', label: 'Chuyên môn kỹ thuật' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'actions', label: 'Thao tác' },
+]
+const defaultUserVisibleColumnKeys = ['username', 'fullName', 'phone', 'role', 'status', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -75,6 +89,19 @@ function UserManagement() {
     initialKey: 'username',
     initialDirection: 'asc',
     getSortValue: getUserSortValue,
+  })
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey: 'mhv-admin-users-visible-columns',
+    columns: userColumnOptions,
+    defaultVisibleKeys: defaultUserVisibleColumnKeys,
   })
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
@@ -124,6 +151,10 @@ function UserManagement() {
     }, 0)
     return () => window.clearTimeout(bootstrapTimer)
   }, [])
+
+  useDebouncedEffect(() => {
+    void loadUsers(0, filters)
+  }, [filters.keyword, filters.role, filters.status], 300, true)
 
   const resetForm = () => {
     setSelectedUserId(null)
@@ -284,6 +315,107 @@ function UserManagement() {
   }
 
   const currentPage = pageInfo.page + 1
+  const tableColumns = useMemo(() => ([
+    {
+      key: 'username',
+      label: (
+        <button type="button" onClick={() => handleSort('username')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('username', 'Username')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2 font-medium',
+      render: (row) => row.username,
+    },
+    {
+      key: 'fullName',
+      label: (
+        <button type="button" onClick={() => handleSort('fullName')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('fullName', 'Họ tên')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => row.fullName || '-',
+    },
+    {
+      key: 'birthday',
+      label: (
+        <button type="button" onClick={() => handleSort('birthday')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('birthday', 'Ngày sinh')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => formatVietnamDate(row.birthday),
+    },
+    {
+      key: 'phone',
+      label: (
+        <button type="button" onClick={() => handleSort('phone')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('phone', 'Số điện thoại')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => row.phone || '-',
+    },
+    {
+      key: 'role',
+      label: (
+        <button type="button" onClick={() => handleSort('roleLabel')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('roleLabel', 'Vai trò')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => toRoleLabel(row.role),
+    },
+    {
+      key: 'techTypeDisplay',
+      label: (
+        <button type="button" onClick={() => handleSort('techTypeDisplay')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('techTypeDisplay', 'Chuyên môn kỹ thuật')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => (
+        row.role === 'TechSupport'
+          ? (row.techTypeNames?.join(', ') || 'Kỹ thuật viên')
+          : '-'
+      ),
+    },
+    {
+      key: 'status',
+      label: (
+        <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('status', 'Trạng thái')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => row.status,
+    },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => (
+        <ActionIconButton
+          icon={Wrench}
+          label="Chọn để chỉnh sửa tài khoản"
+          variant="primary"
+          onClick={() => handleSelect(row)}
+        />
+      ),
+    },
+  ]), [getSortLabel, handleSort])
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
 
   return (
     <div className="space-y-4">
@@ -299,7 +431,7 @@ function UserManagement() {
           </button>
         </div>
 
-        <div className="mb-3 grid gap-2 md:grid-cols-4">
+        <div className="mb-3 grid gap-2 md:grid-cols-5">
           <input
             value={filters.keyword}
             onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
@@ -350,78 +482,48 @@ function UserManagement() {
               Đặt lại
             </button>
           </div>
+          <ColumnVisibilityDropdown
+            columns={userColumnOptions}
+            visibleColumns={visibleColumns}
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            onToggleColumn={(columnKey) => {
+              if (visibleColumns[columnKey] && selectedCount === 1) {
+                toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                return
+              }
+              toggleColumn(columnKey)
+            }}
+            onSelectAll={selectAllColumns}
+            onResetDefault={resetDefaultColumns}
+          />
         </div>
 
         <div className="overflow-auto rounded-lg border border-slate-200">
           <table className="min-w-max text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('username')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('username', 'Username')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('fullName')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('fullName', 'Họ tên')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('birthday')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('birthday', 'Ngày sinh')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('phone')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('phone', 'Số điện thoại')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('roleLabel')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('roleLabel', 'Vai trò')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('techTypeDisplay')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('techTypeDisplay', 'Chuyên môn kỹ thuật')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
-                    {getSortLabel('status', 'Trạng thái')}
-                  </button>
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Thao tác</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {!loading &&
                 sortedRows.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-medium">{row.username}</td>
-                    <td className="px-3 py-2">{row.fullName || '-'}</td>
-                    <td className="px-3 py-2">{formatVietnamDate(row.birthday)}</td>
-                    <td className="px-3 py-2">{row.phone || '-'}</td>
-                    <td className="px-3 py-2">{toRoleLabel(row.role)}</td>
-                    <td className="px-3 py-2">
-                      {row.role === 'TechSupport'
-                        ? (row.techTypeNames?.join(', ') || 'Kỹ thuật viên')
-                        : '-'}
-                    </td>
-                    <td className="px-3 py-2">{row.status}</td>
-                    <td className="px-3 py-2">
-                      <ActionIconButton
-                        icon={Wrench}
-                        label="Chọn để chỉnh sửa tài khoản"
-                        variant="primary"
-                        onClick={() => handleSelect(row)}
-                      />
-                    </td>
+                    {renderedColumns.map((column) => (
+                      <td key={`${row.id}-${column.key}`} className={column.cellClassName}>
+                        {column.render(row)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-4 text-center text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-4 text-center text-slate-500">
                     Không có dữ liệu tài khoản.
                   </td>
                 </tr>

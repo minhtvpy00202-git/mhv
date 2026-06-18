@@ -27,6 +27,7 @@ import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
+import { formatVietnamDateTime } from '../utils/datetime'
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
@@ -298,14 +299,14 @@ function AdminLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-[200] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Quản trị viên</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Admin'}</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <div className="relative">
+            <div className="relative z-[120]">
               <button
                 type="button"
                 onClick={() => {
@@ -325,7 +326,7 @@ function AdminLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="absolute right-0 z-[120] mt-2 w-[26rem] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button type="button" onClick={handleMarkAllRead} className="text-xs font-semibold hover:opacity-80" style={{ color: primaryColor }}>
@@ -351,6 +352,9 @@ function AdminLayout() {
                         <p>{notification.title}</p>
                         {notification.assetName && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">Thiết bị: {notification.assetName}</p>}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                          {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
+                        </p>
                       </button>
                     ))}
                   </div>

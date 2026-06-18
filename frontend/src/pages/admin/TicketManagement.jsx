@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
+import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
@@ -20,6 +22,49 @@ const defaultStats = {
   inProgress: 0,
   resolved: 0,
 }
+const ticketColumnOptions = [
+  { key: 'ticket', label: 'Ticket' },
+  { key: 'assetQaCode', label: 'Mã thiết bị' },
+  { key: 'assetName', label: 'Tên thiết bị' },
+  { key: 'assetLocationName', label: 'Phòng' },
+  { key: 'reporterName', label: 'Người báo' },
+  { key: 'description', label: 'Mô tả sự cố' },
+  { key: 'image', label: 'Ảnh lỗi' },
+  { key: 'priority', label: 'Ưu tiên' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'assignee', label: 'KTV phụ trách' },
+  { key: 'createdAt', label: 'Ngày báo' },
+  { key: 'dueDate', label: 'Hạn sửa chữa' },
+]
+const defaultVisibleColumnKeys = [
+  'ticket',
+  'assetQaCode',
+  'assetName',
+  'assetLocationName',
+  'description',
+  'priority',
+  'status',
+  'assignee',
+  'createdAt',
+]
+const ticketColumnStorageKey = 'mhv-admin-ticket-visible-columns'
+const ticketColumnPresets = [
+  {
+    key: 'basic',
+    label: 'Cơ bản',
+    keys: ['ticket', 'assetQaCode', 'assetName', 'status', 'assignee', 'createdAt'],
+  },
+  {
+    key: 'dispatch',
+    label: 'Điều phối',
+    keys: ['ticket', 'assetQaCode', 'assetName', 'assetLocationName', 'priority', 'status', 'assignee', 'createdAt'],
+  },
+  {
+    key: 'sla',
+    label: 'SLA',
+    keys: ['ticket', 'assetName', 'reporterName', 'priority', 'status', 'createdAt', 'dueDate'],
+  },
+]
 
 function toVietnamesePriority(priority) {
   if (priority === 'HIGH') return 'Cao'
@@ -54,6 +99,21 @@ function TicketManagement() {
     assigneeId: '',
   })
   const [assignDraft, setAssignDraft] = useState({})
+
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+    applyColumnPreset,
+  } = useColumnVisibility({
+    storageKey: ticketColumnStorageKey,
+    columns: ticketColumnOptions,
+    defaultVisibleKeys: defaultVisibleColumnKeys,
+  })
 
   const getEligibleTechSupports = (ticket) => {
     const techTypeId = Number(ticket?.assetCategoryTechTypeId) || 0
@@ -141,6 +201,162 @@ function TicketManagement() {
     }
   }
 
+  const tableColumns = useMemo(() => ([
+    {
+      key: 'ticket',
+      label: 'Ticket',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => `#${ticket.id}`,
+    },
+    {
+      key: 'assetQaCode',
+      label: 'Mã thiết bị',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => ticket.assetQaCode || '-',
+    },
+    {
+      key: 'assetName',
+      label: 'Tên thiết bị',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'max-w-[180px] truncate whitespace-nowrap px-3 py-2',
+      render: (ticket) => ticket.assetName || '-',
+      getTitle: (ticket) => ticket.assetName || '-',
+    },
+    {
+      key: 'assetLocationName',
+      label: 'Phòng',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'max-w-[150px] truncate whitespace-nowrap px-3 py-2',
+      render: (ticket) => ticket.assetLocationName || '-',
+      getTitle: (ticket) => ticket.assetLocationName || '-',
+    },
+    {
+      key: 'reporterName',
+      label: 'Người báo',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'max-w-[150px] truncate whitespace-nowrap px-3 py-2',
+      render: (ticket) => ticket.reporterName || `#${ticket.reporterId}`,
+      getTitle: (ticket) => ticket.reporterName || `#${ticket.reporterId}`,
+    },
+    {
+      key: 'description',
+      label: 'Mô tả sự cố',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'max-w-[260px] truncate whitespace-nowrap px-3 py-2 text-slate-700',
+      render: (ticket) => ticket.description || '-',
+      getTitle: (ticket) => ticket.description || '-',
+    },
+    {
+      key: 'image',
+      label: 'Ảnh lỗi',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => (
+        <ActionIconButton
+          icon={ImageIcon}
+          label="Xem ảnh lỗi"
+          onClick={() => {
+            if (!ticket.imageUrl) {
+              toast.info('Ticket này chưa có ảnh lỗi.')
+              return
+            }
+            setPreviewImageUrl(ticket.imageUrl)
+          }}
+        />
+      ),
+    },
+    {
+      key: 'priority',
+      label: 'Ưu tiên',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => toVietnamesePriority(ticket.priority),
+    },
+    {
+      key: 'status',
+      label: 'Trạng thái',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+          ticket.status === 'RESOLVED'
+            ? 'bg-emerald-100 text-emerald-800'
+            : ticket.status === 'IN_PROGRESS'
+              ? 'bg-blue-100 text-blue-800'
+              : 'bg-amber-100 text-amber-800'
+        }`}
+        >
+          {toVietnameseStatus(ticket.status)}
+        </span>
+      ),
+    },
+    {
+      key: 'assignee',
+      label: 'KTV phụ trách',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (ticket) => (
+        ticket.status === 'PENDING' ? (
+          <div className="flex min-w-[240px] items-center gap-2">
+            {getEligibleTechSupports(ticket).length === 0 ? (
+              <p className="whitespace-nowrap text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
+            ) : (
+              <select
+                value={assignDraft[ticket.id] || ''}
+                onChange={(event) =>
+                  setAssignDraft((prev) => ({ ...prev, [ticket.id]: event.target.value }))
+                }
+                className="rounded border border-slate-300 px-2 py-1 text-xs"
+              >
+                <option value="">Chọn kỹ thuật viên</option>
+                {getEligibleTechSupports(ticket).map((tech) => (
+                  <option key={tech.id} value={tech.id}>
+                    {tech.fullName || tech.username}
+                  </option>
+                ))}
+              </select>
+            )}
+            <ActionIconButton
+              icon={Check}
+              label="Gán kỹ thuật viên"
+              variant="primary"
+              onClick={() => handleAssign(ticket.id)}
+              disabled={submittingId === ticket.id}
+            />
+          </div>
+        ) : (
+          <p className="whitespace-nowrap text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
+        )
+      ),
+    },
+    {
+      key: 'createdAt',
+      label: 'Ngày báo',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => formatVietnamDateTime(ticket.createdAt),
+    },
+    {
+      key: 'dueDate',
+      label: 'Hạn sửa chữa',
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'whitespace-nowrap px-3 py-2',
+      render: (ticket) => (
+        <>
+          <p className="whitespace-nowrap">{formatVietnamDateTime(ticket.dueDate)}</p>
+          {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
+        </>
+      ),
+    },
+  ]), [assignDraft, submittingId, techSupports])
+
+  const renderedColumns = useMemo(
+    () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
+    [activeColumns, tableColumns],
+  )
+
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -163,7 +379,7 @@ function TicketManagement() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 grid gap-2 md:grid-cols-4">
+        <div className="mb-3 grid gap-2 md:grid-cols-5">
           <select
             value={filters.status}
             onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
@@ -206,24 +422,36 @@ function TicketManagement() {
           >
             Đặt lại
           </button>
+          <ColumnVisibilityDropdown
+            className="md:col-span-1"
+            columns={ticketColumnOptions}
+            visibleColumns={visibleColumns}
+            selectedCount={selectedCount}
+            allSelected={allSelected}
+            onToggleColumn={(columnKey) => {
+              const canHide = visibleColumns[columnKey] && selectedCount === 1
+              if (canHide) {
+                toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                return
+              }
+              toggleColumn(columnKey)
+            }}
+            onSelectAll={selectAllColumns}
+            onResetDefault={resetDefaultColumns}
+            presets={ticketColumnPresets}
+            onApplyPreset={applyColumnPreset}
+          />
         </div>
 
         <div className="overflow-auto rounded-2xl border border-slate-200">
-          <table className="min-w-[1750px] text-sm">
+          <table className="min-w-full text-sm">
             <thead className="bg-slate-50/80">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ticket</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Mã thiết bị</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Tên thiết bị</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Phòng</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Người báo</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Mô tả sự cố</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ảnh lỗi</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ưu tiên</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Trạng thái</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">KTV phụ trách</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Ngày báo</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Hạn sửa chữa</th>
+                {renderedColumns.map((column) => (
+                  <th key={column.key} className={column.headClassName}>
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -268,52 +496,14 @@ function TicketManagement() {
                           : 'bg-amber-100 text-amber-800'
                     }`}
                     >
-                      {toVietnameseStatus(ticket.status)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    {ticket.status === 'PENDING' ? (
-                      <div className="flex min-w-[240px] items-center gap-2">
-                        {getEligibleTechSupports(ticket).length === 0 ? (
-                          <p className="whitespace-nowrap text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
-                        ) : (
-                          <select
-                            value={assignDraft[ticket.id] || ''}
-                            onChange={(event) =>
-                              setAssignDraft((prev) => ({ ...prev, [ticket.id]: event.target.value }))
-                            }
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
-                          >
-                            <option value="">Chọn kỹ thuật viên</option>
-                            {getEligibleTechSupports(ticket).map((tech) => (
-                              <option key={tech.id} value={tech.id}>
-                                {tech.fullName || tech.username}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        <ActionIconButton
-                          icon={Check}
-                          label="Gán kỹ thuật viên"
-                          variant="primary"
-                          onClick={() => handleAssign(ticket.id)}
-                          disabled={submittingId === ticket.id}
-                        />
-                      </div>
-                    ) : (
-                      <p className="whitespace-nowrap text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">{formatVietnamDateTime(ticket.createdAt)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    <p className="whitespace-nowrap">{formatVietnamDateTime(ticket.dueDate)}</p>
-                    {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
-                  </td>
+                      {column.render(ticket)}
+                    </td>
+                  ))}
                 </tr>
               ))}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-8 text-center text-slate-500">
                     Không có ticket phù hợp.
                   </td>
                 </tr>

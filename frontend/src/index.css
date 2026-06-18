@@ -43,6 +43,12 @@
 }
 
 @layer components {
+  .overflow-x-auto > table,
+  .overflow-auto > table {
+    width: max-content;
+    min-width: 100%;
+  }
+
   .brand-theme .bg-fptOrange {
     background-color: var(--brand-primary) !important;
   }

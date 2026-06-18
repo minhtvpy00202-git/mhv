@@ -6,7 +6,7 @@ import {
   IconLogout as LogOut,
   IconSearch as Search,
 } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
@@ -14,6 +14,7 @@ import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
+import { formatVietnamDateTime } from '../utils/datetime'
 import { isNarrowViewport, toTechSupportMobilePath } from '../utils/navigation'
 
 const navItems = [
@@ -21,16 +22,6 @@ const navItems = [
   { to: '/tech/inventory-audits', label: 'Kiểm kê thiết bị', icon: ClipboardCheck, end: true },
   { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History, end: true },
 ]
-
-function isDeviceFailureNotification(notification) {
-  return notification?.eventType === 'TICKET_CREATED'
-}
-
-function extractTicketIdFromLink(linkPath) {
-  if (!linkPath) return null
-  const match = String(linkPath).match(/\/tickets\/(\d+)/)
-  return match?.[1] ? Number(match[1]) : null
-}
 
 function TechSupportLayout() {
   const { user, logout } = useAuth()
@@ -46,6 +37,18 @@ function TechSupportLayout() {
   const [chatKeyword, setChatKeyword] = useState('')
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
+
+  const loadFeed = useCallback(async (suppressError = false) => {
+    try {
+      const response = await axiosClient.get('/api/notifications')
+      setNotifications(response.data?.items || [])
+      setUnreadCount(response.data?.unreadCount || 0)
+    } catch (error) {
+      if (suppressError) return
+      const message = error?.response?.data?.message || 'Không tải được thông báo.'
+      toast.error(message)
+    }
+  }, [])
 
   useEffect(() => {
     const syncViewportRoute = () => {
@@ -64,29 +67,18 @@ function TechSupportLayout() {
   }, [location.pathname, navigate])
 
   useEffect(() => {
-    if (!contactTickets.length) return
-    const allowedTicketIds = new Set((contactTickets || []).map((item) => Number(item.id)))
-    const loadFeed = async () => {
-      if (document.hidden) return
-      try {
-        const response = await axiosClient.get('/api/notifications')
-        const filteredItems = (response.data?.items || [])
-          .filter(isDeviceFailureNotification)
-          .filter((item) => {
-            const ticketId = extractTicketIdFromLink(item.linkPath)
-            return ticketId != null && allowedTicketIds.has(ticketId)
-          })
-        setNotifications(filteredItems)
-        setUnreadCount(filteredItems.filter((item) => !item.isRead).length)
-      } catch (error) {
-        const message = error?.response?.data?.message || 'Không tải được thông báo.'
-        toast.error(message)
-      }
+    const bootstrapTimer = window.setTimeout(() => {
+      void loadFeed(true)
+    }, 0)
+    const handleRefresh = () => {
+      void loadFeed(true)
     }
-    loadFeed()
-    const timer = setInterval(loadFeed, 20000)
-    return () => clearInterval(timer)
-  }, [contactTickets])
+    window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
+    return () => {
+      window.clearTimeout(bootstrapTimer)
+      window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
+    }
+  }, [loadFeed])
 
   useEffect(() => {
     const loadContactTickets = async () => {
@@ -168,9 +160,8 @@ function TechSupportLayout() {
   }
 
   const handleMarkAllRead = async () => {
-    const unreadNotificationIds = notifications.filter((item) => !item.isRead).map((item) => item.id)
     try {
-      await Promise.all(unreadNotificationIds.map((id) => axiosClient.post(`/api/notifications/${id}/read`)))
+      await axiosClient.post('/api/notifications/read-all')
     } catch {
       // Ignore mark-all-read failures and keep local UI responsive.
     }
@@ -253,17 +244,23 @@ function TechSupportLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-[200] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Kỹ thuật viên hỗ trợ</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'TechSupport'}</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <div className="relative">
+            <div className="relative z-[120]">
               <button
                 type="button"
-                onClick={() => setShowNotificationDropdown((prev) => !prev)}
+                onClick={() => {
+                  const nextValue = !showNotificationDropdown
+                  setShowNotificationDropdown(nextValue)
+                  if (nextValue) {
+                    void loadFeed(true)
+                  }
+                }}
                 className="relative inline-flex items-center rounded-lg border border-slate-300 p-2 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Bell size={18} />
@@ -274,7 +271,7 @@ function TechSupportLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="absolute right-0 z-[120] mt-2 w-[26rem] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button
@@ -318,6 +315,9 @@ function TechSupportLayout() {
                         <p>{notification.title}</p>
                         {notification.assetName && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">Thiết bị: {notification.assetName}</p>}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                          {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
+                        </p>
                       </button>
                     ))}
                   </div>
