@@ -16,7 +16,9 @@ import {
   IconTicket as Ticket,
   IconTool as Wrench,
   IconUsers as Users,
+  IconClock as Clock,
 } from '@tabler/icons-react'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -43,8 +45,17 @@ const menuItems = [
   },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
-  { to: '/admin/tickets', label: 'Điều phối ticket sửa chữa', icon: Ticket },
+  {
+    id: 'tickets-management-submenu',
+    label: 'Ticket sửa chữa',
+    icon: Ticket,
+    children: [
+      { to: '/admin/tickets', label: 'Danh sách ticket', icon: Ticket },
+      { to: '/admin/tickets/extensions', label: 'Duyệt yêu cầu', icon: Clock },
+    ],
+  },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
+
   { to: '/admin/branding', label: 'Cài đặt thương hiệu', icon: Settings },
 ]
 
@@ -57,7 +68,7 @@ function AdminLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
-  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true })
+  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'tickets-management-submenu': true })
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -83,6 +94,14 @@ function AdminLayout() {
     ) {
       const syncMenuTimer = window.setTimeout(() => {
         setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))
+      }, 0)
+      return () => window.clearTimeout(syncMenuTimer)
+    }
+    if (
+      location.pathname.startsWith('/admin/tickets')
+    ) {
+      const syncMenuTimer = window.setTimeout(() => {
+        setExpandedMenus((prev) => ({ ...prev, 'tickets-management-submenu': true }))
       }, 0)
       return () => window.clearTimeout(syncMenuTimer)
     }
@@ -151,21 +170,23 @@ function AdminLayout() {
           {menuItems.map((item) => {
             if (!item.children) {
               const Icon = item.icon
+              const customActive = item.to === '/admin/tickets'
+                ? /^\/admin\/tickets(\/\d+)?$/.test(location.pathname)
+                : location.pathname === item.to || (item.to !== '/admin/dashboard' && item.to !== '/admin/tickets' && location.pathname.startsWith(item.to))
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      isActive ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
-                    }`
-                  }
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    customActive ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
+                  }`}
                 >
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </NavLink>
               )
             }
+
 
             const isExpanded = expandedMenus[item.id]
             const isParentActive = item.children.some((child) => location.pathname.startsWith(child.to))
@@ -195,6 +216,7 @@ function AdminLayout() {
                         <NavLink
                           key={child.to}
                           to={child.to}
+                          end={child.to === '/admin/tickets'}
                           className={({ isActive }) =>
                             `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
                               isActive ? 'bg-orange-50 font-semibold text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
@@ -276,7 +298,7 @@ function AdminLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Quản trị viên</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Admin'}</p>
@@ -303,7 +325,7 @@ function AdminLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button type="button" onClick={handleMarkAllRead} className="text-xs font-semibold hover:opacity-80" style={{ color: primaryColor }}>

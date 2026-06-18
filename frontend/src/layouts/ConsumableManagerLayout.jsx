@@ -100,7 +100,7 @@ function ConsumableManagerLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Nhân viên quản lý cấp phát vật tư</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Consumable Manager'}</p>
@@ -125,7 +125,7 @@ function ConsumableManagerLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button type="button" onClick={handleMarkAllRead} className="text-xs font-semibold" style={{ color: primaryColor }}>
