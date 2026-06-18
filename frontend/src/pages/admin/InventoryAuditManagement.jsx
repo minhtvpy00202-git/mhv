@@ -44,90 +44,17 @@ function createDefaultAuditForm() {
   }
 }
 
-function DetailIconButton({ onClick }) {
-  return (
-    <div className="relative group inline-block">
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex h-6 w-6 items-center justify-center rounded-md border border-amber-300 bg-white shadow-sm transition-all hover:bg-amber-50/80"
-      >
-        <svg className="h-3.5 w-3.5 text-amber-700" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-      </button>
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-all duration-200 group-hover:pointer-events-auto group-hover:opacity-100">
-        Xem chi tiết
-        <div className="absolute left-1/2 top-full -mt-1 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-      </div>
-    </div>
-  )
-}
-
-function AssetListModal({ open, title, onClose, columns, items, emptyMessage }) {
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-slate-100 p-4">
-          <h3 className="text-base font-semibold text-slate-800">{title}</h3>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="overflow-auto p-4">
-          <table className="w-full divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 bg-slate-50 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-              <tr>
-                {columns.map((column) => (
-                  <th key={column.key} className="px-3 py-2 text-left font-semibold text-slate-600">
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {items.map((item, index) => (
-                <tr key={`${item.assetQaCode || title}-${index}`} className="hover:bg-slate-50/50">
-                  {columns.map((column) => (
-                    <td key={`${item.assetQaCode || title}-${column.key}-${index}`} className="px-3 py-2 text-slate-600">
-                      {column.render ? column.render(item, index) : (item[column.key] || '-')}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td className="px-3 py-6 text-center text-slate-400" colSpan={columns.length}>
-                    {emptyMessage}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex justify-end rounded-b-xl border-t border-slate-100 bg-slate-50 p-3">
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Đóng</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
   const [audits, setAudits] = useState([])
   const [selectedAudit, setSelectedAudit] = useState(null)
   const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
 
-  // Trạng thái hiển thị các modal chi tiết
-  const [openScannedModal, setOpenScannedModal] = useState(false)
-  const [openLentModal, setOpenLentModal] = useState(false)
-  const [openBorrowedModal, setOpenBorrowedModal] = useState(false)
-  const [openRepairingModal, setOpenRepairingModal] = useState(false)
-  const [openMissingModal, setOpenMissingModal] = useState(false)
+  // State cho Tab chi tiết thiết bị
+  const [activeTab, setActiveTab] = useState('scanned')
+
   const [form, setForm] = useState(createDefaultAuditForm)
+  const [isAutoTime, setIsAutoTime] = useState(true) // State quản lý việc tự động cập nhật thời gian
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
@@ -182,16 +109,17 @@ function InventoryAuditManagement() {
       headClassName: 'whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600',
       cellClassName: 'whitespace-nowrap px-3 py-2 text-right',
       render: (audit) => (
-        <button
-          type="button"
-          onClick={() => loadAuditDetail(audit.id)}
-          className="rounded border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-        >
-          Xem
-        </button>
+          <button
+              type="button"
+              onClick={() => loadAuditDetail(audit.id)}
+              className="rounded border border-blue-300 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+          >
+            Xem
+          </button>
       ),
     },
   ]), [])
+
   const {
     visibleColumns,
     activeColumns,
@@ -205,6 +133,24 @@ function InventoryAuditManagement() {
     columns: auditColumnOptions,
     defaultVisibleKeys: auditColumnOptions.map((column) => column.key),
   })
+
+  // Effect để cập nhật thời gian thực
+  useEffect(() => {
+    if (!isAutoTime) return; // Dừng chạy nếu người dùng đã tự chỉnh sửa giờ
+
+    const timer = setInterval(() => {
+      const now = new Date();
+      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      setForm((prev) => ({
+        ...prev,
+        startedAt: toDateTimeLocalValue(now),
+        dueDate: toDateTimeLocalValue(tomorrow),
+      }));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAutoTime]);
 
   const loadInitialData = async (page = 0) => {
     setLoading(true)
@@ -244,6 +190,7 @@ function InventoryAuditManagement() {
     try {
       const response = await axiosClient.get(`/api/inventory-audits/${auditId}`)
       setSelectedAudit(response.data)
+      setActiveTab('scanned') // Đặt lại tab mặc định mỗi khi xem phiên mới
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể tải chi tiết kiểm kê.'
       toast.error(message)
@@ -277,6 +224,7 @@ function InventoryAuditManagement() {
       })
       toast.success('Tạo phiên kiểm kê thành công.')
       setForm(createDefaultAuditForm())
+      setIsAutoTime(true) // Bật lại tự động cập nhật thời gian sau khi tạo xong form
       await loadInitialData(0)
       await loadAuditDetail(response.data.id)
     } catch (error) {
@@ -371,6 +319,15 @@ function InventoryAuditManagement() {
     }
   }
 
+  // Định nghĩa các tab
+  const TABS = [
+    { id: 'repairing', label: 'Đang sửa chữa', count: selectedAudit?.summary?.repairingCount || 0 },
+    { id: 'scanned', label: 'Đã quét', count: selectedAudit?.summary?.scannedCount || 0 },
+    { id: 'lent', label: 'Đang cho mượn', count: selectedAudit?.summary?.lentCount || 0 },
+    { id: 'borrowed', label: 'Đang mượn', count: selectedAudit?.summary?.borrowedCount || 0 },
+    { id: 'missing', label: 'Thất lạc', count: selectedAudit?.summary?.missingCount || 0 },
+  ]
+
   return (
       <div className="space-y-4">
         {/* KHỐI TẠO PHIÊN KIỂM KÊ ĐỊNH KỲ */}
@@ -399,7 +356,10 @@ function InventoryAuditManagement() {
               <input
                   type="datetime-local"
                   value={form.startedAt}
-                  onChange={(e) => setForm((prev) => ({ ...prev, startedAt: e.target.value }))}
+                  onChange={(e) => {
+                    setIsAutoTime(false);
+                    setForm((prev) => ({ ...prev, startedAt: e.target.value }));
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
               />
             </label>
@@ -409,7 +369,10 @@ function InventoryAuditManagement() {
               <input
                   type="datetime-local"
                   value={form.dueDate}
-                  onChange={(e) => setForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                  onChange={(e) => {
+                    setIsAutoTime(false);
+                    setForm((prev) => ({ ...prev, dueDate: e.target.value }));
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
               />
             </label>
@@ -443,19 +406,19 @@ function InventoryAuditManagement() {
               <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
               <div className="w-full min-w-[136px] sm:w-auto">
                 <ColumnVisibilityDropdown
-                  columns={auditColumnOptions}
-                  visibleColumns={visibleColumns}
-                  selectedCount={selectedCount}
-                  allSelected={allSelected}
-                  onToggleColumn={(columnKey) => {
-                    if (visibleColumns[columnKey] && selectedCount === 1) {
-                      toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
-                      return
-                    }
-                    toggleColumn(columnKey)
-                  }}
-                  onSelectAll={selectAllColumns}
-                  onResetDefault={resetDefaultColumns}
+                    columns={auditColumnOptions}
+                    visibleColumns={visibleColumns}
+                    selectedCount={selectedCount}
+                    allSelected={allSelected}
+                    onToggleColumn={(columnKey) => {
+                      if (visibleColumns[columnKey] && selectedCount === 1) {
+                        toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                        return
+                      }
+                      toggleColumn(columnKey)
+                    }}
+                    onSelectAll={selectAllColumns}
+                    onResetDefault={resetDefaultColumns}
                 />
               </div>
             </div>
@@ -465,9 +428,9 @@ function InventoryAuditManagement() {
               <thead className="bg-slate-50">
               <tr>
                 {activeColumns.map((column) => (
-                  <th key={column.key} className={column.headClassName}>
-                    {column.label}
-                  </th>
+                    <th key={column.key} className={column.headClassName}>
+                      {column.label}
+                    </th>
                 ))}
               </tr>
               </thead>
@@ -484,9 +447,9 @@ function InventoryAuditManagement() {
                   sortedAudits.map((audit) => (
                       <tr key={audit.id}>
                         {activeColumns.map((column) => (
-                          <td key={`${audit.id}-${column.key}`} className={column.cellClassName}>
-                            {column.render(audit)}
-                          </td>
+                            <td key={`${audit.id}-${column.key}`} className={column.cellClassName}>
+                              {column.render(audit)}
+                            </td>
                         ))}
                       </tr>
                   ))}
@@ -564,38 +527,19 @@ function InventoryAuditManagement() {
                         {selectedAudit.summary.expectedCount || 0}
                       </td>
                       <td className="px-4 py-2.5 font-medium text-violet-600">
-                        <div className="flex items-center gap-3">
-                          <span>{selectedAudit.summary.repairingCount || 0}</span>
-                          <DetailIconButton onClick={() => setOpenRepairingModal(true)} />
-                        </div>
+                        {selectedAudit.summary.repairingCount || 0}
                       </td>
-
                       <td className="px-4 py-2.5 text-emerald-600 font-medium">
-                        <div className="flex items-center gap-3">
-                          <span>{selectedAudit.summary.scannedCount || 0}</span>
-                          <DetailIconButton onClick={() => setOpenScannedModal(true)} />
-                        </div>
+                        {selectedAudit.summary.scannedCount || 0}
                       </td>
-
                       <td className="px-4 py-2.5 text-sky-600 font-medium">
-                        <div className="flex items-center gap-3">
-                          <span>{selectedAudit.summary.lentCount || 0}</span>
-                          <DetailIconButton onClick={() => setOpenLentModal(true)} />
-                        </div>
+                        {selectedAudit.summary.lentCount || 0}
                       </td>
-
                       <td className="px-4 py-2.5 text-amber-600 font-medium">
-                        <div className="flex items-center gap-3">
-                          <span>{selectedAudit.summary.borrowedCount || 0}</span>
-                          <DetailIconButton onClick={() => setOpenBorrowedModal(true)} />
-                        </div>
+                        {selectedAudit.summary.borrowedCount || 0}
                       </td>
-
                       <td className="px-4 py-2.5 text-red-600 font-medium">
-                        <div className="flex items-center gap-3">
-                          <span>{selectedAudit.summary.missingCount || 0}</span>
-                          <DetailIconButton onClick={() => setOpenMissingModal(true)} />
-                        </div>
+                        {selectedAudit.summary.missingCount || 0}
                       </td>
                     </tr>
                     </tbody>
@@ -608,109 +552,165 @@ function InventoryAuditManagement() {
                     <span className="font-semibold text-slate-700">Ghi chú phiên:</span> {selectedAudit.summary.notes}
                   </div>
               )}
-            </div>
-        )}
 
-        <AssetListModal
-          open={openScannedModal}
-          title="Danh sách thiết bị đã quét"
-          onClose={() => setOpenScannedModal(false)}
-          items={selectedAudit?.scannedItems || []}
-          emptyMessage="Chưa quét thiết bị nào."
-          columns={[
-            { key: 'index', label: 'STT', render: (_, index) => index + 1 },
-            { key: 'assetQaCode', label: 'Mã thiết bị', render: (item) => <span className="font-medium text-slate-700">{item.assetQaCode}</span> },
-            { key: 'assetName', label: 'Tên thiết bị' },
-            { key: 'scannedByUsername', label: 'Người quét' },
-            { key: 'scannedAt', label: 'Thời gian', render: (item) => <span className="text-xs text-slate-400">{formatVietnamDateTime(item.scannedAt, '')}</span> },
-          ]}
-        />
+              {/* KHU VỰC BẢNG CHI TIẾT TỪNG TAB */}
 
-        <AssetListModal
-          open={openLentModal}
-          title="Danh sách thiết bị đang cho mượn"
-          onClose={() => setOpenLentModal(false)}
-          items={selectedAudit?.lentItems || []}
-          emptyMessage="Không có thiết bị nào đang cho mượn."
-          columns={[
-            { key: 'index', label: 'STT', render: (_, index) => index + 1 },
-            { key: 'assetQaCode', label: 'Mã thiết bị', render: (item) => <span className="font-medium text-slate-700">{item.assetQaCode}</span> },
-            { key: 'assetName', label: 'Tên thiết bị' },
-            { key: 'toLocationName', label: 'Đang ở phòng' },
-            { key: 'borrowerName', label: 'Người mượn' },
-            { key: 'borrowedAt', label: 'Thời gian mượn', render: (item) => formatVietnamDateTime(item.borrowedAt, 'Chưa xác định') },
-          ]}
-        />
-
-        <AssetListModal
-          open={openBorrowedModal}
-          title="Danh sách thiết bị đang mượn"
-          onClose={() => setOpenBorrowedModal(false)}
-          items={selectedAudit?.borrowedItems || []}
-          emptyMessage="Không có thiết bị nào đang mượn."
-          columns={[
-            { key: 'index', label: 'STT', render: (_, index) => index + 1 },
-            { key: 'assetQaCode', label: 'Mã thiết bị', render: (item) => <span className="font-medium text-slate-700">{item.assetQaCode}</span> },
-            { key: 'assetName', label: 'Tên thiết bị' },
-            { key: 'homeLocationName', label: 'Phòng gốc' },
-            { key: 'currentLocationName', label: 'Hiện đang ở' },
-            { key: 'borrowerName', label: 'Người mượn' },
-            { key: 'borrowedAt', label: 'Thời gian mượn', render: (item) => formatVietnamDateTime(item.borrowedAt, 'Chưa xác định') },
-          ]}
-        />
-
-        <AssetListModal
-          open={openRepairingModal}
-          title="Danh sách thiết bị đang sửa chữa"
-          onClose={() => setOpenRepairingModal(false)}
-          items={selectedAudit?.repairingItems || []}
-          emptyMessage="Không có thiết bị nào đang sửa chữa."
-          columns={[
-            { key: 'index', label: 'STT', render: (_, index) => index + 1 },
-            { key: 'assetQaCode', label: 'Mã thiết bị', render: (item) => <span className="font-medium text-slate-700">{item.assetQaCode}</span> },
-            { key: 'assetName', label: 'Tên thiết bị' },
-            { key: 'homeLocationName', label: 'Phòng gốc' },
-            { key: 'currentLocationName', label: 'Vị trí hiện tại' },
-            { key: 'displayStatus', label: 'Trạng thái hiển thị' },
-          ]}
-        />
-
-        {/* MODAL CHI TIẾT THIẾT BỊ THẤT LẠC / THIẾU */}
-        {openMissingModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
-              <div className="w-full max-w-3xl rounded-xl bg-white shadow-xl flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between border-b border-slate-100 p-4">
-                  <h3 className="text-base font-semibold text-slate-800">Danh sách thiết bị thất lạc / thiếu</h3>
-                  <button type="button" onClick={() => setOpenMissingModal(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+              <div className="pt-4 mt-6 border-t border-slate-100">
+                <h4 className="mb-2 text-sm font-semibold text-slate-700">Bảng chi tiết thiết bị</h4>
+                {/* THANH ĐIỀU HƯỚNG TAB */}
+                <div className="flex gap-2 overflow-x-auto border-b border-slate-200 mb-4 pb-0.5 scrollbar-hide">
+                  {TABS.map((tab) => (
+                      <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`flex items-center gap-2 whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                              activeTab === tab.id
+                                  ? 'border-fptOrange text-fptOrange'
+                                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                          }`}
+                      >
+                        {tab.label}
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${
+                            activeTab === tab.id ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                        {tab.count}
+                      </span>
+                      </button>
+                  ))}
                 </div>
-                <div className="overflow-auto p-4">
-                  <table className="w-full text-sm divide-y divide-slate-200">
-                    <thead className="bg-slate-50 sticky top-0 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600 w-16">STT</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
-                      <th className="px-3 py-2 text-left font-semibold text-slate-600">Xử lý</th>
-                      <th className="px-3 py-2 text-right font-semibold text-slate-600">Hành động</th>
-                    </tr>
+
+                {/* NỘI DUNG TAB - BẢNG CHI TIẾT */}
+
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full min-w-max divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50">
+                    {activeTab === 'repairing' && (
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">STT</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Trạng thái hiển thị</th>
+                        </tr>
+                    )}
+                    {activeTab === 'scanned' && (
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">STT</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Người quét</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Thời gian</th>
+                        </tr>
+                    )}
+                    {activeTab === 'lent' && (
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">STT</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Đang ở phòng</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                        </tr>
+                    )}
+                    {activeTab === 'borrowed' && (
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">STT</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Hiện đang ở</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                        </tr>
+                    )}
+                    {activeTab === 'missing' && (
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">STT</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                          <th className="px-4 py-2 text-left font-semibold text-slate-600">Xử lý</th>
+                          <th className="px-4 py-2 text-right font-semibold text-slate-600">Hành động</th>
+                        </tr>
+                    )}
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                    {selectedAudit?.missingItems?.map((item, index) => (
-                        <tr key={item.assetQaCode} className="hover:bg-slate-50/50">
-                          <td className="px-3 py-2 text-slate-500">{index + 1}</td>
-                          <td className="px-3 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
-                          <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
-                          <td className="px-3 py-2">
-                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                            item.resolutionStatus === 'PENDING' ? 'bg-amber-50 text-amber-700' : item.resolutionStatus === 'FOUND' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {item.resolutionStatus === 'PENDING' ? 'Chưa xử lý' : item.resolutionStatus === 'FOUND' ? 'Tìm thấy' : 'Mất hẳn'}
-                        </span>
+
+                    {/* Bảng Đang sửa chữa */}
+                    {activeTab === 'repairing' && selectedAudit?.repairingItems?.map((item, index) => (
+                        <tr key={`rep-${item.assetQaCode}-${index}`} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                          <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.displayStatus || '-'}</td>
+                        </tr>
+                    ))}
+                    {activeTab === 'repairing' && (!selectedAudit?.repairingItems || selectedAudit.repairingItems.length === 0) && (
+                        <tr><td className="px-4 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang sửa chữa.</td></tr>
+                    )}
+
+                    {/* Bảng Đã quét */}
+                    {activeTab === 'scanned' && selectedAudit?.scannedItems?.map((item, index) => (
+                        <tr key={`scan-${item.assetQaCode}-${index}`} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                          <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.scannedByUsername || '-'}</td>
+                          <td className="px-4 py-2 text-slate-400">{formatVietnamDateTime(item.scannedAt, '')}</td>
+                        </tr>
+                    ))}
+                    {activeTab === 'scanned' && (!selectedAudit?.scannedItems || selectedAudit.scannedItems.length === 0) && (
+                        <tr><td className="px-4 py-6 text-center text-slate-400" colSpan={5}>Chưa quét thiết bị nào.</td></tr>
+                    )}
+
+                    {/* Bảng Đang cho mượn */}
+                    {activeTab === 'lent' && selectedAudit?.lentItems?.map((item, index) => (
+                        <tr key={`lent-${item.assetQaCode}-${index}`} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                          <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.toLocationName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                        </tr>
+                    ))}
+                    {activeTab === 'lent' && (!selectedAudit?.lentItems || selectedAudit.lentItems.length === 0) && (
+                        <tr><td className="px-4 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang cho mượn.</td></tr>
+                    )}
+
+                    {/* Bảng Đang mượn */}
+                    {activeTab === 'borrowed' && selectedAudit?.borrowedItems?.map((item, index) => (
+                        <tr key={`borrow-${item.assetQaCode}-${index}`} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                          <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                          <td className="px-4 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                        </tr>
+                    ))}
+                    {activeTab === 'borrowed' && (!selectedAudit?.borrowedItems || selectedAudit.borrowedItems.length === 0) && (
+                        <tr><td className="px-4 py-6 text-center text-slate-400" colSpan={7}>Không có thiết bị nào đang mượn.</td></tr>
+                    )}
+
+                    {/* Bảng Thất lạc */}
+                    {activeTab === 'missing' && selectedAudit?.missingItems?.map((item, index) => (
+                        <tr key={`miss-${item.assetQaCode}-${index}`} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                          <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
+                          <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                item.resolutionStatus === 'PENDING' ? 'bg-amber-50 text-amber-700' : item.resolutionStatus === 'FOUND' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {item.resolutionStatus === 'PENDING' ? 'Chưa xử lý' : item.resolutionStatus === 'FOUND' ? 'Tìm thấy' : 'Mất hẳn'}
+                            </span>
                             {item.resolvedByUsername && <p className="text-[10px] text-slate-400 mt-0.5">Bởi: {item.resolvedByUsername}</p>}
                           </td>
-                          <td className="px-3 py-2 text-right">
+                          <td className="px-4 py-2 text-right">
                             {item.resolutionStatus === 'PENDING' ? (
                                 <div className="flex gap-1.5 justify-end">
                                   <button type="button" onClick={() => handleResolveFound(item.assetQaCode)} className="rounded bg-emerald-50 border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Thấy</button>
@@ -720,14 +720,11 @@ function InventoryAuditManagement() {
                           </td>
                         </tr>
                     ))}
-                    {(selectedAudit?.missingItems?.length || 0) === 0 && (
-                        <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={5}>Không có thiết bị thất lạc.</td></tr>
+                    {activeTab === 'missing' && (!selectedAudit?.missingItems || selectedAudit.missingItems.length === 0) && (
+                        <tr><td className="px-4 py-6 text-center text-slate-400" colSpan={5}>Không có thiết bị thất lạc.</td></tr>
                     )}
                     </tbody>
                   </table>
-                </div>
-                <div className="flex justify-end border-t border-slate-100 p-3 bg-slate-50 rounded-b-xl">
-                  <button type="button" onClick={() => setOpenMissingModal(false)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Đóng</button>
                 </div>
               </div>
             </div>

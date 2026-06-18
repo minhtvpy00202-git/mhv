@@ -3,8 +3,6 @@ import {
   IconClipboardCheck as ClipboardCheck,
   IconRefresh as RefreshCcw,
   IconScan as ScanLine,
-  IconSearch as Search, // Bổ sung icon kính lúp để làm nút xem chi tiết
-  IconX as X, // Bổ sung icon đóng modal
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
@@ -43,10 +41,8 @@ function InventoryAuditScanner() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [completing, setCompleting] = useState(false)
 
-  // --- STATE QUẢN LÝ MODAL CHI TIẾT ---
-  const [modalType, setModalType] = useState(null) // 'scanned' | 'borrowed' | 'missing' | null
-  const [modalData, setModalData] = useState([])
-  const [loadingModal, setLoadingModal] = useState(false)
+  // --- STATE QUẢN LÝ TAB CHI TIẾT ---
+  const [activeTab, setActiveTab] = useState('scanned')
 
   const loadActiveAudits = async () => {
     setLoadingAudits(true)
@@ -102,6 +98,7 @@ function InventoryAuditScanner() {
         setSelectedAuditDetail(detail || null)
         setRecentScans(detail?.scannedItems || [])
         setScannedCount(detail?.summary?.scannedCount || 0)
+        setActiveTab('scanned') // Đặt lại tab mặc định mỗi khi đổi phiên
       } catch {
         setSelectedAuditDetail(null)
         setRecentScans([])
@@ -131,6 +128,7 @@ function InventoryAuditScanner() {
     setSelectedAuditDetail(null)
     setRecentScans([])
     setScannedCount(0)
+    setActiveTab('scanned')
   }
 
   const handleScanSubmit = async (qaCodeInput) => {
@@ -145,14 +143,29 @@ function InventoryAuditScanner() {
       })
       const data = response.data
       setScannedCount(data.scannedCount || 0)
-      setSelectedAuditDetail((prev) => prev ? ({
-        ...prev,
-        summary: {
-          ...prev.summary,
-          scannedCount: data.scannedCount || 0,
-          expectedCount: data.expectedCount || prev.summary?.expectedCount || 0,
-        },
-      }) : prev)
+
+      // Cập nhật lại list sau khi quét thành công
+      setSelectedAuditDetail((prev) => {
+        if (!prev) return prev;
+        const newScannedItem = {
+          assetQaCode: data.assetQaCode,
+          assetName: data.assetName,
+          currentLocationName: data.currentLocationName,
+          homeLocationName: data.homeLocationName,
+          scannedByUsername: user?.fullName || user?.username || 'Bạn',
+          scannedAt: new Date().toISOString(),
+        };
+        return {
+          ...prev,
+          summary: {
+            ...prev.summary,
+            scannedCount: data.scannedCount || 0,
+            expectedCount: data.expectedCount || prev.summary?.expectedCount || 0,
+          },
+          scannedItems: [newScannedItem, ...(prev.scannedItems || [])]
+        };
+      });
+
       setRecentScans((prev) => [
         {
           assetQaCode: data.assetQaCode,
@@ -173,35 +186,6 @@ function InventoryAuditScanner() {
       setTimeout(() => {
         isSubmittingRef.current = false
       }, 500)
-    }
-  }
-
-  // --- HÀM KÍCH HOẠT CALL API LẤY CHI TIẾT THEO PHÂN LOẠI ĐỂ HIỂN THỊ MODAL ---
-  const handleOpenModal = async (type) => {
-    if (!selectedAuditId) return
-    setModalType(type)
-    setLoadingModal(true)
-    try {
-      // Gọi lên API chi tiết phiên của bạn
-      const response = await axiosClient.get(`/api/inventory-audits/${selectedAuditId}`)
-      const detail = response.data
-
-      if (type === 'scanned') {
-        setModalData(detail?.scannedItems || [])
-      } else if (type === 'lent') {
-        setModalData(detail?.lentItems || [])
-      } else if (type === 'borrowed') {
-        setModalData(detail?.borrowedItems || [])
-      } else if (type === 'repairing') {
-        setModalData(detail?.repairingItems || [])
-      } else if (type === 'missing') {
-        setModalData(detail?.missingItems || [])
-      }
-    } catch {
-      setModalData([])
-      toast.error('Không thể tải dữ liệu chi tiết danh sách thiết bị.')
-    } finally {
-      setLoadingModal(false)
     }
   }
 
@@ -248,6 +232,15 @@ function InventoryAuditScanner() {
     }
   }
 
+  // Định nghĩa các tab dữ liệu
+  const TABS = [
+    { id: 'repairing', label: 'Đang sửa chữa', count: selectedSummary?.repairingCount || 0 },
+    { id: 'scanned', label: 'Đã quét', count: selectedSummary?.scannedCount || 0 },
+    { id: 'lent', label: 'Đang cho mượn', count: selectedSummary?.lentCount || 0 },
+    { id: 'borrowed', label: 'Đang mượn', count: selectedSummary?.borrowedCount || 0 },
+    { id: 'missing', label: 'Thất lạc', count: selectedSummary?.missingCount || 0 },
+  ]
+
   return (
       <div className="space-y-4">
         <section className="rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-600 p-5 text-white shadow-sm">
@@ -277,18 +270,7 @@ function InventoryAuditScanner() {
             <p className="mt-1 text-xs text-slate-500">Các phiên kiểm kê mà techsupport có thể tiếp nhận.</p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-500">Đã quét</p>
-              {selectedAuditId && (
-                  <button
-                      onClick={() => handleOpenModal('scanned')}
-                      title="Xem nguồn gốc tài sản đã quét"
-                      className="rounded-lg border border-amber-200 p-1 text-amber-700 bg-amber-50 hover:bg-amber-100 transition"
-                  >
-                    <Search size={16} />
-                  </button>
-              )}
-            </div>
+            <p className="text-sm font-medium text-slate-500">Đã quét</p>
             <p className="mt-1 text-2xl font-bold text-slate-800">{scannedCount}</p>
             <p className="mt-1 text-xs text-slate-500">Số thiết bị đã xác nhận trong phiên hiện tại.</p>
           </div>
@@ -301,6 +283,7 @@ function InventoryAuditScanner() {
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
           <div className="space-y-4">
+            {/* KHỐI CHỌN PHIÊN & HIỂN THỊ CHI TIẾT */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -338,10 +321,10 @@ function InventoryAuditScanner() {
                   </div>
               )}
 
-              {/* KHỐI HIỂN THỊ CHI TIẾT PHIÊN ĐƯỢC CHỌN VÀ NÚT XEM CHI TIẾT MODAL */}
+              {/* KHỐI HIỂN THỊ THÔNG SỐ TỔNG QUAN */}
               {!loadingAudits && selectedSummary && (
                   <div className="mt-4">
-                    <div className="rounded-2xl border border-blue-400 bg-blue-50/50 p-4 text-left shadow-sm">
+                    <div className="rounded-2xl border border-blue-400 bg-blue-50/30 p-4 text-left shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-blue-900">Thông tin chi tiết phiên được chọn</p>
@@ -355,70 +338,188 @@ function InventoryAuditScanner() {
                       <div className="mt-4 grid gap-3 border-t border-blue-100 pt-3 text-sm text-slate-700 sm:grid-cols-2 xl:grid-cols-3">
                         <p><span className="font-medium text-slate-500">Tổng thiết bị:</span> {selectedSummary.totalAssetCount || 0}</p>
                         <p><span className="font-medium text-slate-500">Cần quét:</span> {selectedSummary.expectedCount || 0}</p>
-                        <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đang sửa chữa:</span> <span className="font-semibold text-violet-700">{selectedSummary.repairingCount || 0}</span></p>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal('repairing')}
-                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
-                            title="Xem danh sách thiết bị đang sửa chữa"
-                          >
-                            <Search size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đang cho mượn:</span> <span className="font-semibold text-sky-700">{selectedSummary.lentCount || 0}</span></p>
-                          <button
-                              type="button"
-                              onClick={() => handleOpenModal('lent')}
-                              className="rounded border border-amber-200 p-0.5 bg-white text-amber-700 hover:bg-amber-50 transition"
-                              title="Xem danh sách thiết bị đang cho mượn"
-                          >
-                            <Search size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đang mượn:</span> <span className="font-semibold text-amber-700">{selectedSummary.borrowedCount || 0}</span></p>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal('borrowed')}
-                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
-                            title="Xem danh sách thiết bị đang mượn"
-                          >
-                            <Search size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Đã quét:</span> <span className="font-semibold text-emerald-700">{selectedSummary.scannedCount || 0}</span></p>
-                          <button
-                              type="button"
-                              onClick={() => handleOpenModal('scanned')}
-                              className="rounded border border-amber-200 p-0.5 bg-white text-amber-700 hover:bg-amber-50 transition"
-                              title="Xem danh sách thiết bị đã quét"
-                          >
-                            <Search size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <p><span className="font-medium text-slate-500">Thất lạc:</span> <span className="font-semibold text-red-700">{selectedSummary.missingCount || 0}</span></p>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal('missing')}
-                            className="rounded border border-amber-200 bg-white p-0.5 text-amber-700 transition hover:bg-amber-50"
-                            title="Xem danh sách thiết bị thất lạc"
-                          >
-                            <Search size={14} />
-                          </button>
-                        </div>
+                        <p><span className="font-medium text-slate-500">Đang sửa chữa:</span> <span className="font-semibold text-violet-700">{selectedSummary.repairingCount || 0}</span></p>
+                        <p><span className="font-medium text-slate-500">Đang cho mượn:</span> <span className="font-semibold text-sky-700">{selectedSummary.lentCount || 0}</span></p>
+                        <p><span className="font-medium text-slate-500">Đang mượn:</span> <span className="font-semibold text-amber-700">{selectedSummary.borrowedCount || 0}</span></p>
+                        <p><span className="font-medium text-slate-500">Đã quét:</span> <span className="font-semibold text-emerald-700">{selectedSummary.scannedCount || 0}</span></p>
+                        <p><span className="font-medium text-slate-500">Thất lạc:</span> <span className="font-semibold text-red-700">{selectedSummary.missingCount || 0}</span></p>
                         <p><span className="font-medium text-slate-500">Người tạo:</span> {selectedSummary.createdByUsername || '-'}</p>
                         <p><span className="font-medium text-slate-500">Bắt đầu lúc:</span> {formatVietnamDateTime(selectedSummary.startedAt, '')}</p>
                         <p className="sm:col-span-2 xl:col-span-3"><span className="font-medium text-slate-500">Hạn hoàn tất:</span> {formatVietnamDateTime(selectedSummary.dueDate, 'Chưa đặt hạn')}</p>
                       </div>
+
+                      {/* --- KHU VỰC TAB & BẢNG CHI TIẾT --- */}
+                      <div className="mt-5 border-t border-blue-200 pt-4">
+                        <h4 className="mb-2 text-sm font-semibold text-slate-700">Bảng chi tiết thiết bị</h4>
+                        {/* THANH ĐIỀU HƯỚNG TAB */}
+                        <div className="flex gap-2 overflow-x-auto border-b border-slate-200 mb-3 pb-0.5 scrollbar-hide">
+                          {TABS.map((tab) => (
+                              <button
+                                  key={tab.id}
+                                  onClick={() => setActiveTab(tab.id)}
+                                  className={`flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                                      activeTab === tab.id
+                                          ? 'border-blue-600 text-blue-700'
+                                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                                  }`}
+                              >
+                                {tab.label}
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                    activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                {tab.count}
+                              </span>
+                              </button>
+                          ))}
+                        </div>
+
+                        {/* NỘI DUNG BẢNG */}
+                        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                          <table className="w-full min-w-max divide-y divide-slate-200 text-sm">
+                            <thead className="bg-slate-50">
+                            {activeTab === 'repairing' && (
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
+                                </tr>
+                            )}
+                            {activeTab === 'scanned' && (
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Người quét</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian</th>
+                                </tr>
+                            )}
+                            {activeTab === 'lent' && (
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Đang ở phòng</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                                </tr>
+                            )}
+                            {activeTab === 'borrowed' && (
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Hiện đang ở</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                                </tr>
+                            )}
+                            {activeTab === 'missing' && (
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Xử lý</th>
+                                </tr>
+                            )}
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                            {loadingDetail && (
+                                <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
+                            )}
+
+                            {/* Bảng Đang sửa chữa */}
+                            {!loadingDetail && activeTab === 'repairing' && selectedAuditDetail?.repairingItems?.map((item, index) => (
+                                <tr key={`rep-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                  <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.displayStatus || item.technicalStatus || '-'}</td>
+                                </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'repairing' && (!selectedAuditDetail?.repairingItems?.length) && (
+                                <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang sửa chữa.</td></tr>
+                            )}
+
+                            {/* Bảng Đã quét */}
+                            {!loadingDetail && activeTab === 'scanned' && selectedAuditDetail?.scannedItems?.map((item, index) => (
+                                <tr key={`scan-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                  <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.scannedByUsername || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-400">{formatVietnamDateTime(item.scannedAt, '-')}</td>
+                                </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'scanned' && (!selectedAuditDetail?.scannedItems?.length) && (
+                                <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={5}>Chưa quét thiết bị nào.</td></tr>
+                            )}
+
+                            {/* Bảng Đang cho mượn */}
+                            {!loadingDetail && activeTab === 'lent' && selectedAuditDetail?.lentItems?.map((item, index) => (
+                                <tr key={`lent-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                  <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.toLocationName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                                </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'lent' && (!selectedAuditDetail?.lentItems?.length) && (
+                                <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang cho mượn.</td></tr>
+                            )}
+
+                            {/* Bảng Đang mượn */}
+                            {!loadingDetail && activeTab === 'borrowed' && selectedAuditDetail?.borrowedItems?.map((item, index) => (
+                                <tr key={`borrow-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                  <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                                  <td className="px-3 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                                </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'borrowed' && (!selectedAuditDetail?.borrowedItems?.length) && (
+                                <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={7}>Không có thiết bị nào đang mượn.</td></tr>
+                            )}
+
+                            {/* Bảng Thất lạc */}
+                            {!loadingDetail && activeTab === 'missing' && selectedAuditDetail?.missingItems?.map((item, index) => (
+                                <tr key={`miss-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                  <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                  <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                  <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                  <td className="px-3 py-2">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                                        item.resolutionStatus === 'PENDING' ? 'bg-amber-50 text-amber-700' : item.resolutionStatus === 'FOUND' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {item.resolutionStatus === 'PENDING' ? 'Chưa xử lý' : item.resolutionStatus === 'FOUND' ? 'Tìm thấy' : 'Mất hẳn'}
+                                    </span>
+                                  </td>
+                                </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'missing' && (!selectedAuditDetail?.missingItems?.length) && (
+                                <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={4}>Không có thiết bị thất lạc.</td></tr>
+                            )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
               )}
             </div>
 
+            {/* KHU VỰC QUÉT MÃ */}
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
@@ -537,129 +638,6 @@ function InventoryAuditScanner() {
             </div>
           </aside>
         </section>
-
-        {/* ==================== CẤU TRÚC DIALOG MODAL XEM CHI TIẾT THIẾT BỊ ==================== */}
-        {modalType && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-              <div className="relative w-full max-w-4xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[85vh]">
-
-                {/* Tiêu đề Modal */}
-                <div className="flex items-center justify-between border-b border-slate-100 p-4">
-                  <h3 className="text-lg font-bold text-slate-800">
-                    {modalType === 'scanned' && `Danh sách thiết bị đã quét `}
-                    {modalType === 'lent' && `Danh sách thiết bị đang cho mượn `}
-                    {modalType === 'borrowed' && `Danh sách thiết bị đang mượn `}
-                    {modalType === 'repairing' && `Danh sách thiết bị đang sửa chữa `}
-                    {modalType === 'missing' && `Danh sách thiết bị thất lạc (${modalData.length})`}
-                  </h3>
-                  <button
-                      type="button"
-                      onClick={() => { setModalType(null); setModalData([]); }}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-
-                {/* Nội dung dữ liệu dạng bảng (Table) */}
-                <div className="overflow-auto p-4 flex-1">
-                  {loadingModal ? (
-                      <p className="text-center py-8 text-sm text-slate-500">Đang tải dữ liệu chi tiết...</p>
-                  ) : modalData.length === 0 ? (
-                      <div className="text-center py-12 text-sm text-slate-400 border border-dashed border-slate-200 rounded-xl bg-slate-50">
-                        Không tìm thấy thiết bị nào thuộc danh mục này.
-                      </div>
-                  ) : (
-                      <table className="w-full text-left border-collapse text-sm">
-                        <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50 font-semibold text-slate-600">
-                          <th className="p-3 w-16">STT</th>
-                          <th className="p-3">Mã thiết bị</th>
-                          <th className="p-3">Tên thiết bị</th>
-                          {modalType === 'scanned' && (
-                              <>
-                                <th className="p-3">Người quét</th>
-                                <th className="p-3">Thời gian quét</th>
-                              </>
-                          )}
-                          {(modalType === 'lent' || modalType === 'borrowed') && (
-                              <>
-                                <th className="p-3">{modalType === 'lent' ? 'Đang ở phòng' : 'Vị trí hiện tại'}</th>
-                                <th className="p-3">Phòng gốc</th>
-                                <th className="p-3">Người mượn</th>
-                                <th className="p-3">Thời gian mượn</th>
-                              </>
-                          )}
-                          {modalType === 'repairing' && (
-                              <>
-                                <th className="p-3">Vị trí hiện tại</th>
-                                <th className="p-3">Phòng gốc</th>
-                                <th className="p-3">Trạng thái</th>
-                              </>
-                          )}
-                          {modalType === 'missing' && (
-                              <>
-                                <th className="p-3">Phòng ghi nhận</th>
-                                <th className="p-3">Xử lý</th>
-                              </>
-                          )}
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700">
-                        {modalData.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/80 transition">
-                              <td className="p-3 text-slate-400 font-medium">{idx + 1}</td>
-                              <td className="p-3 font-bold text-slate-800">{item.assetQaCode || item.assetCode || '-'}</td>
-                              <td className="p-3 font-medium">{item.assetName || '-'}</td>
-
-                              {/* Trường thông tin động theo loại Modal */}
-                              {modalType === 'scanned' && (
-                                  <>
-                                    <td className="p-3 text-slate-600">{item.scannedByUsername || 'N/A'}</td>
-                                    <td className="p-3 text-slate-500">{formatVietnamDateTime(item.scannedAt, '-')}</td>
-                                  </>
-                              )}
-                              {(modalType === 'lent' || modalType === 'borrowed') && (
-                                  <>
-                                    <td className="p-3 text-slate-600">{item.toLocationName || item.currentLocationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.homeLocationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.borrowerName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-400 italic">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
-                                  </>
-                              )}
-                              {modalType === 'repairing' && (
-                                  <>
-                                    <td className="p-3 text-slate-600">{item.currentLocationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.homeLocationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.displayStatus || item.technicalStatus || 'N/A'}</td>
-                                  </>
-                              )}
-                              {modalType === 'missing' && (
-                                  <>
-                                    <td className="p-3 text-slate-600">{item.locationName || 'N/A'}</td>
-                                    <td className="p-3 text-slate-600">{item.resolutionStatus || 'PENDING'}</td>
-                                  </>
-                              )}
-                            </tr>
-                        ))}
-                        </tbody>
-                      </table>
-                  )}
-                </div>
-
-                {/* Nút Đóng ở Footer */}
-                <div className="flex justify-end gap-2 border-t border-slate-100 p-4 bg-slate-50/50 rounded-b-2xl">
-                  <button
-                      type="button"
-                      onClick={() => { setModalType(null); setModalData([]); }}
-                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-                  >
-                    Đóng
-                  </button>
-                </div>
-              </div>
-            </div>
-        )}
       </div>
   )
 }

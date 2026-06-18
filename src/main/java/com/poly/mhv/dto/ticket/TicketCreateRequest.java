@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -40,4 +41,31 @@ public class TicketCreateRequest {
     )
     @Size(max = 255, message = "Đường dẫn ảnh không được vượt quá 255 ký tự.")
     private String imageUrl;
+
+    @JsonAlias({"customSlaMinutes", "custom_sla_minutes"})
+    @Schema(
+            description = "Thời gian xử lý mong muốn tùy chọn (tính bằng phút)",
+            example = "30",
+            nullable = true
+    )
+    @Positive(message = "Thời gian xử lý tùy chỉnh phải là số phút dương.")
+    private Integer customSlaMinutes;
+
+    @JsonAlias({"minSlaMinutes", "min_sla_minutes"})
+    @Schema(
+            description = "Thời gian xử lý mong muốn tối thiểu (tính bằng phút)",
+            example = "30",
+            nullable = true
+    )
+    @Positive(message = "Thời gian xử lý tối thiểu phải là số phút dương.")
+    private Integer minSlaMinutes;
+
+    @JsonAlias({"maxSlaMinutes", "max_sla_minutes"})
+    @Schema(
+            description = "Thời gian xử lý mong muốn tối đa (tính bằng phút)",
+            example = "120",
+            nullable = true
+    )
+    @Positive(message = "Thời gian xử lý tối đa phải là số phút dương.")
+    private Integer maxSlaMinutes;
 }

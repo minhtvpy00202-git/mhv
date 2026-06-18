@@ -15,7 +15,7 @@ import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 function getBackPath(pathname = '', ticketId = '') {
   if (pathname.startsWith('/admin/')) {
-    return `/admin/tickets/${ticketId}`
+    return `/admin/tickets`
   }
   return `/mobile/tickets/${ticketId}`
 }

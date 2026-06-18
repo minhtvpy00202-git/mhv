@@ -122,6 +122,13 @@ function HelpdeskKpiPanel({
             : 'Chưa có phiên kiểm kê nào đủ dữ liệu hạn',
           tone: 'sky',
         },
+        {
+          label: 'Xếp loại vận hành',
+          value: summary?.performanceGrade || '-',
+          meta: `Điểm tổng: ${formatScore(summary?.performanceScore ?? 0)}`,
+          tone: 'amber',
+          className: getGradeTone(summary?.performanceGrade),
+        },
       ]
     : [
         {
@@ -187,7 +194,7 @@ function HelpdeskKpiPanel({
 
       {loading ? (
         <div className="mt-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
             {Array.from({ length: 7 }).map((_, index) => (
               <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
@@ -199,7 +206,7 @@ function HelpdeskKpiPanel({
         </div>
       ) : (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             {cards.map((card) => (
               <div key={card.label} className={`rounded-xl border p-4 ${card.className || toneClasses[card.tone]}`}>
                 <p className="text-xs font-medium opacity-80">{card.label}</p>
@@ -231,7 +238,7 @@ function HelpdeskKpiPanel({
               </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
                     {visibleColumns.technician && <th className="px-4 py-2 text-left">Kỹ thuật viên</th>}
                     {visibleColumns.assignedTicketCount && <th className="px-4 py-2 text-left">Tổng được giao</th>}
