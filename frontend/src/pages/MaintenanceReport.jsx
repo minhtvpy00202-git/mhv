@@ -410,6 +410,7 @@ function MaintenanceReport() {
               <p className="text-[11px] text-slate-400 dark:text-slate-500">Chưa có ticket nào được gửi gần đây.</p>
             )}
           </div>
+          </div>
         </section>
 
       {/* Sleek Collapsible Accordion Guide */}
@@ -458,7 +459,9 @@ function MaintenanceReport() {
               <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 {scannerError}
               </div>
-            </div>
+            )}
+          </div>
+        </div>
         )}
 
       {showModal && (
@@ -659,6 +662,8 @@ function MaintenanceReport() {
                 Đóng
               </button>
             </div>
+          </form>
+        </div>
         )}
       </div>
   )

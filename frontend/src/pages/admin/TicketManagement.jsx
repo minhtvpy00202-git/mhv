@@ -457,44 +457,11 @@ function TicketManagement() {
             <tbody>
               {!loading && tickets.map((ticket) => (
                 <tr key={ticket.id} className="border-t border-slate-100 align-top hover:bg-slate-50/60">
-                  <td className="whitespace-nowrap px-3 py-2 font-bold text-slate-700">
-                    #{ticket.id}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">{ticket.assetQaCode}</td>
-                  <td className="max-w-[180px] truncate whitespace-nowrap px-3 py-2" title={ticket.assetName || '-'}>
-                    {ticket.assetName || '-'}
-                  </td>
-                  <td className="max-w-[150px] truncate whitespace-nowrap px-3 py-2" title={ticket.assetLocationName || '-'}>
-                    {ticket.assetLocationName || '-'}
-                  </td>
-                  <td className="max-w-[150px] truncate whitespace-nowrap px-3 py-2" title={ticket.reporterName || `#${ticket.reporterId}`}>
-                    {ticket.reporterName || `#${ticket.reporterId}`}
-                  </td>
-                  <td className="max-w-[260px] truncate whitespace-nowrap px-3 py-2 text-slate-700" title={ticket.description || '-'}>
-                    {ticket.description || '-'}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    <ActionIconButton
-                      icon={ImageIcon}
-                      label="Xem ảnh lỗi"
-                      onClick={() => {
-                        if (!ticket.imageUrl) {
-                          toast.info('Ticket này chưa có ảnh lỗi.')
-                          return
-                        }
-                        setPreviewImageUrl(ticket.imageUrl)
-                      }}
-                    />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      ticket.status === 'RESOLVED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : ticket.status === 'IN_PROGRESS'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                    }`}
+                  {renderedColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={column.cellClassName}
+                      title={typeof column.getTitle === 'function' ? column.getTitle(ticket) : undefined}
                     >
                       {column.render(ticket)}
                     </td>
