@@ -90,4 +90,10 @@ public class TicketResponse {
 
     @Schema(description = "Nhận xét sau khi chấm điểm hài lòng", example = "Kỹ thuật viên hỗ trợ nhanh và xử lý dứt điểm.", nullable = true)
     private String satisfactionComment;
+
+    @Schema(description = "Thời gian xử lý mong muốn tối thiểu (tính bằng phút)", example = "30", nullable = true)
+    private Integer minSlaMinutes;
+
+    @Schema(description = "Thời gian xử lý mong muốn tối đa (tính bằng phút)", example = "120", nullable = true)
+    private Integer maxSlaMinutes;
 }

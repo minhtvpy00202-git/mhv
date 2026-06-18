@@ -107,7 +107,7 @@ function MaintenanceHistoryManagement() {
         if (aOpen !== bOpen) return bOpen - aOpen
         return getServerDateTimeMs(b.createdAt) - getServerDateTimeMs(a.createdAt)
       })[0]
-      navigate(`/admin/tickets/${ticketToOpen.id}`)
+      navigate(`/admin/tickets`)
     } catch (error) {
       const message = error?.response?.data?.message || 'Không mở được ticket/chat.'
       toast.error(message)

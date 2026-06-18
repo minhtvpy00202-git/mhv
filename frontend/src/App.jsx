@@ -39,6 +39,8 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 const NotificationDetail = lazy(() => import('./pages/admin/NotificationDetail'))
 const TicketManagement = lazy(() => import('./pages/admin/TicketManagement'))
 const BrandingSettings = lazy(() => import('./pages/admin/BrandingSettings'))
+const SlaExtensionManagement = lazy(() => import('./pages/admin/SlaExtensionManagement'))
+
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -176,8 +178,8 @@ function App() {
           <Route path="/admin/branding" element={withSuspense(<BrandingSettings />)} />
           <Route path="/admin/notifications/:id" element={withSuspense(<NotificationDetail />)} />
           <Route path="/admin/tickets" element={withSuspense(<TicketManagement />)} />
-          <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
-          <Route path="/admin/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
+          <Route path="/admin/tickets/extensions" element={withSuspense(<SlaExtensionManagement />)} />
+
         </Route>
 
         <Route

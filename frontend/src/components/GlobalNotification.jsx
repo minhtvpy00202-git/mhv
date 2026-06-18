@@ -108,7 +108,7 @@ function GlobalNotification() {
           ticketPath: user.role === 'TechSupport'
             ? getTechSupportTicketPath(ticketId)
             : user.role === 'Admin' || user.role === 'ConsumableManager'
-              ? `/admin/tickets/${ticketId}`
+              ? `/admin/tickets`
               : `/mobile/tickets/${ticketId}`,
         },
       }))
