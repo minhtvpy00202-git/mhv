@@ -106,14 +106,15 @@ const itemizedAssetColumnOptions = [
   { key: 'qaCode', label: 'Mã QA' },
   { key: 'name', label: 'Tên thiết bị' },
   { key: 'category', label: 'Loại' },
-  { key: 'homeLocationName', label: 'Vị trí' },
+  { key: 'homeLocationName', label: 'Vị trí gốc' },
+  { key: 'currentLocationName', label: 'Vị trí hiện tại' },
   { key: 'status', label: 'Tình trạng kỹ thuật' },
   { key: 'usageStatus', label: 'Trạng thái sử dụng' },
   { key: 'specs', label: 'Thuộc tính' },
   { key: 'origin', label: 'Nguồn gốc tài sản' },
   { key: 'actions', label: 'Thao tác' },
 ]
-const defaultItemizedAssetVisibleColumnKeys = ['qaCode', 'name', 'category', 'homeLocationName', 'status', 'usageStatus', 'actions']
+const defaultItemizedAssetVisibleColumnKeys = ['qaCode', 'name', 'homeLocationName', 'currentLocationName', 'status', 'usageStatus', 'actions']
 const disposalModalLotColumnOptions = [
   { key: 'selected', label: 'Chọn' },
   { key: 'lotCode', label: 'Lô hàng' },
@@ -526,6 +527,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [supplierForm, setSupplierForm] = useState({ name: '', address: '', phoneNumber: '' })
   const [supplierFormErrors, setSupplierFormErrors] = useState({})
   const [activeTab, setActiveTab] = useState(initialTrackingMode)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [openActionMenuQaCode, setOpenActionMenuQaCode] = useState(null)
   const [consumableWorkspace, setConsumableWorkspace] = useState('OVERVIEW')
   const [showConsumableOverviewSummary, setShowConsumableOverviewSummary] = useState(false)
   const [showExpiredLotsSummary, setShowExpiredLotsSummary] = useState(false)
@@ -1967,33 +1970,11 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openCreateModal}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-            >
-              <Plus size={16} />
-              {isConsumableTab ? 'Thêm vật tư' : 'Thêm tài sản'}
-            </button>
-            <button
-              type="button"
-              onClick={() => loadAssets()}
-              disabled={submitting}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <RefreshCw size={15} />
-              Tải lại
-            </button>
-          </div>
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
+          </p>
         </div>
         {!restrictToConsumable && showTabSwitcher && (
         <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -3240,152 +3221,130 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-            <div className="mb-3 flex items-center gap-2">
-              <Search size={16} className="text-slate-400" />
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Lọc và tìm kiếm tài sản cố định</h3>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <input
-                value={filters.name}
-                onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                placeholder="Tên thiết bị"
-              />
-              <div ref={categoryFilterRef} className="relative">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  value={filters.categoryKeyword}
-                  onFocus={() => setShowCategoryFilterOptions(true)}
-                  onChange={(e) => {
-                    setFilters((prev) => ({ ...prev, categoryKeyword: e.target.value, categoryId: '' }))
-                    setShowCategoryFilterOptions(true)
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Loại thiết bị (gõ để lọc)"
+                  value={filters.name}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  placeholder="Tìm tên hoặc mã QA"
                 />
-                {showCategoryFilterOptions && (
-                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFilters((prev) => ({ ...prev, categoryId: '', categoryKeyword: '' }))
-                        setShowCategoryFilterOptions(false)
-                      }}
-                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                    >
-                      Tất cả loại
-                    </button>
-                    {filteredCategoryOptions.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        onClick={() => {
-                          setFilters((prev) => ({
-                            ...prev,
-                            categoryId: String(category.id),
-                            categoryKeyword: getCategoryLabel(category),
-                          }))
-                          setShowCategoryFilterOptions(false)
-                        }}
-                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                      >
-                        {getCategoryLabel(category)}
-                      </button>
-                    ))}
-                    {filteredCategoryOptions.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-slate-500">Không có loại phù hợp.</p>
-                    )}
-                  </div>
-                )}
               </div>
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFilters((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${showAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
               >
-                <option value="">Tất cả trạng thái</option>
-                {itemizedStatusOptions.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
-              <div ref={locationFilterRef} className="relative">
-                <input
-                  value={filters.locationKeyword}
-                  onFocus={() => setShowLocationFilterOptions(true)}
-                  onChange={(e) => {
-                    setFilters((prev) => ({ ...prev, locationKeyword: e.target.value, locationId: '' }))
-                    setShowLocationFilterOptions(true)
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Phòng (gõ để lọc)"
-                />
-                {showLocationFilterOptions && (
-                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFilters((prev) => ({ ...prev, locationId: '', locationKeyword: '' }))
-                        setShowLocationFilterOptions(false)
-                      }}
-                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                    >
-                      Tất cả phòng
-                    </button>
-                    {filteredLocationFilterOptions.map((location) => (
-                      <button
-                        key={location.id}
-                        type="button"
-                        onClick={() => {
-                          setFilters((prev) => ({
-                            ...prev,
-                            locationId: String(location.id),
-                            locationKeyword: location.roomName || '',
-                          }))
-                          setShowLocationFilterOptions(false)
-                        }}
-                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                      >
-                        {location.roomName}
-                      </button>
-                    ))}
-                    {filteredLocationFilterOptions.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+                <ChevronDown size={14} className={`transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+                Bộ lọc nâng cao
+              </button>
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={loading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
               >
-                <Search size={15} />
-                Tìm kiếm
+                Lọc
               </button>
               <button
                 type="button"
-                onClick={handleResetFilters}
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={openCreateModal}
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
               >
-                <X size={15} />
-                Xóa bộ lọc
+                <Plus size={15} />
+                Thêm tài sản
               </button>
               <button
                 type="button"
                 onClick={handleDownloadExcel}
                 disabled={downloading}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
               >
-                <Download size={15} />
-                Tải báo cáo Excel
+                Xuất Excel
               </button>
             </div>
+
+            {showAdvancedFilters && (
+              <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-3">
+                <div ref={categoryFilterRef} className="relative">
+                  <input
+                    value={filters.categoryKeyword}
+                    onFocus={() => setShowCategoryFilterOptions(true)}
+                    onChange={(e) => {
+                      setFilters((prev) => ({ ...prev, categoryKeyword: e.target.value, categoryId: '' }))
+                      setShowCategoryFilterOptions(true)
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    placeholder="Loại thiết bị (gõ để lọc)"
+                  />
+                  {showCategoryFilterOptions && (
+                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <button type="button" onClick={() => { setFilters((prev) => ({ ...prev, categoryId: '', categoryKeyword: '' })); setShowCategoryFilterOptions(false) }}
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
+                        Tất cả loại
+                      </button>
+                      {filteredCategoryOptions.map((category) => (
+                        <button key={category.id} type="button"
+                          onClick={() => { setFilters((prev) => ({ ...prev, categoryId: String(category.id), categoryKeyword: getCategoryLabel(category) })); setShowCategoryFilterOptions(false) }}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
+                          {getCategoryLabel(category)}
+                        </button>
+                      ))}
+                      {filteredCategoryOptions.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Không có loại phù hợp.</p>}
+                    </div>
+                  )}
+                </div>
+                <select
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="">Tất cả trạng thái</option>
+                  {itemizedStatusOptions.map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+                <div ref={locationFilterRef} className="relative">
+                  <input
+                    value={filters.locationKeyword}
+                    onFocus={() => setShowLocationFilterOptions(true)}
+                    onChange={(e) => {
+                      setFilters((prev) => ({ ...prev, locationKeyword: e.target.value, locationId: '' }))
+                      setShowLocationFilterOptions(true)
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                    placeholder="Phòng (gõ để lọc)"
+                  />
+                  {showLocationFilterOptions && (
+                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      <button type="button" onClick={() => { setFilters((prev) => ({ ...prev, locationId: '', locationKeyword: '' })); setShowLocationFilterOptions(false) }}
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
+                        Tất cả phòng
+                      </button>
+                      {filteredLocationFilterOptions.map((location) => (
+                        <button key={location.id} type="button"
+                          onClick={() => { setFilters((prev) => ({ ...prev, locationId: String(location.id), locationKeyword: location.roomName || '' })); setShowLocationFilterOptions(false) }}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
+                          {location.roomName}
+                        </button>
+                      ))}
+                      {filteredLocationFilterOptions.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 md:col-span-3">
+                  <button type="button" onClick={handleResetFilters} disabled={loading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300">
+                    <X size={14} /> Xóa bộ lọc
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -3431,9 +3390,10 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                   </th>}
                   {itemizedAssetColumns.visibleColumns.homeLocationName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('homeLocationName', 'Vị trí')}
+                      {getSortLabel('homeLocationName', 'Vị trí gốc')}
                     </button>
                   </th>}
+                  {itemizedAssetColumns.visibleColumns.currentLocationName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>}
                   {itemizedAssetColumns.visibleColumns.status && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
                       {getSortLabel('status', 'Tình trạng kỹ thuật')}
@@ -3457,12 +3417,13 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                       </tr>
                     ))}
                   {!loading &&
-                    assets.map((asset, idx) => (
-                      <tr key={asset.qaCode} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-950' : 'bg-slate-50/60 dark:bg-slate-900/40'}>
+                    assets.map((asset) => (
+                      <tr key={asset.qaCode} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
                         {itemizedAssetColumns.visibleColumns.qaCode && <td className="px-3 py-2">{asset.qaCode}</td>}
                         {itemizedAssetColumns.visibleColumns.name && <td className="px-3 py-2">{asset.name}</td>}
                         {itemizedAssetColumns.visibleColumns.category && <td className="px-3 py-2">{asset.category}</td>}
                         {itemizedAssetColumns.visibleColumns.homeLocationName && <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>}
+                        {itemizedAssetColumns.visibleColumns.currentLocationName && <td className="px-3 py-2">{asset.currentLocationName || asset.homeLocationName || asset.homeLocationId}</td>}
                         {itemizedAssetColumns.visibleColumns.status && <td className="px-3 py-2">
                           <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
                         </td>}
@@ -3502,7 +3463,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                           />
                         </td>}
                         {itemizedAssetColumns.visibleColumns.actions && <td className="px-3 py-2">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-1">
                             <ActionIconButton
                               icon={QrCode}
                               label="Xem mã QR"
@@ -3511,26 +3472,33 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                               disabled={qrModalLoading}
                             />
                             <ActionIconButton
-                              icon={History}
-                              label="Xem timeline sửa chữa"
-                              variant="violet"
-                              onClick={() => {
-                                setTimelineAsset(asset)
-                                setShowTimelineModal(true)
-                              }}
-                            />
-                            <ActionIconButton
-                              icon={Wrench}
-                              label="Sửa tài sản"
+                              icon={Search}
+                              label="Xem chi tiết"
                               variant="primary"
                               onClick={() => handleSelectAsset(asset)}
                             />
-                            <ActionIconButton
-                              icon={Trash2}
-                              label="Xóa tài sản"
-                              variant="danger"
-                              onClick={() => handleDeleteAsset(asset.qaCode)}
-                            />
+                            <div className="relative">
+                              <button
+                                type="button"
+                                title="Thêm thao tác"
+                                onClick={() => setOpenActionMenuQaCode((prev) => prev === asset.qaCode ? null : asset.qaCode)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+                              >
+                                <ChevronDown size={14} />
+                              </button>
+                              {openActionMenuQaCode === asset.qaCode && (
+                                <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                                  <button type="button" onClick={() => { setTimelineAsset(asset); setShowTimelineModal(true); setOpenActionMenuQaCode(null) }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
+                                    <History size={14} /> Lịch sử sửa chữa
+                                  </button>
+                                  <button type="button" onClick={() => { handleDeleteAsset(asset.qaCode); setOpenActionMenuQaCode(null) }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
+                                    <Trash2 size={14} /> Xóa tài sản
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>}
                       </tr>
