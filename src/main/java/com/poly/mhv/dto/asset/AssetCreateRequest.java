@@ -34,6 +34,9 @@ public class AssetCreateRequest {
     @Positive(message = "Phòng gốc không hợp lệ.")
     private Integer locationId;
 
+    @Positive(message = "Phòng hiện tại không hợp lệ.")
+    private Integer currentLocationId;
+
     private String status;
 
     private String technicalStatus;

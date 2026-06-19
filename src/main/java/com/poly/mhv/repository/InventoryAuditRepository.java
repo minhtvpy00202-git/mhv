@@ -58,4 +58,68 @@ public interface InventoryAuditRepository extends JpaRepository<InventoryAudit, 
     );
 
     boolean existsByLocationIdAndStatus(Integer locationId, String status);
+
+    @Query(value = """
+            select coalesce(ia.status, 'UNKNOWN') as row_value, count(*) as row_count
+            from inventory_audits ia
+            where ia.started_at >= :startTime
+              and ia.started_at <= :endTime
+              and (:locationId is null or ia.location_id = :locationId)
+            group by coalesce(ia.status, 'UNKNOWN')
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countAuditsByStatusForStatistics(
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from inventory_audits ia
+            where ia.started_at >= :startTime
+              and ia.started_at <= :endTime
+              and (:locationId is null or ia.location_id = :locationId)
+            """, nativeQuery = true)
+    long countAuditsForStatistics(
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select coalesce(sum(coalesce(ia.missing_count, 0)), 0)
+            from inventory_audits ia
+            where ia.started_at >= :startTime
+              and ia.started_at <= :endTime
+              and (:locationId is null or ia.location_id = :locationId)
+            """, nativeQuery = true)
+    long sumMissingCountForStatistics(
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select ia.id,
+                   coalesce(l.room_name, ''),
+                   ia.status,
+                   coalesce(ia.expected_count, 0),
+                   coalesce(ia.scanned_count, 0),
+                   coalesce(ia.missing_count, 0),
+                   ia.started_at,
+                   ia.completed_at
+            from inventory_audits ia
+            left join locations l on l.id = ia.location_id
+            where ia.started_at >= :startTime
+              and ia.started_at <= :endTime
+              and (:locationId is null or ia.location_id = :locationId)
+            order by ia.started_at desc, ia.id desc
+            limit 6
+            """, nativeQuery = true)
+    List<Object[]> findRecentAuditsForStatistics(
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime,
+            @Param("locationId") Integer locationId
+    );
 }

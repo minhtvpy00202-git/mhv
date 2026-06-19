@@ -145,4 +145,81 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
     @EntityGraph(attributePaths = {"asset", "asset.category", "asset.category.techSupportType", "assignee"})
     @Query("select t from Ticket t")
     List<Ticket> findAllForKpi();
+
+    @Query(value = """
+            select cast(t.created_at as date) as row_date, count(*) as row_count
+            from tickets t
+            join assets a on a.qa_code = t.asset_qa_code
+            where t.created_at >= :startTime
+              and t.created_at <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            group by cast(t.created_at as date)
+            order by row_date asc
+            """, nativeQuery = true)
+    List<Object[]> countTicketTrendForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select coalesce(t.status, 'UNKNOWN') as row_value, count(*) as row_count
+            from tickets t
+            join assets a on a.qa_code = t.asset_qa_code
+            where t.created_at >= :startTime
+              and t.created_at <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            group by coalesce(t.status, 'UNKNOWN')
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countTicketsByStatusForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select a.qa_code,
+                   a.name,
+                   coalesce(c.name, ''),
+                   coalesce(l.room_name, ''),
+                   count(*) as row_count
+            from tickets t
+            join assets a on a.qa_code = t.asset_qa_code
+            left join categories c on c.id = a.category_id
+            left join locations l on l.id = a.location_id
+            where t.created_at >= :startTime
+              and t.created_at <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            group by a.qa_code, a.name, coalesce(c.name, ''), coalesce(l.room_name, '')
+            order by row_count desc, a.name asc
+            limit 8
+            """, nativeQuery = true)
+    List<Object[]> findTopProblemAssetsForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from tickets t
+            join assets a on a.qa_code = t.asset_qa_code
+            where t.created_at >= :startTime
+              and t.created_at <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countTicketsForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
 }
