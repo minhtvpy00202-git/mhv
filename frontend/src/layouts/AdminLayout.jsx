@@ -16,7 +16,9 @@ import {
   IconTicket as Ticket,
   IconTool as Wrench,
   IconUsers as Users,
+  IconClock as Clock,
 } from '@tabler/icons-react'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -25,6 +27,7 @@ import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
+import { formatVietnamDateTime } from '../utils/datetime'
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
@@ -52,8 +55,17 @@ const menuItems = [
   },
   { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
   { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
-  { to: '/admin/tickets', label: 'Điều phối ticket sửa chữa', icon: Ticket },
+  {
+    id: 'tickets-management-submenu',
+    label: 'Ticket sửa chữa',
+    icon: Ticket,
+    children: [
+      { to: '/admin/tickets', label: 'Danh sách ticket', icon: Ticket },
+      { to: '/admin/tickets/extensions', label: 'Duyệt yêu cầu', icon: Clock },
+    ],
+  },
   { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
+
   { to: '/admin/branding', label: 'Cài đặt thương hiệu', icon: Settings },
 ]
 
@@ -66,7 +78,7 @@ function AdminLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
-  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'asset-management': true })
+  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'asset-management': true, 'tickets-management-submenu': true })
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -99,6 +111,14 @@ function AdminLayout() {
             ? { 'asset-management': true }
             : {}),
         }))
+      }, 0)
+      return () => window.clearTimeout(syncMenuTimer)
+    }
+    if (
+      location.pathname.startsWith('/admin/tickets')
+    ) {
+      const syncMenuTimer = window.setTimeout(() => {
+        setExpandedMenus((prev) => ({ ...prev, 'tickets-management-submenu': true }))
       }, 0)
       return () => window.clearTimeout(syncMenuTimer)
     }
@@ -290,14 +310,14 @@ function AdminLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-[200] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Quản trị viên</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Admin'}</p>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle compact />
-            <div className="relative">
+            <div className="relative z-[120]">
               <button
                 type="button"
                 onClick={() => {
@@ -317,7 +337,7 @@ function AdminLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="absolute right-0 z-[120] mt-2 w-[26rem] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button type="button" onClick={handleMarkAllRead} className="text-xs font-semibold hover:opacity-80" style={{ color: primaryColor }}>
@@ -343,6 +363,9 @@ function AdminLayout() {
                         <p>{notification.title}</p>
                         {notification.assetName && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">Thiết bị: {notification.assetName}</p>}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
+                        <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                          {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
+                        </p>
                       </button>
                     ))}
                   </div>

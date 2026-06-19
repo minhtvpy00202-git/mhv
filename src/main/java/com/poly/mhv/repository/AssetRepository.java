@@ -27,7 +27,10 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     long countByLocationIdOrHomeLocationId(Integer locationId, Integer homeLocationId);
     List<Asset> findByWarrantyExpirationDate(LocalDate warrantyExpirationDate);
     long countByHomeLocationIdAndTrackingMode(Integer homeLocationId, String trackingMode);
+    @EntityGraph(attributePaths = {"location", "homeLocation"})
     List<Asset> findByHomeLocationIdAndTrackingMode(Integer homeLocationId, String trackingMode);
+    @EntityGraph(attributePaths = {"location", "homeLocation"})
+    List<Asset> findByLocationIdAndTrackingMode(Integer locationId, String trackingMode);
 
     @Query("""
             select new com.poly.mhv.dto.asset.AssetAdminListItemResponse(

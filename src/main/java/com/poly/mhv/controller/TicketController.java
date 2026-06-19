@@ -6,6 +6,10 @@ import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
 import com.poly.mhv.dto.ticket.TicketTimelineEventResponse;
+import com.poly.mhv.dto.ticket.TicketExtensionRequest;
+import com.poly.mhv.dto.ticket.TicketExtensionReviewRequest;
+import com.poly.mhv.dto.ticket.TicketExtensionEventResponse;
+
 import com.poly.mhv.service.TicketEventService;
 import com.poly.mhv.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -87,6 +91,18 @@ public class TicketController {
             @NotBlank(message = "Mức độ ưu tiên là bắt buộc.")
             @Pattern(regexp = "^(LOW|MEDIUM|HIGH)$", message = "Mức độ ưu tiên không hợp lệ.")
             String priority,
+            @Parameter(description = "Thời gian xử lý mong muốn tùy chọn (tính bằng phút)", example = "30")
+            @RequestParam(name = "customSlaMinutes", required = false)
+            @Positive(message = "Thời gian xử lý tùy chỉnh phải là số phút dương.")
+            Integer customSlaMinutes,
+            @Parameter(description = "Thời gian tối thiểu (phút)", example = "30")
+            @RequestParam(name = "minSlaMinutes", required = false)
+            @Positive(message = "Thời gian tối thiểu phải là số phút dương.")
+            Integer minSlaMinutes,
+            @Parameter(description = "Thời gian tối đa (phút)", example = "120")
+            @RequestParam(name = "maxSlaMinutes", required = false)
+            @Positive(message = "Thời gian tối đa phải là số phút dương.")
+            Integer maxSlaMinutes,
             @Parameter(
                     description = "Ảnh minh họa sự cố đính kèm theo multipart/form-data",
                     schema = @Schema(type = "string", format = "binary")
@@ -97,6 +113,9 @@ public class TicketController {
                 .assetQaCode(assetQaCode)
                 .description(description)
                 .priority(priority)
+                .customSlaMinutes(customSlaMinutes)
+                .minSlaMinutes(minSlaMinutes)
+                .maxSlaMinutes(maxSlaMinutes)
                 .build();
         return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.createTicket(request, image));
     }
@@ -209,7 +228,15 @@ public class TicketController {
         return ResponseEntity.ok(ticketService.getAdminTickets(page, size, status, assigneeId, assetQaCode, reporterId));
     }
 
+    @GetMapping("/extension-requests")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Lấy danh sách yêu cầu gia hạn", description = "Admin lấy danh sách tất cả các yêu cầu gia hạn thời gian sửa chữa.")
+    public ResponseEntity<List<TicketExtensionEventResponse>> getExtensionRequests() {
+        return ResponseEntity.ok(ticketService.getExtensionRequests());
+    }
+
     @GetMapping("/{id}")
+
     @PreAuthorize("hasAnyRole('Admin','NhanVien','TechSupport')")
     @Operation(summary = "Lấy chi tiết ticket", description = "Lấy thông tin chi tiết của một ticket theo id.")
     @ApiResponses({
@@ -238,5 +265,25 @@ public class TicketController {
             @RequestParam(required = false) Integer limit
     ) {
         return ResponseEntity.ok(ticketEventService.getTimeline(id, limit));
+    }
+
+    @PostMapping("/{id}/request-extension")
+    @PreAuthorize("hasRole('TechSupport')")
+    @Operation(summary = "Yêu cầu gia hạn ticket", description = "Kỹ thuật viên gửi yêu cầu gia hạn thêm thời gian xử lý ticket.")
+    public ResponseEntity<TicketResponse> requestExtension(
+            @PathVariable Integer id,
+            @Valid @RequestBody TicketExtensionRequest request
+    ) {
+        return ResponseEntity.ok(ticketService.requestExtension(id, request));
+    }
+
+    @PostMapping("/{id}/review-extension")
+    @PreAuthorize("hasRole('Admin')")
+    @Operation(summary = "Duyệt yêu cầu gia hạn ticket", description = "Admin duyệt hoặc từ chối yêu cầu gia hạn thời gian của kỹ thuật viên.")
+    public ResponseEntity<TicketResponse> reviewExtension(
+            @PathVariable Integer id,
+            @Valid @RequestBody TicketExtensionReviewRequest request
+    ) {
+        return ResponseEntity.ok(ticketService.reviewExtension(id, request));
     }
 }

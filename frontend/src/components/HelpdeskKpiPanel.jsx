@@ -1,3 +1,19 @@
+import ColumnVisibilityDropdown from './ui/ColumnVisibilityDropdown'
+import useColumnVisibility from '../hooks/useColumnVisibility'
+
+const kpiTechnicianColumnOptions = [
+  { key: 'technician', label: 'Kỹ thuật viên' },
+  { key: 'assignedTicketCount', label: 'Tổng được giao' },
+  { key: 'fastResponseRate', label: 'Tiếp nhận nhanh' },
+  { key: 'onTimeResolutionRate', label: 'Đúng hạn' },
+  { key: 'averageResolutionMinutes', label: 'Xử lý TB' },
+  { key: 'repeatIncidentRate', label: 'Tái lỗi' },
+  { key: 'firstTimeFixRate', label: 'Lần đầu' },
+  { key: 'averageSatisfactionScore', label: 'Hài lòng' },
+  { key: 'performanceGrade', label: 'Xếp loại' },
+]
+const defaultKpiTechnicianVisibleColumnKeys = ['technician', 'assignedTicketCount', 'fastResponseRate', 'onTimeResolutionRate', 'averageResolutionMinutes', 'performanceGrade']
+
 function formatPercentage(value) {
   const safeValue = Number.isFinite(value) ? value : 0
   return `${safeValue.toFixed(1)}%`
@@ -51,6 +67,20 @@ function HelpdeskKpiPanel({
   emptyText = 'Chưa có dữ liệu kỹ thuật viên.',
 }) {
   const isAdminScope = summary?.scope === 'ADMIN'
+  const storageKey = `mhv-helpdesk-kpi-columns-${summary?.scope || 'default'}`
+  const {
+    visibleColumns,
+    activeColumns,
+    selectedCount,
+    allSelected,
+    toggleColumn,
+    selectAllColumns,
+    resetDefaultColumns,
+  } = useColumnVisibility({
+    storageKey,
+    columns: kpiTechnicianColumnOptions,
+    defaultVisibleKeys: defaultKpiTechnicianVisibleColumnKeys,
+  })
 
   const cards = isAdminScope
     ? [
@@ -91,6 +121,13 @@ function HelpdeskKpiPanel({
             ? `${summary?.onTimeAuditCount ?? 0} / ${summary?.auditDueDateSampleCount ?? 0} phiên có hạn kiểm kê`
             : 'Chưa có phiên kiểm kê nào đủ dữ liệu hạn',
           tone: 'sky',
+        },
+        {
+          label: 'Xếp loại vận hành',
+          value: summary?.performanceGrade || '-',
+          meta: `Điểm tổng: ${formatScore(summary?.performanceScore ?? 0)}`,
+          tone: 'amber',
+          className: getGradeTone(summary?.performanceGrade),
         },
       ]
     : [
@@ -157,7 +194,7 @@ function HelpdeskKpiPanel({
 
       {loading ? (
         <div className="mt-4 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
             {Array.from({ length: 7 }).map((_, index) => (
               <div key={index} className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="h-3 w-24 rounded bg-slate-200 dark:bg-slate-700" />
@@ -169,7 +206,7 @@ function HelpdeskKpiPanel({
         </div>
       ) : (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             {cards.map((card) => (
               <div key={card.label} className={`rounded-xl border p-4 ${card.className || toneClasses[card.tone]}`}>
                 <p className="text-xs font-medium opacity-80">{card.label}</p>
@@ -180,50 +217,66 @@ function HelpdeskKpiPanel({
           </div>
 
             <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800">
-              <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{tableTitle}</h3>
-            </div>
+                <div className="w-full max-w-xs">
+                  <ColumnVisibilityDropdown
+                    columns={kpiTechnicianColumnOptions}
+                    visibleColumns={visibleColumns}
+                    selectedCount={selectedCount}
+                    allSelected={allSelected}
+                    onToggleColumn={(columnKey) => {
+                      if (visibleColumns[columnKey] && selectedCount === 1) {
+                        return
+                      }
+                      toggleColumn(columnKey)
+                    }}
+                    onSelectAll={selectAllColumns}
+                    onResetDefault={resetDefaultColumns}
+                  />
+                </div>
+              </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-900">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    <th className="px-4 py-2 text-left">Kỹ thuật viên</th>
-                    <th className="px-4 py-2 text-left">Tổng được giao</th>
-                    <th className="px-4 py-2 text-left">Tiếp nhận nhanh</th>
-                    <th className="px-4 py-2 text-left">Đúng hạn</th>
-                    <th className="px-4 py-2 text-left">Xử lý TB</th>
-                    <th className="px-4 py-2 text-left">Tái lỗi</th>
-                    <th className="px-4 py-2 text-left">Lần đầu</th>
-                    <th className="px-4 py-2 text-left">Hài lòng</th>
-                    <th className="px-4 py-2 text-left">Xếp loại</th>
+                    {visibleColumns.technician && <th className="px-4 py-2 text-left">Kỹ thuật viên</th>}
+                    {visibleColumns.assignedTicketCount && <th className="px-4 py-2 text-left">Tổng được giao</th>}
+                    {visibleColumns.fastResponseRate && <th className="px-4 py-2 text-left">Tiếp nhận nhanh</th>}
+                    {visibleColumns.onTimeResolutionRate && <th className="px-4 py-2 text-left">Đúng hạn</th>}
+                    {visibleColumns.averageResolutionMinutes && <th className="px-4 py-2 text-left">Xử lý TB</th>}
+                    {visibleColumns.repeatIncidentRate && <th className="px-4 py-2 text-left">Tái lỗi</th>}
+                    {visibleColumns.firstTimeFixRate && <th className="px-4 py-2 text-left">Lần đầu</th>}
+                    {visibleColumns.averageSatisfactionScore && <th className="px-4 py-2 text-left">Hài lòng</th>}
+                    {visibleColumns.performanceGrade && <th className="px-4 py-2 text-left">Xếp loại</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {(summary?.ticketsByTechnician || []).map((item) => (
                     <tr key={item.technicianId || item.technicianUsername} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-2">
+                      {visibleColumns.technician && <td className="px-4 py-2">
                         <p className="font-medium text-slate-800 dark:text-slate-100">{item.technicianName || item.technicianUsername}</p>
                         {item.technicianUsername && (
                           <p className="text-xs text-slate-500 dark:text-slate-400">{item.technicianUsername}</p>
                         )}
-                      </td>
-                      <td className="px-4 py-2">{item.assignedTicketCount}</td>
-                      <td className="px-4 py-2">{formatPercentage(item.fastResponseRate)}</td>
-                      <td className="px-4 py-2">{formatPercentage(item.onTimeResolutionRate)}</td>
-                      <td className="px-4 py-2">{formatResolutionMinutes(item.averageResolutionMinutes)}</td>
-                      <td className="px-4 py-2">{formatPercentage(item.repeatIncidentRate)}</td>
-                      <td className="px-4 py-2">{formatPercentage(item.firstTimeFixRate)}</td>
-                      <td className="px-4 py-2">{formatSatisfaction(item.averageSatisfactionScore)}</td>
-                      <td className="px-4 py-2">
+                      </td>}
+                      {visibleColumns.assignedTicketCount && <td className="px-4 py-2">{item.assignedTicketCount}</td>}
+                      {visibleColumns.fastResponseRate && <td className="px-4 py-2">{formatPercentage(item.fastResponseRate)}</td>}
+                      {visibleColumns.onTimeResolutionRate && <td className="px-4 py-2">{formatPercentage(item.onTimeResolutionRate)}</td>}
+                      {visibleColumns.averageResolutionMinutes && <td className="px-4 py-2">{formatResolutionMinutes(item.averageResolutionMinutes)}</td>}
+                      {visibleColumns.repeatIncidentRate && <td className="px-4 py-2">{formatPercentage(item.repeatIncidentRate)}</td>}
+                      {visibleColumns.firstTimeFixRate && <td className="px-4 py-2">{formatPercentage(item.firstTimeFixRate)}</td>}
+                      {visibleColumns.averageSatisfactionScore && <td className="px-4 py-2">{formatSatisfaction(item.averageSatisfactionScore)}</td>}
+                      {visibleColumns.performanceGrade && <td className="px-4 py-2">
                         <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getGradeTone(item.performanceGrade)}`}>
                           {item.performanceGrade || '-'}
                         </span>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                   {(!summary?.ticketsByTechnician || summary.ticketsByTechnician.length === 0) && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
+                      <td colSpan={Math.max(activeColumns.length, 1)} className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
                         {emptyText}
                       </td>
                     </tr>

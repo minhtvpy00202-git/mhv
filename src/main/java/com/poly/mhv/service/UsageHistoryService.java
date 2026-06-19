@@ -3,6 +3,7 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.usage.CheckinRequest;
 import com.poly.mhv.dto.usage.CheckoutRequest;
 import com.poly.mhv.dto.common.PagedResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.usage.UsageHistoryAdminResponse;
 import com.poly.mhv.dto.usage.UsageHistoryResponse;
 import com.poly.mhv.entity.AppUser;
@@ -117,6 +118,10 @@ public class UsageHistoryService {
                         "Phòng gốc", asset.getHomeLocation().getRoomName(),
                         "Phòng hiện tại trước khi mượn", fromLocation.getRoomName(),
                         "Phòng đích", toLocation.getRoomName()
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/usage-history"),
+                        NotificationTarget.forUser(user.getId(), "/mobile/home")
                 )
         );
         return mapToResponse(saved);
@@ -168,6 +173,10 @@ public class UsageHistoryService {
                         "Phòng gốc", asset.getHomeLocation().getRoomName(),
                         "Phòng đang mượn", usageHistory.getToLocation().getRoomName(),
                         "Điểm trả", asset.getHomeLocation().getRoomName()
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/usage-history"),
+                        NotificationTarget.forUser(actor.getId(), "/mobile/home")
                 )
         );
         return mapToResponse(saved);

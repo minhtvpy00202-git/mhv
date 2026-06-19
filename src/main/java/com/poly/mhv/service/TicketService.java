@@ -2,19 +2,27 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
-import com.poly.mhv.dto.notification.RealtimeNotificationResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
+import com.poly.mhv.dto.ticket.TicketExtensionRequest;
+import com.poly.mhv.dto.ticket.TicketExtensionReviewRequest;
+import com.poly.mhv.dto.ticket.TicketExtensionEventResponse;
+
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.Ticket;
+import com.poly.mhv.entity.TicketEvent;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,9 +43,9 @@ public class TicketService {
             .and(Sort.by(Sort.Direction.DESC, "id"));
 
     private final TicketRepository ticketRepository;
+    private final TicketEventRepository ticketEventRepository;
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
-    private final AsyncRealtimePushService asyncRealtimePushService;
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
     private final TicketEventService ticketEventService;
@@ -82,15 +90,37 @@ public class TicketService {
                 ? ticketImageStorageService.storeImage(imageFile)
                 : ticketImageStorageService.normalizeTicketImageUrl(request.getImageUrl());
 
+        int minSla;
+        int maxSla;
+        if (request.getMinSlaMinutes() != null && request.getMaxSlaMinutes() != null) {
+            minSla = request.getMinSlaMinutes();
+            maxSla = request.getMaxSlaMinutes();
+        } else {
+            int customVal = (request.getCustomSlaMinutes() != null && request.getCustomSlaMinutes() > 0)
+                    ? request.getCustomSlaMinutes()
+                    : -1;
+            if (customVal > 0) {
+                minSla = customVal;
+                maxSla = customVal;
+            } else {
+                minSla = switch (priority) {
+                    case "HIGH" -> 240;
+                    case "MEDIUM" -> 1440;
+                    default -> 4320;
+                };
+                maxSla = minSla;
+            }
+        }
+
         Ticket ticket = Ticket.builder()
                 .asset(asset)
                 .reporter(reporter)
-                .description(request.getDescription().trim())
+                .description(request.getDescription().trim() + " [SLA_RANGE:" + minSla + ":" + maxSla + "]")
                 .imageUrl(imageUrl)
                 .priority(priority)
                 .status("PENDING")
                 .createdAt(createdAt)
-                .dueDate(calculateDueDate(priority, createdAt))
+                .dueDate(createdAt.plusMinutes(minSla))
                 .acceptedAt(null)
                 .resolvedAt(null)
                 .satisfactionScore(null)
@@ -119,13 +149,8 @@ public class TicketService {
                         "Trạng thái", saved.getStatus(),
                         "Người thực hiện", reporterDisplayName,
                         "Phòng gốc", asset.getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_CREATED",
-                "Ticket #" + saved.getId() + " đã được tạo.",
-                saved,
-                eligibleTechSupports
+                ),
+                buildTicketNotificationTargets(saved, eligibleTechSupports, true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -201,12 +226,8 @@ public class TicketService {
                         "Trạng thái", toVietnameseStatus("IN_PROGRESS"),
                         "Người thao tác", actorDisplayName,
                         "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_ASSIGNED",
-                "Ticket #" + saved.getId() + " đã được gán cho " + assignee.getUsername() + ".",
-                saved
+                ),
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -276,12 +297,8 @@ public class TicketService {
                         "Trạng thái", toVietnameseStatus(saved.getStatus()),
                         "Người thao tác", actorDisplayName,
                         "Phòng gốc", saved.getAsset().getHomeLocation().getRoomName()
-                )
-        );
-        pushNotification(
-                "TICKET_RESOLVED",
-                "Ticket #" + saved.getId() + " đã được xử lý xong.",
-                saved
+                ),
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
         );
         ticketEventService.recordEvent(
                 saved,
@@ -331,6 +348,16 @@ public class TicketService {
         if (normalizedComment != null) {
             detail.put("Nhận xét", normalizedComment);
         }
+        notificationService.createNotification(
+                "TICKET_SATISFACTION_RATED",
+                "Có đánh giá sau xử lý ticket",
+                getActorDisplayName(actor) + " đã đánh giá ticket #" + saved.getId() + ".",
+                actor.getUsername(),
+                saved.getAsset().getQaCode(),
+                saved.getAsset().getName(),
+                detail,
+                buildTicketNotificationTargets(saved, getEligibleTechSupportsByAsset(saved.getAsset()), true, true)
+        );
         ticketEventService.recordEvent(
                 saved,
                 "TICKET_SATISFACTION_RATED",
@@ -427,12 +454,15 @@ public class TicketService {
         return new TicketFilter(normalizedStatus, assigneeId, normalizedAssetQaCode, reporterId);
     }
 
-    private LocalDateTime calculateDueDate(String priority, LocalDateTime createdAt) {
+    private LocalDateTime calculateDueDate(String priority, LocalDateTime createdAt, Integer customSlaMinutes) {
+        if (customSlaMinutes != null && customSlaMinutes > 0) {
+            return createdAt.plusMinutes(customSlaMinutes);
+        }
         return switch (priority) {
-            case "LOW" -> createdAt.plusHours(48);
+            case "LOW" -> createdAt.plusHours(72);
             case "MEDIUM" -> createdAt.plusHours(24);
-            case "HIGH" -> createdAt.plusHours(1);
-            default -> createdAt.plusHours(48);
+            case "HIGH" -> createdAt.plusHours(4);
+            default -> createdAt.plusHours(72);
         };
     }
 
@@ -446,6 +476,35 @@ public class TicketService {
                     ? ticket.getAssignee().getFullName()
                     : ticket.getAssignee().getUsername();
         }
+
+        String rawDesc = ticket.getDescription() != null ? ticket.getDescription() : "";
+        String cleanDesc = rawDesc;
+        Integer minSla = null;
+        Integer maxSla = null;
+        if (rawDesc.contains("[SLA_RANGE:")) {
+            int start = rawDesc.indexOf("[SLA_RANGE:");
+            int end = rawDesc.indexOf("]", start);
+            if (end > start) {
+                String rangeStr = rawDesc.substring(start + 11, end);
+                String[] parts = rangeStr.split(":");
+                if (parts.length == 2) {
+                    try {
+                        minSla = Integer.parseInt(parts[0]);
+                        maxSla = Integer.parseInt(parts[1]);
+                    } catch (NumberFormatException e) {
+                        // ignore
+                    }
+                }
+                cleanDesc = rawDesc.substring(0, start).trim();
+            }
+        }
+
+        if (minSla == null && ticket.getCreatedAt() != null && ticket.getDueDate() != null) {
+            long diffMins = java.time.Duration.between(ticket.getCreatedAt(), ticket.getDueDate()).toMinutes();
+            minSla = (int) Math.max(1, diffMins);
+            maxSla = minSla;
+        }
+
         return TicketResponse.builder()
                 .id(ticket.getId())
                 .assetQaCode(ticket.getAsset().getQaCode())
@@ -467,7 +526,7 @@ public class TicketService {
                 .assigneeId(ticket.getAssignee() != null ? ticket.getAssignee().getId() : null)
                 .assigneeName(assigneeName)
                 .assigneePhone(ticket.getAssignee() != null ? ticket.getAssignee().getPhone() : null)
-                .description(ticket.getDescription())
+                .description(cleanDesc)
                 .imageUrl(ticketImageStorageService.toPublicImageUrl(ticket.getImageUrl()))
                 .priority(ticket.getPriority())
                 .status(ticket.getStatus())
@@ -477,6 +536,8 @@ public class TicketService {
                 .resolvedAt(ticket.getResolvedAt())
                 .satisfactionScore(ticket.getSatisfactionScore())
                 .satisfactionComment(ticket.getSatisfactionComment())
+                .minSlaMinutes(minSla)
+                .maxSlaMinutes(maxSla)
                 .build();
     }
 
@@ -579,29 +640,28 @@ public class TicketService {
         return priority;
     }
 
-    private void pushNotification(String type, String message, Ticket ticket) {
-        pushNotification(type, message, ticket, List.of());
-    }
-
-    private void pushNotification(String type, String message, Ticket ticket, List<AppUser> receivers) {
-        RealtimeNotificationResponse payload = RealtimeNotificationResponse.builder()
-                .type(type)
-                .message(message)
-                .ticketId(ticket.getId())
-                .assetQaCode(ticket.getAsset().getQaCode())
-                .status(ticket.getStatus())
-                .timestamp(LocalDateTime.now())
-                .build();
-        if ("TICKET_CREATED".equals(type)) {
-            for (AppUser receiver : receivers) {
-                asyncRealtimePushService.pushToDestination("/topic/users/" + receiver.getId() + "/notifications", payload);
-            }
-            for (AppUser admin : appUserRepository.findByRole("Admin")) {
-                asyncRealtimePushService.pushToDestination("/topic/users/" + admin.getId() + "/notifications", payload);
-            }
-            return;
+    private List<NotificationTarget> buildTicketNotificationTargets(
+            Ticket ticket,
+            List<AppUser> techSupportReceivers,
+            boolean includeAdmin,
+            boolean includeReporter
+    ) {
+        List<NotificationTarget> targets = new ArrayList<>();
+        if (includeAdmin) {
+            targets.add(NotificationTarget.forRole("Admin", "/admin/tickets/" + ticket.getId()));
         }
-        asyncRealtimePushService.pushToDestination("/topic/notifications", payload);
+        for (AppUser receiver : techSupportReceivers) {
+            if (receiver != null && receiver.getId() != null) {
+                targets.add(NotificationTarget.forUser(receiver.getId(), "/tech/tickets/" + ticket.getId()));
+            }
+        }
+        if (ticket.getAssignee() != null && ticket.getAssignee().getId() != null) {
+            targets.add(NotificationTarget.forUser(ticket.getAssignee().getId(), "/tech/tickets/" + ticket.getId()));
+        }
+        if (includeReporter && ticket.getReporter() != null && ticket.getReporter().getId() != null) {
+            targets.add(NotificationTarget.forUser(ticket.getReporter().getId(), "/mobile/tickets/" + ticket.getId()));
+        }
+        return targets;
     }
 
     private String getActorDisplayName(AppUser user) {
@@ -621,6 +681,391 @@ public class TicketService {
         };
     }
 
+    @Transactional
+    public TicketResponse requestExtension(Integer ticketId, TicketExtensionRequest request) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        
+        AppUser actor = currentUserProvider.getCurrentUser();
+        if (!"TechSupport".equals(actor.getRole())) {
+            throw new CustomException("Chỉ kỹ thuật viên mới được phép yêu cầu gia hạn.");
+        }
+        
+        if (ticket.getAssignee() == null || !actor.getId().equals(ticket.getAssignee().getId())) {
+            throw new CustomException("Bạn không được phân công xử lý ticket này.");
+        }
+        
+        if (!"IN_PROGRESS".equals(ticket.getStatus())) {
+            throw new CustomException("Chỉ có thể yêu cầu gia hạn khi ticket đang xử lý (IN_PROGRESS).");
+        }
+        
+        // Check if there is already a pending extension request
+        List<TicketEvent> events = ticketEventRepository.findByTicketIdOrderByOccurredAtDescIdDesc(ticketId, PageRequest.of(0, 100));
+        boolean hasPending = false;
+        for (TicketEvent event : events) {
+            if ("EXTENSION_REQUESTED".equals(event.getEventType())) {
+                hasPending = true;
+            } else if ("EXTENSION_APPROVED".equals(event.getEventType()) || "EXTENSION_REJECTED".equals(event.getEventType())) {
+                break;
+            }
+        }
+        if (hasPending) {
+            throw new CustomException("Đã có một yêu cầu gia hạn đang chờ admin duyệt.");
+        }
+        
+        // Record the event
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("requestedMinutes", request.getRequestedMinutes());
+        detail.put("reason", request.getReason());
+        detail.put("status", "PENDING");
+        
+        ticketEventService.recordEvent(
+                ticket,
+                "EXTENSION_REQUESTED",
+                actor,
+                "[Yêu cầu gia hạn] Xin thêm " + request.getRequestedMinutes() + " phút. Lý do: " + request.getReason(),
+                detail
+        );
+        
+        // Create notification for Admins
+        String technicianName = StringUtils.hasText(actor.getFullName()) ? actor.getFullName() : actor.getUsername();
+        notificationService.createNotification(
+                "EXTENSION_REQUESTED",
+                "Yêu cầu gia hạn xử lý ticket #" + ticketId,
+                technicianName + " yêu cầu gia hạn thêm " + request.getRequestedMinutes() + " phút cho ticket #" + ticketId + " với lý do: " + request.getReason(),
+                actor.getUsername(),
+                ticket.getAsset().getQaCode(),
+                ticket.getAsset().getName(),
+                Map.of(
+                        "Ticket ID", "#" + ticketId,
+                        "Kỹ thuật viên", technicianName,
+                        "Số phút xin thêm", request.getRequestedMinutes(),
+                        "Lý do", request.getReason()
+                )
+        );
+        
+        return mapToResponse(ticket);
+    }
+
+    @Transactional
+    public TicketResponse reviewExtension(Integer ticketId, TicketExtensionReviewRequest request) {
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
+        
+        AppUser actor = currentUserProvider.getCurrentUser();
+        if (!"Admin".equals(actor.getRole())) {
+            throw new CustomException("Chỉ Admin mới có quyền duyệt yêu cầu gia hạn.");
+        }
+        
+        // Find the pending extension request event
+        List<TicketEvent> events = ticketEventRepository.findByTicketIdOrderByOccurredAtDescIdDesc(ticketId, PageRequest.of(0, 100));
+        TicketEvent pendingRequestEvent = null;
+        for (TicketEvent event : events) {
+            if ("EXTENSION_REQUESTED".equals(event.getEventType())) {
+                pendingRequestEvent = event;
+                break;
+            } else if ("EXTENSION_APPROVED".equals(event.getEventType()) || "EXTENSION_REJECTED".equals(event.getEventType())) {
+                break;
+            }
+        }
+        
+        if (pendingRequestEvent == null) {
+            throw new CustomException("Không tìm thấy yêu cầu gia hạn nào đang chờ duyệt cho ticket này.");
+        }
+        
+        Integer requestedMinutes = 0;
+        String requestedReason = "";
+        try {
+            String detailText = pendingRequestEvent.getDetailJson();
+            if (StringUtils.hasText(detailText)) {
+                String[] lines = detailText.split("\n");
+                for (String line : lines) {
+                    if (line.startsWith("requestedMinutes: ")) {
+                        requestedMinutes = Integer.parseInt(line.substring(18).trim());
+                    } else if (line.startsWith("reason: ")) {
+                        requestedReason = line.substring(8).trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
+        }
+        
+        if (requestedMinutes <= 0) {
+            try {
+                String msg = pendingRequestEvent.getMessage();
+                int idx = msg.indexOf("Xin thêm ");
+                if (idx != -1) {
+                    int endIdx = msg.indexOf(" phút", idx);
+                    if (endIdx > idx) {
+                        requestedMinutes = Integer.parseInt(msg.substring(idx + 9, endIdx).trim());
+                    }
+                }
+            } catch (Exception ex) {
+                // Ignore
+            }
+        }
+        
+        if (requestedMinutes <= 0) {
+            throw new CustomException("Không thể xác định số phút yêu cầu gia hạn từ lịch sử sự kiện.");
+        }
+        
+        String decision = request.getDecision().trim().toUpperCase();
+        String adminName = StringUtils.hasText(actor.getFullName()) ? actor.getFullName() : actor.getUsername();
+        
+        if ("APPROVED".equals(decision)) {
+            LocalDateTime oldDueDate = ticket.getDueDate() != null ? ticket.getDueDate() : LocalDateTime.now();
+            LocalDateTime newDueDate = oldDueDate.plusMinutes(requestedMinutes);
+            ticket.setDueDate(newDueDate);
+            
+            String rawDesc = ticket.getDescription() != null ? ticket.getDescription() : "";
+            if (rawDesc.contains("[SLA_RANGE:")) {
+                int start = rawDesc.indexOf("[SLA_RANGE:");
+                int end = rawDesc.indexOf("]", start);
+                if (end > start) {
+                    String rangeStr = rawDesc.substring(start + 11, end);
+                    String[] parts = rangeStr.split(":");
+                    if (parts.length == 2) {
+                        try {
+                            int minSla = Integer.parseInt(parts[0]) + requestedMinutes;
+                            int maxSla = Integer.parseInt(parts[1]) + requestedMinutes;
+                            String newMetadata = "[SLA_RANGE:" + minSla + ":" + maxSla + "]";
+                            String cleanDesc = rawDesc.substring(0, start).trim();
+                            ticket.setDescription(cleanDesc + " " + newMetadata);
+                        } catch (NumberFormatException e) {
+                            // ignore
+                        }
+                    }
+                }
+            } else {
+                long totalMins = java.time.Duration.between(ticket.getCreatedAt() != null ? ticket.getCreatedAt() : LocalDateTime.now(), newDueDate).toMinutes();
+                ticket.setDescription(rawDesc + " [SLA_RANGE:" + totalMins + ":" + totalMins + "]");
+            }
+            
+            ticketRepository.save(ticket);
+            helpdeskKpiService.invalidateCaches();
+            
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("decision", "APPROVED");
+            detail.put("requestedMinutes", requestedMinutes);
+            detail.put("newDueDate", newDueDate.toString());
+            
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+            ticketEventService.recordEvent(
+                    ticket,
+                    "EXTENSION_APPROVED",
+                    actor,
+                    "[Gia hạn được duyệt] Admin " + adminName + " đã duyệt yêu cầu gia hạn thêm " + requestedMinutes + " phút. Hạn xử lý mới: " + newDueDate.format(formatter),
+                    detail
+            );
+            
+            if (ticket.getAssignee() != null) {
+                notificationService.createNotification(
+                        "EXTENSION_APPROVED",
+                        "Yêu cầu gia hạn ticket #" + ticketId + " được duyệt",
+                        "Yêu cầu gia hạn thêm " + requestedMinutes + " phút của bạn cho ticket #" + ticketId + " đã được phê duyệt bởi Admin " + adminName + ". Hạn xử lý mới: " + newDueDate.format(formatter),
+                        actor.getUsername(),
+                        ticket.getAsset().getQaCode(),
+                        ticket.getAsset().getName(),
+                        Map.of(
+                                "Ticket ID", "#" + ticketId,
+                                "Quyết định", "Phê duyệt",
+                                "Số phút gia hạn", requestedMinutes,
+                                "Hạn mới", newDueDate.format(formatter)
+                        )
+                );
+            }
+        } else {
+            String rejectReason = StringUtils.hasText(request.getRejectReason()) ? request.getRejectReason().trim() : "Không có lý do cụ thể.";
+            
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("decision", "REJECTED");
+            detail.put("rejectReason", rejectReason);
+            
+            ticketEventService.recordEvent(
+                    ticket,
+                    "EXTENSION_REJECTED",
+                    actor,
+                    "[Gia hạn bị từ chối] Admin " + adminName + " đã từ chối yêu cầu gia hạn. Lý do: " + rejectReason,
+                    detail
+            );
+            
+            if (ticket.getAssignee() != null) {
+                notificationService.createNotification(
+                        "EXTENSION_REJECTED",
+                        "Yêu cầu gia hạn ticket #" + ticketId + " bị từ chối",
+                        "Yêu cầu gia hạn thêm " + requestedMinutes + " phút của bạn cho ticket #" + ticketId + " đã bị từ chối bởi Admin " + adminName + ". Lý do: " + rejectReason,
+                        actor.getUsername(),
+                        ticket.getAsset().getQaCode(),
+                        ticket.getAsset().getName(),
+                        Map.of(
+                                "Ticket ID", "#" + ticketId,
+                                "Quyết định", "Từ chối",
+                                "Lý do", rejectReason
+                        )
+                );
+            }
+        }
+        
+        return mapToResponse(ticket);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TicketExtensionEventResponse> getExtensionRequests() {
+        AppUser actor = currentUserProvider.getCurrentUser();
+        if (!"Admin".equals(actor.getRole())) {
+            throw new CustomException("Chỉ Admin mới có quyền xem danh sách yêu cầu gia hạn.");
+        }
+        
+        List<TicketEvent> reqEvents = ticketEventRepository.findByEventTypeOrderByOccurredAtDesc("EXTENSION_REQUESTED");
+        List<TicketExtensionEventResponse> responses = new java.util.ArrayList<>();
+        
+        for (TicketEvent reqEvent : reqEvents) {
+            Ticket ticket = reqEvent.getTicket();
+            
+            // Find if there is a subsequent approval or rejection for this ticket
+            List<TicketEvent> allEvents = ticketEventRepository.findByTicketIdOrderByOccurredAtDescIdDesc(ticket.getId(), PageRequest.of(0, 100));
+            
+            TicketEvent reviewEvent = null;
+            for (TicketEvent ev : allEvents) {
+                if (ev.getOccurredAt().isAfter(reqEvent.getOccurredAt())) {
+                    if ("EXTENSION_APPROVED".equals(ev.getEventType()) || "EXTENSION_REJECTED".equals(ev.getEventType())) {
+                        reviewEvent = ev;
+                        break;
+                    }
+                }
+            }
+            
+            String status = "PENDING";
+            String rejectReason = null;
+            LocalDateTime reviewedAt = null;
+            
+            if (reviewEvent != null) {
+                if ("EXTENSION_APPROVED".equals(reviewEvent.getEventType())) {
+                    status = "APPROVED";
+                } else {
+                    status = "REJECTED";
+                    rejectReason = parseRejectReason(reviewEvent);
+                }
+                reviewedAt = reviewEvent.getOccurredAt();
+            } else if (!"IN_PROGRESS".equals(ticket.getStatus())) {
+                status = "EXPIRED";
+            }
+            
+            int requestedMinutes = 0;
+            String reason = "";
+            
+            try {
+                String detailText = reqEvent.getDetailJson();
+                if (StringUtils.hasText(detailText)) {
+                    String[] lines = detailText.split("\n");
+                    for (String line : lines) {
+                        if (line.startsWith("requestedMinutes: ")) {
+                            requestedMinutes = Integer.parseInt(line.substring(18).trim());
+                        } else if (line.startsWith("reason: ")) {
+                            reason = line.substring(8).trim();
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+            
+            if (requestedMinutes <= 0) {
+                try {
+                    String msg = reqEvent.getMessage();
+                    int idx = msg.indexOf("Xin thêm ");
+                    if (idx != -1) {
+                        int endIdx = msg.indexOf(" phút", idx);
+                        if (endIdx > idx) {
+                            requestedMinutes = Integer.parseInt(msg.substring(idx + 9, endIdx).trim());
+                        }
+                    }
+                } catch (Exception ex) {
+                    // ignore
+                }
+            }
+            
+            if (requestedMinutes <= 0) {
+                requestedMinutes = 15;
+            }
+            
+            int originalSla = 30;
+            String rawDesc = ticket.getDescription() != null ? ticket.getDescription() : "";
+            if (rawDesc.contains("[SLA_RANGE:")) {
+                int start = rawDesc.indexOf("[SLA_RANGE:");
+                int end = rawDesc.indexOf("]", start);
+                if (end > start) {
+                    String rangeStr = rawDesc.substring(start + 11, end);
+                    String[] parts = rangeStr.split(":");
+                    if (parts.length == 2) {
+                        try {
+                            originalSla = Integer.parseInt(parts[0]);
+                        } catch (NumberFormatException e) {
+                            // ignore
+                        }
+                    }
+                }
+            } else if (ticket.getCreatedAt() != null && ticket.getDueDate() != null) {
+                originalSla = (int) java.time.Duration.between(ticket.getCreatedAt(), ticket.getDueDate()).toMinutes();
+            }
+
+            int proposedMinutes = "APPROVED".equals(status) ? originalSla : originalSla + requestedMinutes;
+
+            LocalDateTime proposedDueDate = null;
+            if (ticket.getDueDate() != null) {
+                if ("APPROVED".equals(status)) {
+                    proposedDueDate = ticket.getDueDate();
+                } else {
+                    proposedDueDate = ticket.getDueDate().plusMinutes(requestedMinutes);
+                }
+            }
+
+            responses.add(TicketExtensionEventResponse.builder()
+                    .id(reqEvent.getId())
+                    .ticketId(ticket.getId())
+                    .ticketStatus(ticket.getStatus())
+                    .priority(ticket.getPriority())
+                    .assetName(ticket.getAsset().getName())
+                    .assetQaCode(ticket.getAsset().getQaCode())
+                    .assigneeName(ticket.getAssignee() != null ? (StringUtils.hasText(ticket.getAssignee().getFullName()) ? ticket.getAssignee().getFullName() : ticket.getAssignee().getUsername()) : "Chưa phân công")
+                    .requesterName(reqEvent.getActorName())
+                    .requestedMinutes(requestedMinutes)
+                    .reason(StringUtils.hasText(reason) ? reason : reqEvent.getMessage())
+                    .status(status)
+                    .rejectReason(rejectReason)
+                    .requestedAt(reqEvent.getOccurredAt())
+                    .reviewedAt(reviewedAt)
+                    .proposedDueDate(proposedDueDate)
+                    .proposedMinutes(proposedMinutes)
+                    .build());
+        }
+        
+        return responses;
+    }
+    
+    private String parseRejectReason(TicketEvent reviewEvent) {
+        try {
+            String detailText = reviewEvent.getDetailJson();
+            if (StringUtils.hasText(detailText)) {
+                String[] lines = detailText.split("\n");
+                for (String line : lines) {
+                    if (line.startsWith("rejectReason: ")) {
+                        return line.substring(14).trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        String msg = reviewEvent.getMessage();
+        if (msg != null && msg.contains("Lý do: ")) {
+            return msg.substring(msg.indexOf("Lý do: ") + 7).trim();
+        }
+        return "Không có lý do cụ thể.";
+    }
+
     private record TicketFilter(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {
     }
 }
+

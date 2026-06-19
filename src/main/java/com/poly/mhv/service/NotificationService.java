@@ -3,29 +3,45 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.notification.NotificationDetailResponse;
 import com.poly.mhv.dto.notification.NotificationFeedResponse;
 import com.poly.mhv.dto.notification.NotificationItemResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
+import com.poly.mhv.dto.notification.RealtimeNotificationResponse;
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Notification;
 import com.poly.mhv.exception.CustomException;
+import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.NotificationRepository;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationService {
 
-    private static final long FEED_CACHE_TTL_MS = 30_000L;
-
     private final NotificationRepository notificationRepository;
+    private final AppUserRepository appUserRepository;
     private final AdminAlertSseService adminAlertSseService;
-    private volatile NotificationFeedResponse cachedFeed;
-    private volatile long cachedFeedExpiresAt;
+    private final AsyncRealtimePushService asyncRealtimePushService;
+    private final CurrentUserProvider currentUserProvider;
 
-    public NotificationService(NotificationRepository notificationRepository, AdminAlertSseService adminAlertSseService) {
+    public NotificationService(
+            NotificationRepository notificationRepository,
+            AppUserRepository appUserRepository,
+            AdminAlertSseService adminAlertSseService,
+            AsyncRealtimePushService asyncRealtimePushService,
+            CurrentUserProvider currentUserProvider
+    ) {
         this.notificationRepository = notificationRepository;
+        this.appUserRepository = appUserRepository;
         this.adminAlertSseService = adminAlertSseService;
+        this.asyncRealtimePushService = asyncRealtimePushService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional
@@ -38,25 +54,49 @@ public class NotificationService {
             String assetName,
             Map<String, Object> detail
     ) {
+        createNotification(eventType, title, message, actorUsername, assetQaCode, assetName, detail,
+                List.of(NotificationTarget.forRole("Admin", "/admin/dashboard")));
+    }
+
+    @Transactional
+    public void createNotification(
+            String eventType,
+            String title,
+            String message,
+            String actorUsername,
+            String assetQaCode,
+            String assetName,
+            Map<String, Object> detail,
+            Collection<NotificationTarget> targets
+    ) {
         try {
+            LocalDateTime occurredAt = LocalDateTime.now();
             String detailJson = formatDetail(detail == null ? Map.of() : detail);
-            Notification notification = Notification.builder()
-                    .eventType(eventType)
-                    .title(title)
-                    .message(message)
-                    .linkPath("/admin/notifications/0")
-                    .actorUsername(actorUsername)
-                    .assetQaCode(assetQaCode)
-                    .assetName(assetName)
-                    .detailJson(detailJson)
-                    .occurredAt(LocalDateTime.now())
-                    .isRead(false)
-                    .build();
-            Notification saved = notificationRepository.save(notification);
-            saved.setLinkPath("/admin/notifications/" + saved.getId());
-            notificationRepository.save(saved);
-            invalidateFeedCache();
-            adminAlertSseService.notifyNotificationAlert(saved.getEventType(), saved.getTitle(), saved.getMessage());
+            boolean shouldNotifyAdmin = false;
+            for (NotificationTarget target : deduplicateTargets(targets)) {
+                Notification notification = Notification.builder()
+                        .eventType(eventType)
+                        .title(title)
+                        .message(message)
+                        .linkPath(resolveLinkPath(target))
+                        .actorUsername(actorUsername)
+                        .assetQaCode(assetQaCode)
+                        .assetName(assetName)
+                        .receiverUserId(target.receiverUserId())
+                        .receiverRole(target.receiverRole())
+                        .detailJson(detailJson)
+                        .occurredAt(occurredAt)
+                        .isRead(false)
+                        .build();
+                Notification saved = notificationRepository.save(notification);
+                pushRealtime(saved);
+                if ("Admin".equals(target.receiverRole())) {
+                    shouldNotifyAdmin = true;
+                }
+            }
+            if (shouldNotifyAdmin) {
+                adminAlertSseService.notifyNotificationAlert(eventType, title, message);
+            }
         } catch (Exception ex) {
             throw new CustomException("Không thể tạo thông báo hệ thống.");
         }
@@ -64,53 +104,44 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public NotificationFeedResponse getFeed() {
-        long now = System.currentTimeMillis();
-        NotificationFeedResponse cacheSnapshot = cachedFeed;
-        if (cacheSnapshot != null && cachedFeedExpiresAt > now) {
-            return cacheSnapshot;
-        }
-        List<NotificationItemResponse> items = notificationRepository.findTop50FeedItems(PageRequest.of(0, 50));
+        AppUser currentUser = currentUserProvider.getCurrentUser();
+        List<NotificationItemResponse> items = notificationRepository.findTop50FeedItemsForViewer(
+                currentUser.getId(),
+                currentUser.getRole(),
+                PageRequest.of(0, 50)
+        );
         NotificationFeedResponse response = NotificationFeedResponse.builder()
-                .unreadCount(notificationRepository.countByIsReadFalse())
+                .unreadCount(notificationRepository.countUnreadForViewer(currentUser.getId(), currentUser.getRole()))
                 .items(items)
                 .build();
-        cachedFeed = response;
-        cachedFeedExpiresAt = now + FEED_CACHE_TTL_MS;
         return response;
     }
 
     @Transactional
     public NotificationDetailResponse getDetailAndMarkAsRead(Integer id) {
-        Notification notification = notificationRepository.findById(id)
+        AppUser currentUser = currentUserProvider.getCurrentUser();
+        Notification notification = notificationRepository.findAccessibleById(id, currentUser.getId(), currentUser.getRole())
                 .orElseThrow(() -> new CustomException("Không tìm thấy thông báo."));
         if (!Boolean.TRUE.equals(notification.getIsRead())) {
             notification.setIsRead(true);
-            notificationRepository.save(notification);
-            invalidateFeedCache();
         }
         return mapToDetail(notification);
     }
 
     @Transactional
     public void markAsRead(Integer id) {
-        Notification notification = notificationRepository.findById(id)
+        AppUser currentUser = currentUserProvider.getCurrentUser();
+        Notification notification = notificationRepository.findAccessibleById(id, currentUser.getId(), currentUser.getRole())
                 .orElseThrow(() -> new CustomException("Không tìm thấy thông báo."));
         if (!Boolean.TRUE.equals(notification.getIsRead())) {
             notification.setIsRead(true);
-            notificationRepository.save(notification);
-            invalidateFeedCache();
         }
     }
 
     @Transactional
     public void markAllAsRead() {
-        notificationRepository.markAllAsRead();
-        invalidateFeedCache();
-    }
-
-    private void invalidateFeedCache() {
-        cachedFeed = null;
-        cachedFeedExpiresAt = 0L;
+        AppUser currentUser = currentUserProvider.getCurrentUser();
+        notificationRepository.markAllAsReadForViewer(currentUser.getId(), currentUser.getRole());
     }
 
     private NotificationDetailResponse mapToDetail(Notification notification) {
@@ -140,5 +171,64 @@ public class NotificationService {
             }
         }
         return builder.toString();
+    }
+
+    private List<NotificationTarget> deduplicateTargets(Collection<NotificationTarget> targets) {
+        if (targets == null || targets.isEmpty()) {
+            return List.of(NotificationTarget.forRole("Admin", "/admin/dashboard"));
+        }
+        Map<String, NotificationTarget> deduplicated = new LinkedHashMap<>();
+        for (NotificationTarget target : targets) {
+            if (target == null) {
+                continue;
+            }
+            Integer receiverUserId = target.receiverUserId();
+            String receiverRole = StringUtils.hasText(target.receiverRole()) ? target.receiverRole().trim() : null;
+            String linkPath = resolveLinkPath(target);
+            if (receiverUserId == null && !StringUtils.hasText(receiverRole)) {
+                continue;
+            }
+            String dedupeKey = (receiverUserId != null ? "U:" + receiverUserId : "R:" + receiverRole) + "|" + linkPath;
+            deduplicated.putIfAbsent(dedupeKey, new NotificationTarget(receiverUserId, receiverRole, linkPath));
+        }
+        return new LinkedHashSet<>(deduplicated.values()).stream().toList();
+    }
+
+    private String resolveLinkPath(NotificationTarget target) {
+        if (target != null && StringUtils.hasText(target.linkPath())) {
+            return target.linkPath().trim();
+        }
+        if (target != null && StringUtils.hasText(target.receiverRole())) {
+            return switch (target.receiverRole().trim()) {
+                case "ConsumableManager" -> "/supply/consumables";
+                case "TechSupport" -> "/tech/tickets";
+                case "NhanVien" -> "/mobile/home";
+                default -> "/admin/dashboard";
+            };
+        }
+        return "/mobile/home";
+    }
+
+    private void pushRealtime(Notification notification) {
+        RealtimeNotificationResponse payload = RealtimeNotificationResponse.builder()
+                .notificationId(notification.getId())
+                .type(notification.getEventType())
+                .title(notification.getTitle())
+                .message(notification.getMessage())
+                .linkPath(notification.getLinkPath())
+                .assetQaCode(notification.getAssetQaCode())
+                .timestamp(notification.getOccurredAt())
+                .build();
+
+        if (notification.getReceiverUserId() != null) {
+            asyncRealtimePushService.pushToDestination("/topic/users/" + notification.getReceiverUserId() + "/notifications", payload);
+            return;
+        }
+        if (!StringUtils.hasText(notification.getReceiverRole())) {
+            return;
+        }
+        for (AppUser receiver : appUserRepository.findByRole(notification.getReceiverRole())) {
+            asyncRealtimePushService.pushToDestination("/topic/users/" + receiver.getId() + "/notifications", payload);
+        }
     }
 }

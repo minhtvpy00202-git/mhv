@@ -15,6 +15,8 @@ public class InventoryAuditCreateRequest {
     @NotNull(message = "locationId là bắt buộc.")
     private Integer locationId;
 
+    private LocalDateTime startedAt;
+
     @NotNull(message = "dueDate là bắt buộc.")
     private LocalDateTime dueDate;
 

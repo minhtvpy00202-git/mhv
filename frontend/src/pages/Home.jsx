@@ -260,149 +260,96 @@ function Home() {
     }
   }, [filteredMaintenanceHistory, maintenanceIndex])
 
-  const primaryAction = quickActions[0]
-  const secondaryActions = quickActions.slice(1)
-
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.18),transparent_65%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.22),transparent_65%)]" />
-        <div className="relative grid gap-4">
-          <div className="grid gap-4 md:grid-cols-[1.15fr_0.85fr]">
+      {/* 1. Header Control Center Card */}
+      <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.15),transparent_60%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.2),transparent_60%)]" />
+        <div className="relative space-y-4">
+          <div className="flex items-center justify-between">
             <div>
-              <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
-                <Stars size={14} />
-                Trung tâm thao tác
-              </span>
-              <h2 className="mt-4 max-w-[14ch] text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                Quét, báo hỏng và theo dõi ticket trong một nơi gọn hơn.
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                Thao tác nhanh
               </h2>
-              <p className="mt-3 max-w-[34ch] text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Các thao tác chính, lịch sử và việc cần xử lý được gom lại để bạn không phải đi qua nhiều màn hình.
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Mượn, trả hoặc báo sự cố thiết bị nhanh chóng.
               </p>
-
-              <Link
-                to={primaryAction.to}
-                className={`mt-5 block rounded-[28px] border p-4 shadow-sm transition hover:-translate-y-0.5 ${primaryAction.tone}`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex h-12 w-12 items-center justify-center rounded-[20px] ${primaryAction.iconTone}`}>
-                      <primaryAction.icon size={20} />
-                    </span>
-                    <div>
-                      <p className="text-base font-semibold">{primaryAction.label}</p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{primaryAction.hint}</p>
-                    </div>
-                  </div>
-                  <ArrowUpRight size={18} className="shrink-0 text-fptOrange dark:text-orange-300" />
-                </div>
-              </Link>
             </div>
-
-            <div className="space-y-3">
-              <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Ưu tiên hôm nay</p>
-                    <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                      {pendingRatings.length}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                      ticket đã hoàn tất đang chờ bạn đánh giá.
-                    </p>
-                  </div>
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-[20px] bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                    <Bolt size={20} />
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowPendingRatings((prev) => !prev)}
-                  className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Xem việc cần làm
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-[24px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mượn / trả</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{usageHistory.length}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Tổng lượt thao tác</p>
-                </div>
-                <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Báo hỏng</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{maintenanceHistory.length}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Lần đã tạo ticket</p>
-                </div>
-              </div>
-            </div>
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-fptOrange dark:bg-orange-500/10 dark:text-orange-300">
+              <Stars size={18} />
+            </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {secondaryActions.map(({ to, label, hint, icon: Icon, tone, iconTone }) => (
+          {/* 3 columns Quick Action Buttons */}
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {quickActions.map(({ to, label, hint, icon: Icon, iconTone }) => (
               <Link
                 key={to}
                 to={to}
-                className={`rounded-[28px] border p-4 shadow-sm transition hover:-translate-y-0.5 ${tone}`}
+                className="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-slate-50/50 p-3 text-center transition hover:bg-slate-50 dark:border-slate-800/60 dark:bg-slate-900/30 dark:hover:bg-slate-900/50"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex h-11 w-11 items-center justify-center rounded-[18px] ${iconTone}`}>
-                      <Icon size={18} />
-                    </span>
-                    <div>
-                      <p className="font-semibold">{label}</p>
-                      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{hint}</p>
-                    </div>
-                  </div>
-                  <ArrowUpRight size={18} className="shrink-0 text-slate-400 dark:text-slate-500" />
-                </div>
+                <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl shadow-sm ${iconTone}`}>
+                  <Icon size={20} />
+                </span>
+                <span className="mt-2 text-xs font-semibold text-slate-800 dark:text-slate-200">{label}</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{hint.split(' ')[0]}</span>
               </Link>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_0.8fr]">
-        <StatCard label="Theo dõi phản hồi" value={pendingRatings.length} hint="Ticket hoàn tất đang chờ bạn đánh giá." tone="border-orange-200 bg-orange-50/70 dark:border-orange-500/30 dark:bg-orange-500/10" />
-        <StatCard label="Lịch sử sử dụng" value={usageHistory.length} hint="Các lượt mượn và trả thiết bị." tone="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />
-        <StatCard label="Sự cố đã gửi" value={maintenanceHistory.length} hint="Các ticket báo hỏng bạn đã tạo." tone="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950" />
+      {/* 2. Compact Stats Indicators */}
+      <section className="grid grid-cols-3 gap-2">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-2.5 px-2 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-100">{usageHistory.length}</span>
+          <span className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Mượn/trả</span>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-2.5 px-2 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-slate-100">{maintenanceHistory.length}</span>
+          <span className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Báo hỏng</span>
+        </div>
+        <div className={`flex flex-col items-center justify-center rounded-2xl border py-2.5 px-2 text-center shadow-sm transition-all ${
+          pendingRatings.length > 0
+            ? 'border-orange-200 bg-orange-50/70 text-orange-800 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300 animate-pulse'
+            : 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100'
+        }`}>
+          <span className="text-xl font-bold tracking-tight">{pendingRatings.length}</span>
+          <span className="mt-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">Cần đánh giá</span>
+        </div>
       </section>
 
       <CollapsibleSection
-        title="Đánh giá sau xử lý"
-        subtitle="Những ticket đã hoàn tất nhưng bạn chưa gửi phản hồi."
+        title="Việc cần chú ý"
+        subtitle="Đánh giá chất lượng hỗ trợ kỹ thuật."
         icon={TriangleAlert}
         iconClassName="bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-300"
         open={showPendingRatings}
         onToggle={() => setShowPendingRatings((prev) => !prev)}
       >
-        <div className="space-y-3">
-          {pendingRatings.slice(0, 3).map((ticket) => (
-            <div key={ticket.id} className="rounded-[24px] border border-orange-200 bg-white p-4 dark:border-orange-500/30 dark:bg-slate-950">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{ticket.assetName || 'Thiết bị không xác định'}</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Ticket #{ticket.id} · {ticket.assetQaCode}</p>
+        <div className="space-y-2.5">
+          {pendingRatings.slice(0, 5).map((ticket) => (
+            <div key={ticket.id} className="rounded-2xl border border-slate-150 bg-white p-3.5 shadow-sm dark:border-slate-800/80 dark:bg-slate-950">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{ticket.assetName || 'Thiết bị không xác định'}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">Ticket #{ticket.id} · {ticket.assetQaCode}</p>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Xử lý xong: {formatVietnamDateTime(ticket.resolvedAt, 'Gần đây')}
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => navigate(`/mobile/tickets/${ticket.id}/review`)}
-                  className="rounded-xl bg-fptOrange px-3 py-2 text-xs font-semibold text-white hover:bg-fptOrangeDark"
+                  className="shrink-0 rounded-xl bg-fptOrange px-3 py-1.5 text-xs font-semibold text-white hover:bg-fptOrangeDark transition shadow-sm"
                 >
-                  Đánh giá ngay
+                  Đánh giá
                 </button>
               </div>
-              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-                Hoàn tất lúc: {formatVietnamDateTime(ticket.resolvedAt, 'Gần đây')}
-              </p>
             </div>
           ))}
           {pendingRatings.length === 0 && (
-            <EmptyState>Chưa có ticket nào đang chờ bạn đánh giá.</EmptyState>
+            <EmptyState>Tất cả công việc đã hoàn thành! ✨</EmptyState>
           )}
         </div>
       </CollapsibleSection>

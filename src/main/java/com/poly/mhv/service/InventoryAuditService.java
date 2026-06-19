@@ -4,9 +4,11 @@ import com.poly.mhv.dto.inventory.InventoryAuditCreateRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditDetailResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditItemResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditMissingResponse;
+import com.poly.mhv.dto.inventory.InventoryAuditRoomAssetResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditScanRequest;
 import com.poly.mhv.dto.inventory.InventoryAuditScanResultResponse;
 import com.poly.mhv.dto.inventory.InventoryAuditSummaryResponse;
+import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
@@ -14,6 +16,7 @@ import com.poly.mhv.entity.InventoryAudit;
 import com.poly.mhv.entity.InventoryAuditItem;
 import com.poly.mhv.entity.InventoryAuditMissing;
 import com.poly.mhv.entity.Location;
+import com.poly.mhv.entity.UsageHistory;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AssetRepository;
@@ -21,10 +24,12 @@ import com.poly.mhv.repository.InventoryAuditItemRepository;
 import com.poly.mhv.repository.InventoryAuditMissingRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.LocationRepository;
+import com.poly.mhv.repository.UsageHistoryRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,6 +52,7 @@ public class InventoryAuditService {
     private final AssetRepository assetRepository;
     private final LocationRepository locationRepository;
     private final AppUserRepository appUserRepository;
+    private final UsageHistoryRepository usageHistoryRepository;
     private final NotificationService notificationService;
     private final HelpdeskKpiService helpdeskKpiService;
 
@@ -57,6 +63,7 @@ public class InventoryAuditService {
             AssetRepository assetRepository,
             LocationRepository locationRepository,
             AppUserRepository appUserRepository,
+            UsageHistoryRepository usageHistoryRepository,
             NotificationService notificationService,
             HelpdeskKpiService helpdeskKpiService
     ) {
@@ -66,6 +73,7 @@ public class InventoryAuditService {
         this.assetRepository = assetRepository;
         this.locationRepository = locationRepository;
         this.appUserRepository = appUserRepository;
+        this.usageHistoryRepository = usageHistoryRepository;
         this.notificationService = notificationService;
         this.helpdeskKpiService = helpdeskKpiService;
     }
@@ -87,9 +95,9 @@ public class InventoryAuditService {
             throw new CustomException("Không thể tạo phiên kiểm kê cho khu vực không chứa tài sản.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime startedAt = LocalDateTime.now();
+        LocalDateTime startedAt = request.getStartedAt() != null ? request.getStartedAt() : LocalDateTime.now();
         if (!request.getDueDate().isAfter(startedAt)) {
-            throw new CustomException("Hạn kiểm kê phải sau thời điểm tạo phiên.");
+            throw new CustomException("Hạn kiểm kê phải sau thời gian bắt đầu.");
         }
         InventoryAudit audit = InventoryAudit.builder()
                 .location(location)
@@ -98,13 +106,15 @@ public class InventoryAuditService {
                 .dueDate(request.getDueDate())
                 .status("OPEN")
                 .notes(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
-                .expectedCount((int) assetRepository.countByHomeLocationIdAndTrackingMode(request.getLocationId(), "ITEMIZED"))
+                .expectedCount(0)
                 .scannedCount(0)
                 .missingCount(0)
                 .build();
+        AuditComputedData computedData = computeAuditData(audit);
+        audit.setExpectedCount(computedData.expectedAssets().size());
         InventoryAudit saved = inventoryAuditRepository.save(audit);
         helpdeskKpiService.invalidateCaches();
-        return mapSummary(saved);
+        return mapSummary(saved, computedData);
     }
 
     @Transactional(readOnly = true)
@@ -146,6 +156,8 @@ public class InventoryAuditService {
     public InventoryAuditDetailResponse getDetail(Integer auditId) {
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));
+        AuditComputedData computedData = computeAuditData(audit);
+        Map<String, UsageHistory> openUsageHistoryByAssetQaCode = loadOpenUsageHistoriesByAssetQaCode(audit.getLocation().getId());
         List<InventoryAuditItem> auditItems = inventoryAuditItemRepository.findByAuditIdOrderByScannedAtDesc(auditId);
         List<String> qaCodes = auditItems.stream()
                 .map(InventoryAuditItem::getAssetQaCode)
@@ -179,7 +191,16 @@ public class InventoryAuditService {
                         .build())
                 .toList();
         return InventoryAuditDetailResponse.builder()
-                .summary(mapSummary(audit))
+                .summary(mapSummary(audit, computedData))
+                .lentItems(computedData.lentAssets().stream()
+                        .map(asset -> mapRoomAsset(asset, openUsageHistoryByAssetQaCode.get(asset.getQaCode())))
+                        .toList())
+                .borrowedItems(computedData.borrowedAssets().stream()
+                        .map(asset -> mapRoomAsset(asset, openUsageHistoryByAssetQaCode.get(asset.getQaCode())))
+                        .toList())
+                .repairingItems(computedData.repairingAssets().stream()
+                        .map(asset -> mapRoomAsset(asset, openUsageHistoryByAssetQaCode.get(asset.getQaCode())))
+                        .toList())
                 .scannedItems(scannedItems)
                 .missingItems(missingItems)
                 .build();
@@ -201,8 +222,14 @@ public class InventoryAuditService {
         if ("CONSUMABLE".equalsIgnoreCase(asset.getTrackingMode())) {
             throw new CustomException("Vật tư tiêu hao không thuộc phạm vi kiểm kê từng thiết bị.");
         }
-        if (!asset.getHomeLocation().getId().equals(audit.getLocation().getId())) {
-            throw new CustomException("Tài sản này thuộc " + asset.getHomeLocation().getRoomName());
+        if (!asset.getLocation().getId().equals(audit.getLocation().getId())) {
+            throw new CustomException("Thiết bị hiện không ở phòng " + audit.getLocation().getRoomName() + ".");
+        }
+        if (isBrokenAsset(asset)) {
+            throw new CustomException("Thiết bị đang hỏng hoặc sửa chữa, không thuộc phạm vi kiểm kê cần quét.");
+        }
+        if (isLostAsset(asset)) {
+            throw new CustomException("Thiết bị đang ở trạng thái thất lạc.");
         }
         if (inventoryAuditItemRepository.existsByAuditIdAndAssetQaCode(auditId, qaCode)) {
             throw new CustomException("Thiết bị " + qaCode + " đã được quét trong phiên này.");
@@ -219,9 +246,7 @@ public class InventoryAuditService {
         inventoryAuditItemRepository.save(item);
 
         int scannedCount = (audit.getScannedCount() == null ? 0 : audit.getScannedCount()) + 1;
-        int expectedCount = audit.getExpectedCount() != null
-                ? audit.getExpectedCount()
-                : (int) assetRepository.countByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
+        int expectedCount = computeAuditData(audit).expectedAssets().size();
         audit.setScannedCount(scannedCount);
         audit.setExpectedCount(expectedCount);
         inventoryAuditRepository.save(audit);
@@ -244,7 +269,8 @@ public class InventoryAuditService {
         if (!"OPEN".equals(audit.getStatus())) {
             throw new CustomException("Phiên kiểm kê đã được hoàn thành.");
         }
-        List<Asset> expectedAssets = assetRepository.findByHomeLocationIdAndTrackingMode(audit.getLocation().getId(), "ITEMIZED");
+        AuditComputedData computedData = computeAuditData(audit);
+        List<Asset> expectedAssets = computedData.expectedAssets();
         Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(auditId).stream()
                 .collect(Collectors.toSet());
 
@@ -274,7 +300,7 @@ public class InventoryAuditService {
         assetRepository.saveAll(missingAssets);
         int missingCount = missingItems.size();
 
-        audit.setExpectedCount(expectedAssets.size());
+        audit.setExpectedCount(computedData.expectedAssets().size());
         audit.setScannedCount(scannedQaCodes.size());
         audit.setMissingCount(missingCount);
         audit.setCompletedAt(LocalDateTime.now());
@@ -300,6 +326,10 @@ public class InventoryAuditService {
                         "Số lượng đã quét", audit.getScannedCount(),
                         "Số lượng thất lạc", missingCount,
                         "Người thực hiện", actorDisplayName
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/inventory-audits"),
+                        NotificationTarget.forRole("TechSupport", "/tech/inventory-audits/history")
                 )
         );
 
@@ -318,8 +348,7 @@ public class InventoryAuditService {
 
         assetRepository.findById(assetQaCode).ifPresent(asset -> {
             asset.setTechnicalStatus(AssetStatusSupport.TECHNICAL_STATUS_GOOD);
-            asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_HOME);
-            asset.setLocation(asset.getHomeLocation());
+            asset.setUsageStatus(resolveUsageStatus(asset));
             asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
                     asset.getTechnicalStatus(),
                     asset.getUsageStatus(),
@@ -348,6 +377,13 @@ public class InventoryAuditService {
     }
 
     private InventoryAuditSummaryResponse mapSummary(InventoryAudit audit) {
+        return mapSummary(audit, computeAuditData(audit));
+    }
+
+    private InventoryAuditSummaryResponse mapSummary(InventoryAudit audit, AuditComputedData computedData) {
+        Integer expectedCount = "COMPLETED".equals(audit.getStatus()) && audit.getExpectedCount() != null
+                ? audit.getExpectedCount()
+                : computedData.expectedAssets().size();
         return InventoryAuditSummaryResponse.builder()
                 .id(audit.getId())
                 .locationId(audit.getLocation().getId())
@@ -357,7 +393,11 @@ public class InventoryAuditService {
                 .completedAt(audit.getCompletedAt())
                 .dueDate(audit.getDueDate())
                 .status(audit.getStatus())
-                .expectedCount(audit.getExpectedCount())
+                .totalAssetCount(computedData.totalAssetCount())
+                .expectedCount(expectedCount)
+                .repairingCount(computedData.repairingAssets().size())
+                .lentCount(computedData.lentAssets().size())
+                .borrowedCount(computedData.borrowedAssets().size())
                 .scannedCount(audit.getScannedCount())
                 .missingCount(audit.getMissingCount())
                 .notes(audit.getNotes())
@@ -407,5 +447,94 @@ public class InventoryAuditService {
                 locationId,
                 homeLocationId
         );
+    }
+
+    private String resolveTechnicalStatus(Asset asset) {
+        if (asset == null) {
+            return AssetStatusSupport.TECHNICAL_STATUS_GOOD;
+        }
+        return AssetStatusSupport.resolveTechnicalStatus(asset.getTechnicalStatus(), asset.getStatus());
+    }
+
+    private boolean isLostAsset(Asset asset) {
+        return AssetStatusSupport.TECHNICAL_STATUS_LOST.equals(resolveTechnicalStatus(asset));
+    }
+
+    private boolean isBrokenAsset(Asset asset) {
+        return AssetStatusSupport.TECHNICAL_STATUS_BROKEN.equals(resolveTechnicalStatus(asset));
+    }
+
+    private boolean isAwayFromHome(Asset asset, Integer locationId) {
+        Integer homeLocationId = asset.getHomeLocation() == null ? null : asset.getHomeLocation().getId();
+        return homeLocationId != null && !homeLocationId.equals(locationId);
+    }
+
+    private AuditComputedData computeAuditData(InventoryAudit audit) {
+        Integer locationId = audit.getLocation().getId();
+        List<Asset> homeAssets = assetRepository.findByHomeLocationIdAndTrackingMode(locationId, "ITEMIZED").stream()
+                .filter(asset -> !isLostAsset(asset))
+                .toList();
+        List<Asset> currentLocationAssets = assetRepository.findByLocationIdAndTrackingMode(locationId, "ITEMIZED").stream()
+                .filter(asset -> !isLostAsset(asset))
+                .toList();
+
+        List<Asset> borrowedAssets = currentLocationAssets.stream()
+                .filter(asset -> isAwayFromHome(asset, locationId))
+                .toList();
+        List<Asset> lentAssets = homeAssets.stream()
+                .filter(asset -> asset.getLocation() != null && !locationId.equals(asset.getLocation().getId()))
+                .toList();
+        List<Asset> repairingAssets = currentLocationAssets.stream()
+                .filter(this::isBrokenAsset)
+                .toList();
+        List<Asset> expectedAssets = currentLocationAssets.stream()
+                .filter(asset -> !isBrokenAsset(asset))
+                .toList();
+
+        return new AuditComputedData(
+                homeAssets.size() + borrowedAssets.size(),
+                expectedAssets,
+                lentAssets,
+                borrowedAssets,
+                repairingAssets
+        );
+    }
+
+    private Map<String, UsageHistory> loadOpenUsageHistoriesByAssetQaCode(Integer locationId) {
+        Map<String, UsageHistory> result = new LinkedHashMap<>();
+        for (UsageHistory history : usageHistoryRepository.findOpenByLocationId(locationId)) {
+            result.putIfAbsent(history.getAsset().getQaCode(), history);
+        }
+        return result;
+    }
+
+    private InventoryAuditRoomAssetResponse mapRoomAsset(Asset asset, UsageHistory usageHistory) {
+        String technicalStatus = resolveTechnicalStatus(asset);
+        String usageStatus = resolveUsageStatus(asset);
+        return InventoryAuditRoomAssetResponse.builder()
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .homeLocationName(asset.getHomeLocation() != null ? asset.getHomeLocation().getRoomName() : null)
+                .currentLocationName(asset.getLocation() != null ? asset.getLocation().getRoomName() : null)
+                .borrowerName(usageHistory != null ? getFullNameOrUsername(usageHistory.getUser()) : null)
+                .fromLocationName(usageHistory != null && usageHistory.getFromLocation() != null ? usageHistory.getFromLocation().getRoomName() : null)
+                .toLocationName(usageHistory != null && usageHistory.getToLocation() != null ? usageHistory.getToLocation().getRoomName() : null)
+                .borrowedAt(usageHistory != null ? usageHistory.getStartTime() : null)
+                .technicalStatus(technicalStatus)
+                .displayStatus(AssetStatusSupport.deriveDisplayStatus(
+                        technicalStatus,
+                        usageStatus,
+                        AssetStatusSupport.isRepairInProgress(asset.getStatus())
+                ))
+                .build();
+    }
+
+    private record AuditComputedData(
+            int totalAssetCount,
+            List<Asset> expectedAssets,
+            List<Asset> lentAssets,
+            List<Asset> borrowedAssets,
+            List<Asset> repairingAssets
+    ) {
     }
 }
