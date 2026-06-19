@@ -413,7 +413,7 @@ function getInitialTrackingMode(initialSection, restrictToConsumable) {
   return initialSection === 'consumables' ? 'CONSUMABLE' : 'ITEMIZED'
 }
 
-function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed' }) {
+function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed', showTabSwitcher = false }) {
   const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
   const categoryFilterRef = useRef(null)
@@ -1995,7 +1995,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
             </button>
           </div>
         </div>
-        {!restrictToConsumable && (
+        {!restrictToConsumable && showTabSwitcher && (
         <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
           {managementTabs.map((tab) => {
             const active = tab.value === activeTrackingMode

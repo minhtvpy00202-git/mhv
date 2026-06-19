@@ -166,7 +166,7 @@ function App() {
           )}
         >
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
-          <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" />)} />
+          <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
           <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
           <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables" initialSection="consumables" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
