@@ -36,7 +36,16 @@ const menuItems = [
     label: 'Quản lý chung',
     icon: Boxes,
     children: [
-      { to: '/admin/assets', label: 'Quản lý thiết bị', icon: Boxes },
+      {
+        id: 'asset-management',
+        label: 'Quản lý tài sản',
+        icon: Boxes,
+        children: [
+          { to: '/admin/assets/fixed', label: 'Tài sản cố định', icon: PackageSearch },
+          { to: '/admin/assets/consumables', label: 'Vật tư tiêu hao', icon: Boxes },
+          { to: '/admin/asset-statistics', label: 'Thống kê', icon: BarChart3 },
+        ],
+      },
       { to: '/admin/asset-map', label: 'Sơ đồ định vị tài sản', icon: MapPin },
       { to: '/admin/suppliers', label: 'Quản lý nhà cung cấp', icon: PackageSearch },
       { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
@@ -69,7 +78,7 @@ function AdminLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
-  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'tickets-management-submenu': true })
+  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'asset-management': true, 'tickets-management-submenu': true })
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -87,6 +96,7 @@ function AdminLayout() {
   useEffect(() => {
     if (
       location.pathname.startsWith('/admin/assets')
+      || location.pathname.startsWith('/admin/asset-statistics')
       || location.pathname.startsWith('/admin/asset-map')
       || location.pathname.startsWith('/admin/suppliers')
       || location.pathname.startsWith('/admin/categories')
@@ -94,7 +104,13 @@ function AdminLayout() {
       || location.pathname.startsWith('/admin/locations')
     ) {
       const syncMenuTimer = window.setTimeout(() => {
-        setExpandedMenus((prev) => ({ ...prev, 'shared-management': true }))
+        setExpandedMenus((prev) => ({
+          ...prev,
+          'shared-management': true,
+          ...(location.pathname.startsWith('/admin/assets') || location.pathname.startsWith('/admin/asset-statistics')
+            ? { 'asset-management': true }
+            : {}),
+        }))
       }, 0)
       return () => window.clearTimeout(syncMenuTimer)
     }
@@ -158,6 +174,66 @@ function AdminLayout() {
     window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
   }
 
+  const getMenuPath = (item) => {
+    if (!item?.to) return ''
+    return typeof item.to === 'string' ? item.to.split('?')[0] : item.to.pathname || ''
+  }
+
+  const isMenuItemActive = (item) => {
+    if (item.children?.length) return item.children.some((child) => isMenuItemActive(child))
+    const itemPath = getMenuPath(item)
+    if (!itemPath) return false
+    if (itemPath === '/admin/assets/fixed' && location.pathname === '/admin/assets') return true
+    return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`)
+  }
+
+  const getMenuItemClass = (active, depth, parent = false) => {
+    const depthClass = depth >= 2 ? 'px-2.5 py-1.5 text-[13px]' : 'px-3 py-2 text-sm'
+    const weightClass = parent || depth === 0 ? 'font-medium' : active ? 'font-semibold' : ''
+    const activeClass = active
+      ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300'
+      : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
+    return `flex items-center gap-2 rounded-lg ${depthClass} ${weightClass} transition ${activeClass}`
+  }
+
+  const renderMenuItem = (item, depth = 0) => {
+    const Icon = item.icon || Boxes
+    const active = isMenuItemActive(item)
+    const key = item.id || item.to
+
+    if (!item.children?.length) {
+      return (
+        <NavLink key={key} to={item.to} className={() => getMenuItemClass(active, depth)}>
+          <Icon size={depth >= 2 ? 15 : depth === 1 ? 16 : 18} />
+          <span>{item.label}</span>
+        </NavLink>
+      )
+    }
+
+    const isExpanded = expandedMenus[item.id]
+    return (
+      <div key={key} className="space-y-1">
+        <button
+          type="button"
+          onClick={() => setExpandedMenus((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+          className={`${getMenuItemClass(active, depth, true)} w-full justify-between`}
+        >
+          <span className="flex items-center gap-2">
+            <Icon size={depth >= 2 ? 15 : depth === 1 ? 16 : 18} />
+            <span>{item.label}</span>
+          </span>
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        </button>
+
+        {isExpanded && (
+          <div className={`space-y-1 border-l border-slate-200 dark:border-slate-700 ${depth === 0 ? 'pl-4' : 'ml-2 pl-3'}`}>
+            {item.children.map((child) => renderMenuItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="brand-theme flex min-h-[100dvh] bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <aside className="hidden w-72 flex-col border-r border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/80 md:flex">
@@ -168,72 +244,7 @@ function AdminLayout() {
           <h1 className="text-lg font-semibold">{branding.adminTitle}</h1>
         </div>
         <nav className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          {menuItems.map((item) => {
-            if (!item.children) {
-              const Icon = item.icon
-              const customActive = item.to === '/admin/tickets'
-                ? /^\/admin\/tickets(\/\d+)?$/.test(location.pathname)
-                : location.pathname === item.to || (item.to !== '/admin/dashboard' && item.to !== '/admin/tickets' && location.pathname.startsWith(item.to))
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    customActive ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
-                  }`}
-                >
-                  <Icon size={18} />
-                  <span>{item.label}</span>
-                </NavLink>
-              )
-            }
-
-
-            const isExpanded = expandedMenus[item.id]
-            const isParentActive = item.children.some((child) => location.pathname.startsWith(child.to))
-            const ParentIcon = item.icon
-
-            return (
-              <div key={item.id} className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setExpandedMenus((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-                  className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    isParentActive ? 'bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <ParentIcon size={18} />
-                    <span>{item.label}</span>
-                  </span>
-                  {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                </button>
-
-                {isExpanded && (
-                  <div className="space-y-1 border-l border-slate-200 pl-4 dark:border-slate-700">
-                    {item.children.map((child) => {
-                      const ChildIcon = child.icon
-                      return (
-                        <NavLink
-                          key={child.to}
-                          to={child.to}
-                          end={child.to === '/admin/tickets'}
-                          className={({ isActive }) =>
-                            `flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                              isActive ? 'bg-orange-50 font-semibold text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'text-slate-600 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300'
-                            }`
-                          }
-                        >
-                          <ChildIcon size={16} />
-                          <span>{child.label}</span>
-                        </NavLink>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {menuItems.map((item) => renderMenuItem(item))}
         </nav>
         <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div

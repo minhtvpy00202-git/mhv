@@ -30,6 +30,9 @@ public class AssetUpdateRequest {
     @Positive(message = "Phòng gốc không hợp lệ.")
     private Integer locationId;
 
+    @Positive(message = "Phòng hiện tại không hợp lệ.")
+    private Integer currentLocationId;
+
     @Pattern(
             regexp = "^(Sẵn sàng|Hoạt động tốt|Đang sử dụng|Đang cho mượn|Hỏng|Bảo trì|Đang sửa chữa|Thất lạc)$",
             message = "Trạng thái thiết bị không hợp lệ."
