@@ -1967,14 +1967,36 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
-          </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+            >
+              <Plus size={16} />
+              {isConsumableTab ? 'Thêm vật tư' : 'Thêm tài sản'}
+            </button>
+            <button
+              type="button"
+              onClick={() => loadAssets()}
+              disabled={submitting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <RefreshCw size={15} />
+              Tải lại
+            </button>
+          </div>
         </div>
         {!restrictToConsumable && (
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
           {managementTabs.map((tab) => {
             const active = tab.value === activeTrackingMode
             return (
@@ -1982,37 +2004,18 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                 key={tab.value}
                 type="button"
                 onClick={() => handleSwitchTab(tab.value)}
-                className={`rounded-xl border px-4 py-3 text-left transition ${
+                className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all ${
                   active
-                    ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50/50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-orange-500/40 dark:hover:bg-orange-500/10'
+                    ? 'bg-white text-fptOrangeDark shadow-sm dark:bg-slate-900 dark:text-orange-300'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
               >
-                <p className="text-sm font-semibold">{tab.label}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{tab.description}</p>
+                {tab.label}
               </button>
             )
           })}
         </div>
         )}
-        <div className="grid gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={openCreateModal}
-            disabled={submitting}
-            className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-          >
-            {isConsumableTab ? 'Thêm mới vật tư tiêu hao' : 'Thêm mới tài sản cố định'}
-          </button>
-          <button
-            type="button"
-            onClick={() => loadAssets()}
-            disabled={submitting}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-          >
-            Tải lại
-          </button>
-        </div>
         {qrImage && (
           <div className="mt-4 rounded-lg border border-slate-200 p-3">
             <p className="mb-2 text-sm font-medium text-slate-700">QR thiết bị vừa tạo</p>
@@ -3237,8 +3240,11 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         </div>
       ) : (
         <>
-          <div className="rounded-xl bg-white p-4 shadow-sm">
-            <h3 className="mb-3 text-base font-semibold text-slate-800">Lọc và tìm kiếm tài sản cố định</h3>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="mb-3 flex items-center gap-2">
+              <Search size={16} className="text-slate-400" />
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Lọc và tìm kiếm tài sản cố định</h3>
+            </div>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <input
                 value={filters.name}
@@ -3351,37 +3357,40 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                 )}
               </div>
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={handleSearch}
                 disabled={loading}
-                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
               >
+                <Search size={15} />
                 Tìm kiếm
               </button>
               <button
                 type="button"
                 onClick={handleResetFilters}
                 disabled={loading}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
+                <X size={15} />
                 Xóa bộ lọc
               </button>
               <button
                 type="button"
                 onClick={handleDownloadExcel}
                 disabled={downloading}
-                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
               >
+                <Download size={15} />
                 Tải báo cáo Excel
               </button>
             </div>
           </div>
 
-          <div className="rounded-xl bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-slate-800">Danh sách tài sản cố định</h2>
+              <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Danh sách tài sản cố định</h2>
               <div className="flex items-center gap-3">
                 <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
                 <ColumnVisibilityDropdown
@@ -3401,9 +3410,9 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-max divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
+            <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
+              <table className="min-w-max divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                 <tr>
                   {itemizedAssetColumns.visibleColumns.qaCode && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                     <button type="button" onClick={() => handleSort('qaCode')} className="whitespace-nowrap hover:text-fptOrange">
@@ -3448,8 +3457,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                       </tr>
                     ))}
                   {!loading &&
-                    assets.map((asset) => (
-                      <tr key={asset.qaCode}>
+                    assets.map((asset, idx) => (
+                      <tr key={asset.qaCode} className={idx % 2 === 0 ? 'bg-white dark:bg-slate-950' : 'bg-slate-50/60 dark:bg-slate-900/40'}>
                         {itemizedAssetColumns.visibleColumns.qaCode && <td className="px-3 py-2">{asset.qaCode}</td>}
                         {itemizedAssetColumns.visibleColumns.name && <td className="px-3 py-2">{asset.name}</td>}
                         {itemizedAssetColumns.visibleColumns.category && <td className="px-3 py-2">{asset.category}</td>}

@@ -1,7 +1,15 @@
 import {
+  IconAlertTriangle,
+  IconBoxMultiple,
+  IconCalendarCheck,
+  IconClipboardList,
   IconDownload,
   IconFilter,
+  IconFlask,
+  IconPackage,
   IconRefresh,
+  IconArrowsExchange,
+  IconTool,
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
@@ -117,19 +125,64 @@ function EmptyState({ text = 'Chưa có dữ liệu.' }) {
   )
 }
 
-function KpiCard({ label, value, helper, tone = 'slate' }) {
-  const toneClass = {
-    slate: 'border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
-    blue: 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100',
-    green: 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100',
-    orange: 'border-orange-200 bg-orange-50 text-orange-900 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-100',
-    red: 'border-red-200 bg-red-50 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100',
+function KpiCard({ label, value, helper, tone = 'slate', icon: Icon }) {
+  const config = {
+    slate: {
+      card: 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950',
+      value: 'text-slate-900 dark:text-slate-100',
+      helper: 'text-slate-500 dark:text-slate-400',
+      iconBg: 'bg-slate-100 dark:bg-slate-800',
+      iconColor: 'text-slate-500 dark:text-slate-400',
+      bar: 'bg-slate-400',
+    },
+    blue: {
+      card: 'border-blue-200 bg-blue-50 dark:border-blue-500/30 dark:bg-blue-500/10',
+      value: 'text-blue-900 dark:text-blue-100',
+      helper: 'text-blue-600/70 dark:text-blue-300/70',
+      iconBg: 'bg-blue-100 dark:bg-blue-500/20',
+      iconColor: 'text-blue-600 dark:text-blue-300',
+      bar: 'bg-blue-500',
+    },
+    green: {
+      card: 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10',
+      value: 'text-emerald-900 dark:text-emerald-100',
+      helper: 'text-emerald-600/70 dark:text-emerald-300/70',
+      iconBg: 'bg-emerald-100 dark:bg-emerald-500/20',
+      iconColor: 'text-emerald-600 dark:text-emerald-300',
+      bar: 'bg-emerald-500',
+    },
+    orange: {
+      card: 'border-orange-200 bg-orange-50 dark:border-orange-500/30 dark:bg-orange-500/10',
+      value: 'text-orange-900 dark:text-orange-100',
+      helper: 'text-orange-600/70 dark:text-orange-300/70',
+      iconBg: 'bg-orange-100 dark:bg-orange-500/20',
+      iconColor: 'text-orange-600 dark:text-orange-300',
+      bar: 'bg-orange-500',
+    },
+    red: {
+      card: 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10',
+      value: 'text-red-900 dark:text-red-100',
+      helper: 'text-red-500/70 dark:text-red-300/70',
+      iconBg: 'bg-red-100 dark:bg-red-500/20',
+      iconColor: 'text-red-600 dark:text-red-300',
+      bar: 'bg-red-500',
+    },
   }[tone]
   return (
-    <div className={`min-h-28 rounded-xl border p-4 shadow-sm ${toneClass}`}>
-      <p className="text-sm font-medium opacity-75">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-      {helper ? <p className="mt-1 text-xs opacity-70">{helper}</p> : null}
+    <div className={`relative overflow-hidden rounded-xl border p-4 shadow-sm ${config.card}`}>
+      <div className={`absolute left-0 top-0 h-full w-1 ${config.bar}`} />
+      <div className="flex items-start justify-between gap-2 pl-2">
+        <div className="min-w-0 flex-1">
+          <p className={`text-xs font-medium uppercase tracking-wide ${config.helper}`}>{label}</p>
+          <p className={`mt-2 text-2xl font-bold tabular-nums ${config.value}`}>{value}</p>
+          {helper ? <p className={`mt-1 text-xs ${config.helper}`}>{helper}</p> : null}
+        </div>
+        {Icon && (
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${config.iconBg}`}>
+            <Icon size={18} className={config.iconColor} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -460,14 +513,14 @@ function AssetStatisticsManagement() {
           {activeTab === 'overview' && (
             <>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <KpiCard label="Tài sản cố định" value={formatNumber(summary.fixedAssetCount)} helper={formatCurrency(summary.fixedAssetValue)} tone="blue" />
-                <KpiCard label="Vật tư tiêu hao" value={formatNumber(summary.consumableCount)} helper={formatCurrency(summary.consumableInventoryValue)} tone="green" />
-                <KpiCard label="Đang mượn" value={formatNumber(summary.borrowedAssetCount)} helper={`${formatNumber(summary.borrowEventCount)} lượt trong kỳ`} tone="orange" />
-                <KpiCard label="Cần xử lý" value={formatNumber((summary.brokenAssetCount || 0) + (summary.repairingAssetCount || 0) + (summary.lostAssetCount || 0))} helper="Hỏng, sửa chữa hoặc thất lạc" tone="red" />
-                <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper={`${formatNumber(summary.pendingConsumableRequestCount)} phiếu cấp phát chờ duyệt`} />
-                <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" />
-                <KpiCard label="Ticket trong kỳ" value={formatNumber(summary.ticketCount)} helper="Theo ngày tạo ticket" />
-                <KpiCard label="Kiểm kê trong kỳ" value={formatNumber(summary.auditCount)} helper={`${formatNumber(summary.auditMissingCount)} thiết bị thiếu`} />
+                <KpiCard label="Tài sản cố định" value={formatNumber(summary.fixedAssetCount)} helper={formatCurrency(summary.fixedAssetValue)} tone="blue" icon={IconPackage} />
+                <KpiCard label="Vật tư tiêu hao" value={formatNumber(summary.consumableCount)} helper={formatCurrency(summary.consumableInventoryValue)} tone="green" icon={IconBoxMultiple} />
+                <KpiCard label="Đang mượn" value={formatNumber(summary.borrowedAssetCount)} helper={`${formatNumber(summary.borrowEventCount)} lượt trong kỳ`} tone="orange" icon={IconArrowsExchange} />
+                <KpiCard label="Cần xử lý" value={formatNumber((summary.brokenAssetCount || 0) + (summary.repairingAssetCount || 0) + (summary.lostAssetCount || 0))} helper="Hỏng, sửa chữa hoặc thất lạc" tone="red" icon={IconTool} />
+                <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper={`${formatNumber(summary.pendingConsumableRequestCount)} phiếu cấp phát chờ duyệt`} icon={IconFlask} />
+                <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" icon={IconAlertTriangle} />
+                <KpiCard label="Ticket trong kỳ" value={formatNumber(summary.ticketCount)} helper="Theo ngày tạo ticket" icon={IconClipboardList} />
+                <KpiCard label="Kiểm kê trong kỳ" value={formatNumber(summary.auditCount)} helper={`${formatNumber(summary.auditMissingCount)} thiết bị thiếu`} icon={IconCalendarCheck} />
               </div>
 
               <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
