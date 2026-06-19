@@ -121,6 +121,54 @@ public interface UsageHistoryRepository extends JpaRepository<UsageHistory, Inte
     );
 
     @Query(value = """
+            select '' as qa_code,
+                   coalesce(u.full_name, u.username) as user_name,
+                   u.username,
+                   '' as location_name,
+                   count(*) as row_count
+            from usage_histories uh
+            join users u on u.id = uh.user_id
+            join assets a on a.qa_code = uh.asset_qa_code
+            where uh.start_time >= :startTime
+              and uh.start_time <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or uh.to_location_id = :locationId)
+            group by u.id, coalesce(u.full_name, u.username), u.username
+            order by row_count desc, u.username asc
+            limit 8
+            """, nativeQuery = true)
+    List<Object[]> findTopBorrowedUsersForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select '' as qa_code,
+                   l.room_name,
+                   '' as category_name,
+                   '' as extra,
+                   count(*) as row_count
+            from usage_histories uh
+            join locations l on l.id = uh.to_location_id
+            join assets a on a.qa_code = uh.asset_qa_code
+            where uh.start_time >= :startTime
+              and uh.start_time <= :endTime
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or uh.to_location_id = :locationId)
+            group by l.id, l.room_name
+            order by row_count desc, l.room_name asc
+            limit 8
+            """, nativeQuery = true)
+    List<Object[]> findTopBorrowedLocationsForStatistics(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
             select count(*)
             from usage_histories uh
             join assets a on a.qa_code = uh.asset_qa_code

@@ -26,10 +26,14 @@ public class AssetStatisticsResponse {
     private List<AssetStatisticsCountResponse> expiryBuckets;
     private List<AssetStatisticsTrendResponse> borrowTrend;
     private List<AssetStatisticsTrendResponse> ticketTrend;
+    private List<AssetStatisticsTrendResponse> issuanceTrend;
     private List<AssetStatisticsCountResponse> ticketStatus;
     private List<AssetStatisticsCountResponse> auditStatus;
     private List<AssetStatisticsRankResponse> topBorrowedAssets;
     private List<AssetStatisticsRankResponse> topProblemAssets;
     private List<AssetStatisticsRankResponse> topLowStockConsumables;
+    private List<AssetStatisticsRankResponse> topBorrowedUsers;
+    private List<AssetStatisticsRankResponse> topBorrowedLocations;
+    private List<AssetStatisticsRankResponse> topDispensedConsumables;
     private List<AssetStatisticsAuditResponse> recentAudits;
 }

@@ -229,6 +229,8 @@ public class AssetService {
             int size,
             String name,
             String status,
+            String technicalStatus,
+            String usageStatus,
             String trackingMode,
             Integer categoryId,
             Integer locationId,
@@ -237,6 +239,8 @@ public class AssetService {
     ) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = normalizeAssetFilterStatus(status);
+        String normalizedTechnicalStatus = normalizeOptionalTechnicalStatusFilter(technicalStatus);
+        String normalizedUsageStatus = normalizeOptionalUsageStatusFilter(usageStatus);
         String normalizedTrackingMode = StringUtils.hasText(trackingMode) ? normalizeTrackingMode(trackingMode) : null;
         PageRequest pageable = PageRequest.of(
                 Math.max(0, page),
@@ -246,6 +250,8 @@ public class AssetService {
         Page<AssetAdminListItemResponse> assetPage = assetRepository.searchForAdmin(
                 normalizedName,
                 normalizedStatus,
+                normalizedTechnicalStatus,
+                normalizedUsageStatus,
                 normalizedTrackingMode,
                 categoryId,
                 locationId,
@@ -1453,6 +1459,20 @@ public class AssetService {
             return normalized;
         }
         return AssetStatusSupport.normalizeDisplayStatusFilter(normalized);
+    }
+
+    private String normalizeOptionalTechnicalStatusFilter(String technicalStatus) {
+        if (!StringUtils.hasText(technicalStatus)) {
+            return null;
+        }
+        return AssetStatusSupport.normalizeTechnicalStatus(technicalStatus);
+    }
+
+    private String normalizeOptionalUsageStatusFilter(String usageStatus) {
+        if (!StringUtils.hasText(usageStatus)) {
+            return null;
+        }
+        return AssetStatusSupport.normalizeUsageStatus(usageStatus);
     }
 
     private String normalizeRequestedTechnicalStatus(String technicalStatus, String legacyStatus) {

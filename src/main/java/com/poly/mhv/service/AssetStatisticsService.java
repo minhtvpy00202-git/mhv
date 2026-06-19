@@ -8,6 +8,7 @@ import com.poly.mhv.dto.statistics.AssetStatisticsSummaryResponse;
 import com.poly.mhv.dto.statistics.AssetStatisticsTrendResponse;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestRepository;
+import com.poly.mhv.repository.ConsumableIssueRepository;
 import com.poly.mhv.repository.ConsumableReceiptLotRepository;
 import com.poly.mhv.repository.ConsumableRequestRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
@@ -42,6 +43,7 @@ public class AssetStatisticsService {
     private final ConsumableReceiptLotRepository consumableReceiptLotRepository;
     private final ConsumableRequestRepository consumableRequestRepository;
     private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
+    private final ConsumableIssueRepository consumableIssueRepository;
     private final UsageHistoryRepository usageHistoryRepository;
     private final TicketRepository ticketRepository;
     private final InventoryAuditRepository inventoryAuditRepository;
@@ -51,6 +53,7 @@ public class AssetStatisticsService {
             ConsumableReceiptLotRepository consumableReceiptLotRepository,
             ConsumableRequestRepository consumableRequestRepository,
             ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
+            ConsumableIssueRepository consumableIssueRepository,
             UsageHistoryRepository usageHistoryRepository,
             TicketRepository ticketRepository,
             InventoryAuditRepository inventoryAuditRepository
@@ -59,6 +62,7 @@ public class AssetStatisticsService {
         this.consumableReceiptLotRepository = consumableReceiptLotRepository;
         this.consumableRequestRepository = consumableRequestRepository;
         this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
+        this.consumableIssueRepository = consumableIssueRepository;
         this.usageHistoryRepository = usageHistoryRepository;
         this.ticketRepository = ticketRepository;
         this.inventoryAuditRepository = inventoryAuditRepository;
@@ -131,11 +135,19 @@ public class AssetStatisticsService {
                         range.fromDate(),
                         range.toDate()
                 ))
+                .issuanceTrend(fillTrend(
+                        consumableIssueRepository.countIssuanceTrendForStatistics(startTime, endTime, categoryId, locationId),
+                        range.fromDate(),
+                        range.toDate()
+                ))
                 .ticketStatus(mapStatusRows(ticketRepository.countTicketsByStatusForStatistics(startTime, endTime, categoryId, locationId), "ticket"))
                 .auditStatus(mapStatusRows(inventoryAuditRepository.countAuditsByStatusForStatistics(startTime, endTime, locationId), "audit"))
                 .topBorrowedAssets(mapRankRows(usageHistoryRepository.findTopBorrowedAssetsForStatistics(startTime, endTime, categoryId, locationId)))
                 .topProblemAssets(mapRankRows(ticketRepository.findTopProblemAssetsForStatistics(startTime, endTime, categoryId, locationId)))
                 .topLowStockConsumables(mapLowStockRows(assetRepository.findTopLowStockConsumablesForStatistics(categoryId, locationId)))
+                .topBorrowedUsers(mapRankRows(usageHistoryRepository.findTopBorrowedUsersForStatistics(startTime, endTime, categoryId, locationId)))
+                .topBorrowedLocations(mapRankRows(usageHistoryRepository.findTopBorrowedLocationsForStatistics(startTime, endTime, categoryId, locationId)))
+                .topDispensedConsumables(mapRankRows(consumableIssueRepository.findTopDispensedConsumablesForStatistics(startTime, endTime, categoryId, locationId)))
                 .recentAudits(mapAuditRows(inventoryAuditRepository.findRecentAuditsForStatistics(startTime, endTime, locationId)))
                 .build();
     }
@@ -156,9 +168,13 @@ public class AssetStatisticsService {
             writeCountSheet(workbook, "Lô theo hạn dùng", statistics.getExpiryBuckets());
             writeTrendSheet(workbook, "Xu hướng mượn trả", statistics.getBorrowTrend());
             writeTrendSheet(workbook, "Xu hướng ticket", statistics.getTicketTrend());
+            writeTrendSheet(workbook, "Xu hướng cấp phát", statistics.getIssuanceTrend());
             writeRankSheet(workbook, "Top thiết bị mượn", statistics.getTopBorrowedAssets());
             writeRankSheet(workbook, "Top thiết bị lỗi", statistics.getTopProblemAssets());
             writeRankSheet(workbook, "Vật tư cần nhập", statistics.getTopLowStockConsumables());
+            writePersonRankSheet(workbook, "Top NV mượn nhiều", statistics.getTopBorrowedUsers());
+            writeLocationRankSheet(workbook, "Top phòng mượn nhiều", statistics.getTopBorrowedLocations());
+            writeRankSheet(workbook, "Top vật tư cấp phát", statistics.getTopDispensedConsumables());
             workbook.write(outputStream);
             return outputStream.toByteArray();
         }
@@ -430,6 +446,36 @@ public class AssetStatisticsService {
             createCell(row, 7, item.getUnit());
         }
         autoSize(sheet, 8);
+    }
+
+    private void writePersonRankSheet(XSSFWorkbook workbook, String sheetName, List<AssetStatisticsRankResponse> rows) {
+        XSSFSheet sheet = workbook.createSheet(sheetName);
+        Row header = sheet.createRow(0);
+        createCell(header, 0, "Ho ten");
+        createCell(header, 1, "Username");
+        createCell(header, 2, "Luot muon");
+        int rowIndex = 1;
+        for (AssetStatisticsRankResponse item : rows) {
+            Row row = sheet.createRow(rowIndex++);
+            createCell(row, 0, item.getName());
+            createCell(row, 1, item.getCategoryName());
+            createCell(row, 2, String.valueOf(item.getCount()));
+        }
+        autoSize(sheet, 3);
+    }
+
+    private void writeLocationRankSheet(XSSFWorkbook workbook, String sheetName, List<AssetStatisticsRankResponse> rows) {
+        XSSFSheet sheet = workbook.createSheet(sheetName);
+        Row header = sheet.createRow(0);
+        createCell(header, 0, "Phong / Vi tri");
+        createCell(header, 1, "Luot muon");
+        int rowIndex = 1;
+        for (AssetStatisticsRankResponse item : rows) {
+            Row row = sheet.createRow(rowIndex++);
+            createCell(row, 0, item.getName());
+            createCell(row, 1, String.valueOf(item.getCount()));
+        }
+        autoSize(sheet, 2);
     }
 
     private void createCell(Row row, int column, String value) {

@@ -204,6 +204,63 @@ function LowStockTable({ rows }) {
   )
 }
 
+function PersonRankingTable({ rows, valueLabel = 'Lượt', emptyText }) {
+  if (!rows?.length) return <EmptyState text={emptyText} />
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+          <tr>
+            <th className="px-3 py-2">Nhân viên</th>
+            <th className="px-3 py-2 text-right">{valueLabel}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((item) => (
+            <tr key={`${item.categoryName}-${item.name}`} className="bg-white dark:bg-slate-950">
+              <td className="px-3 py-3">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{item.name || 'Chưa cập nhật'}</p>
+                <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{item.categoryName}</p>
+              </td>
+              <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                {formatNumber(item.count)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LocationRankingTable({ rows, valueLabel = 'Lượt', emptyText }) {
+  if (!rows?.length) return <EmptyState text={emptyText} />
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+          <tr>
+            <th className="px-3 py-2">Phòng / Vị trí</th>
+            <th className="px-3 py-2 text-right">{valueLabel}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+          {rows.map((item, index) => (
+            <tr key={`${item.name}-${index}`} className="bg-white dark:bg-slate-950">
+              <td className="px-3 py-3 font-semibold text-slate-900 dark:text-slate-100">
+                {item.name || 'Chưa cập nhật'}
+              </td>
+              <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                {formatNumber(item.count)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function AuditList({ rows }) {
   if (!rows?.length) return <EmptyState text="Chưa có phiên kiểm kê trong kỳ." />
   return (
@@ -288,6 +345,7 @@ function AssetStatisticsManagement() {
 
   const summary = statistics?.summary || {}
   const fixedStatusData = useMemo(() => withColors(statistics?.fixedAssetStatus || []), [statistics])
+  const fixedUsageData = useMemo(() => withColors(statistics?.fixedAssetUsage || []), [statistics])
   const consumableStockData = useMemo(() => withColors(statistics?.consumableStockStatus || []), [statistics])
   const expiryData = useMemo(() => withColors(statistics?.expiryBuckets || []), [statistics])
   const trendData = useMemo(() => {
@@ -297,6 +355,14 @@ function AssetStatisticsManagement() {
       label: formatShortDate(item.date),
       borrow: item.count,
       ticket: ticketsByDate.get(item.date) || 0,
+    }))
+  }, [statistics])
+
+  const issuanceTrendData = useMemo(() => {
+    return (statistics?.issuanceTrend || []).map((item) => ({
+      date: item.date,
+      label: formatShortDate(item.date),
+      issued: item.count,
     }))
   }, [statistics])
 
@@ -450,8 +516,8 @@ function AssetStatisticsManagement() {
       </section>
 
       {loading && !statistics ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, index) => (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 10 }).map((_, index) => (
             <div key={index} className="h-28 animate-pulse rounded-xl bg-white shadow-sm dark:bg-slate-950" />
           ))}
         </div>
@@ -459,13 +525,15 @@ function AssetStatisticsManagement() {
         <>
           {activeTab === 'overview' && (
             <>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                 <KpiCard label="Tài sản cố định" value={formatNumber(summary.fixedAssetCount)} helper={formatCurrency(summary.fixedAssetValue)} tone="blue" />
                 <KpiCard label="Vật tư tiêu hao" value={formatNumber(summary.consumableCount)} helper={formatCurrency(summary.consumableInventoryValue)} tone="green" />
+                <KpiCard label="Sẵn sàng sử dụng" value={formatNumber(summary.availableAssetCount)} helper="Tài sản cố định sẵn sàng" tone="green" />
                 <KpiCard label="Đang mượn" value={formatNumber(summary.borrowedAssetCount)} helper={`${formatNumber(summary.borrowEventCount)} lượt trong kỳ`} tone="orange" />
                 <KpiCard label="Cần xử lý" value={formatNumber((summary.brokenAssetCount || 0) + (summary.repairingAssetCount || 0) + (summary.lostAssetCount || 0))} helper="Hỏng, sửa chữa hoặc thất lạc" tone="red" />
                 <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper={`${formatNumber(summary.pendingConsumableRequestCount)} phiếu cấp phát chờ duyệt`} />
                 <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" />
+                <KpiCard label="Chờ thanh lý" value={formatNumber(summary.pendingDisposalRequestCount)} helper="Phiếu thanh lý chờ xử lý" tone="orange" />
                 <KpiCard label="Ticket trong kỳ" value={formatNumber(summary.ticketCount)} helper="Theo ngày tạo ticket" />
                 <KpiCard label="Kiểm kê trong kỳ" value={formatNumber(summary.auditCount)} helper={`${formatNumber(summary.auditMissingCount)} thiết bị thiếu`} />
               </div>
@@ -510,13 +578,13 @@ function AssetStatisticsManagement() {
 
           {activeTab === 'fixed-assets' && (
             <>
-              <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-                <Section title="Tài sản cố định theo trạng thái" subtitle="Tình trạng kỹ thuật và trạng thái sử dụng đã được backend chuẩn hóa.">
-                  <div className="h-80">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <Section title="Tình trạng kỹ thuật" subtitle="Tình trạng kỹ thuật tài sản cố định.">
+                  <div className="h-72">
                     {fixedStatusData.some((item) => item.count > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={fixedStatusData} dataKey="count" nameKey="label" innerRadius={56} outerRadius={104} paddingAngle={3}>
+                          <Pie data={fixedStatusData} dataKey="count" nameKey="label" innerRadius={48} outerRadius={88} paddingAngle={3}>
                             {fixedStatusData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
                           </Pie>
                           <Tooltip content={<ChartTooltip />} />
@@ -527,28 +595,64 @@ function AssetStatisticsManagement() {
                   </div>
                 </Section>
 
+                <Section title="Trạng thái sử dụng" subtitle="Tài sản đang tại vị trí, cho mượn hoặc đã cấp phát.">
+                  <div className="h-72">
+                    {fixedUsageData.some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={fixedUsageData} dataKey="count" nameKey="label" innerRadius={48} outerRadius={88} paddingAngle={3}>
+                            {fixedUsageData.map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu trạng thái sử dụng." />}
+                  </div>
+                </Section>
+
                 <Section title="Top thiết bị được mượn" subtitle="Các thiết bị có lượt mượn cao nhất trong kỳ.">
                   <RankingTable rows={statistics?.topBorrowedAssets || []} emptyText="Chưa có dữ liệu mượn thiết bị." />
                 </Section>
               </div>
 
-              <Section title="Tài sản theo loại" subtitle="Phân bổ tài sản cố định.">
-                <div className="h-72">
-                  {(statistics?.fixedAssetsByCategory || []).some((item) => item.count > 0) ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={withColors(statistics.fixedAssetsByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
-                        <Bar dataKey="count" name="Tài sản" radius={[8, 8, 0, 0]}>
-                          {withColors(statistics.fixedAssetsByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : <EmptyState text="Chưa có dữ liệu loại tài sản." />}
-                </div>
-              </Section>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Section title="Tài sản theo loại" subtitle="Phân bổ tài sản cố định theo danh mục.">
+                  <div className="h-72">
+                    {(statistics?.fixedAssetsByCategory || []).some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={withColors(statistics.fixedAssetsByCategory)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                          <Bar dataKey="count" name="Tài sản" radius={[8, 8, 0, 0]}>
+                            {withColors(statistics.fixedAssetsByCategory).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu loại tài sản." />}
+                  </div>
+                </Section>
+
+                <Section title="Tài sản theo vị trí" subtitle="Phân bổ tài sản cố định theo phòng / vị trí.">
+                  <div className="h-72">
+                    {(statistics?.fixedAssetsByLocation || []).some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={withColors(statistics.fixedAssetsByLocation)} margin={{ top: 8, right: 16, left: -20, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                          <Tooltip content={<ChartTooltip />} cursor={chartCursor} />
+                          <Bar dataKey="count" name="Tài sản" radius={[8, 8, 0, 0]}>
+                            {withColors(statistics.fixedAssetsByLocation).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu vị trí tài sản." />}
+                  </div>
+                </Section>
+              </div>
             </>
           )}
 
@@ -610,15 +714,43 @@ function AssetStatisticsManagement() {
                 </Section>
               </div>
 
-              <Section title="Vật tư cần nhập" subtitle="Các vật tư có tồn hiện tại dưới hoặc bằng ngưỡng cảnh báo.">
-                <LowStockTable rows={statistics?.topLowStockConsumables || []} />
+              <Section title="Xu hướng cấp phát vật tư" subtitle="Tổng số lượng vật tư được cấp phát theo ngày trong kỳ.">
+                <div className="h-64">
+                  {issuanceTrendData.some((item) => item.issued > 0) ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={issuanceTrendData} margin={{ top: 12, right: 16, left: -20, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                        <Tooltip content={<ChartTooltip />} />
+                        <Legend />
+                        <Line type="monotone" dataKey="issued" name="Số lượng cấp phát" stroke="#16a34a" strokeWidth={2.5} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : <EmptyState text="Chưa có cấp phát vật tư trong kỳ." />}
+                </div>
               </Section>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Section title="Vật tư cần nhập" subtitle="Các vật tư có tồn hiện tại dưới hoặc bằng ngưỡng cảnh báo.">
+                  <LowStockTable rows={statistics?.topLowStockConsumables || []} />
+                </Section>
+                <Section title="Top vật tư cấp phát nhiều" subtitle="Vật tư có tổng số lượng cấp phát cao nhất trong kỳ.">
+                  <RankingTable rows={statistics?.topDispensedConsumables || []} valueLabel="Số lượng" emptyText="Chưa có dữ liệu cấp phát trong kỳ." />
+                </Section>
+              </div>
             </>
           )}
 
           {activeTab === 'operations' && (
             <>
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-3">
+                <Section title="Top nhân viên mượn nhiều" subtitle="Nhân viên có số lượt mượn tài sản cao nhất trong kỳ.">
+                  <PersonRankingTable rows={statistics?.topBorrowedUsers || []} emptyText="Chưa có dữ liệu mượn trong kỳ." />
+                </Section>
+                <Section title="Top phòng mượn nhiều" subtitle="Phòng / vị trí tiếp nhận thiết bị mượn nhiều nhất trong kỳ.">
+                  <LocationRankingTable rows={statistics?.topBorrowedLocations || []} emptyText="Chưa có dữ liệu phòng mượn." />
+                </Section>
                 <Section title="Top thiết bị phát sinh ticket" subtitle="Các thiết bị có nhiều ticket nhất trong kỳ.">
                   <RankingTable rows={statistics?.topProblemAssets || []} valueLabel="Ticket" emptyText="Chưa có dữ liệu ticket thiết bị." />
                 </Section>
@@ -627,7 +759,7 @@ function AssetStatisticsManagement() {
                     {(statistics?.ticketStatus || []).some((item) => item.count > 0) ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={withColors(statistics.ticketStatus)} dataKey="count" nameKey="label" outerRadius={96}>
+                          <Pie data={withColors(statistics.ticketStatus)} dataKey="count" nameKey="label" outerRadius={88}>
                             {withColors(statistics.ticketStatus).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
                           </Pie>
                           <Tooltip content={<ChartTooltip />} />
@@ -639,9 +771,26 @@ function AssetStatisticsManagement() {
                 </Section>
               </div>
 
-              <Section title="Kiểm kê gần đây" subtitle="Các phiên kiểm kê trong khoảng thời gian lọc.">
-                <AuditList rows={statistics?.recentAudits || []} />
-              </Section>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <Section title="Kết quả kiểm kê" subtitle="Phân bổ trạng thái các phiên kiểm kê trong kỳ.">
+                  <div className="h-72">
+                    {(statistics?.auditStatus || []).some((item) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={withColors(statistics.auditStatus)} dataKey="count" nameKey="label" outerRadius={88}>
+                            {withColors(statistics.auditStatus).map((entry) => <Cell key={entry.label} fill={entry.fill} />)}
+                          </Pie>
+                          <Tooltip content={<ChartTooltip />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : <EmptyState text="Chưa có dữ liệu kiểm kê." />}
+                  </div>
+                </Section>
+                <Section title="Kiểm kê gần đây" subtitle="Các phiên kiểm kê trong khoảng thời gian lọc.">
+                  <AuditList rows={statistics?.recentAudits || []} />
+                </Section>
+              </div>
             </>
           )}
         </>

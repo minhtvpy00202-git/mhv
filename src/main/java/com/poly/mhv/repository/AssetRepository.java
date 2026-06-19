@@ -60,7 +60,11 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             left join a.homeLocation hl
             join a.category c
             left join a.supplier s
-            where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
+            where (
+                    coalesce(:name, '') = ''
+                    or lower(a.name) like lower(concat('%', :name, '%'))
+                    or lower(a.qaCode) like lower(concat('%', :name, '%'))
+                  )
               and (
                     :status is null
                     or (
@@ -106,6 +110,42 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                     )
                     )
               )
+              and (
+                    :technicalStatus is null
+                    or a.trackingMode = 'CONSUMABLE'
+                    or (
+                        (:technicalStatus = 'Hoạt động tốt'
+                            and coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hoạt động tốt'
+                            and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc'))
+                        or (:technicalStatus = 'Hỏng'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hỏng'
+                                or coalesce(a.status, '') = 'Hỏng'
+                            )
+                            and coalesce(a.status, '') <> 'Bảo trì')
+                        or (:technicalStatus = 'Thất lạc'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Thất lạc'
+                                or coalesce(a.status, '') = 'Thất lạc'
+                            ))
+                    )
+              )
+              and (
+                    :usageStatus is null
+                    or a.trackingMode = 'CONSUMABLE'
+                    or (
+                        (:usageStatus = 'Tại vị trí gốc' and not (
+                            coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                            or a.status = 'Đang sử dụng'
+                            or (hl.id is not null and l.id <> hl.id)
+                        ))
+                        or (:usageStatus = 'Đang cho mượn' and (
+                            coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                            or a.status = 'Đang sử dụng'
+                            or (hl.id is not null and l.id <> hl.id)
+                        ))
+                    )
+              )
               and (:trackingMode is null or a.trackingMode = :trackingMode)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)
@@ -113,6 +153,8 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     Page<AssetAdminListItemResponse> searchForAdmin(
             @Param("name") String name,
             @Param("status") String status,
+            @Param("technicalStatus") String technicalStatus,
+            @Param("usageStatus") String usageStatus,
             @Param("trackingMode") String trackingMode,
             @Param("categoryId") Integer categoryId,
             @Param("locationId") Integer locationId,

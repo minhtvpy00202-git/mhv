@@ -10,6 +10,9 @@ import {
   IconPackage as Package,
   IconPackageImport as PackagePlus,
   IconPlus as Plus,
+  IconPrinter as Printer,
+  IconUpload as Upload,
+  IconFileSpreadsheet as FileSpreadsheet,
   IconQrcode as QrCode,
   IconRefresh as RefreshCw,
   IconSearch as Search,
@@ -417,8 +420,6 @@ function getInitialTrackingMode(initialSection, restrictToConsumable) {
 function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed', showTabSwitcher = false }) {
   const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
-  const categoryFilterRef = useRef(null)
-  const locationFilterRef = useRef(null)
   const supplierOptionsRef = useRef(null)
   const { user } = useAuth()
   const [assets, setAssets] = useState([])
@@ -432,8 +433,14 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [qrImage, setQrImage] = useState('')
   const [qrModalImage, setQrModalImage] = useState('')
   const [qrModalQaCode, setQrModalQaCode] = useState('')
+  const [qrModalAssetName, setQrModalAssetName] = useState('')
   const [showQrModal, setShowQrModal] = useState(false)
   const [qrModalLoading, setQrModalLoading] = useState(false)
+  const [bulkQrPrinting, setBulkQrPrinting] = useState(false)
+  const [qrSelectionMode, setQrSelectionMode] = useState(false)
+  const [selectedQrQaCodes, setSelectedQrQaCodes] = useState(() => new Set())
+  const [selectedQrAssetCache, setSelectedQrAssetCache] = useState({})
+  const [showBulkQrPreview, setShowBulkQrPreview] = useState(false)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineAsset, setTimelineAsset] = useState(null)
   const [confirmDialog, setConfirmDialog] = useState(createDefaultConfirmDialog)
@@ -518,8 +525,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   })
   const [formMode, setFormMode] = useState('create')
   const [selectedQaCode, setSelectedQaCode] = useState(null)
-  const [showCategoryFilterOptions, setShowCategoryFilterOptions] = useState(false)
-  const [showLocationFilterOptions, setShowLocationFilterOptions] = useState(false)
   const [showSupplierOptions, setShowSupplierOptions] = useState(false)
   const [supplierKeyword, setSupplierKeyword] = useState('')
   const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false)
@@ -527,11 +532,18 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [supplierForm, setSupplierForm] = useState({ name: '', address: '', phoneNumber: '' })
   const [supplierFormErrors, setSupplierFormErrors] = useState({})
   const [activeTab, setActiveTab] = useState(initialTrackingMode)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [openActionMenuQaCode, setOpenActionMenuQaCode] = useState(null)
+  const [actionMenuPos, setActionMenuPos] = useState({ top: 0, bottom: 'auto', right: 0 })
   const [consumableWorkspace, setConsumableWorkspace] = useState('OVERVIEW')
   const [showConsumableOverviewSummary, setShowConsumableOverviewSummary] = useState(false)
   const [showExpiredLotsSummary, setShowExpiredLotsSummary] = useState(false)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [importPreview, setImportPreview] = useState(null)
+  const [importPreviewing, setImportPreviewing] = useState(false)
+  const [importCommitting, setImportCommitting] = useState(false)
+  const importFileInputRef = useRef(null)
   const [roomSearchKeyword, setRoomSearchKeyword] = useState('')
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
   const [consumableStatusCounts, setConsumableStatusCounts] = useState(defaultConsumableStatusCounts)
@@ -539,12 +551,15 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [filters, setFilters] = useState({
     name: '',
     status: '',
+    technicalStatus: '',
+    usageStatus: '',
     trackingMode: initialTrackingMode,
     categoryId: '',
     locationId: '',
     categoryKeyword: '',
     locationKeyword: '',
   })
+  const [itemizedFilterDraft, setItemizedFilterDraft] = useState(filters)
   const [form, setForm] = useState({
     trackingMode: initialTrackingMode,
     name: '',
@@ -606,17 +621,69 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   })
 
   const filteredCategoryOptions = useMemo(() => {
-    const keyword = filters.categoryKeyword.trim().toLowerCase()
+    const keyword = (isConsumableTab ? filters.categoryKeyword : itemizedFilterDraft.categoryKeyword).trim().toLowerCase()
     const matchingCategories = categories.filter((category) => categoryMatchesTrackingMode(category, activeTrackingMode))
     if (!keyword) return matchingCategories
     return matchingCategories.filter((category) => getCategoryLabel(category).toLowerCase().includes(keyword))
-  }, [activeTrackingMode, categories, filters.categoryKeyword])
-  const filteredLocationFilterOptions = useMemo(() => {
-    const keyword = filters.locationKeyword.trim().toLowerCase()
-    const sortedLocations = [...locations].sort((left, right) => left.roomName.localeCompare(right.roomName, 'vi'))
-    if (!keyword) return sortedLocations
-    return sortedLocations.filter((location) => String(location?.roomName || '').toLowerCase().includes(keyword))
-  }, [filters.locationKeyword, locations])
+  }, [activeTrackingMode, categories, filters.categoryKeyword, isConsumableTab, itemizedFilterDraft.categoryKeyword])
+  const sortedLocations = useMemo(
+    () => [...locations].sort((left, right) => left.roomName.localeCompare(right.roomName, 'vi')),
+    [locations],
+  )
+  const hasActiveItemizedFilters = useMemo(
+    () => Boolean(
+      filters.name.trim() ||
+      filters.status ||
+      filters.technicalStatus ||
+      filters.usageStatus ||
+      filters.categoryId ||
+      filters.locationId ||
+      itemizedFilterDraft.name.trim() ||
+      itemizedFilterDraft.status ||
+      itemizedFilterDraft.technicalStatus ||
+      itemizedFilterDraft.usageStatus ||
+      itemizedFilterDraft.categoryId ||
+      itemizedFilterDraft.locationId
+    ),
+    [
+      filters.name,
+      filters.status,
+      filters.technicalStatus,
+      filters.usageStatus,
+      filters.categoryId,
+      filters.locationId,
+      itemizedFilterDraft.name,
+      itemizedFilterDraft.status,
+      itemizedFilterDraft.technicalStatus,
+      itemizedFilterDraft.usageStatus,
+      itemizedFilterDraft.categoryId,
+      itemizedFilterDraft.locationId,
+    ],
+  )
+  const hasPendingItemizedFilterChanges = useMemo(
+    () => (
+      itemizedFilterDraft.name.trim() !== filters.name.trim() ||
+      itemizedFilterDraft.status !== filters.status ||
+      itemizedFilterDraft.technicalStatus !== filters.technicalStatus ||
+      itemizedFilterDraft.usageStatus !== filters.usageStatus ||
+      itemizedFilterDraft.categoryId !== filters.categoryId ||
+      itemizedFilterDraft.locationId !== filters.locationId
+    ),
+    [
+      filters.name,
+      filters.status,
+      filters.technicalStatus,
+      filters.usageStatus,
+      filters.categoryId,
+      filters.locationId,
+      itemizedFilterDraft.name,
+      itemizedFilterDraft.status,
+      itemizedFilterDraft.technicalStatus,
+      itemizedFilterDraft.usageStatus,
+      itemizedFilterDraft.categoryId,
+      itemizedFilterDraft.locationId,
+    ],
+  )
   const formCategoryOptions = useMemo(
     () => categories.filter((category) => categoryMatchesTrackingMode(category, form.trackingMode)),
     [categories, form.trackingMode],
@@ -635,12 +702,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   useEffect(() => {
     const handlePointerDownOutside = (event) => {
       const target = event.target
-      if (showCategoryFilterOptions && categoryFilterRef.current && !categoryFilterRef.current.contains(target)) {
-        setShowCategoryFilterOptions(false)
-      }
-      if (showLocationFilterOptions && locationFilterRef.current && !locationFilterRef.current.contains(target)) {
-        setShowLocationFilterOptions(false)
-      }
       if (showSupplierOptions && supplierOptionsRef.current && !supplierOptionsRef.current.contains(target)) {
         setShowSupplierOptions(false)
       }
@@ -650,7 +711,26 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     return () => {
       document.removeEventListener('pointerdown', handlePointerDownOutside)
     }
-  }, [showCategoryFilterOptions, showLocationFilterOptions, showSupplierOptions])
+  }, [showSupplierOptions])
+
+  useEffect(() => {
+    if (!openActionMenuQaCode) return
+    const handleOutside = () => setOpenActionMenuQaCode(null)
+    document.addEventListener('pointerdown', handleOutside)
+    return () => document.removeEventListener('pointerdown', handleOutside)
+  }, [openActionMenuQaCode])
+
+  const itemizedAssetsOnPage = useMemo(
+    () => assets.filter((asset) => !isConsumableMode(asset.trackingMode)),
+    [assets],
+  )
+  const selectedQrAssets = useMemo(
+    () => [...selectedQrQaCodes].map((qaCode) => selectedQrAssetCache[qaCode]).filter(Boolean),
+    [selectedQrAssetCache, selectedQrQaCodes],
+  )
+  const selectedQrCountOnPage = itemizedAssetsOnPage.filter((asset) => selectedQrQaCodes.has(asset.qaCode)).length
+  const allPageQrSelected = itemizedAssetsOnPage.length > 0 && selectedQrCountOnPage === itemizedAssetsOnPage.length
+  const somePageQrSelected = selectedQrCountOnPage > 0 && !allPageQrSelected
 
   const selectedSpecsEntries = useMemo(() => parseSpecsToEntries(selectedSpecsAsset?.specs), [selectedSpecsAsset])
   const isEditing = formMode === 'update' && Boolean(selectedQaCode)
@@ -769,6 +849,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     }
     if ((nextFilters.name || '').trim()) params.name = nextFilters.name.trim()
     if (nextFilters.status) params.status = nextFilters.status
+    if (nextFilters.technicalStatus) params.technicalStatus = nextFilters.technicalStatus
+    if (nextFilters.usageStatus) params.usageStatus = nextFilters.usageStatus
     if (nextFilters.trackingMode) params.trackingMode = nextFilters.trackingMode
     if (nextFilters.categoryId) params.categoryId = Number(nextFilters.categoryId)
     if (nextFilters.locationId) params.locationId = Number(nextFilters.locationId)
@@ -998,6 +1080,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
           await loadConsumableStatusCounts({
             name: '',
             status: '',
+            technicalStatus: '',
+            usageStatus: '',
             trackingMode: 'CONSUMABLE',
             categoryId: '',
             locationId: '',
@@ -1018,8 +1102,9 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   }, [loadConsumableStatusCounts, restrictToConsumable])
 
   useDebouncedEffect(() => {
+    if (!isConsumableTab) return
     void loadAssets(0, filters)
-  }, [filters.name, filters.status, filters.trackingMode, filters.categoryId, filters.locationId], 300, true)
+  }, [filters.name, filters.status, filters.technicalStatus, filters.usageStatus, filters.trackingMode, filters.categoryId, filters.locationId, isConsumableTab], 300, true)
 
   useEffect(() => {
     if (!isConsumableTab || !isAdmin) return
@@ -1078,6 +1163,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     const nextFilters = {
       name: '',
       status: '',
+      technicalStatus: '',
+      usageStatus: '',
       trackingMode: nextTab,
       categoryId: '',
       locationId: '',
@@ -1086,8 +1173,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     }
     setActiveTab(nextTab)
     setFilters(nextFilters)
+    setItemizedFilterDraft(nextFilters)
     setSortState(defaultSortState)
-    setShowCategoryFilterOptions(false)
     setQrImage('')
     setConsumableWorkspace('OVERVIEW')
     if (showFormModal) {
@@ -1239,6 +1326,61 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       toast.error(message)
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handleImportTemplate = async () => {
+    try {
+      const response = await axiosClient.get('/api/assets/import/template', { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'mau-nhap-tai-san.xlsx')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Không tải được file mẫu.')
+    }
+  }
+
+  const handleImportPreview = async (file) => {
+    setImportPreviewing(true)
+    setImportPreview(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await axiosClient.post('/api/assets/import/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setImportPreview(response.data)
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể đọc file. Hãy kiểm tra định dạng.')
+    } finally {
+      setImportPreviewing(false)
+    }
+  }
+
+  const handleImportCommit = async () => {
+    if (!importFile) return
+    setImportCommitting(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', importFile)
+      const response = await axiosClient.post('/api/assets/import/commit', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const { imported, skipped } = response.data
+      toast.success(`Đã nhập thành công ${imported} tài sản. ${skipped > 0 ? `Bỏ qua ${skipped} dòng lỗi.` : ''}`)
+      setShowImportModal(false)
+      setImportFile(null)
+      setImportPreview(null)
+      void loadAssets()
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Nhập tài sản thất bại.')
+    } finally {
+      setImportCommitting(false)
     }
   }
 
@@ -1494,13 +1636,17 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   }
 
   const handleSearch = async () => {
-    await loadAssets(0)
+    const nextFilters = isConsumableTab ? filters : itemizedFilterDraft
+    setFilters(nextFilters)
+    await loadAssets(0, nextFilters)
   }
 
   const handleResetFilters = async () => {
     const reset = {
       name: '',
       status: '',
+      technicalStatus: '',
+      usageStatus: '',
       trackingMode: activeTrackingMode,
       categoryId: '',
       locationId: '',
@@ -1508,6 +1654,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       locationKeyword: '',
     }
     setFilters(reset)
+    setItemizedFilterDraft(reset)
     await loadAssets(0, reset)
   }
 
@@ -1913,36 +2060,334 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     }
   }
 
-  const handleOpenQrModal = async (qaCode) => {
+  const fetchQrDataUrl = async (qaCode) => {
+    let qrCodeBase64 = ''
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await axiosClient.get(`/api/assets/${qaCode}/qr`)
+      qrCodeBase64 = String(response.data?.qrCodeBase64 || '').trim()
+      if (qrCodeBase64) break
+      if (attempt === 0) {
+        await sleep(300)
+      }
+    }
+    if (!qrCodeBase64) {
+      throw new Error('Không lấy được mã QR của thiết bị này.')
+    }
+    return `data:image/png;base64,${qrCodeBase64}`
+  }
+
+  const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]))
+
+  const openQrPrintWindow = ({ qaCode, name, qrDataUrl, printWindow: existingPrintWindow }) => {
+    const printWindow = existingPrintWindow || window.open('', '_blank', 'width=420,height=560')
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép pop-up rồi thử lại.')
+      return
+    }
+
+    const safeQaCode = escapeHtml(qaCode)
+    const safeName = escapeHtml(name)
+
+    printWindow.document.open()
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>In mã QR ${safeQaCode}</title>
+          <style>
+            @page { size: 80mm 100mm; margin: 8mm; }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: Arial, sans-serif;
+              color: #111827;
+              text-align: center;
+            }
+            .label {
+              display: flex;
+              min-height: 80mm;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 8px;
+            }
+            img {
+              width: 58mm;
+              height: 58mm;
+              object-fit: contain;
+            }
+            .code {
+              font-size: 14px;
+              font-weight: 700;
+            }
+            .name {
+              max-width: 64mm;
+              font-size: 11px;
+              line-height: 1.35;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <img src="${qrDataUrl}" alt="QR ${safeQaCode}" />
+            <div class="code">Mã tài sản: ${safeQaCode}</div>
+            ${safeName ? `<div class="name">${safeName}</div>` : ''}
+          </div>
+          <script>
+            window.onload = () => {
+              window.focus();
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
+  const openBulkQrPrintWindow = ({ labels, printWindow }) => {
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép pop-up rồi thử lại.')
+      return
+    }
+
+    const labelHtml = labels.map((label) => {
+      const safeQaCode = escapeHtml(label.qaCode)
+      const safeName = escapeHtml(label.name)
+      return `
+        <div class="label">
+          <img src="${label.qrDataUrl}" alt="QR ${safeQaCode}" />
+          <div class="code">${safeQaCode}</div>
+          ${safeName ? `<div class="name">${safeName}</div>` : ''}
+        </div>
+      `
+    }).join('')
+
+    printWindow.document.open()
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>In QR hàng loạt</title>
+          <style>
+            @page { size: A4; margin: 10mm; }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              font-family: Arial, sans-serif;
+              color: #111827;
+            }
+            .grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 8mm;
+            }
+            .label {
+              break-inside: avoid;
+              min-height: 82mm;
+              border: 1px dashed #cbd5e1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+              padding: 6mm;
+              text-align: center;
+            }
+            img {
+              width: 48mm;
+              height: 48mm;
+              object-fit: contain;
+            }
+            .code {
+              font-size: 13px;
+              font-weight: 700;
+            }
+            .name {
+              max-width: 72mm;
+              font-size: 10px;
+              line-height: 1.35;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="grid">${labelHtml}</div>
+          <script>
+            window.onload = () => {
+              window.focus();
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
+  const handleOpenQrModal = async (asset) => {
+    const qaCode = typeof asset === 'string' ? asset : asset?.qaCode
+    if (!qaCode) return
     setQrModalLoading(true)
     try {
-      let qrCodeBase64 = ''
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const response = await axiosClient.get(`/api/assets/${qaCode}/qr`)
-        qrCodeBase64 = String(response.data?.qrCodeBase64 || '').trim()
-        if (qrCodeBase64) break
-        if (attempt === 0) {
-          await sleep(300)
-        }
-      }
-      if (!qrCodeBase64) {
-        toast.error('Không lấy được mã QR của thiết bị này.')
-        return
-      }
+      const qrDataUrl = await fetchQrDataUrl(qaCode)
       setQrModalQaCode(qaCode)
-      setQrModalImage(`data:image/png;base64,${qrCodeBase64}`)
+      setQrModalAssetName(typeof asset === 'string' ? '' : asset?.name || '')
+      setQrModalImage(qrDataUrl)
       setShowQrModal(true)
     } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể tải mã QR của thiết bị.'
+      const message = error?.response?.data?.message || error?.message || 'Không thể tải mã QR của thiết bị.'
       toast.error(message)
     } finally {
       setQrModalLoading(false)
     }
   }
 
+  const handlePrintQr = async (asset) => {
+    const printWindow = window.open('', '_blank', 'width=420,height=560')
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép pop-up rồi thử lại.')
+      return
+    }
+    printWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 16px;">Đang tải mã QR...</p>')
+    try {
+      const qrDataUrl = await fetchQrDataUrl(asset.qaCode)
+      openQrPrintWindow({ qaCode: asset.qaCode, name: asset.name, qrDataUrl, printWindow })
+    } catch (error) {
+      printWindow.close()
+      const message = error?.response?.data?.message || error?.message || 'Không thể in mã QR của thiết bị.'
+      toast.error(message)
+    }
+  }
+
+  const handleToggleQrSelection = (asset) => {
+    const qaCode = asset?.qaCode || asset
+    if (!qaCode) return
+    setSelectedQrQaCodes((previous) => {
+      const next = new Set(previous)
+      if (next.has(qaCode)) {
+        next.delete(qaCode)
+      } else {
+        next.add(qaCode)
+      }
+      return next
+    })
+    setSelectedQrAssetCache((previous) => {
+      if (previous[qaCode]) {
+        const next = { ...previous }
+        delete next[qaCode]
+        return next
+      }
+      return asset?.qaCode ? { ...previous, [qaCode]: asset } : previous
+    })
+  }
+
+  const handleToggleAllPageQrSelection = () => {
+    setSelectedQrQaCodes((previous) => {
+      const next = new Set(previous)
+      if (allPageQrSelected) {
+        itemizedAssetsOnPage.forEach((asset) => next.delete(asset.qaCode))
+      } else {
+        itemizedAssetsOnPage.forEach((asset) => next.add(asset.qaCode))
+      }
+      return next
+    })
+    setSelectedQrAssetCache((previous) => {
+      const next = { ...previous }
+      if (allPageQrSelected) {
+        itemizedAssetsOnPage.forEach((asset) => {
+          delete next[asset.qaCode]
+        })
+      } else {
+        itemizedAssetsOnPage.forEach((asset) => {
+          next[asset.qaCode] = asset
+        })
+      }
+      return next
+    })
+  }
+
+  const handleCancelQrSelection = () => {
+    setQrSelectionMode(false)
+    setShowBulkQrPreview(false)
+    setSelectedQrQaCodes(new Set())
+    setSelectedQrAssetCache({})
+  }
+
+  const handleOpenBulkQrPreview = () => {
+    if (selectedQrAssets.length === 0) {
+      toast.info('Vui lòng chọn ít nhất một tài sản để in QR.')
+      return
+    }
+    setShowBulkQrPreview(true)
+  }
+
+  const handlePrintSelectedQrs = async () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700')
+    if (!printWindow) {
+      toast.error('Trình duyệt đã chặn cửa sổ in. Vui lòng cho phép pop-up rồi thử lại.')
+      return
+    }
+
+    setBulkQrPrinting(true)
+    printWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 16px;">Đang tải mã QR hàng loạt...</p>')
+    try {
+      const results = await Promise.allSettled(
+        selectedQrAssets.map(async (asset) => ({
+          qaCode: asset.qaCode,
+          name: asset.name,
+          qrDataUrl: await fetchQrDataUrl(asset.qaCode),
+        })),
+      )
+      const labels = results
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value)
+
+      if (labels.length === 0) {
+        printWindow.close()
+        toast.error('Không tải được mã QR nào để in.')
+        return
+      }
+
+      openBulkQrPrintWindow({ labels, printWindow })
+      const failedCount = results.length - labels.length
+      if (failedCount > 0) {
+        toast.warning(`Đã bỏ qua ${failedCount} tài sản không tải được QR.`)
+      }
+      handleCancelQrSelection()
+    } catch (error) {
+      printWindow.close()
+      const message = error?.response?.data?.message || error?.message || 'Không thể in QR hàng loạt.'
+      toast.error(message)
+    } finally {
+      setBulkQrPrinting(false)
+    }
+  }
+
+  const handlePrintCurrentQr = () => {
+    if (!qrModalImage || !qrModalQaCode) return
+    openQrPrintWindow({ qaCode: qrModalQaCode, name: qrModalAssetName, qrDataUrl: qrModalImage })
+  }
+
+  const handleDownloadCurrentQr = () => {
+    if (!qrModalImage || !qrModalQaCode) return
+    const link = document.createElement('a')
+    link.href = qrModalImage
+    link.download = `qr-${qrModalQaCode}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const handleCloseQrModal = () => {
     setShowQrModal(false)
     setQrModalQaCode('')
+    setQrModalAssetName('')
     setQrModalImage('')
   }
 
@@ -1970,11 +2415,43 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
-          </p>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {restrictToConsumable ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.' : 'Tài sản cố định và vật tư tiêu hao.'}
+            </p>
+          </div>
+          {!isConsumableTab && (
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={openCreateModal}
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                <Plus size={15} />
+                Thêm tài sản
+              </button>
+              <button
+                type="button"
+                onClick={() => { setImportFile(null); setImportPreview(null); setShowImportModal(true) }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+              >
+                <Upload size={15} />
+                Nhập Excel
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                disabled={downloading}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                <Download size={15} />
+                Xuất Excel
+              </button>
+            </div>
+          )}
         </div>
         {!restrictToConsumable && showTabSwitcher && (
         <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -3221,127 +3698,138 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
               <div className="relative min-w-0 flex-1">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
-                  value={filters.name}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, name: e.target.value }))}
+                  value={itemizedFilterDraft.name}
+                  onChange={(e) => setItemizedFilterDraft((prev) => ({ ...prev, name: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="Tìm tên hoặc mã QA"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowAdvancedFilters((v) => !v)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${showAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-              >
-                <ChevronDown size={14} className={`transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
-                Bộ lọc nâng cao
-              </button>
-              <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
-              <button
-                type="button"
-                onClick={handleSearch}
-                disabled={loading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-              >
-                Lọc
-              </button>
-              <button
-                type="button"
-                onClick={openCreateModal}
-                disabled={submitting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-              >
-                <Plus size={15} />
-                Thêm tài sản
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadExcel}
-                disabled={downloading}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                Xuất Excel
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${showAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                >
+                  <ChevronDown size={14} className={`transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+                  Bộ lọc nâng cao
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSearch}
+                  disabled={loading}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
+                    hasPendingItemizedFilterChanges
+                      ? 'bg-fptOrangeDark shadow-sm ring-2 ring-orange-200 hover:bg-fptOrange'
+                      : 'bg-fptOrange hover:bg-fptOrangeDark'
+                  }`}
+                >
+                  Lọc
+                </button>
+                {hasActiveItemizedFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    disabled={loading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Xóa bộ lọc
+                  </button>
+                )}
+              </div>
             </div>
 
+            {hasPendingItemizedFilterChanges && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                Có thay đổi bộ lọc chưa áp dụng. Bấm Lọc để cập nhật danh sách.
+              </p>
+            )}
+
             {showAdvancedFilters && (
-              <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-3">
-                <div ref={categoryFilterRef} className="relative">
-                  <input
-                    value={filters.categoryKeyword}
-                    onFocus={() => setShowCategoryFilterOptions(true)}
+              <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                    Loại thiết bị
+                  </label>
+                  <select
+                    value={itemizedFilterDraft.categoryId}
                     onChange={(e) => {
-                      setFilters((prev) => ({ ...prev, categoryKeyword: e.target.value, categoryId: '' }))
-                      setShowCategoryFilterOptions(true)
+                      const categoryId = e.target.value
+                      setItemizedFilterDraft((prev) => ({
+                        ...prev,
+                        categoryId,
+                        categoryKeyword: getCategoryLabel(categories.find((category) => String(category.id) === categoryId)) || '',
+                      }))
                     }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder="Loại thiết bị (gõ để lọc)"
-                  />
-                  {showCategoryFilterOptions && (
-                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <button type="button" onClick={() => { setFilters((prev) => ({ ...prev, categoryId: '', categoryKeyword: '' })); setShowCategoryFilterOptions(false) }}
-                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
-                        Tất cả loại
-                      </button>
-                      {filteredCategoryOptions.map((category) => (
-                        <button key={category.id} type="button"
-                          onClick={() => { setFilters((prev) => ({ ...prev, categoryId: String(category.id), categoryKeyword: getCategoryLabel(category) })); setShowCategoryFilterOptions(false) }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
-                          {getCategoryLabel(category)}
-                        </button>
-                      ))}
-                      {filteredCategoryOptions.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Không có loại phù hợp.</p>}
-                    </div>
-                  )}
+                  >
+                    <option value="">Tất cả loại</option>
+                    {filteredCategoryOptions.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {getCategoryLabel(category)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                >
-                  <option value="">Tất cả trạng thái</option>
-                  {itemizedStatusOptions.map((status) => (
-                    <option key={status.value} value={status.value}>{status.label}</option>
-                  ))}
-                </select>
-                <div ref={locationFilterRef} className="relative">
-                  <input
-                    value={filters.locationKeyword}
-                    onFocus={() => setShowLocationFilterOptions(true)}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                    Tình trạng kỹ thuật
+                  </label>
+                  <select
+                    value={itemizedFilterDraft.technicalStatus}
+                    onChange={(e) => setItemizedFilterDraft((prev) => ({ ...prev, status: '', technicalStatus: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="">Tất cả kỹ thuật</option>
+                    {technicalStatusOptions.map((status) => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                    Trạng thái sử dụng
+                  </label>
+                  <select
+                    value={itemizedFilterDraft.usageStatus}
+                    onChange={(e) => setItemizedFilterDraft((prev) => ({ ...prev, status: '', usageStatus: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="">Tất cả sử dụng</option>
+                    {usageStatusOptions.map((status) => (
+                      <option key={status.value} value={status.value}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                    Phòng / vị trí
+                  </label>
+                  <select
+                    value={itemizedFilterDraft.locationId}
                     onChange={(e) => {
-                      setFilters((prev) => ({ ...prev, locationKeyword: e.target.value, locationId: '' }))
-                      setShowLocationFilterOptions(true)
+                      const locationId = e.target.value
+                      const location = sortedLocations.find((item) => String(item.id) === locationId)
+                      setItemizedFilterDraft((prev) => ({
+                        ...prev,
+                        locationId,
+                        locationKeyword: location?.roomName || '',
+                      }))
                     }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                    placeholder="Phòng (gõ để lọc)"
-                  />
-                  {showLocationFilterOptions && (
-                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                      <button type="button" onClick={() => { setFilters((prev) => ({ ...prev, locationId: '', locationKeyword: '' })); setShowLocationFilterOptions(false) }}
-                        className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
-                        Tất cả phòng
-                      </button>
-                      {filteredLocationFilterOptions.map((location) => (
-                        <button key={location.id} type="button"
-                          onClick={() => { setFilters((prev) => ({ ...prev, locationId: String(location.id), locationKeyword: location.roomName || '' })); setShowLocationFilterOptions(false) }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50 dark:text-slate-200 dark:hover:bg-orange-500/10">
-                          {location.roomName}
-                        </button>
-                      ))}
-                      {filteredLocationFilterOptions.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>}
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2 md:col-span-3">
-                  <button type="button" onClick={handleResetFilters} disabled={loading}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300">
-                    <X size={14} /> Xóa bộ lọc
-                  </button>
+                  >
+                    <option value="">Tất cả phòng</option>
+                    {sortedLocations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.roomName}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -3350,162 +3838,223 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Danh sách tài sản cố định</h2>
-              <div className="flex items-center gap-3">
-                <p className="text-sm text-slate-500">Tổng: {pageInfo.totalItems}</p>
-                <ColumnVisibilityDropdown
-                  columns={itemizedAssetColumnOptions}
-                  visibleColumns={itemizedAssetColumns.visibleColumns}
-                  selectedCount={itemizedAssetColumns.selectedCount}
-                  allSelected={itemizedAssetColumns.allSelected}
-                  onToggleColumn={(columnKey) => handleColumnToggleWithGuard(
-                    columnKey,
-                    itemizedAssetColumns.visibleColumns,
-                    itemizedAssetColumns.selectedCount,
-                    itemizedAssetColumns.toggleColumn,
-                  )}
-                  onSelectAll={itemizedAssetColumns.selectAllColumns}
-                  onResetDefault={itemizedAssetColumns.resetDefaultColumns}
-                />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!qrSelectionMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setQrSelectionMode(true)}
+                    disabled={loading || itemizedAssetsOnPage.length === 0}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                  >
+                    <Printer size={14} />
+                    In mã QR
+                  </button>
+                ) : (
+                  <>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                      Đã chọn {selectedQrAssets.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleOpenBulkQrPreview}
+                      disabled={loading || bulkQrPrinting || selectedQrAssets.length === 0}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300 dark:hover:bg-blue-500/20"
+                    >
+                      <Printer size={14} />
+                      {bulkQrPrinting ? 'Đang tải QR...' : 'In QR đã chọn'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelQrSelection}
+                      disabled={bulkQrPrinting}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      Hủy chọn
+                    </button>
+                  </>
+                )}
+                <p className="text-xs font-medium text-slate-400 dark:text-slate-500">Tổng: {pageInfo.totalItems}</p>
               </div>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
-              <table className="min-w-max divide-y divide-slate-200 text-sm dark:divide-slate-800">
+              <table className={`${qrSelectionMode ? 'min-w-[1040px]' : 'min-w-[980px]'} divide-y divide-slate-200 text-xs dark:divide-slate-800`}>
                 <thead className="bg-slate-50 dark:bg-slate-900">
-                <tr>
-                  {itemizedAssetColumns.visibleColumns.qaCode && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('qaCode')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('qaCode', 'Mã QA')}
-                    </button>
-                  </th>}
-                  {itemizedAssetColumns.visibleColumns.name && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('name', 'Tên thiết bị')}
-                    </button>
-                  </th>}
-                  {itemizedAssetColumns.visibleColumns.category && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('category')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('category', 'Loại')}
-                    </button>
-                  </th>}
-                  {itemizedAssetColumns.visibleColumns.homeLocationName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('homeLocationName', 'Vị trí gốc')}
-                    </button>
-                  </th>}
-                  {itemizedAssetColumns.visibleColumns.currentLocationName && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>}
-                  {itemizedAssetColumns.visibleColumns.status && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                    <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
-                      {getSortLabel('status', 'Tình trạng kỹ thuật')}
-                    </button>
-                  </th>}
-                  {itemizedAssetColumns.visibleColumns.usageStatus && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>}
-                  {itemizedAssetColumns.visibleColumns.specs && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Thuộc tính</th>}
-                  {itemizedAssetColumns.visibleColumns.origin && <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Nguồn gốc tài sản</th>}
-                  {itemizedAssetColumns.visibleColumns.actions && <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>}
-                </tr>
+                  <tr>
+                    {qrSelectionMode && (
+                      <th className="w-10 px-3 py-2 text-left font-semibold text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={allPageQrSelected}
+                          disabled={loading || itemizedAssetsOnPage.length === 0}
+                          onChange={handleToggleAllPageQrSelection}
+                          aria-label={somePageQrSelected ? 'Chọn tất cả tài sản còn lại trên trang' : 'Chọn tất cả tài sản trên trang'}
+                          className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                        />
+                      </th>
+                    )}
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      <button type="button" onClick={() => handleSort('qaCode')} className="whitespace-nowrap hover:text-fptOrange">
+                        {getSortLabel('qaCode', 'Mã QA')}
+                      </button>
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      <button type="button" onClick={() => handleSort('name')} className="whitespace-nowrap hover:text-fptOrange">
+                        {getSortLabel('name', 'Tên thiết bị')}
+                      </button>
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      <button type="button" onClick={() => handleSort('homeLocationName')} className="whitespace-nowrap hover:text-fptOrange">
+                        {getSortLabel('homeLocationName', 'Vị trí gốc')}
+                      </button>
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      <button type="button" onClick={() => handleSort('status')} className="whitespace-nowrap hover:text-fptOrange">
+                        {getSortLabel('status', 'Tình trạng kỹ thuật')}
+                      </button>
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">Trạng thái sử dụng</th>
+                    <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">Thao tác</th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading &&
                     Array.from({ length: 6 }).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="animate-pulse">
-                        {Array.from({ length: itemizedAssetColumns.activeColumns.length }).map((__, cellIndex) => (
+                        {Array.from({ length: qrSelectionMode ? 8 : 7 }).map((__, cellIndex) => (
                           <td key={`cell-${cellIndex}`} className="px-3 py-2">
-                            <div className="h-4 w-24 rounded bg-slate-200" />
+                            <div className="h-3.5 w-24 rounded bg-slate-200" />
                           </td>
                         ))}
                       </tr>
                     ))}
                   {!loading &&
-                    assets.map((asset) => (
-                      <tr key={asset.qaCode} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
-                        {itemizedAssetColumns.visibleColumns.qaCode && <td className="px-3 py-2">{asset.qaCode}</td>}
-                        {itemizedAssetColumns.visibleColumns.name && <td className="px-3 py-2">{asset.name}</td>}
-                        {itemizedAssetColumns.visibleColumns.category && <td className="px-3 py-2">{asset.category}</td>}
-                        {itemizedAssetColumns.visibleColumns.homeLocationName && <td className="px-3 py-2">{asset.homeLocationName || asset.homeLocationId}</td>}
-                        {itemizedAssetColumns.visibleColumns.currentLocationName && <td className="px-3 py-2">{asset.currentLocationName || asset.homeLocationName || asset.homeLocationId}</td>}
-                        {itemizedAssetColumns.visibleColumns.status && <td className="px-3 py-2">
-                          <p>{getTechnicalStatusLabel(asset.technicalStatus || asset.status)}</p>
-                        </td>}
-                        {itemizedAssetColumns.visibleColumns.usageStatus && <td className="px-3 py-2">{getUsageStatusLabel(asset.usageStatus)}</td>}
-                        {itemizedAssetColumns.visibleColumns.specs && <td className="px-3 py-2">
-                          <ActionIconButton
-                            icon={Detail}
-                            label="Xem đặc tính kỹ thuật"
-                            variant="violet"
-                            onClick={async () => {
-                              try {
-                                const detail = await fetchAssetDetail(asset.qaCode)
-                                setSelectedSpecsAsset(detail)
-                                setShowSpecsModal(true)
-                              } catch (error) {
-                                const message = error?.response?.data?.message || 'Không thể tải đặc tính kỹ thuật của thiết bị.'
-                                toast.error(message)
-                              }
-                            }}
-                          />
-                        </td>}
-                        {itemizedAssetColumns.visibleColumns.origin && <td className="px-3 py-2">
-                          <ActionIconButton
-                            icon={Search}
-                            label="Xem nguồn gốc tài sản"
-                            variant="warning"
-                            onClick={async () => {
-                              try {
-                                const detail = await fetchAssetDetail(asset.qaCode)
-                                setSelectedOriginAsset(detail)
-                                setShowOriginModal(true)
-                              } catch (error) {
-                                const message = error?.response?.data?.message || 'Không thể tải nguồn gốc tài sản của thiết bị.'
-                                toast.error(message)
-                              }
-                            }}
-                          />
-                        </td>}
-                        {itemizedAssetColumns.visibleColumns.actions && <td className="px-3 py-2">
-                          <div className="flex justify-end gap-1">
-                            <ActionIconButton
-                              icon={QrCode}
-                              label="Xem mã QR"
-                              variant="success"
-                              onClick={() => handleOpenQrModal(asset.qaCode)}
-                              disabled={qrModalLoading}
-                            />
-                            <ActionIconButton
-                              icon={Search}
-                              label="Xem chi tiết"
-                              variant="primary"
-                              onClick={() => handleSelectAsset(asset)}
-                            />
-                            <div className="relative">
-                              <button
-                                type="button"
-                                title="Thêm thao tác"
-                                onClick={() => setOpenActionMenuQaCode((prev) => prev === asset.qaCode ? null : asset.qaCode)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
-                              >
-                                <ChevronDown size={14} />
-                              </button>
-                              {openActionMenuQaCode === asset.qaCode && (
-                                <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                                  <button type="button" onClick={() => { setTimelineAsset(asset); setShowTimelineModal(true); setOpenActionMenuQaCode(null) }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
-                                    <History size={14} /> Lịch sử sửa chữa
-                                  </button>
-                                  <button type="button" onClick={() => { handleDeleteAsset(asset.qaCode); setOpenActionMenuQaCode(null) }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
-                                    <Trash2 size={14} /> Xóa tài sản
-                                  </button>
-                                </div>
-                              )}
+                    assets.map((asset) => {
+                      const homeLocation = asset.homeLocationName || asset.homeLocationId || '-'
+                      const currentLocation = asset.currentLocationName || asset.homeLocationName || asset.homeLocationId || '-'
+                      return (
+                        <tr key={asset.qaCode} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
+                          {qrSelectionMode && (
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedQrQaCodes.has(asset.qaCode)}
+                                onChange={() => handleToggleQrSelection(asset)}
+                                aria-label={`Chọn ${asset.qaCode} để in QR`}
+                                className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                              />
+                            </td>
+                          )}
+                          <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-800 dark:text-slate-100">{asset.qaCode}</td>
+                          <td className="max-w-[220px] px-3 py-2">
+                            <p className="truncate font-medium text-slate-800 dark:text-slate-100" title={asset.name}>{asset.name}</p>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">{homeLocation}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">{currentLocation}</td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
+                            {getTechnicalStatusLabel(asset.technicalStatus || asset.status)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
+                            {getUsageStatusLabel(asset.usageStatus)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex justify-end gap-1">
+                              <ActionIconButton
+                                icon={QrCode}
+                                label="Xem mã QR"
+                                variant="success"
+                                onClick={() => handleOpenQrModal(asset)}
+                                disabled={qrModalLoading}
+                              />
+                              <ActionIconButton
+                                icon={Wrench}
+                                label="Chỉnh sửa"
+                                variant="primary"
+                                onClick={() => handleSelectAsset(asset)}
+                              />
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  title="Thêm thao tác"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    if (openActionMenuQaCode === asset.qaCode) {
+                                      setOpenActionMenuQaCode(null)
+                                    } else {
+                                      const rect = e.currentTarget.getBoundingClientRect()
+                                      const menuHeight = 210
+                                      const spaceBelow = window.innerHeight - rect.bottom
+                                      const rightOffset = window.innerWidth - rect.right
+                                      if (spaceBelow < menuHeight) {
+                                        setActionMenuPos({ top: 'auto', bottom: window.innerHeight - rect.top + 4, right: rightOffset })
+                                      } else {
+                                        setActionMenuPos({ top: rect.bottom + 4, bottom: 'auto', right: rightOffset })
+                                      }
+                                      setOpenActionMenuQaCode(asset.qaCode)
+                                    }
+                                  }}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+                                >
+                                  <ChevronDown size={14} />
+                                </button>
+                                {openActionMenuQaCode === asset.qaCode && (
+                                  <div
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    style={{ position: 'fixed', top: actionMenuPos.top, bottom: actionMenuPos.bottom, right: actionMenuPos.right, zIndex: 9999 }}
+                                    className="w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                                  >
+                                    <button type="button" onClick={async () => {
+                                      try {
+                                        const detail = await fetchAssetDetail(asset.qaCode)
+                                        setSelectedSpecsAsset(detail)
+                                        setShowSpecsModal(true)
+                                        setOpenActionMenuQaCode(null)
+                                      } catch (error) {
+                                        const message = error?.response?.data?.message || 'Không thể tải đặc tính kỹ thuật của thiết bị.'
+                                        toast.error(message)
+                                      }
+                                    }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
+                                      <Detail size={14} /> Thuộc tính
+                                    </button>
+                                    <button type="button" onClick={async () => {
+                                      try {
+                                        const detail = await fetchAssetDetail(asset.qaCode)
+                                        setSelectedOriginAsset(detail)
+                                        setShowOriginModal(true)
+                                        setOpenActionMenuQaCode(null)
+                                      } catch (error) {
+                                        const message = error?.response?.data?.message || 'Không thể tải nguồn gốc tài sản của thiết bị.'
+                                        toast.error(message)
+                                      }
+                                    }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
+                                      <Search size={14} /> Nguồn gốc
+                                    </button>
+                                    <button type="button" onClick={() => { handlePrintQr(asset); setOpenActionMenuQaCode(null) }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
+                                      <Printer size={14} /> In mã QR
+                                    </button>
+                                    <button type="button" onClick={() => { setTimelineAsset(asset); setShowTimelineModal(true); setOpenActionMenuQaCode(null) }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
+                                      <History size={14} /> Lịch sử sửa chữa
+                                    </button>
+                                    <button type="button" onClick={() => { handleDeleteAsset(asset.qaCode); setOpenActionMenuQaCode(null) }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10">
+                                      <Trash2 size={14} /> Xóa tài sản
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </td>}
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   {!loading && assets.length === 0 && (
                     <tr>
-                      <td colSpan={Math.max(itemizedAssetColumns.activeColumns.length, 1)} className="px-3 py-6 text-center text-sm text-slate-500">
+                      <td colSpan={qrSelectionMode ? 8 : 7} className="px-3 py-6 text-center text-sm text-slate-500">
                         Chưa có tài sản cố định phù hợp.
                       </td>
                     </tr>
@@ -3515,28 +4064,51 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
             </div>
 
             {!loading && pageInfo.totalItems > 0 && (
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
-                {currentPage >= 3 && (
-                  <button type="button" onClick={goToFirstPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
-                    Trang đầu
+              <div className="mt-4 flex flex-col gap-3 text-sm text-slate-600 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Hiển thị {assets.length} / {pageInfo.totalItems} tài sản
+                </p>
+                <div className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <button
+                    type="button"
+                    onClick={goToFirstPage}
+                    disabled={currentPage === 1}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Trang đầu"
+                  >
+                    «
                   </button>
-                )}
-                {currentPage >= 2 && (
-                  <button type="button" onClick={goToPrevPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
-                    Trang trước
+                  <button
+                    type="button"
+                    onClick={goToPrevPage}
+                    disabled={currentPage === 1}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Trang trước"
+                  >
+                    ‹
                   </button>
-                )}
-                <span className="font-semibold text-slate-700">Trang {currentPage}</span>
-                {currentPage < totalPages && (
-                  <button type="button" onClick={goToNextPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
-                    Trang tiếp
+                  <span className="min-w-16 rounded-md bg-orange-50 px-3 py-1.5 text-center text-xs font-bold text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={goToNextPage}
+                    disabled={currentPage >= totalPages}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Trang tiếp"
+                  >
+                    ›
                   </button>
-                )}
-                {currentPage < totalPages && (
-                  <button type="button" onClick={goToLastPage} className="rounded border border-slate-300 px-3 py-1 hover:bg-slate-100">
-                    Trang cuối
+                  <button
+                    type="button"
+                    onClick={goToLastPage}
+                    disabled={currentPage >= totalPages}
+                    className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+                    title="Trang cuối"
+                  >
+                    »
                   </button>
-                )}
+                </div>
               </div>
             )}
           </div>
@@ -4915,22 +5487,133 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         </div>
       )}
 
-      {showQrModal && (
+      {showBulkQrPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-base font-semibold text-slate-800">Mã QR thiết bị {qrModalQaCode}</h4>
+          <div className="w-full max-w-2xl rounded-xl bg-white p-4 shadow-xl dark:bg-slate-900">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">Preview in QR đã chọn</h4>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Sẽ in {selectedQrAssets.length} tem QR theo khổ A4, bố cục 2 cột.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelQrSelection}
+                  disabled={bulkQrPrinting}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Bỏ chọn tất cả
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkQrPreview(false)}
+                  disabled={bulkQrPrinting}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">Mã QA</th>
+                    <th className="px-3 py-2 text-left font-semibold">Tên thiết bị</th>
+                    <th className="px-3 py-2 text-right font-semibold">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {selectedQrAssets.map((asset) => (
+                    <tr key={asset.qaCode} className="bg-white dark:bg-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-800 dark:text-slate-100">{asset.qaCode}</td>
+                      <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{asset.name}</td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleQrSelection(asset)}
+                          disabled={bulkQrPrinting}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-60 dark:text-red-400"
+                        >
+                          Bỏ chọn
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {selectedQrAssets.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-3 py-6 text-center text-sm text-slate-500">
+                        Chưa chọn tài sản nào để in QR.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={handleCloseQrModal}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={() => setShowBulkQrPreview(false)}
+                disabled={bulkQrPrinting}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                Đóng
+                Hủy
               </button>
+              <button
+                type="button"
+                onClick={handlePrintSelectedQrs}
+                disabled={bulkQrPrinting || selectedQrAssets.length === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Printer size={15} />
+                {bulkQrPrinting ? 'Đang tải QR...' : `In ${selectedQrAssets.length} QR`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-base font-semibold text-slate-800">Mã QR thiết bị {qrModalQaCode}</h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintCurrentQr}
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  <Printer size={13} />
+                  In mã QR
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadCurrentQr}
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                >
+                  <Download size={13} />
+                  Tải PNG
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseQrModal}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
             <div className="flex justify-center">
               <img src={qrModalImage} alt={`QR ${qrModalQaCode}`} className="h-[300px] w-[300px] rounded border border-slate-200" />
             </div>
+            {qrModalAssetName && (
+              <p className="mt-3 text-center text-sm font-medium text-slate-700">{qrModalAssetName}</p>
+            )}
           </div>
         </div>
       )}
@@ -5140,6 +5823,162 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         onConfirm={handleConfirmDialogAccept}
         onClose={closeConfirmDialog}
       />
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-3xl rounded-2xl bg-white shadow-2xl dark:bg-slate-950">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={18} className="text-blue-600" />
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nhập tài sản từ Excel</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowImportModal(false); setImportFile(null); setImportPreview(null) }}
+                className="rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium">Hướng dẫn nhập Excel</span>
+                  <button
+                    type="button"
+                    onClick={handleImportTemplate}
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:bg-slate-900 dark:text-blue-300"
+                  >
+                    <Download size={13} />
+                    Tải file mẫu
+                  </button>
+                </div>
+                <ol className="mt-2 list-decimal list-inside space-y-1 text-xs">
+                  <li>Tải file mẫu → mở sheet <strong>Danh mục hợp lệ</strong> để xem tên Loại, Phòng, NCC có trong hệ thống</li>
+                  <li>Điền dữ liệu vào sheet <strong>Nhập tài sản</strong> — tên Loại thiết bị và Phòng gốc phải <strong>khớp chính xác</strong></li>
+                  <li>Upload file → xem trước → xác nhận nhập</li>
+                </ol>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Chọn file Excel (.xlsx)
+                </label>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setImportFile(file)
+                    setImportPreview(null)
+                    void handleImportPreview(file)
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => importFileInputRef.current?.click()}
+                  disabled={importPreviewing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-2.5 text-sm text-slate-600 hover:border-blue-400 hover:text-blue-600 disabled:opacity-60 dark:border-slate-700 dark:text-slate-400"
+                >
+                  <Upload size={15} />
+                  {importFile ? importFile.name : 'Chọn file...'}
+                </button>
+                {importPreviewing && (
+                  <p className="mt-2 text-xs text-slate-500">Đang phân tích file...</p>
+                )}
+              </div>
+
+              {importPreview && (
+                <div>
+                  <div className="mb-3 flex items-center gap-4 text-sm">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      Tổng: {importPreview.totalRows} dòng
+                    </span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      ✓ Hợp lệ: {importPreview.validRows}
+                    </span>
+                    {importPreview.errorRows > 0 && (
+                      <span className="text-red-600 dark:text-red-400">
+                        ✗ Lỗi: {importPreview.errorRows}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+                      <thead className="sticky top-0 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                        <tr>
+                          <th className="px-3 py-2">Dòng</th>
+                          <th className="px-3 py-2">Kiểu</th>
+                          <th className="px-3 py-2">Tên</th>
+                          <th className="px-3 py-2">Loại</th>
+                          <th className="px-3 py-2">Phòng</th>
+                          <th className="px-3 py-2">Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {importPreview.rows.map((row) => (
+                          <tr key={row.rowNumber} className={row.valid
+                            ? 'bg-white dark:bg-slate-950'
+                            : 'bg-red-50 dark:bg-red-500/5'
+                          }>
+                            <td className="px-3 py-2 text-slate-500">{row.rowNumber}</td>
+                            <td className="px-3 py-2">
+                              <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+                                row.trackingMode?.toUpperCase() === 'CONSUMABLE'
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-300'
+                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300'
+                              }`}>
+                                {row.trackingMode?.toUpperCase() === 'CONSUMABLE' ? 'Tiêu hao' : 'Cố định'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100 max-w-[160px] truncate">{row.name || '—'}</td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{row.categoryName || '—'}</td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{row.locationName || '—'}</td>
+                            <td className="px-3 py-2">
+                              {row.valid ? (
+                                <span className="text-emerald-600 dark:text-emerald-400">✓ Hợp lệ</span>
+                              ) : (
+                                <div className="text-red-600 dark:text-red-400">
+                                  {row.errors?.map((err, i) => (
+                                    <p key={i} className="text-xs leading-tight">✗ {err}</p>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => { setShowImportModal(false); setImportFile(null); setImportPreview(null) }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleImportCommit}
+                disabled={!importPreview || importPreview.validRows === 0 || importCommitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {importCommitting ? 'Đang nhập...' : `Nhập ${importPreview?.validRows ?? 0} tài sản hợp lệ`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
