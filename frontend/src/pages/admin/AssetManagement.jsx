@@ -330,7 +330,13 @@ function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
 }
 
-function AssetManagement({ restrictToConsumable = false }) {
+function getInitialTrackingMode(initialSection, restrictToConsumable) {
+  if (restrictToConsumable) return 'CONSUMABLE'
+  return initialSection === 'consumables' ? 'CONSUMABLE' : 'ITEMIZED'
+}
+
+function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed' }) {
+  const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
   const categoryFilterRef = useRef(null)
   const locationFilterRef = useRef(null)
@@ -441,7 +447,7 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [creatingSupplier, setCreatingSupplier] = useState(false)
   const [supplierForm, setSupplierForm] = useState({ name: '', address: '', phoneNumber: '' })
   const [supplierFormErrors, setSupplierFormErrors] = useState({})
-  const [activeTab, setActiveTab] = useState(restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED')
+  const [activeTab, setActiveTab] = useState(initialTrackingMode)
   const [consumableWorkspace, setConsumableWorkspace] = useState('OVERVIEW')
   const [showConsumableOverviewSummary, setShowConsumableOverviewSummary] = useState(false)
   const [showExpiredLotsSummary, setShowExpiredLotsSummary] = useState(false)
@@ -452,14 +458,14 @@ function AssetManagement({ restrictToConsumable = false }) {
   const [filters, setFilters] = useState({
     name: '',
     status: '',
-    trackingMode: restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED',
+    trackingMode: initialTrackingMode,
     categoryId: '',
     locationId: '',
     categoryKeyword: '',
     locationKeyword: '',
   })
   const [form, setForm] = useState({
-    trackingMode: restrictToConsumable ? 'CONSUMABLE' : 'ITEMIZED',
+    trackingMode: initialTrackingMode,
     name: '',
     categoryId: '',
     locationId: '',
