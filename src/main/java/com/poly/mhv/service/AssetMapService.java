@@ -203,6 +203,8 @@ public class AssetMapService {
             roomShape.setPolygonJson(imageFloor ? writePoints(points) : null);
             roomShape.setBoundsJson(imageFloor ? writeBounds(bounds) : null);
             roomShape.setColorHex(normalizeColor(shapeRequest.getColorHex(), null, "Mau phong"));
+            roomShape.setAreaTypeKey(shapeRequest.getAreaTypeKey());
+            roomShape.setAreaTypeLabel(shapeRequest.getAreaTypeLabel());
             shapesToSave.add(roomShape);
             if (roomShape.getId() != null) {
                 retainedShapeIds.add(roomShape.getId());
@@ -427,6 +429,8 @@ public class AssetMapService {
                 .points(readPoints(shape.getPolygonJson()))
                 .bounds(readBounds(shape.getBoundsJson()))
                 .colorHex(shape.getColorHex())
+                .areaTypeKey(shape.getAreaTypeKey())
+                .areaTypeLabel(shape.getAreaTypeLabel())
                 .build();
     }
 

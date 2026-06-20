@@ -1,15 +1,17 @@
-const RAW_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+import { getApiBaseUrl, joinApiPath } from '../api/apiPath'
+
 const IS_LOCAL_FRONTEND = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 const DEFAULT_BACKEND_BASE_URL = IS_LOCAL_FRONTEND
   ? 'http://localhost:8080'
   : `${window.location.origin}/api`
 
-const BACKEND_BASE_URL = RAW_API_BASE_URL || DEFAULT_BACKEND_BASE_URL
+const BACKEND_BASE_URL = getApiBaseUrl() || DEFAULT_BACKEND_BASE_URL
 
 export function resolveBackendMediaUrl(url) {
   if (!url) return ''
   const normalizedUrl = String(url).trim().replaceAll('\\', '/')
   if (!normalizedUrl) return ''
+
   if (
     normalizedUrl.startsWith('http://')
     || normalizedUrl.startsWith('https://')
@@ -20,25 +22,25 @@ export function resolveBackendMediaUrl(url) {
   }
 
   if (normalizedUrl.startsWith('/api/')) {
-    return `${window.location.origin}${normalizedUrl}`
+    return joinApiPath(BACKEND_BASE_URL, normalizedUrl)
   }
 
   if (normalizedUrl.startsWith('/uploads/')) {
-    return `${BACKEND_BASE_URL}${normalizedUrl}`
+    return joinApiPath(BACKEND_BASE_URL, normalizedUrl)
   }
 
   if (normalizedUrl.startsWith('uploads/')) {
-    return `${BACKEND_BASE_URL}/${normalizedUrl}`
+    return joinApiPath(BACKEND_BASE_URL, `/${normalizedUrl}`)
   }
 
   const uploadsIndex = normalizedUrl.indexOf('/uploads/')
   if (uploadsIndex >= 0) {
-    return `${BACKEND_BASE_URL}${normalizedUrl.substring(uploadsIndex)}`
+    return joinApiPath(BACKEND_BASE_URL, normalizedUrl.substring(uploadsIndex))
   }
 
   if (normalizedUrl.startsWith('/')) {
-    return `${BACKEND_BASE_URL}${normalizedUrl}`
+    return joinApiPath(BACKEND_BASE_URL, normalizedUrl)
   }
 
-  return `${BACKEND_BASE_URL}/${normalizedUrl}`
+  return joinApiPath(BACKEND_BASE_URL, `/${normalizedUrl}`)
 }

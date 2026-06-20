@@ -29,5 +29,11 @@ public class RoomShapeSaveRequest {
     @Size(max = 20, message = "Mau phong khong hop le.")
     private String colorHex;
 
+    @Size(max = 80, message = "Ma loai khu vuc khong hop le.")
+    private String areaTypeKey;
+
+    @Size(max = 120, message = "Ten loai khu vuc khong duoc vuot qua 120 ky tu.")
+    private String areaTypeLabel;
+
     private Boolean hasAsset;
 }

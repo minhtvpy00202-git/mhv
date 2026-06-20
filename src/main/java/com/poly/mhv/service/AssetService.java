@@ -644,6 +644,23 @@ public class AssetService {
     }
 
     @Transactional(readOnly = true)
+    public ConsumableLocationOverviewResponse getAllTrackableConsumableRoomsOverview() {
+        return ConsumableLocationOverviewResponse.builder()
+                .locationName("Tất cả phòng")
+                .roomCount(Math.toIntExact(locationRepository.countTrackableConsumableRooms()))
+                .stocks(consumableLocationStockRepository.findAllTrackableRoomStocksOrderByLocationAndAsset().stream()
+                        .map(this::mapToConsumableLocationStockResponse)
+                        .toList())
+                .issueHistory(consumableIssueRepository.findAllTrackableRoomIssuesOrderByIssuedAtDesc().stream()
+                        .map(this::mapToConsumableIssueResponse)
+                        .toList())
+                .requestHistory(consumableRequestRepository.findAllTrackableRoomRequestsOrderByCreatedAtDesc().stream()
+                        .map(this::mapToConsumableRequestResponse)
+                        .toList())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
     public List<ConsumableRequestResponse> getConsumableRequests(String status) {
         List<ConsumableRequest> requests = StringUtils.hasText(status)
                 ? consumableRequestRepository.findByStatusOrderByCreatedAtDescIdDesc(status.trim().toUpperCase())

@@ -153,7 +153,7 @@ function MobileLayout() {
 
   return (
     <div className="mx-auto min-h-[100dvh] w-full max-w-md bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="sticky top-0 z-[200] flex items-center justify-between border-b border-orange-200 bg-fptOrange px-4 py-3 text-white shadow dark:border-orange-900/60 dark:bg-orange-700">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-orange-200 bg-fptOrange px-4 py-3 text-white shadow dark:border-orange-900/60 dark:bg-orange-700">
         <div>
           <h1 className="text-sm font-medium text-white/90">Nhân viên</h1>
           <p className="text-base font-semibold">{user?.fullName || user?.username || `${branding.companyName} ${branding.appName}`}</p>
