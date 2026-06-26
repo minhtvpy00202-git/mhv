@@ -175,33 +175,33 @@ function MaintenanceReport() {
     scannerRef.current = scanner
     try {
       await scanner.start(
-          { facingMode: 'environment' },
-          scannerConfig,
-          async (decodedText) => {
-            const qaCode = extractQaCode(decodedText)
-            if (!qaCode) return
-            await stopScanner()
-            try {
-              const response = await axiosClient.get(`/api/assets/${qaCode}`)
-              setAssetQaCode(qaCode)
-              setAssetName(response.data?.name || '')
-              setAssetLocationName(response.data?.locationName || '')
-              setAssetHomeLocationName(response.data?.homeLocationName || '')
-              setAssetSpecs(parseSpecsToEntries(response.data?.specs))
-              setFormErrors({})
-              setShowScannerModal(false)
-              setShowModal(true)
-            } catch {
-              setAssetQaCode('')
-              setAssetName('')
-              setAssetLocationName('')
-              setAssetHomeLocationName('')
-              setAssetSpecs([])
-              toast.error('Mã tài sản không tồn tại')
-              startScanner()
-            }
-          },
-          () => {},
+        { facingMode: 'environment' },
+        scannerConfig,
+        async (decodedText) => {
+          const qaCode = extractQaCode(decodedText)
+          if (!qaCode) return
+          await stopScanner()
+          try {
+            const response = await axiosClient.get(`/api/assets/${qaCode}`)
+            setAssetQaCode(qaCode)
+            setAssetName(response.data?.name || '')
+            setAssetLocationName(response.data?.locationName || '')
+            setAssetHomeLocationName(response.data?.homeLocationName || '')
+            setAssetSpecs(parseSpecsToEntries(response.data?.specs))
+            setFormErrors({})
+            setShowScannerModal(false)
+            setShowModal(true)
+          } catch {
+            setAssetQaCode('')
+            setAssetName('')
+            setAssetLocationName('')
+            setAssetHomeLocationName('')
+            setAssetSpecs([])
+            toast.error('Mã tài sản không tồn tại')
+            startScanner()
+          }
+        },
+        () => { },
       )
       isScanningRef.current = true
       setScannerError('')
@@ -209,8 +209,8 @@ function MaintenanceReport() {
       const message = error?.message || ''
       const denied = /denied|permission|notallowed|secure/i.test(message)
       const blockedMessage = denied
-          ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
-          : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
+        ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
+        : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
       setScannerError(blockedMessage)
       toast.error(blockedMessage)
       await stopScanner()
@@ -360,60 +360,81 @@ function MaintenanceReport() {
   const handleOpenCamera = () => {
     cameraInputRef.current?.click()
   }
-  return (
-      <div className="space-y-5">
-        <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.2),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.26),transparent_62%)]" />
-          <div className="relative grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-            <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
-              <Bolt size={14} />
-              Báo hỏng thiết bị
-            </span>
-            <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              Quét mã QR để gửi ticket
-            </h2>
-            <p className="mt-1.5 max-w-[280px] text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Chuẩn bị mã QR trên thiết bị, mở camera quét để tự động điền thông tin và tạo yêu cầu hỗ trợ.
-            </p>
-          </div>
 
-          {/* Scanner action box */}
-          <div className="w-full max-w-[280px] bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center dark:bg-slate-900/40 dark:border-slate-800/80">
-            <button
-              type="button"
-              onClick={() => {
-                keepScannerAliveRef.current = true
-                setScannerError('')
-                setShowScannerModal(true)
-              }}
-              className="relative flex h-20 w-20 items-center justify-center rounded-full bg-fptOrange text-white shadow-md transition hover:scale-105 active:scale-95"
-            >
-              <span className="absolute inset-0 rounded-full bg-fptOrange/30 animate-ping" />
-              <QrCode size={32} className="relative z-10" />
-            </button>
-            <span className="mt-3 text-xs font-semibold text-slate-700 dark:text-slate-300">Nhấn để quét mã QR</span>
+  return (
+    <div className="space-y-4">
+      <style>{`
+        @keyframes ripple {
+          0% { transform: scale(1); opacity: 0.8; }
+          50% { transform: scale(1.4); opacity: 0.3; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }
+        .animate-ripple {
+          animation: ripple 3s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        .animate-ripple-delayed {
+          animation: ripple 3s infinite cubic-bezier(0.4, 0, 0.6, 1);
+          animation-delay: 1.5s;
+        }
+      `}</style>
+      {/* Main card */}
+      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.15),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.2),transparent_62%)]" />
+        
+        <div className="relative">
+          <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
+            <Bolt size={14} />
+            Báo hỏng thiết bị
+          </span>
+          <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
+            Quét mã QR để gửi ticket
+          </h2>
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Chuẩn bị mã QR trên thiết bị, mở camera quét để tự động điền thông tin và tạo yêu cầu hỗ trợ.
+          </p>
+
+          {/* Rounded Square Scanner Action with Ripple waves */}
+          <div className="mt-5 w-full py-12 px-8 flex flex-col items-center justify-center rounded-[36px] border border-slate-100 bg-slate-50/40 dark:border-slate-800/80 dark:bg-slate-900/30">
+            <div className="relative flex h-36 w-36 items-center justify-center">
+              {/* Outer soft expanding waves */}
+              <div className="absolute inset-4 rounded-[36px] bg-fptOrange/10 animate-ripple" />
+              <div className="absolute inset-4 rounded-[36px] bg-fptOrange/10 animate-ripple-delayed" />
+              
+              <button
+                type="button"
+                onClick={() => {
+                  keepScannerAliveRef.current = true
+                  setScannerError('')
+                  setShowScannerModal(true)
+                }}
+                className="relative z-10 flex h-24 w-24 items-center justify-center rounded-[28px] bg-fptOrange text-white shadow-xl shadow-orange-500/25 hover:bg-fptOrangeDark transition hover:scale-105 active:scale-95 focus:outline-none"
+              >
+                <QrCode size={40} />
+              </button>
+            </div>
+            <span className="mt-6 text-xs font-semibold text-slate-750 dark:text-slate-200 tracking-wide">Nhấn để quét mã QR</span>
           </div>
 
           {/* Secondary Actions */}
-          <div className="w-full pt-2">
+          <div className="w-full mt-3">
             {latestTicket?.id ? (
               <button
                 type="button"
                 onClick={() => navigate(`/mobile/tickets/${latestTicket.id}`)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white py-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-850 transition"
               >
                 <Ticket size={16} />
                 Xem ticket vừa tạo gần nhất
               </button>
             ) : (
-              <p className="text-[11px] text-slate-400 dark:text-slate-500">Chưa có ticket nào được gửi gần đây.</p>
+              <p className="text-[11px] text-center text-slate-400 dark:text-slate-500 mt-2">Chưa có ticket nào được gửi gần đây.</p>
             )}
           </div>
-        </section>
+        </div>
+      </section>
 
       {/* Sleek Collapsible Accordion Guide */}
-      <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden">
+      <div className="rounded-[24px] border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden">
         <details className="group">
           <summary className="flex cursor-pointer items-center justify-between p-4 text-xs font-semibold text-slate-700 dark:text-slate-350 select-none">
             <span>Hướng dẫn quét QR & báo hỏng</span>
@@ -431,9 +452,10 @@ function MaintenanceReport() {
         </details>
       </div>
 
+      {/* Scanner Modal */}
       {showScannerModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-950">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-950">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Quét QR để chọn thiết bị</p>
@@ -449,7 +471,7 @@ function MaintenanceReport() {
                 <X size={16} />
               </button>
             </div>
-            <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
+            <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner dark:border-slate-800">
               <div className="rounded-[22px] border border-dashed border-white/20 bg-slate-900 p-2">
                 <div id={scannerElementId} className="min-h-[320px] overflow-hidden rounded-[18px] bg-black" />
               </div>
@@ -458,11 +480,17 @@ function MaintenanceReport() {
               <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
                 {scannerError}
               </div>
+            )}
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+              Giữ camera ổn định trong 1-2 giây. Nếu không quét được, hãy tăng ánh sáng hoặc đưa mã QR gần hơn.
             </div>
-        )}
+          </div>
+        </div>
+      )}
 
+      {/* Form Report Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
           <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-950 flex flex-col max-h-[90vh]">
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
@@ -659,8 +687,10 @@ function MaintenanceReport() {
                 Đóng
               </button>
             </div>
-        )}
-      </div>
+          </form>
+        </div>
+      )}
+    </div>
   )
 }
 
