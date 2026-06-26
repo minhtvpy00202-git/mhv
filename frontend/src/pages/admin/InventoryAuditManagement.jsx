@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
+import * as XLSX from 'xlsx' // Import thư viện xuất Excel từ Frontend
 import axiosClient from '../../api/axiosClient'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -12,6 +13,7 @@ const inventoryAuditColumnStorageKey = 'admin.inventoryAudit.visibleColumns'
 const STATUS_MAP = {
   OPEN: 'ĐANG MỞ',
   COMPLETED: 'ĐÃ HOÀN THÀNH',
+  OVERDUE: 'QUÁ HẠN',
 }
 
 const defaultPageInfo = {
@@ -43,6 +45,16 @@ function createDefaultAuditForm() {
     notes: '',
   }
 }
+
+// Hàm phụ trợ để loại bỏ phần giây khỏi chuỗi ngày tháng
+const formatNoSeconds = (dateVal, fallback) => {
+  const formatted = formatVietnamDateTime(dateVal, fallback);
+  if (typeof formatted === 'string') {
+    // Xóa :ss (hai chữ số sau dấu hai chấm nằm ngay trước dấu cách hoặc cuối chuỗi)
+    return formatted.replace(/:(\d{2})(?=\s|$)/, '');
+  }
+  return formatted;
+};
 
 function InventoryAuditManagement() {
   const [locations, setLocations] = useState([])
@@ -80,28 +92,34 @@ function InventoryAuditManagement() {
       label: 'Trạng thái',
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
       cellClassName: 'whitespace-nowrap px-3 py-2',
-      render: (audit) => STATUS_MAP[audit.status] || audit.status || '-',
+      render: (audit) => {
+        // Kiểm tra nếu đang mở và đã qua hạn hoàn tất
+        if (audit.status === 'OPEN' && audit.dueDate && new Date(audit.dueDate).getTime() < new Date().getTime()) {
+          return <span className="font-semibold text-red-600">QUÁ HẠN</span>;
+        }
+        return STATUS_MAP[audit.status] || audit.status || '-';
+      },
     },
     {
       key: 'startedAt',
       label: 'Bắt đầu',
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
       cellClassName: 'whitespace-nowrap px-3 py-2',
-      render: (audit) => formatVietnamDateTime(audit.startedAt, ''),
+      render: (audit) => formatNoSeconds(audit.startedAt, ''),
     },
     {
       key: 'dueDate',
       label: 'Hạn hoàn tất',
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
       cellClassName: 'whitespace-nowrap px-3 py-2',
-      render: (audit) => formatVietnamDateTime(audit.dueDate, ''),
+      render: (audit) => formatNoSeconds(audit.dueDate, ''),
     },
     {
       key: 'completedAt',
-      label: 'Kết thúc',
+      label: 'Thời gian hoàn tất',
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
       cellClassName: 'whitespace-nowrap px-3 py-2',
-      render: (audit) => formatVietnamDateTime(audit.completedAt, ''),
+      render: (audit) => formatNoSeconds(audit.completedAt, '-'),
     },
     {
       key: 'detail',
@@ -298,28 +316,135 @@ function InventoryAuditManagement() {
     setConfirmDialog(createDefaultConfirmDialog())
   }
 
+  // Hàm xuất file Excel đã nâng cấp: Xuất toàn bộ dữ liệu tổng hợp và chi tiết các tab
   const handleExportReport = async () => {
     if (!selectedAudit?.summary?.id) return
     try {
-      const response = await axiosClient.get(`/api/reports/export-inventory-audit/${selectedAudit.summary.id}`, {
-        responseType: 'blob',
-      })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `bien-ban-kiem-ke-${selectedAudit.summary.id}.xlsx`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      toast.success('Đang tải biên bản kiểm kê.')
+      toast.info('Đang khởi tạo dữ liệu biên bản kiểm kê...');
+
+      // 1. Tạo mới một Workbook từ SheetJS
+      const wb = XLSX.utils.book_new();
+
+      // --- SHEET 1: TỔNG QUAN & BẢNG SỐ LIỆU TỔNG HỢP ---
+      const summaryRows = [
+        ['BIÊN BẢN KIỂM KÊ TÀI SẢN & THIẾT BỊ'],
+        [],
+        ['Mã phiên kiểm kê:', `#${selectedAudit.summary.id}`],
+        ['Phòng kiểm kê:', selectedAudit.summary.locationName || '-'],
+        ['Thời gian bắt đầu:', formatNoSeconds(selectedAudit.summary.startedAt, '')],
+        ['Hạn hoàn tất:', formatNoSeconds(selectedAudit.summary.dueDate, 'Chưa đặt hạn')],
+        ['Trạng thái:', STATUS_MAP[selectedAudit.summary.status] || selectedAudit.summary.status || '-'],
+        ['Ghi chú:', selectedAudit.summary.notes || '-'],
+        [],
+        ['I. BẢNG SỐ LIỆU TỔNG HỢP'],
+        ['Tổng thiết bị', 'Dự kiến (Cần quét)', 'Đang sửa chữa', 'Đã quét', 'Đang cho mượn', 'Đang mượn', 'Thất lạc'],
+        [
+          selectedAudit.summary.totalAssetCount || 0,
+          selectedAudit.summary.expectedCount || 0,
+          selectedAudit.summary.repairingCount || 0,
+          selectedAudit.summary.scannedCount || 0,
+          selectedAudit.summary.lentCount || 0,
+          selectedAudit.summary.borrowedCount || 0,
+          selectedAudit.summary.missingCount || 0
+        ]
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Tong_Quan');
+
+      // --- SHEET 2: CHI TIẾT ĐÃ QUÉT ---
+      const scannedRows = [
+        ['DANH SÁCH THIẾT BỊ ĐÃ QUÉT'],
+        [],
+        ['STT', 'Mã thiết bị', 'Tên thiết bị', 'Người quét', 'Thời gian quét'],
+        ...(selectedAudit.scannedItems || []).map((item, index) => [
+          index + 1,
+          item.assetQaCode,
+          item.assetName,
+          item.scannedByUsername || '-',
+          formatNoSeconds(item.scannedAt, '')
+        ])
+      ];
+      const wsScanned = XLSX.utils.aoa_to_sheet(scannedRows);
+      XLSX.utils.book_append_sheet(wb, wsScanned, 'Da_Quet');
+
+      // --- SHEET 3: CHI TIẾT ĐANG SỬA CHỮA ---
+      const repairingRows = [
+        ['DANH SÁCH THIẾT BỊ ĐANG SỬA CHỮA'],
+        [],
+        ['STT', 'Mã thiết bị', 'Tên thiết bị', 'Phòng gốc', 'Vị trí hiện tại', 'Trạng thái hiển thị'],
+        ...(selectedAudit.repairingItems || []).map((item, index) => [
+          index + 1,
+          item.assetQaCode,
+          item.assetName,
+          item.homeLocationName || '-',
+          item.currentLocationName || '-',
+          item.displayStatus || '-'
+        ])
+      ];
+      const wsRepairing = XLSX.utils.aoa_to_sheet(repairingRows);
+      XLSX.utils.book_append_sheet(wb, wsRepairing, 'Dang_Sua_Chua');
+
+      // --- SHEET 4: CHI TIẾT ĐANG CHO MƯỢN ---
+      const lentRows = [
+        ['DANH SÁCH THIẾT BỊ ĐANG CHO MƯỢN'],
+        [],
+        ['STT', 'Mã thiết bị', 'Tên thiết bị', 'Đang ở phòng', 'Người mượn', 'Thời gian mượn'],
+        ...(selectedAudit.lentItems || []).map((item, index) => [
+          index + 1,
+          item.assetQaCode,
+          item.assetName,
+          item.toLocationName || '-',
+          item.borrowerName || '-',
+          formatNoSeconds(item.borrowedAt, 'Chưa xác định')
+        ])
+      ];
+      const wsLent = XLSX.utils.aoa_to_sheet(lentRows);
+      XLSX.utils.book_append_sheet(wb, wsLent, 'Cho_Muon');
+
+      // --- SHEET 5: CHI TIẾT ĐANG MƯỢN ---
+      const borrowedRows = [
+        ['DANH SÁCH THIẾT BỊ ĐANG MƯỢN'],
+        [],
+        ['STT', 'Mã thiết bị', 'Tên thiết bị', 'Phòng gốc', 'Hiện đang ở', 'Người mượn', 'Thời gian mượn'],
+        ...(selectedAudit.borrowedItems || []).map((item, index) => [
+          index + 1,
+          item.assetQaCode,
+          item.assetName,
+          item.homeLocationName || '-',
+          item.currentLocationName || '-',
+          item.borrowerName || '-',
+          formatNoSeconds(item.borrowedAt, 'Chưa xác định')
+        ])
+      ];
+      const wsBorrowed = XLSX.utils.aoa_to_sheet(borrowedRows);
+      XLSX.utils.book_append_sheet(wb, wsBorrowed, 'Dang_Muon');
+
+      // --- SHEET 6: CHI TIẾT THẤT LẠC ---
+      const missingRows = [
+        ['DANH SÁCH THIẾT BỊ THẤT LẠC'],
+        [],
+        ['STT', 'Mã thiết bị', 'Tên thiết bị', 'Trạng thái xử lý', 'Người xử lý / Thông tin bổ sung'],
+        ...(selectedAudit.missingItems || []).map((item, index) => [
+          index + 1,
+          item.assetQaCode,
+          item.assetName,
+          item.resolutionStatus === 'PENDING' ? 'Chưa xử lý' : item.resolutionStatus === 'FOUND' ? 'Tìm thấy' : 'Mất hẳn',
+          item.resolvedByUsername || '-'
+        ])
+      ];
+      const wsMissing = XLSX.utils.aoa_to_sheet(missingRows);
+      XLSX.utils.book_append_sheet(wb, wsMissing, 'That_Lac');
+
+      // 3. Tiến hành đóng gói và tải xuống file Excel (.xlsx) dưới Client
+      XLSX.writeFile(wb, `bien-ban-kiem-ke-${selectedAudit.summary.id}.xlsx`);
+      toast.success('Tải biên bản kiểm kê đầy đủ thành công.');
     } catch (error) {
-      const message = error?.response?.data?.message || 'Xuất biên bản kiểm kê thất bại.'
-      toast.error(message)
+      console.error('Lỗi khi kết xuất Excel ở Client: ', error);
+      toast.error('Xuất biên bản kiểm kê thất bại.');
     }
   }
 
-  // Định nghĩa các tab
+  // Định nghĩa các tab dữ liệu trên UI
   const TABS = [
     { id: 'repairing', label: 'Đang sửa chữa', count: selectedAudit?.summary?.repairingCount || 0 },
     { id: 'scanned', label: 'Đã quét', count: selectedAudit?.summary?.scannedCount || 0 },
@@ -479,7 +604,7 @@ function InventoryAuditManagement() {
                     Chi tiết phiên #{selectedAudit.summary.id} - {selectedAudit.summary.locationName}
                   </h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    Bắt đầu: {formatVietnamDateTime(selectedAudit.summary.startedAt, '')} | Hạn hoàn tất: {formatVietnamDateTime(selectedAudit.summary.dueDate, 'Chưa đặt hạn')}
+                    Bắt đầu: {formatNoSeconds(selectedAudit.summary.startedAt, '')} | Hạn hoàn tất: {formatNoSeconds(selectedAudit.summary.dueDate, 'Chưa đặt hạn')}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -658,7 +783,7 @@ function InventoryAuditManagement() {
                           <td className="px-4 py-2 font-medium text-slate-700">{item.assetQaCode}</td>
                           <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
                           <td className="px-4 py-2 text-slate-600">{item.scannedByUsername || '-'}</td>
-                          <td className="px-4 py-2 text-slate-400">{formatVietnamDateTime(item.scannedAt, '')}</td>
+                          <td className="px-4 py-2 text-slate-400">{formatNoSeconds(item.scannedAt, '')}</td>
                         </tr>
                     ))}
                     {activeTab === 'scanned' && (!selectedAudit?.scannedItems || selectedAudit.scannedItems.length === 0) && (
@@ -673,7 +798,7 @@ function InventoryAuditManagement() {
                           <td className="px-4 py-2 text-slate-600">{item.assetName}</td>
                           <td className="px-4 py-2 text-slate-600">{item.toLocationName || '-'}</td>
                           <td className="px-4 py-2 text-slate-600">{item.borrowerName || '-'}</td>
-                          <td className="px-4 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                          <td className="px-4 py-2 text-slate-600">{formatNoSeconds(item.borrowedAt, 'Chưa xác định')}</td>
                         </tr>
                     ))}
                     {activeTab === 'lent' && (!selectedAudit?.lentItems || selectedAudit.lentItems.length === 0) && (
@@ -689,7 +814,7 @@ function InventoryAuditManagement() {
                           <td className="px-4 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
                           <td className="px-4 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
                           <td className="px-4 py-2 text-slate-600">{item.borrowerName || '-'}</td>
-                          <td className="px-4 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                          <td className="px-4 py-2 text-slate-600">{formatNoSeconds(item.borrowedAt, 'Chưa xác định')}</td>
                         </tr>
                     ))}
                     {activeTab === 'borrowed' && (!selectedAudit?.borrowedItems || selectedAudit.borrowedItems.length === 0) && (
