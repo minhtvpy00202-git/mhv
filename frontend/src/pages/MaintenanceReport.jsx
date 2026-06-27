@@ -27,6 +27,27 @@ const priorityOptions = [
 ]
 const scannerConfig = { fps: 10, qrbox: { width: 240, height: 240 } }
 
+const getSlaRangeLimits = (p) => {
+  if (p === 'HIGH') return { minLimit: 10, maxLimit: 240, step: 10 }
+  if (p === 'MEDIUM') return { minLimit: 240, maxLimit: 2880, step: 30 }
+  return { minLimit: 2880, maxLimit: 5040, step: 60 }
+}
+
+const formatMinutes = (mins) => {
+  if (mins < 60) return `${mins} phút`
+  const hours = Math.floor(mins / 60)
+  const remainingMins = mins % 60
+  if (hours < 24) {
+    return remainingMins > 0 ? `${hours} giờ ${remainingMins} phút` : `${hours} giờ`
+  }
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  let res = `${days} ngày`
+  if (remainingHours > 0) res += ` ${remainingHours} giờ`
+  if (remainingMins > 0) res += ` ${remainingMins} phút`
+  return res
+}
+
 function MaintenanceReport() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -42,6 +63,21 @@ function MaintenanceReport() {
   const [assetSpecs, setAssetSpecs] = useState([])
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('MEDIUM')
+  const [minSla, setMinSla] = useState(720)
+  const [maxSla, setMaxSla] = useState(1440)
+
+  useEffect(() => {
+    if (priority === 'HIGH') {
+      setMinSla(30)
+      setMaxSla(120)
+    } else if (priority === 'MEDIUM') {
+      setMinSla(720)
+      setMaxSla(1440)
+    } else {
+      setMinSla(3600)
+      setMaxSla(4320)
+    }
+  }, [priority])
   const [imageFile, setImageFile] = useState(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [showScannerModal, setShowScannerModal] = useState(false)
@@ -126,19 +162,6 @@ function MaintenanceReport() {
     return decodedText.trim()
   }
 
-  const requestCameraPermission = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Trình duyệt hiện tại không hỗ trợ camera.')
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-      },
-      audio: false,
-    })
-    stream.getTracks().forEach((track) => track.stop())
-  }
-
   const startScanner = async () => {
     if (isScanningRef.current) return
     const scannerElement = document.getElementById(scannerElementId)
@@ -148,12 +171,9 @@ function MaintenanceReport() {
     }
     setScannerError('')
     await stopScanner()
-    let permissionGranted = false
     const scanner = new Html5Qrcode(scannerElementId)
     scannerRef.current = scanner
     try {
-      await requestCameraPermission()
-      permissionGranted = true
       await scanner.start(
           { facingMode: 'environment' },
           scannerConfig,
@@ -193,12 +213,7 @@ function MaintenanceReport() {
           : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
       setScannerError(blockedMessage)
       toast.error(blockedMessage)
-      if (permissionGranted) {
-        await stopScanner()
-      } else {
-        scannerRef.current = null
-        isScanningRef.current = false
-      }
+      await stopScanner()
     }
   }
 
@@ -226,6 +241,8 @@ function MaintenanceReport() {
     setAssetSpecs([])
     setDescription('')
     setPriority('MEDIUM')
+    setMinSla(720)
+    setMaxSla(1440)
     setImageFile(null)
     setFormErrors({})
     if (imagePreviewUrl) {
@@ -300,6 +317,10 @@ function MaintenanceReport() {
       priority,
       imageFile,
     })
+    const limits = getSlaRangeLimits(priority)
+    if (minSla < limits.minLimit || maxSla > limits.maxLimit || minSla > maxSla) {
+      nextErrors.sla = 'Khoảng thời gian xử lý mong muốn không hợp lệ.'
+    }
     setFormErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       toast.error(Object.values(nextErrors)[0])
@@ -311,6 +332,8 @@ function MaintenanceReport() {
       formData.append('assetQaCode', assetQaCode)
       formData.append('description', description)
       formData.append('priority', priority)
+      formData.append('minSlaMinutes', minSla)
+      formData.append('maxSlaMinutes', maxSla)
       if (imageFile) {
         formData.append('image', imageFile)
       }
@@ -345,257 +368,302 @@ function MaintenanceReport() {
             <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
               <Bolt size={14} />
-              Gửi báo hỏng
+              Báo hỏng thiết bị
             </span>
-              <h2 className="mt-4 max-w-[15ch] text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                Quét thiết bị rồi gửi ticket theo một luồng liền mạch.
-              </h2>
-              <p className="mt-3 max-w-[34ch] text-sm leading-6 text-slate-600 dark:text-slate-400">
-                Camera, mô tả lỗi, ảnh minh họa và ticket gần nhất được đặt cạnh nhau để thao tác nhanh hơn trên điện thoại.
-              </p>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
+              Quét mã QR để gửi ticket
+            </h2>
+            <p className="mt-1.5 max-w-[280px] text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Chuẩn bị mã QR trên thiết bị, mở camera quét để tự động điền thông tin và tạo yêu cầu hỗ trợ.
+            </p>
+          </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <button
-                    type="button"
-                    onClick={() => {
-                      keepScannerAliveRef.current = true
-                      setScannerError('')
-                      setShowScannerModal(true)
-                    }}
-                    className="inline-flex items-center justify-center gap-2 rounded-[24px] bg-fptOrange px-4 py-4 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-fptOrangeDark"
-                >
-                  <QrCode size={18} />
-                  Quét thiết bị ngay
-                </button>
-                {latestTicket?.id ? (
-                    <button
-                        type="button"
-                        onClick={() => navigate(`/mobile/tickets/${latestTicket.id}`)}
-                        className="inline-flex items-center justify-center gap-2 rounded-[24px] border border-slate-300 bg-white px-4 py-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                    >
-                      <Ticket size={18} />
-                      Mở ticket gần nhất
-                    </button>
-                ) : (
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                      Ticket gần nhất sẽ hiện ở đây sau khi bạn gửi báo hỏng.
-                    </div>
-                )}
-              </div>
-            </div>
+          {/* Scanner action box */}
+          <div className="w-full max-w-[280px] bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col items-center dark:bg-slate-900/40 dark:border-slate-800/80">
+            <button
+              type="button"
+              onClick={() => {
+                keepScannerAliveRef.current = true
+                setScannerError('')
+                setShowScannerModal(true)
+              }}
+              className="relative flex h-20 w-20 items-center justify-center rounded-full bg-fptOrange text-white shadow-md transition hover:scale-105 active:scale-95"
+            >
+              <span className="absolute inset-0 rounded-full bg-fptOrange/30 animate-ping" />
+              <QrCode size={32} className="relative z-10" />
+            </button>
+            <span className="mt-3 text-xs font-semibold text-slate-700 dark:text-slate-300">Nhấn để quét mã QR</span>
+          </div>
 
-            <div className="grid gap-3">
-              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Bảng thao tác nhanh</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Chuẩn bị thiết bị trước khi mở camera.</p>
-                  </div>
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-[18px] bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                  <DeviceMobile size={18} />
-                </span>
-                </div>
-                <div className="grid gap-3 p-4">
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Camera sẵn sàng quét</p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Đưa mã QA vào khung và giữ ổn định trong 1-2 giây.</p>
-                      </div>
-                      <QrCode size={22} className="text-fptOrange dark:text-orange-300" />
-                    </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Mô tả lỗi</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Ghi hiện tượng thật ngắn gọn và đủ ngữ cảnh.</p>
-                    </div>
-                    <div className="rounded-[22px] border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ảnh minh họa</p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Ưu tiên ảnh cận cảnh và ảnh tổng thể của khu vực lỗi.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[28px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Tuyến xử lý</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Quét thiết bị, xác nhận thông tin, gửi ticket, rồi theo dõi xử lý.</p>
-                  </div>
-                  <ArrowUpRight size={18} className="text-fptOrange dark:text-orange-300" />
-                </div>
-              </div>
-            </div>
+          {/* Secondary Actions */}
+          <div className="w-full pt-2">
+            {latestTicket?.id ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/mobile/tickets/${latestTicket.id}`)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+              >
+                <Ticket size={16} />
+                Xem ticket vừa tạo gần nhất
+              </button>
+            ) : (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">Chưa có ticket nào được gửi gần đây.</p>
+            )}
+          </div>
           </div>
         </section>
 
-        {showScannerModal && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
-              <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-950">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Quét QR để chọn thiết bị</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Đưa mã QR vào khung camera. Hệ thống sẽ tự mở form báo hỏng khi quét thành công.</p>
-                  </div>
-                  <button
-                      type="button"
-                      onClick={() => {
-                        void closeScannerModal()
-                      }}
-                      className="rounded-xl border border-slate-300 p-2 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
-                  <div className="rounded-[22px] border border-dashed border-white/20 bg-slate-900 p-2">
-                    {/* Đã áp dụng CSS sửa lỗi camera full viền ở đây */}
-                    <div id={scannerElementId} className="relative min-h-[320px] w-full overflow-hidden rounded-[20px] bg-black [&>div]:!h-full [&>div]:!w-full [&_video]:!h-full [&_video]:!w-full [&_video]:!object-cover flex items-center justify-center" />
-                  </div>
-                </div>
-                {scannerError && (
-                    <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-                      {scannerError}
-                    </div>
-                )}
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                  Giữ camera ổn định trong 1-2 giây. Nếu không quét được, hãy tăng ánh sáng hoặc đưa mã QR gần hơn.
-                </div>
+      {/* Sleek Collapsible Accordion Guide */}
+      <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden">
+        <details className="group">
+          <summary className="flex cursor-pointer items-center justify-between p-4 text-xs font-semibold text-slate-700 dark:text-slate-350 select-none">
+            <span>Hướng dẫn quét QR & báo hỏng</span>
+            <span className="transition group-open:rotate-180">
+              <svg fill="none" height="18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="18">
+                <path d="M6 9l6 6 6-6"></path>
+              </svg>
+            </span>
+          </summary>
+          <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 p-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed space-y-2">
+            <p><strong>Bước 1:</strong> Đưa mã QR trên thiết bị vào chính giữa khung quét camera.</p>
+            <p><strong>Bước 2:</strong> Hệ thống tự nhận diện và hiển thị màn hình điền thông tin lỗi.</p>
+            <p><strong>Bước 3:</strong> Chọn mức độ ưu tiên, đính kèm ảnh minh họa và bấm "Gửi báo hỏng".</p>
+          </div>
+        </details>
+      </div>
+
+      {showScannerModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-950">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Quét QR để chọn thiết bị</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Đưa mã QR vào khung camera. Hệ thống sẽ tự mở form báo hỏng khi quét thành công.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  void closeScannerModal()
+                }}
+                className="rounded-xl border border-slate-300 p-2 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-950 p-3 shadow-inner">
+              <div className="rounded-[22px] border border-dashed border-white/20 bg-slate-900 p-2">
+                <div id={scannerElementId} className="min-h-[320px] overflow-hidden rounded-[18px] bg-black" />
               </div>
             </div>
+            {scannerError && (
+              <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                {scannerError}
+              </div>
+            )}
+          </div>
+        </div>
         )}
 
-        {showModal && (
-            <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/50 p-4">
-              <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl dark:bg-slate-950">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Nhập mô tả lỗi thiết bị</h3>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Kiểm tra lại thông tin thiết bị trước khi gửi ticket.</p>
-                  </div>
-                  <div className="rounded-xl bg-orange-50 p-2 text-fptOrange dark:bg-orange-500/15 dark:text-orange-300">
-                    <TriangleAlert size={18} />
-                  </div>
-                </div>
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                  <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Thiết bị đã quét</p>
-                  <p><span className="font-semibold">Mã QA:</span> {assetQaCode}</p>
-                  <p className="mt-1"><span className="font-semibold">Tên thiết bị:</span> {assetName || 'Đang tải...'}</p>
-                  <p className="mt-1"><span className="font-semibold">Phòng hiện tại:</span> {assetLocationName || 'Không xác định'}</p>
-                  <p className="mt-1"><span className="font-semibold">Phòng gốc:</span> {assetHomeLocationName || 'Không xác định'}</p>
-                  {assetSpecs.length > 0 && (
-                      <div className="mt-3 rounded-xl bg-white p-3 dark:bg-slate-950">
-                        <p className="font-semibold text-slate-700 dark:text-slate-200">Đặc tính kỹ thuật</p>
-                        <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
-                          {assetSpecs.map((entry) => (
-                              <p key={`${entry.name}-${entry.value}`}>
-                                <span className="font-medium text-slate-700 dark:text-slate-200">{entry.name}:</span> {entry.value}
-                              </p>
-                          ))}
-                        </div>
-                      </div>
-                  )}
-                </div>
-                <div className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
-                  <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Nội dung ticket</p>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mô tả lỗi</label>
-                  <textarea
-                      value={description}
-                      onChange={(e) => {
-                        setDescription(e.target.value)
-                        setFormErrors((prev) => ({ ...prev, description: '' }))
-                      }}
-                      rows={4}
-                      className={`w-full rounded-lg border px-3 py-2 outline-none ring-fptOrange focus:ring-2 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 ${formErrors.description ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-300 dark:border-slate-700'}`}
-                      placeholder="Mô tả chi tiết tình trạng hỏng"
-                  />
-                  {formErrors.description && <p className="mt-1 text-xs text-red-600">{formErrors.description}</p>}
-                </div>
-                <div className="mt-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
-                  <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Mức ưu tiên và ảnh minh họa</p>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mức độ ưu tiên</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {priorityOptions.map((option) => (
-                        <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => setPriority(option.value)}
-                            className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                                priority === option.value
-                                    ? 'border-fptOrange bg-orange-50 text-fptOrange dark:bg-orange-500/10 dark:text-orange-300'
-                                    : 'border-slate-300 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                            }`}
-                        >
-                          {option.label}
-                        </button>
-                    ))}
-                  </div>
-                  {formErrors.priority && <p className="mt-1 text-xs text-red-600">{formErrors.priority}</p>}
-                  <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleSelectImage}
-                      className="hidden"
-                  />
-                  <input
-                      ref={cameraInputRef}
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleSelectImage}
-                      className="hidden"
-                  />
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={processingImage || loading}
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
-                    >
-                      <ImagePlus size={16} />
-                      Chọn ảnh lỗi
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleOpenCamera}
-                        disabled={processingImage || loading}
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
-                    >
-                      <Camera size={16} />
-                      Chụp ảnh lỗi
-                    </button>
-                  </div>
-                  {imagePreviewUrl && (
-                      <div className="mt-3">
-                        <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Ảnh lỗi đính kèm</p>
-                        <img src={imagePreviewUrl} alt="error-preview" className="h-32 w-32 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
-                      </div>
-                  )}
-                  {formErrors.imageFile && <p className="mt-2 text-xs text-red-600">{formErrors.imageFile}</p>}
-                  {processingImage && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Đang xử lý ảnh...</p>}
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button
-                      type="submit"
-                      disabled={loading}
-                      className="rounded-xl bg-fptOrange px-4 py-2 font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-                  >
-                    Gửi báo hỏng
-                  </button>
-                  <button
-                      type="button"
-                      onClick={closeModal}
-                      disabled={loading}
-                      className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
-                  >
-                    Đóng
-                  </button>
-                </div>
-              </form>
+      {showModal && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-950 flex flex-col max-h-[90vh]">
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Nhập mô tả lỗi thiết bị</h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Kiểm tra lại thông tin thiết bị trước khi gửi ticket.</p>
+              </div>
+              <div className="rounded-xl bg-orange-50 p-2 text-fptOrange dark:bg-orange-500/15 dark:text-orange-300">
+                <TriangleAlert size={18} />
+              </div>
             </div>
+            
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <p className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Thiết bị đã quét</p>
+                <p><span className="font-semibold">Mã QA:</span> {assetQaCode}</p>
+                <p className="mt-1"><span className="font-semibold">Tên thiết bị:</span> {assetName || 'Đang tải...'}</p>
+                <p className="mt-1"><span className="font-semibold">Phòng hiện tại:</span> {assetLocationName || 'Không xác định'}</p>
+                <p className="mt-1"><span className="font-semibold">Phòng gốc:</span> {assetHomeLocationName || 'Không xác định'}</p>
+                {assetSpecs.length > 0 && (
+                  <div className="mt-3 rounded-xl bg-white p-3 dark:bg-slate-950">
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">Đặc tính kỹ thuật</p>
+                    <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                      {assetSpecs.map((entry) => (
+                        <p key={`${entry.name}-${entry.value}`}>
+                          <span className="font-medium text-slate-700 dark:text-slate-200">{entry.name}:</span> {entry.value}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+                <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Nội dung ticket</p>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mô tả lỗi</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value)
+                    setFormErrors((prev) => ({ ...prev, description: '' }))
+                  }}
+                  rows={4}
+                  className={`w-full rounded-lg border px-3 py-2 outline-none ring-fptOrange focus:ring-2 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 ${formErrors.description ? 'border-red-400 bg-red-50 dark:bg-red-500/10' : 'border-slate-300 dark:border-slate-700'}`}
+                  placeholder="Mô tả chi tiết tình trạng hỏng"
+                />
+                {formErrors.description && <p className="mt-1 text-xs text-red-600">{formErrors.description}</p>}
+              </div>
+              
+              <div className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+                <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Mức ưu tiên và ảnh minh họa</p>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mức độ ưu tiên</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {priorityOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setPriority(option.value)
+                        setFormErrors((prev) => {
+                          const copy = { ...prev }
+                          delete copy.sla
+                          return copy
+                        })
+                      }}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        priority === option.value
+                          ? 'border-fptOrange bg-orange-50 text-fptOrange dark:bg-orange-500/10 dark:text-orange-300'
+                          : 'border-slate-300 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {formErrors.priority && <p className="mt-1 text-xs text-red-600">{formErrors.priority}</p>}
+
+                <div className="mt-4">
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Thời gian xử lý mong muốn (SLA)</label>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800/80 dark:bg-slate-900/20">
+                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                      <span>Tối thiểu: <span className="font-semibold text-fptOrange">{formatMinutes(minSla)}</span></span>
+                      <span>Tối đa: <span className="font-semibold text-fptOrange">{formatMinutes(maxSla)}</span></span>
+                    </div>
+                    <div className="text-center text-xs font-medium text-slate-600 dark:text-slate-350 mb-3 bg-white border border-slate-100 py-1 px-2 rounded-lg inline-block dark:bg-slate-900 dark:border-slate-850">
+                      Khoảng SLA chọn: <span className="text-fptOrange font-bold">{formatMinutes(minSla)} - {formatMinutes(maxSla)}</span>
+                    </div>
+                    <div className="relative w-full h-8 flex items-center px-1">
+                      <input
+                        type="range"
+                        min={getSlaRangeLimits(priority).minLimit}
+                        max={getSlaRangeLimits(priority).maxLimit}
+                        step={getSlaRangeLimits(priority).step}
+                        value={minSla}
+                        onChange={(e) => {
+                          const val = Math.min(Number(e.target.value), maxSla - getSlaRangeLimits(priority).step)
+                          setMinSla(val)
+                          setFormErrors((prev) => ({ ...prev, sla: '' }))
+                        }}
+                        className="absolute pointer-events-none appearance-none z-20 h-1 w-full bg-transparent accent-fptOrange [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-fptOrange [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-fptOrange [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:shadow cursor-pointer"
+                      />
+                      <input
+                        type="range"
+                        min={getSlaRangeLimits(priority).minLimit}
+                        max={getSlaRangeLimits(priority).maxLimit}
+                        step={getSlaRangeLimits(priority).step}
+                        value={maxSla}
+                        onChange={(e) => {
+                          const val = Math.max(Number(e.target.value), minSla + getSlaRangeLimits(priority).step)
+                          setMaxSla(val)
+                          setFormErrors((prev) => ({ ...prev, sla: '' }))
+                        }}
+                        className="absolute pointer-events-none appearance-none z-20 h-1 w-full bg-transparent accent-fptOrange [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-fptOrange [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-fptOrange [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:shadow cursor-pointer"
+                      />
+                      <div className="relative h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-lg">
+                        <div
+                          className="absolute h-1.5 bg-fptOrange rounded-lg"
+                          style={{
+                            left: `${((minSla - getSlaRangeLimits(priority).minLimit) / (getSlaRangeLimits(priority).maxLimit - getSlaRangeLimits(priority).minLimit)) * 100}%`,
+                            right: `${100 - ((maxSla - getSlaRangeLimits(priority).minLimit) / (getSlaRangeLimits(priority).maxLimit - getSlaRangeLimits(priority).minLimit)) * 100}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                      <span>{formatMinutes(getSlaRangeLimits(priority).minLimit)}</span>
+                      <span>{formatMinutes(getSlaRangeLimits(priority).maxLimit)}</span>
+                    </div>
+                  </div>
+                  {formErrors.sla && <p className="mt-1 text-xs text-red-600">{formErrors.sla}</p>}
+                </div>
+                
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSelectImage}
+                  className="hidden"
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleSelectImage}
+                  className="hidden"
+                />
+                
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={processingImage || loading}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+                  >
+                    <ImagePlus size={16} />
+                    Chọn ảnh lỗi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenCamera}
+                    disabled={processingImage || loading}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+                  >
+                    <Camera size={16} />
+                    Chụp ảnh lỗi
+                  </button>
+                </div>
+                
+                {imagePreviewUrl && (
+                  <div className="mt-3">
+                    <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Ảnh lỗi đính kèm</p>
+                    <img src={imagePreviewUrl} alt="error-preview" className="h-32 w-32 rounded-xl border border-slate-200 object-cover dark:border-slate-700" />
+                  </div>
+                )}
+                {formErrors.imageFile && <p className="mt-2 text-xs text-red-600">{formErrors.imageFile}</p>}
+                {processingImage && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Đang xử lý ảnh...</p>}
+              </div>
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-xl bg-fptOrange px-4 py-2.5 font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60 transition"
+              >
+                Gửi báo hỏng
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={loading}
+                className="rounded-xl border border-slate-300 px-4 py-2.5 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900 transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </form>
+        </div>
         )}
       </div>
   )

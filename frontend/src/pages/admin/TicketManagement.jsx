@@ -1,5 +1,6 @@
 import { IconCheck as Check, IconPhoto as ImageIcon } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
@@ -359,7 +360,7 @@ function TicketManagement() {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Điều phối ticket sửa chữa</h2>
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Ticket sửa chữa</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Theo dõi ticket báo hỏng, xem nhanh thông tin sự cố và gán kỹ thuật viên phụ trách.</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
@@ -458,7 +459,7 @@ function TicketManagement() {
                 <tr key={ticket.id} className="border-t border-slate-100 align-top hover:bg-slate-50/60">
                   {renderedColumns.map((column) => (
                     <td
-                      key={`${ticket.id}-${column.key}`}
+                      key={column.key}
                       className={column.cellClassName}
                       title={typeof column.getTitle === 'function' ? column.getTitle(ticket) : undefined}
                     >

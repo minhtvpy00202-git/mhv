@@ -38,19 +38,22 @@ public class UsageHistoryService {
     private final AppUserRepository appUserRepository;
     private final LocationRepository locationRepository;
     private final NotificationService notificationService;
+    private final AssetService assetService;
 
     public UsageHistoryService(
             UsageHistoryRepository usageHistoryRepository,
             AssetRepository assetRepository,
             AppUserRepository appUserRepository,
             LocationRepository locationRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            AssetService assetService
     ) {
         this.usageHistoryRepository = usageHistoryRepository;
         this.assetRepository = assetRepository;
         this.appUserRepository = appUserRepository;
         this.locationRepository = locationRepository;
         this.notificationService = notificationService;
+        this.assetService = assetService;
     }
 
     @Transactional
@@ -96,6 +99,7 @@ public class UsageHistoryService {
         ));
         asset.setLocation(toLocation);
         assetRepository.save(asset);
+        assetService.evictAssetCaches(asset.getQaCode());
         String actorDisplayName = getActorDisplayName(user);
         notificationService.createNotification(
                 "CHECKOUT",
@@ -149,6 +153,7 @@ public class UsageHistoryService {
         asset.setLocation(asset.getHomeLocation());
 
         assetRepository.save(asset);
+        assetService.evictAssetCaches(asset.getQaCode());
         UsageHistory saved = usageHistoryRepository.save(usageHistory);
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(

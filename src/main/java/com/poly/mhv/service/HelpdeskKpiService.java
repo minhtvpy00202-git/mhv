@@ -52,14 +52,16 @@ public class HelpdeskKpiService {
             return cacheSnapshot.response();
         }
         List<Ticket> tickets = ticketRepository.findAllForKpi();
-        List<Ticket> resolvedTickets = tickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus())).toList();
+        List<Ticket> resolvedTickets = tickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .toList();
         List<AppUser> technicians = appUserRepository.findByRole("TechSupport").stream()
                 .sorted(Comparator.comparing(this::getActorDisplayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
         long newTicketCount = tickets.stream().filter(ticket -> "PENDING".equals(ticket.getStatus())).count();
         long resolvedTicketCount = resolvedTickets.size();
-        long inProgressTicketCount = tickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus())).count();
+        long inProgressTicketCount = tickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus()))
+                .count();
         long activeTicketCount = countActiveTickets(tickets);
         long overdueTicketCount = countOverdueActiveTickets(tickets);
         FirstResponseMetrics firstResponseMetrics = buildFirstResponseMetrics(tickets);
@@ -69,12 +71,35 @@ public class HelpdeskKpiService {
         long totalAssetCount = assetRepository.countAllAssets();
         long healthyAssetCount = assetRepository.countAvailableAssets(
                 "Hoạt động tốt",
-                "Tại vị trí gốc"
-        ) + assetRepository.countBorrowedAssets("Hoạt động tốt", "Đang cho mượn");
+                "Tại vị trí gốc") + assetRepository.countBorrowedAssets("Hoạt động tốt", "Đang cho mượn");
         long totalConsumableCount = assetRepository.countAllConsumables();
         long lowStockConsumableCount = assetRepository.countLowStockConsumables();
         AuditMetrics auditMetrics = buildAuditMetrics();
         SatisfactionMetrics adminSatisfactionMetrics = buildSatisfactionMetrics(resolvedTickets);
+
+        double onTimeSlaRate = calculateRate(onTimeResolvedTicketCount, resolvedTicketCount);
+        double overdueSlaRate = calculateOverdueRate(overdueTicketCount, activeTicketCount);
+        double healthyAssetRate = calculateRate(healthyAssetCount, totalAssetCount);
+        double repeatIncidentRate = calculateRate(repeatIncidentCount, resolvedTicketCount);
+        double lowStockConsumableRate = calculateRate(lowStockConsumableCount, totalConsumableCount);
+        double onTimeAuditRate = calculateRate(auditMetrics.onTimeCount(), auditMetrics.sampleCount());
+
+        double adminPerformanceScore = calculateAdminPerformanceScore(
+                onTimeSlaRate,
+                overdueSlaRate,
+                healthyAssetRate,
+                repeatIncidentRate,
+                lowStockConsumableRate,
+                onTimeAuditRate,
+                auditMetrics.sampleCount()
+        );
+        String adminPerformanceGrade = derivePerformanceGrade(
+                adminPerformanceScore,
+                overdueSlaRate,
+                repeatIncidentRate,
+                adminSatisfactionMetrics.averageScore(),
+                adminSatisfactionMetrics.sampleCount()
+        );
 
         HelpdeskKpiResponse response = HelpdeskKpiResponse.builder()
                 .scope("ADMIN")
@@ -83,34 +108,39 @@ public class HelpdeskKpiService {
                 .inProgressTicketCount(inProgressTicketCount)
                 .activeTicketCount(activeTicketCount)
                 .overdueTicketCount(overdueTicketCount)
-                .overdueSlaRate(calculateOverdueRate(overdueTicketCount, activeTicketCount))
+                .overdueSlaRate(overdueSlaRate)
                 .averageResolutionMinutes(calculateAverageResolutionMinutes(tickets))
                 .averageFirstResponseMinutes(firstResponseMetrics.averageFirstResponseMinutes())
-                .onTimeSlaRate(calculateRate(onTimeResolvedTicketCount, resolvedTicketCount))
+                .onTimeSlaRate(onTimeSlaRate)
                 .onTimeResolvedTicketCount(onTimeResolvedTicketCount)
-                .healthyAssetRate(calculateRate(healthyAssetCount, totalAssetCount))
+                .healthyAssetRate(healthyAssetRate)
                 .healthyAssetCount(healthyAssetCount)
                 .totalAssetCount(totalAssetCount)
-                .repeatIncidentRate(calculateRate(repeatIncidentCount, resolvedTicketCount))
+                .repeatIncidentRate(repeatIncidentRate)
                 .repeatIncidentCount(repeatIncidentCount)
-                .lowStockConsumableRate(calculateRate(lowStockConsumableCount, totalConsumableCount))
+                .lowStockConsumableRate(lowStockConsumableRate)
                 .lowStockConsumableCount(lowStockConsumableCount)
                 .totalConsumableCount(totalConsumableCount)
-                .onTimeAuditRate(calculateRate(auditMetrics.onTimeCount(), auditMetrics.sampleCount()))
+                .onTimeAuditRate(onTimeAuditRate)
                 .onTimeAuditCount(auditMetrics.onTimeCount())
                 .auditDueDateSampleCount(auditMetrics.sampleCount())
                 .averageSatisfactionScore(adminSatisfactionMetrics.averageScore())
                 .satisfactionSampleCount(adminSatisfactionMetrics.sampleCount())
+                .performanceScore(adminPerformanceScore)
+                .performanceGrade(adminPerformanceGrade)
                 .ticketsByTechnician(
                         technicians.stream()
-                                .map(technician -> mapTechnicianKpi(technician, tickets, firstResponseMetrics, repeatIncidentTicketIds))
+                                .map(technician -> mapTechnicianKpi(technician, tickets, firstResponseMetrics,
+                                        repeatIncidentTicketIds))
                                 .sorted(Comparator
                                         .comparingDouble(TechnicianTicketKpiResponse::getPerformanceScore)
                                         .reversed()
-                                        .thenComparing(Comparator.comparingLong(TechnicianTicketKpiResponse::getAssignedTicketCount).reversed())
-                                        .thenComparing(TechnicianTicketKpiResponse::getTechnicianName, String.CASE_INSENSITIVE_ORDER))
-                                .toList()
-                )
+                                        .thenComparing(Comparator
+                                                .comparingLong(TechnicianTicketKpiResponse::getAssignedTicketCount)
+                                                .reversed())
+                                        .thenComparing(TechnicianTicketKpiResponse::getTechnicianName,
+                                                String.CASE_INSENSITIVE_ORDER))
+                                .toList())
                 .build();
         adminCache = new CachedHelpdeskKpi(response, System.currentTimeMillis() + KPI_CACHE_TTL_MS);
         return response;
@@ -129,7 +159,8 @@ public class HelpdeskKpiService {
         List<Ticket> tickets = ticketRepository.findAllForKpi();
         Set<Integer> repeatIncidentTicketIds = collectRepeatIncidentTicketIds(tickets);
         List<Ticket> myAssignedTickets = tickets.stream()
-                .filter(ticket -> ticket.getAssignee() != null && technician.getId().equals(ticket.getAssignee().getId()))
+                .filter(ticket -> ticket.getAssignee() != null
+                        && technician.getId().equals(ticket.getAssignee().getId()))
                 .toList();
         List<Ticket> myResolvedTickets = myAssignedTickets.stream()
                 .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
@@ -140,18 +171,23 @@ public class HelpdeskKpiService {
                 .filter(ticket -> userCanHandleTicket(technician, ticket))
                 .count();
         long resolvedTicketCount = myResolvedTickets.size();
-        long inProgressTicketCount = myAssignedTickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus())).count();
-        long activeTicketCount = myAssignedTickets.stream().filter(ticket -> !"RESOLVED".equals(ticket.getStatus())).count();
+        long inProgressTicketCount = myAssignedTickets.stream()
+                .filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus())).count();
+        long activeTicketCount = myAssignedTickets.stream().filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
+                .count();
         long overdueTicketCount = countOverdueActiveTickets(myAssignedTickets);
         FirstResponseMetrics firstResponseMetrics = buildFirstResponseMetrics(tickets);
         long repeatIncidentCount = countRepeatIncidentResolvedTickets(myResolvedTickets, repeatIncidentTicketIds);
         long firstTimeFixCount = Math.max(resolvedTicketCount - repeatIncidentCount, 0);
         long onTimeResolvedTicketCount = countResolvedOnTimeTickets(myResolvedTickets);
-        long fastResponseCount = firstResponseMetrics.fastResponseCountByTechnician().getOrDefault(technician.getId(), 0L);
-        long fastResponseSampleCount = firstResponseMetrics.sampleCountByTechnician().getOrDefault(technician.getId(), 0L);
+        long fastResponseCount = firstResponseMetrics.fastResponseCountByTechnician().getOrDefault(technician.getId(),
+                0L);
+        long fastResponseSampleCount = firstResponseMetrics.sampleCountByTechnician().getOrDefault(technician.getId(),
+                0L);
         SatisfactionMetrics mySatisfactionMetrics = buildSatisfactionMetrics(myResolvedTickets);
 
-        TechnicianTicketKpiResponse myRow = mapTechnicianKpi(technician, tickets, firstResponseMetrics, repeatIncidentTicketIds);
+        TechnicianTicketKpiResponse myRow = mapTechnicianKpi(technician, tickets, firstResponseMetrics,
+                repeatIncidentTicketIds);
 
         HelpdeskKpiResponse response = HelpdeskKpiResponse.builder()
                 .scope("TECHNICIAN")
@@ -164,7 +200,8 @@ public class HelpdeskKpiService {
                 .overdueTicketCount(overdueTicketCount)
                 .overdueSlaRate(calculateOverdueRate(overdueTicketCount, activeTicketCount))
                 .averageResolutionMinutes(calculateAverageResolutionMinutes(myAssignedTickets))
-                .averageFirstResponseMinutes(firstResponseMetrics.averageMinutesByTechnician().getOrDefault(technician.getId(), 0L))
+                .averageFirstResponseMinutes(
+                        firstResponseMetrics.averageMinutesByTechnician().getOrDefault(technician.getId(), 0L))
                 .fastResponseRate(myRow.getFastResponseRate())
                 .fastResponseCount(fastResponseCount)
                 .fastResponseSampleCount(fastResponseSampleCount)
@@ -180,7 +217,8 @@ public class HelpdeskKpiService {
                 .performanceGrade(myRow.getPerformanceGrade())
                 .ticketsByTechnician(List.of(myRow))
                 .build();
-        technicianCache.put(technician.getId(), new CachedHelpdeskKpi(response, System.currentTimeMillis() + KPI_CACHE_TTL_MS));
+        technicianCache.put(technician.getId(),
+                new CachedHelpdeskKpi(response, System.currentTimeMillis() + KPI_CACHE_TTL_MS));
         return response;
     }
 
@@ -188,35 +226,40 @@ public class HelpdeskKpiService {
             AppUser technician,
             List<Ticket> tickets,
             FirstResponseMetrics firstResponseMetrics,
-            Set<Integer> repeatIncidentTicketIds
-    ) {
+            Set<Integer> repeatIncidentTicketIds) {
         List<Ticket> assignedTickets = tickets.stream()
-                .filter(ticket -> ticket.getAssignee() != null && technician.getId().equals(ticket.getAssignee().getId()))
+                .filter(ticket -> ticket.getAssignee() != null
+                        && technician.getId().equals(ticket.getAssignee().getId()))
                 .toList();
-        List<Ticket> resolvedTickets = assignedTickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus())).toList();
+        List<Ticket> resolvedTickets = assignedTickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .toList();
         long resolvedCount = resolvedTickets.size();
-        long inProgressCount = assignedTickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus())).count();
+        long inProgressCount = assignedTickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus()))
+                .count();
         long overdueCount = countOverdueActiveTickets(assignedTickets);
         long onTimeResolvedCount = countResolvedOnTimeTickets(resolvedTickets);
         long repeatIncidentCount = countRepeatIncidentResolvedTickets(resolvedTickets, repeatIncidentTicketIds);
         long firstTimeFixCount = Math.max(resolvedCount - repeatIncidentCount, 0);
-        long fastResponseCount = firstResponseMetrics.fastResponseCountByTechnician().getOrDefault(technician.getId(), 0L);
-        long fastResponseSampleCount = firstResponseMetrics.sampleCountByTechnician().getOrDefault(technician.getId(), 0L);
+        long fastResponseCount = firstResponseMetrics.fastResponseCountByTechnician().getOrDefault(technician.getId(),
+                0L);
+        long fastResponseSampleCount = firstResponseMetrics.sampleCountByTechnician().getOrDefault(technician.getId(),
+                0L);
         double fastResponseRate = calculateRate(fastResponseCount, fastResponseSampleCount);
         double onTimeResolutionRate = calculateRate(onTimeResolvedCount, resolvedCount);
         double repeatIncidentRate = calculateRate(repeatIncidentCount, resolvedCount);
         double firstTimeFixRate = calculateRate(firstTimeFixCount, resolvedCount);
         long averageResolutionMinutes = calculateAverageResolutionMinutes(assignedTickets);
+        double averageResolutionScore = calculateAverageResolutionScore(assignedTickets);
         SatisfactionMetrics satisfactionMetrics = buildSatisfactionMetrics(resolvedTickets);
         double performanceScore = calculateTechnicianPerformanceScore(
                 fastResponseRate,
                 onTimeResolutionRate,
-                averageResolutionMinutes,
+                averageResolutionScore,
                 repeatIncidentRate,
                 firstTimeFixRate,
                 satisfactionMetrics.averageScore(),
-                satisfactionMetrics.sampleCount()
-        );
+                satisfactionMetrics.sampleCount());
+        double overdueSlaRate = calculateOverdueRate(overdueCount, inProgressCount);
 
         return TechnicianTicketKpiResponse.builder()
                 .technicianId(technician.getId())
@@ -226,7 +269,8 @@ public class HelpdeskKpiService {
                 .resolvedTicketCount(resolvedCount)
                 .inProgressTicketCount(inProgressCount)
                 .overdueTicketCount(overdueCount)
-                .averageFirstResponseMinutes(firstResponseMetrics.averageMinutesByTechnician().getOrDefault(technician.getId(), 0L))
+                .averageFirstResponseMinutes(
+                        firstResponseMetrics.averageMinutesByTechnician().getOrDefault(technician.getId(), 0L))
                 .averageResolutionMinutes(averageResolutionMinutes)
                 .fastResponseRate(fastResponseRate)
                 .onTimeResolutionRate(onTimeResolutionRate)
@@ -235,7 +279,7 @@ public class HelpdeskKpiService {
                 .averageSatisfactionScore(satisfactionMetrics.averageScore())
                 .satisfactionSampleCount(satisfactionMetrics.sampleCount())
                 .performanceScore(performanceScore)
-                .performanceGrade(derivePerformanceGrade(performanceScore))
+                .performanceGrade(derivePerformanceGrade(performanceScore, overdueSlaRate, repeatIncidentRate, satisfactionMetrics.averageScore(), satisfactionMetrics.sampleCount()))
                 .build();
     }
 
@@ -279,9 +323,7 @@ public class HelpdeskKpiService {
                         FirstResponseSample::technicianId,
                         Collectors.collectingAndThen(
                                 Collectors.averagingLong(FirstResponseSample::minutes),
-                                value -> Math.round(value)
-                        )
-                ));
+                                value -> Math.round(value))));
 
         long fastResponseCount = samples.stream().filter(FirstResponseSample::withinTarget).count();
         Map<Integer, Long> fastResponseCountByTechnician = samples.stream()
@@ -296,15 +338,13 @@ public class HelpdeskKpiService {
                 fastResponseCount,
                 samples.size(),
                 fastResponseCountByTechnician,
-                sampleCountByTechnician
-        );
+                sampleCountByTechnician);
     }
 
     private Optional<FirstResponseSample> extractFirstResponseSample(
             Ticket ticket,
             List<TicketEvent> events,
-            Map<Integer, AppUser> usersById
-    ) {
+            Map<Integer, AppUser> usersById) {
         if (ticket == null || ticket.getCreatedAt() == null || ticket.getAssignee() == null) {
             return Optional.empty();
         }
@@ -314,8 +354,7 @@ public class HelpdeskKpiService {
             return Optional.of(new FirstResponseSample(
                     ticket.getAssignee().getId(),
                     responseMinutes,
-                    isFastResponse(ticket.getPriority(), responseMinutes)
-            ));
+                    isFastResponse(ticket.getPriority(), responseMinutes)));
         }
 
         if (events == null || events.isEmpty()) {
@@ -325,7 +364,8 @@ public class HelpdeskKpiService {
         Integer technicianId = ticket.getAssignee().getId();
         for (int index = 0; index < events.size(); index++) {
             TicketEvent event = events.get(index);
-            if (!"TICKET_ASSIGNED".equals(event.getEventType()) || event.getOccurredAt() == null || event.getActorId() == null) {
+            if (!"TICKET_ASSIGNED".equals(event.getEventType()) || event.getOccurredAt() == null
+                    || event.getActorId() == null) {
                 continue;
             }
 
@@ -339,8 +379,7 @@ public class HelpdeskKpiService {
                 return Optional.of(new FirstResponseSample(
                         technicianId,
                         responseMinutes,
-                        isFastResponse(ticket.getPriority(), responseMinutes)
-                ));
+                        isFastResponse(ticket.getPriority(), responseMinutes)));
             }
 
             if ("Admin".equals(actor.getRole())) {
@@ -349,13 +388,13 @@ public class HelpdeskKpiService {
                     if (nextEvent.getOccurredAt() == null || !technicianId.equals(nextEvent.getActorId())) {
                         continue;
                     }
-                    if ("TICKET_CHAT".equals(nextEvent.getEventType()) || "TICKET_STATUS_CHANGED".equals(nextEvent.getEventType())) {
+                    if ("TICKET_CHAT".equals(nextEvent.getEventType())
+                            || "TICKET_STATUS_CHANGED".equals(nextEvent.getEventType())) {
                         long responseMinutes = calculateMinutes(event.getOccurredAt(), nextEvent.getOccurredAt());
                         return Optional.of(new FirstResponseSample(
                                 technicianId,
                                 responseMinutes,
-                                isFastResponse(ticket.getPriority(), responseMinutes)
-                        ));
+                                isFastResponse(ticket.getPriority(), responseMinutes)));
                     }
                 }
             }
@@ -375,7 +414,8 @@ public class HelpdeskKpiService {
         return Math.round(tickets.stream()
                 .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
                 .filter(ticket -> resolveAcceptedBaseline(ticket) != null && ticket.getResolvedAt() != null)
-                .mapToLong(ticket -> Duration.between(resolveAcceptedBaseline(ticket), ticket.getResolvedAt()).toMinutes())
+                .mapToLong(
+                        ticket -> Duration.between(resolveAcceptedBaseline(ticket), ticket.getResolvedAt()).toMinutes())
                 .filter(minutes -> minutes >= 0)
                 .average()
                 .orElse(0));
@@ -392,7 +432,10 @@ public class HelpdeskKpiService {
         LocalDateTime now = LocalDateTime.now();
         return tickets.stream()
                 .filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
-                .filter(ticket -> ticket.getDueDate() != null && ticket.getDueDate().isBefore(now))
+                .filter(ticket -> {
+                    LocalDateTime penaltyDeadline = getPenaltyDeadline(ticket);
+                    return penaltyDeadline != null && penaltyDeadline.isBefore(now);
+                })
                 .count();
     }
 
@@ -404,8 +447,11 @@ public class HelpdeskKpiService {
 
     private long countResolvedOnTimeTickets(List<Ticket> resolvedTickets) {
         return resolvedTickets.stream()
-                .filter(ticket -> ticket.getResolvedAt() != null && ticket.getDueDate() != null)
-                .filter(ticket -> !ticket.getResolvedAt().isAfter(ticket.getDueDate()))
+                .filter(ticket -> ticket.getResolvedAt() != null)
+                .filter(ticket -> {
+                    LocalDateTime penaltyDeadline = getPenaltyDeadline(ticket);
+                    return penaltyDeadline != null && !ticket.getResolvedAt().isAfter(penaltyDeadline);
+                })
                 .count();
     }
 
@@ -423,7 +469,8 @@ public class HelpdeskKpiService {
                     Set<Integer> ticketIds = new java.util.HashSet<>();
                     for (int index = 0; index < sortedTickets.size(); index++) {
                         Ticket current = sortedTickets.get(index);
-                        if (!"RESOLVED".equals(current.getStatus()) || current.getResolvedAt() == null || current.getId() == null) {
+                        if (!"RESOLVED".equals(current.getStatus()) || current.getResolvedAt() == null
+                                || current.getId() == null) {
                             continue;
                         }
                         LocalDateTime repeatDeadline = current.getResolvedAt().plusDays(REPEAT_INCIDENT_WINDOW_DAYS);
@@ -450,7 +497,8 @@ public class HelpdeskKpiService {
                 .collect(Collectors.toSet());
     }
 
-    private long countRepeatIncidentResolvedTickets(List<Ticket> resolvedTickets, Set<Integer> repeatIncidentTicketIds) {
+    private long countRepeatIncidentResolvedTickets(List<Ticket> resolvedTickets,
+            Set<Integer> repeatIncidentTicketIds) {
         return resolvedTickets.stream()
                 .map(Ticket::getId)
                 .filter(id -> id != null && repeatIncidentTicketIds.contains(id))
@@ -491,21 +539,46 @@ public class HelpdeskKpiService {
     private double calculateTechnicianPerformanceScore(
             double fastResponseRate,
             double onTimeResolutionRate,
-            long averageResolutionMinutes,
+            double averageResolutionScore,
             double repeatIncidentRate,
             double firstTimeFixRate,
             double averageSatisfactionScore,
             long satisfactionSampleCount
     ) {
         double weightedScoreSum = (scorePositiveRate(fastResponseRate) * 0.15D)
-                + (scorePositiveRate(onTimeResolutionRate) * 0.20D)
-                + (scoreResolutionTime(averageResolutionMinutes) * 0.15D)
-                + (scoreNegativeRate(repeatIncidentRate) * 0.15D)
+                + (scorePositiveRate(onTimeResolutionRate) * 0.25D)
+                + (averageResolutionScore * 0.15D)
+                + (scoreNegativeRate(repeatIncidentRate) * 0.20D)
                 + (scorePositiveRate(firstTimeFixRate) * 0.15D);
-        double totalWeight = 0.80D;
+        double totalWeight = 0.90D;
         if (satisfactionSampleCount > 0) {
-            weightedScoreSum += scoreSatisfaction(averageSatisfactionScore) * 0.20D;
-            totalWeight += 0.20D;
+            weightedScoreSum += scoreSatisfaction(averageSatisfactionScore) * 0.10D;
+            totalWeight += 0.10D;
+        }
+        if (totalWeight <= 0D) {
+            return 0D;
+        }
+        return roundOneDecimal(weightedScoreSum / totalWeight);
+    }
+
+    private double calculateAdminPerformanceScore(
+            double onTimeSlaRate,
+            double overdueSlaRate,
+            double healthyAssetRate,
+            double repeatIncidentRate,
+            double lowStockConsumableRate,
+            double onTimeAuditRate,
+            long auditDueDateSampleCount
+    ) {
+        double weightedScoreSum = (scorePositiveRate(onTimeSlaRate) * 0.25D)
+                + (scoreNegativeRate(overdueSlaRate) * 0.20D)
+                + (scorePositiveRate(healthyAssetRate) * 0.15D)
+                + (scoreNegativeRate(repeatIncidentRate) * 0.15D)
+                + (scoreNegativeRate(lowStockConsumableRate) * 0.10D);
+        double totalWeight = 0.85D;
+        if (auditDueDateSampleCount > 0) {
+            weightedScoreSum += scorePositiveRate(onTimeAuditRate) * 0.15D;
+            totalWeight += 0.15D;
         }
         if (totalWeight <= 0D) {
             return 0D;
@@ -545,23 +618,71 @@ public class HelpdeskKpiService {
         return 40D;
     }
 
-    private double scoreResolutionTime(long minutes) {
-        if (minutes <= 0L) {
+    private LocalDateTime getPenaltyDeadline(Ticket ticket) {
+        if (ticket == null) {
+            return null;
+        }
+        String desc = ticket.getDescription();
+        if (desc != null && desc.contains("[SLA_RANGE:")) {
+            int start = desc.indexOf("[SLA_RANGE:");
+            int end = desc.indexOf("]", start);
+            if (end > start) {
+                String rangeStr = desc.substring(start + 11, end);
+                String[] parts = rangeStr.split(":");
+                if (parts.length == 2 && ticket.getCreatedAt() != null) {
+                    try {
+                        int maxSla = Integer.parseInt(parts[1]);
+                        return ticket.getCreatedAt().plusMinutes(maxSla);
+                    } catch (NumberFormatException e) {
+                        // ignore
+                    }
+                }
+            }
+        }
+        return ticket.getDueDate();
+    }
+
+    private double calculateTicketResolutionScore(Ticket ticket) {
+        if (ticket == null || ticket.getResolvedAt() == null) {
             return 0D;
         }
-        if (minutes <= 480L) {
+        LocalDateTime penaltyDeadline = getPenaltyDeadline(ticket);
+        if (penaltyDeadline == null) {
+            return 0D;
+        }
+        if (!ticket.getResolvedAt().isAfter(penaltyDeadline)) {
             return 100D;
         }
-        if (minutes <= 960L) {
-            return 90D;
+        long overdueMinutes = Duration.between(penaltyDeadline, ticket.getResolvedAt()).toMinutes();
+        if (overdueMinutes <= 0) {
+            return 100D;
         }
-        if (minutes <= 1_440L) {
-            return 80D;
+        String p = ticket.getPriority() == null ? "" : ticket.getPriority().trim().toUpperCase();
+        double penalty;
+        if ("HIGH".equals(p)) {
+            penalty = overdueMinutes / 10.0D;
+        } else if ("MEDIUM".equals(p)) {
+            penalty = (overdueMinutes / 60.0D) * 2.0D;
+        } else {
+            penalty = (overdueMinutes / 120.0D) * 2.0D;
         }
-        if (minutes <= 2_880L) {
-            return 65D;
+        double score = 100D - penalty;
+        return Math.max(score, 40D);
+    }
+
+    private double calculateAverageResolutionScore(List<Ticket> tickets) {
+        List<Ticket> resolved = tickets.stream()
+                .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .filter(ticket -> resolveAcceptedBaseline(ticket) != null && ticket.getResolvedAt() != null)
+                .toList();
+        if (resolved.isEmpty()) {
+            return 0D;
         }
-        return 40D;
+        double totalScoreSum = 0D;
+        for (Ticket ticket : resolved) {
+            totalScoreSum += calculateTicketResolutionScore(ticket);
+        }
+        return roundOneDecimal(totalScoreSum / resolved.size());
     }
 
     private double scoreSatisfaction(double averageScore) {
@@ -598,20 +719,32 @@ public class HelpdeskKpiService {
         return new SatisfactionMetrics(averageScore, scores.size());
     }
 
-    private String derivePerformanceGrade(double score) {
+    private String derivePerformanceGrade(double score, double overdueRate, double repeatRate, double avgSatisfaction, long satisfactionCount) {
+        String baseGrade;
         if (score >= 90D) {
-            return "Xuất sắc";
+            baseGrade = "Xuất sắc";
+        } else if (score >= 80D) {
+            baseGrade = "Tốt";
+        } else if (score >= 65D) {
+            baseGrade = "Khá";
+        } else if (score >= 50D) {
+            baseGrade = "Trung bình";
+        } else {
+            return "Yếu";
         }
-        if (score >= 80D) {
-            return "Tốt";
+
+        // Apply blockers
+        if ("Xuất sắc".equals(baseGrade)) {
+            if (overdueRate > 20D || repeatRate > 15D) {
+                baseGrade = "Tốt";
+            }
         }
-        if (score >= 65D) {
-            return "Khá";
+        if (satisfactionCount > 0 && avgSatisfaction < 3.5D) {
+            if ("Xuất sắc".equals(baseGrade) || "Tốt".equals(baseGrade)) {
+                baseGrade = "Khá";
+            }
         }
-        if (score >= 50D) {
-            return "Trung bình";
-        }
-        return "Yếu";
+        return baseGrade;
     }
 
     private double roundOneDecimal(double value) {
@@ -624,7 +757,8 @@ public class HelpdeskKpiService {
     }
 
     private boolean userCanHandleTicket(AppUser technician, Ticket ticket) {
-        if (technician == null || ticket == null || ticket.getAsset() == null || ticket.getAsset().getCategory() == null) {
+        if (technician == null || ticket == null || ticket.getAsset() == null
+                || ticket.getAsset().getCategory() == null) {
             return false;
         }
         if (ticket.getAsset().getCategory().getTechSupportType() == null) {
@@ -637,9 +771,9 @@ public class HelpdeskKpiService {
         Set<Integer> technicianTechTypeIds = technician.getTechSupportTypes() == null
                 ? Set.of()
                 : technician.getTechSupportTypes().stream()
-                .filter(type -> type != null && type.getId() != null)
-                .map(type -> type.getId())
-                .collect(Collectors.toSet());
+                        .filter(type -> type != null && type.getId() != null)
+                        .map(type -> type.getId())
+                        .collect(Collectors.toSet());
         return technicianTechTypeIds.contains(requiredTechTypeId);
     }
 
@@ -658,8 +792,7 @@ public class HelpdeskKpiService {
             long fastResponseCount,
             long sampleCount,
             Map<Integer, Long> fastResponseCountByTechnician,
-            Map<Integer, Long> sampleCountByTechnician
-    ) {
+            Map<Integer, Long> sampleCountByTechnician) {
     }
 
     private record FirstResponseSample(Integer technicianId, long minutes, boolean withinTarget) {

@@ -9,6 +9,7 @@ import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
 import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableInventorySummaryResponse;
 import com.poly.mhv.dto.asset.ConsumableDisposalRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableDisposalRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
@@ -116,6 +117,8 @@ public class AssetController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String technicalStatus,
+            @RequestParam(required = false) String usageStatus,
             @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
@@ -127,6 +130,8 @@ public class AssetController {
                 size,
                 name,
                 status,
+                technicalStatus,
+                usageStatus,
                 trackingMode,
                 categoryId,
                 locationId,
@@ -146,6 +151,8 @@ public class AssetController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String technicalStatus,
+            @RequestParam(required = false) String usageStatus,
             @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
@@ -153,11 +160,25 @@ public class AssetController {
             @RequestParam(required = false) String sortDirection
     ) {
         return ResponseEntity.ok(new AssetManagementBootstrapResponse(
-                assetService.getAssets(page, size, name, status, trackingMode, categoryId, locationId, sortKey, sortDirection),
+                assetService.getAssets(page, size, name, status, technicalStatus, usageStatus, trackingMode, categoryId, locationId, sortKey, sortDirection),
                 locationService.getAllLocations(null, true),
                 categoryService.getCategoryOptions(),
                 supplierService.getAll(null)
         ));
+    }
+
+    @GetMapping("/consumables/summary")
+    @Operation(summary = "Tổng hợp KPI vật tư tiêu hao", description = "Trả về số tổng vật tư, tồn đủ, cần nhập, lô hết hạn và giá trị tồn theo bộ lọc hiện tại.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lấy KPI vật tư thành công"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<ConsumableInventorySummaryResponse> getConsumableInventorySummary(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Integer categoryId,
+            @RequestParam(required = false) Integer locationId
+    ) {
+        return ResponseEntity.ok(assetService.getConsumableInventorySummary(name, categoryId, locationId));
     }
 
     @PostMapping("/{qaCode}/issues")

@@ -3,6 +3,7 @@ package com.poly.mhv.repository;
 import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
 import com.poly.mhv.dto.assetmap.AssetMapAssetResponse;
 import com.poly.mhv.entity.Asset;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +60,11 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
             left join a.homeLocation hl
             join a.category c
             left join a.supplier s
-            where (coalesce(:name, '') = '' or lower(a.name) like lower(concat('%', :name, '%')))
+            where (
+                    coalesce(:name, '') = ''
+                    or lower(a.name) like lower(concat('%', :name, '%'))
+                    or lower(a.qaCode) like lower(concat('%', :name, '%'))
+                  )
               and (
                     :status is null
                     or (
@@ -105,6 +110,42 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                     )
                     )
               )
+              and (
+                    :technicalStatus is null
+                    or a.trackingMode = 'CONSUMABLE'
+                    or (
+                        (:technicalStatus = 'Hoạt động tốt'
+                            and coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hoạt động tốt'
+                            and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc'))
+                        or (:technicalStatus = 'Hỏng'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Hỏng'
+                                or coalesce(a.status, '') = 'Hỏng'
+                            )
+                            and coalesce(a.status, '') <> 'Bảo trì')
+                        or (:technicalStatus = 'Thất lạc'
+                            and (
+                                coalesce(a.technicalStatus, 'Hoạt động tốt') = 'Thất lạc'
+                                or coalesce(a.status, '') = 'Thất lạc'
+                            ))
+                    )
+              )
+              and (
+                    :usageStatus is null
+                    or a.trackingMode = 'CONSUMABLE'
+                    or (
+                        (:usageStatus = 'Tại vị trí gốc' and not (
+                            coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                            or a.status = 'Đang sử dụng'
+                            or (hl.id is not null and l.id <> hl.id)
+                        ))
+                        or (:usageStatus = 'Đang cho mượn' and (
+                            coalesce(a.usageStatus, '') = 'Đang cho mượn'
+                            or a.status = 'Đang sử dụng'
+                            or (hl.id is not null and l.id <> hl.id)
+                        ))
+                    )
+              )
               and (:trackingMode is null or a.trackingMode = :trackingMode)
               and (:categoryId is null or c.id = :categoryId)
               and (:locationId is null or l.id = :locationId)
@@ -112,6 +153,8 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     Page<AssetAdminListItemResponse> searchForAdmin(
             @Param("name") String name,
             @Param("status") String status,
+            @Param("technicalStatus") String technicalStatus,
+            @Param("usageStatus") String usageStatus,
             @Param("trackingMode") String trackingMode,
             @Param("categoryId") Integer categoryId,
             @Param("locationId") Integer locationId,
@@ -177,6 +220,316 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
 
     @Query("select count(a) from Asset a where a.trackingMode = 'CONSUMABLE'")
     long countAllConsumables();
+
+    @Query("""
+            select count(a)
+            from Asset a
+            where a.trackingMode = 'CONSUMABLE'
+              and (coalesce(:name, '') = ''
+                   or lower(a.name) like lower(concat('%', :name, '%'))
+                   or lower(a.qaCode) like lower(concat('%', :name, '%')))
+              and (:categoryId is null or a.category.id = :categoryId)
+              and (:locationId is null or a.location.id = :locationId)
+            """)
+    long countConsumablesForInventorySummary(
+            @Param("name") String name,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query("""
+            select count(a)
+            from Asset a
+            where a.trackingMode = 'CONSUMABLE'
+              and coalesce(a.quantityOnHand, 0) > coalesce(a.minimumStock, 0)
+              and (coalesce(:name, '') = ''
+                   or lower(a.name) like lower(concat('%', :name, '%'))
+                   or lower(a.qaCode) like lower(concat('%', :name, '%')))
+              and (:categoryId is null or a.category.id = :categoryId)
+              and (:locationId is null or a.location.id = :locationId)
+            """)
+    long countHealthyConsumablesForInventorySummary(
+            @Param("name") String name,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query("""
+            select count(a)
+            from Asset a
+            where a.trackingMode = 'CONSUMABLE'
+              and coalesce(a.quantityOnHand, 0) <= coalesce(a.minimumStock, 0)
+              and (coalesce(:name, '') = ''
+                   or lower(a.name) like lower(concat('%', :name, '%'))
+                   or lower(a.qaCode) like lower(concat('%', :name, '%')))
+              and (:categoryId is null or a.category.id = :categoryId)
+              and (:locationId is null or a.location.id = :locationId)
+            """)
+    long countLowStockConsumablesForInventorySummary(
+            @Param("name") String name,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countFixedAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'CONSUMABLE'
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countConsumablesForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select coalesce(sum(a.purchase_price), 0)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    BigDecimal sumFixedAssetPurchaseValueForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'CONSUMABLE'
+              and coalesce(a.quantity_on_hand, 0) <= coalesce(a.minimum_stock, 0)
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countLowStockConsumablesForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and (
+                    coalesce(a.technical_status, 'Hoạt động tốt') = 'Thất lạc'
+                    or coalesce(a.status, '') = 'Thất lạc'
+                  )
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countLostAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and coalesce(a.status, '') = 'Bảo trì'
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countRepairingAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and (
+                    coalesce(a.technical_status, 'Hoạt động tốt') = 'Hỏng'
+                    or coalesce(a.status, '') = 'Hỏng'
+                  )
+              and coalesce(a.status, '') <> 'Bảo trì'
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countBrokenAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and coalesce(a.technical_status, 'Hoạt động tốt') = 'Hoạt động tốt'
+              and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+              and (
+                    coalesce(a.usage_status, '') = 'Đang cho mượn'
+                    or coalesce(a.status, '') = 'Đang sử dụng'
+                    or (a.home_location_id is not null and a.location_id <> a.home_location_id)
+                  )
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countBorrowedAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select count(*)
+            from assets a
+            where a.tracking_mode = 'ITEMIZED'
+              and coalesce(a.technical_status, 'Hoạt động tốt') = 'Hoạt động tốt'
+              and coalesce(a.status, '') not in ('Hỏng', 'Bảo trì', 'Thất lạc')
+              and not (
+                    coalesce(a.usage_status, '') = 'Đang cho mượn'
+                    or coalesce(a.status, '') = 'Đang sử dụng'
+                    or (a.home_location_id is not null and a.location_id <> a.home_location_id)
+                  )
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            """, nativeQuery = true)
+    long countAvailableAssetsForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select row_value, count(*) as row_count
+            from (
+                select case
+                    when coalesce(a.status, '') = 'Bảo trì' then 'Đang sửa chữa'
+                    when coalesce(a.technical_status, 'Hoạt động tốt') = 'Thất lạc'
+                         or coalesce(a.status, '') = 'Thất lạc' then 'Thất lạc'
+                    when coalesce(a.technical_status, 'Hoạt động tốt') = 'Hỏng'
+                         or coalesce(a.status, '') = 'Hỏng' then 'Hỏng'
+                    when coalesce(a.usage_status, '') = 'Đang cho mượn'
+                         or coalesce(a.status, '') = 'Đang sử dụng'
+                         or (a.home_location_id is not null and a.location_id <> a.home_location_id) then 'Đang cho mượn'
+                    else 'Hoạt động tốt'
+                end as row_value
+                from assets a
+                where a.tracking_mode = 'ITEMIZED'
+                  and (:categoryId is null or a.category_id = :categoryId)
+                  and (:locationId is null or a.location_id = :locationId)
+            ) rows
+            group by row_value
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countFixedAssetsByDisplayStatusForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select row_value, count(*) as row_count
+            from (
+                select case
+                    when coalesce(a.usage_status, '') = 'Đang cho mượn'
+                         or coalesce(a.status, '') = 'Đang sử dụng'
+                         or (a.home_location_id is not null and a.location_id <> a.home_location_id) then 'Đang cho mượn'
+                    else 'Tại vị trí gốc'
+                end as row_value
+                from assets a
+                where a.tracking_mode = 'ITEMIZED'
+                  and (:categoryId is null or a.category_id = :categoryId)
+                  and (:locationId is null or a.location_id = :locationId)
+            ) rows
+            group by row_value
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countFixedAssetsByUsageStatusForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select coalesce(c.name, 'Chưa phân loại') as row_value, count(*) as row_count
+            from assets a
+            left join categories c on c.id = a.category_id
+            where a.tracking_mode = :trackingMode
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            group by coalesce(c.name, 'Chưa phân loại')
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countAssetsByCategoryForStatistics(
+            @Param("trackingMode") String trackingMode,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select coalesce(l.room_name, 'Chưa cập nhật') as row_value, count(*) as row_count
+            from assets a
+            left join locations l on l.id = a.location_id
+            where a.tracking_mode = :trackingMode
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            group by coalesce(l.room_name, 'Chưa cập nhật')
+            order by row_count desc, row_value asc
+            limit 8
+            """, nativeQuery = true)
+    List<Object[]> countAssetsByLocationForStatistics(
+            @Param("trackingMode") String trackingMode,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select row_value, count(*) as row_count
+            from (
+                select case
+                    when coalesce(a.quantity_on_hand, 0) <= 0 then 'Hết hàng'
+                    when coalesce(a.quantity_on_hand, 0) <= coalesce(a.minimum_stock, 0) then 'Cần nhập'
+                    else 'Đủ dùng'
+                end as row_value
+                from assets a
+                where a.tracking_mode = 'CONSUMABLE'
+                  and (:categoryId is null or a.category_id = :categoryId)
+                  and (:locationId is null or a.location_id = :locationId)
+            ) rows
+            group by row_value
+            order by row_count desc, row_value asc
+            """, nativeQuery = true)
+    List<Object[]> countConsumablesByStockStatusForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
+
+    @Query(value = """
+            select a.qa_code,
+                   a.name,
+                   coalesce(c.name, ''),
+                   coalesce(l.room_name, ''),
+                   coalesce(a.quantity_on_hand, 0),
+                   coalesce(a.minimum_stock, 0),
+                   coalesce(a.unit, ''),
+                   coalesce(a.purchase_price, 0)
+            from assets a
+            left join categories c on c.id = a.category_id
+            left join locations l on l.id = a.location_id
+            where a.tracking_mode = 'CONSUMABLE'
+              and coalesce(a.quantity_on_hand, 0) <= coalesce(a.minimum_stock, 0)
+              and (:categoryId is null or a.category_id = :categoryId)
+              and (:locationId is null or a.location_id = :locationId)
+            order by (coalesce(a.minimum_stock, 0) - coalesce(a.quantity_on_hand, 0)) desc, a.name asc
+            limit 8
+            """, nativeQuery = true)
+    List<Object[]> findTopLowStockConsumablesForStatistics(
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId
+    );
 
     @Query("""
             select count(a) from Asset a

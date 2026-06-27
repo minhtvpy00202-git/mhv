@@ -33,12 +33,15 @@ const SupplierManagement = lazy(() => import('./pages/admin/SupplierManagement')
 const CategoryManagement = lazy(() => import('./pages/admin/CategoryManagement'))
 const LocationManagement = lazy(() => import('./pages/admin/LocationManagement'))
 const TechSupportTypeManagement = lazy(() => import('./pages/admin/TechSupportTypeManagement'))
+const AssetStatisticsManagement = lazy(() => import('./pages/admin/AssetStatisticsManagement'))
 const UsageHistoryManagement = lazy(() => import('./pages/admin/UsageHistoryManagement'))
 const InventoryAuditManagement = lazy(() => import('./pages/admin/InventoryAuditManagement'))
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 const NotificationDetail = lazy(() => import('./pages/admin/NotificationDetail'))
 const TicketManagement = lazy(() => import('./pages/admin/TicketManagement'))
 const BrandingSettings = lazy(() => import('./pages/admin/BrandingSettings'))
+const SlaExtensionManagement = lazy(() => import('./pages/admin/SlaExtensionManagement'))
+
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -163,12 +166,15 @@ function App() {
           )}
         >
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
-          <Route path="/admin/assets" element={withSuspense(<AssetManagement />)} />
+          <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
+          <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
+          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables" initialSection="consumables" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
           <Route path="/admin/suppliers" element={withSuspense(<SupplierManagement />)} />
           <Route path="/admin/categories" element={withSuspense(<CategoryManagement />)} />
           <Route path="/admin/locations" element={withSuspense(<LocationManagement />)} />
           <Route path="/admin/tech-support-types" element={withSuspense(<TechSupportTypeManagement />)} />
+          <Route path="/admin/asset-statistics" element={withSuspense(<AssetStatisticsManagement />)} />
           <Route path="/admin/usage-history" element={withSuspense(<UsageHistoryManagement />)} />
           <Route path="/admin/maintenance-history" element={<Navigate to="/admin/tickets" replace />} />
           <Route path="/admin/inventory-audits" element={withSuspense(<InventoryAuditManagement />)} />
@@ -176,8 +182,8 @@ function App() {
           <Route path="/admin/branding" element={withSuspense(<BrandingSettings />)} />
           <Route path="/admin/notifications/:id" element={withSuspense(<NotificationDetail />)} />
           <Route path="/admin/tickets" element={withSuspense(<TicketManagement />)} />
-          <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
-          <Route path="/admin/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
+          <Route path="/admin/tickets/extensions" element={withSuspense(<SlaExtensionManagement />)} />
+
         </Route>
 
         <Route

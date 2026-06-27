@@ -1,6 +1,34 @@
 import axios from 'axios'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const BASE_URL_HAS_API_SUFFIX = /\/api$/i.test(API_BASE_URL)
+const ABSOLUTE_URL_PATTERN = /^[a-z][a-z\d+\-.]*:\/\//i
+const API_PREFIX_PATTERN = /^\/?api(?=\/|$)/i
+
+function normalizeRequestUrl(url) {
+  if (typeof url !== 'string') return url
+
+  const normalizedUrl = url.trim()
+  if (!normalizedUrl || ABSOLUTE_URL_PATTERN.test(normalizedUrl)) {
+    return normalizedUrl
+  }
+
+  const hasApiPrefix = API_PREFIX_PATTERN.test(normalizedUrl)
+
+  if (BASE_URL_HAS_API_SUFFIX) {
+    if (hasApiPrefix) {
+      const strippedUrl = normalizedUrl.replace(API_PREFIX_PATTERN, '')
+      return strippedUrl.startsWith('/') ? strippedUrl : `/${strippedUrl}`
+    }
+    return normalizedUrl.startsWith('/') ? normalizedUrl : `/${normalizedUrl}`
+  }
+
+  if (hasApiPrefix) {
+    return normalizedUrl.startsWith('/') ? normalizedUrl : `/${normalizedUrl}`
+  }
+
+  return normalizedUrl.startsWith('/') ? `/api${normalizedUrl}` : `/api/${normalizedUrl}`
+}
 
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
@@ -12,6 +40,7 @@ const axiosClient = axios.create({
 
 axiosClient.interceptors.request.use(
   (config) => {
+    config.url = normalizeRequestUrl(config.url)
     const token = localStorage.getItem('auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
