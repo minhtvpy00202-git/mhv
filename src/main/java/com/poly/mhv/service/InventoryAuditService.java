@@ -78,6 +78,16 @@ public class InventoryAuditService {
         this.helpdeskKpiService = helpdeskKpiService;
     }
 
+    /**
+     * Kiểm tra nhanh xem phiên kiểm kê có đang ở trạng thái OPEN nhưng đã quá hạn hay không.
+     */
+    private boolean isAuditOverdue(InventoryAudit audit) {
+        if (audit == null || audit.getDueDate() == null) {
+            return false;
+        }
+        return "OPEN".equals(audit.getStatus()) && LocalDateTime.now().isAfter(audit.getDueDate());
+    }
+
     @Transactional
     public InventoryAuditSummaryResponse createAudit(InventoryAuditCreateRequest request) {
         if (request == null || request.getLocationId() == null) {
@@ -86,9 +96,45 @@ public class InventoryAuditService {
         if (request.getDueDate() == null) {
             throw new CustomException("dueDate là bắt buộc.");
         }
-        if (inventoryAuditRepository.existsByLocationIdAndStatus(request.getLocationId(), "OPEN")) {
-            throw new CustomException("Phòng này đã có phiên kiểm kê đang mở.");
+
+        // Tìm kiếm các phiên kiểm kê có trạng thái OPEN thực tế của phòng này
+        List<InventoryAudit> openAudits = inventoryAuditRepository.findForAdmin("OPEN").stream()
+                .filter(a -> a.getLocation().getId().equals(request.getLocationId()))
+                .toList();
+
+        for (InventoryAudit activeAudit : openAudits) {
+            // Nếu phiên OPEN đó vẫn chưa quá hạn -> Chặn không cho tạo phiên mới
+            if (!LocalDateTime.now().isAfter(activeAudit.getDueDate())) {
+                throw new CustomException("Phòng này đã có phiên kiểm kê đang mở và chưa quá hạn.");
+            }
+
+            // Nếu phiên OPEN đó đã lố thời gian -> Tự động chốt và đóng phiên cũ thành trạng thái QUÁ HẠN
+            activeAudit.setStatus("OVERDUE");
+
+            // Đảm bảo thời gian hoàn tất bằng null vì phiên bị quá hạn chứ không phải hoàn thành thành công
+            activeAudit.setCompletedAt(null);
+
+            activeAudit.setNotes(StringUtils.hasText(activeAudit.getNotes())
+                    ? activeAudit.getNotes() + " (Hệ thống tự động đóng do quá hạn)"
+                    : "Hệ thống tự động đóng do quá hạn");
+
+            // Tính toán nhanh số lượng đã quét và thất lạc tại thời điểm đóng tự động
+            AuditComputedData computedData = computeAuditData(activeAudit);
+            Set<String> scannedQaCodes = inventoryAuditItemRepository.findQaCodesByAuditId(activeAudit.getId()).stream()
+                    .collect(Collectors.toSet());
+
+            int scannedSize = scannedQaCodes.size();
+            long missingCount = computedData.expectedAssets().stream()
+                    .filter(asset -> !scannedQaCodes.contains(asset.getQaCode()))
+                    .count();
+
+            activeAudit.setExpectedCount(computedData.expectedAssets().size());
+            activeAudit.setScannedCount(scannedSize);
+            activeAudit.setMissingCount((int) missingCount);
+
+            inventoryAuditRepository.save(activeAudit);
         }
+
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
         if (location.getHasAsset() != null && !location.getHasAsset()) {
@@ -140,6 +186,7 @@ public class InventoryAuditService {
     @Transactional(readOnly = true)
     public List<InventoryAuditSummaryResponse> getActiveAudits() {
         return inventoryAuditRepository.findForAdmin("OPEN").stream()
+                .filter(audit -> !isAuditOverdue(audit)) // Chỉ lấy các phiên OPEN thực sự chưa quá hạn
                 .map(this::mapSummary)
                 .toList();
     }
@@ -166,7 +213,7 @@ public class InventoryAuditService {
         Map<String, Asset> assetsByQaCode = qaCodes.isEmpty()
                 ? Map.of()
                 : assetRepository.findAllDetailsByQaCodeIn(qaCodes).stream()
-                        .collect(Collectors.toMap(Asset::getQaCode, asset -> asset));
+                  .collect(Collectors.toMap(Asset::getQaCode, asset -> asset));
         List<InventoryAuditItemResponse> scannedItems = auditItems.stream()
                 .map(item -> {
                     Asset scannedAsset = assetsByQaCode.get(item.getAssetQaCode());
@@ -213,9 +260,15 @@ public class InventoryAuditService {
         }
         InventoryAudit audit = inventoryAuditRepository.findDetailById(auditId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên kiểm kê."));
+
+        // Chặn quét nếu trạng thái khác OPEN hoặc thời gian hiện tại đã quá hạn
         if (!"OPEN".equals(audit.getStatus())) {
             throw new CustomException("Phiên kiểm kê đã đóng.");
         }
+        if (LocalDateTime.now().isAfter(audit.getDueDate())) {
+            throw new CustomException("Phiên kiểm kê này đã quá hạn hoàn tất, không thể quét thiết bị.");
+        }
+
         String qaCode = request.getAssetQaCode().trim();
         Asset asset = assetRepository.findById(qaCode)
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
@@ -381,18 +434,33 @@ public class InventoryAuditService {
     }
 
     private InventoryAuditSummaryResponse mapSummary(InventoryAudit audit, AuditComputedData computedData) {
-        Integer expectedCount = "COMPLETED".equals(audit.getStatus()) && audit.getExpectedCount() != null
+        boolean isCompletedOrOverdue = "COMPLETED".equals(audit.getStatus()) || "OVERDUE".equals(audit.getStatus());
+        Integer expectedCount = isCompletedOrOverdue && audit.getExpectedCount() != null
                 ? audit.getExpectedCount()
                 : computedData.expectedAssets().size();
+
+        // Xử lý chuyển đổi chữ hiển thị trạng thái đồng bộ với Frontend
+        String displayStatus = audit.getStatus();
+        LocalDateTime displayCompletedAt = audit.getCompletedAt(); // Tạo biến để ép null nếu cần
+
+        if (isAuditOverdue(audit) || "OVERDUE".equals(audit.getStatus())) {
+            displayStatus = "QUÁ HẠN";
+            displayCompletedAt = null; // CHÍNH LÀ ĐÂY: Ép về null để Frontend hiển thị dấu trừ '-'
+        } else if ("OPEN".equals(displayStatus)) {
+            displayStatus = "ĐANG MỞ";
+        } else if ("COMPLETED".equals(displayStatus)) {
+            displayStatus = "ĐÃ HOÀN THÀNH";
+        }
+
         return InventoryAuditSummaryResponse.builder()
                 .id(audit.getId())
                 .locationId(audit.getLocation().getId())
                 .locationName(audit.getLocation().getRoomName())
                 .createdByUsername(audit.getCreatedBy().getUsername())
                 .startedAt(audit.getStartedAt())
-                .completedAt(audit.getCompletedAt())
+                .completedAt(displayCompletedAt) // Dùng biến đã được xử lý thay vì lấy thẳng từ audit
                 .dueDate(audit.getDueDate())
-                .status(audit.getStatus())
+                .status(displayStatus)
                 .totalAssetCount(computedData.totalAssetCount())
                 .expectedCount(expectedCount)
                 .repairingCount(computedData.repairingAssets().size())
