@@ -1,18 +1,11 @@
 import {
-  IconArrowsMove as Move,
-  IconCamera as Camera,
   IconChevronDown as ChevronDown,
   IconChevronUp as ChevronUp,
-  IconDeviceFloppy as Save,
-  IconEdit as Edit,
   IconInfoCircle as InfoCircle,
   IconListDetails as ListDetails,
   IconPlus as Plus,
   IconRefresh as Refresh,
-  IconSearch as Search,
-  IconTrash as Trash,
   IconUpload as Upload,
-  IconX as X,
 } from '@tabler/icons-react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -20,10 +13,24 @@ import { useBeforeUnload, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
-import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
+import AreaTypeCatalogModal from './asset-map/AreaTypeCatalogModal'
+import AssetPlacementPanel from './asset-map/AssetPlacementPanel'
+import {
+  AREA_TYPE_PRESETS,
+  buildAreaTypeOptions,
+  buildAreaTypePayload,
+  normalizeAreaTypeLabel,
+  resolveAreaTypeDraft,
+  resolveAreaTypeMeta,
+} from './asset-map/areaTypes'
+import FloorToolbar from './asset-map/FloorToolbar'
+import ImportSessionPanel from './asset-map/ImportSessionPanel'
+import MapCanvas from './asset-map/MapCanvas'
+import RoomEditorModal from './asset-map/RoomEditorModal'
 
 const CELL_SIZE = 32
 const DEFAULT_COLOR = '#F97316'
+const CANVAS_COLOR_DISTANCE_THRESHOLD = 52
 const scannerElementId = 'asset-map-qr-scanner'
 const DEFAULT_DRAW_TOOL = 'select'
 const IMAGE_RECTANGLE_TOOL = 'rectangle'
@@ -52,6 +59,8 @@ function createDefaultRoomDraft() {
     locationId: '',
     roomName: '',
     colorHex: DEFAULT_COLOR,
+    areaTypeKey: 'ROOM',
+    areaTypeLabel: 'Phòng',
     hasAsset: true,
   }
 }
@@ -113,6 +122,52 @@ function getReadableTextColor(hex) {
   const blue = Number.parseInt(normalized.slice(4, 6), 16)
   const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
   return luminance > 0.62 ? '#0f172a' : '#ffffff'
+}
+
+function normalizeHexColor(hex, fallback = DEFAULT_COLOR) {
+  const normalized = String(hex || '').trim().replace('#', '')
+  if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return `#${normalized.toUpperCase()}`
+  }
+  return fallback
+}
+
+function parseHexColor(hex, fallback = DEFAULT_COLOR) {
+  const normalized = normalizeHexColor(hex, fallback).replace('#', '')
+  return {
+    red: Number.parseInt(normalized.slice(0, 2), 16),
+    green: Number.parseInt(normalized.slice(2, 4), 16),
+    blue: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function getColorDistance(firstHex, secondHex) {
+  const first = parseHexColor(firstHex)
+  const second = parseHexColor(secondHex)
+  return Math.sqrt(
+    ((first.red - second.red) ** 2)
+    + ((first.green - second.green) ** 2)
+    + ((first.blue - second.blue) ** 2),
+  )
+}
+
+function findCanvasColorConflict(roomShapes, nextCanvasColor) {
+  const normalizedCanvasColor = normalizeHexColor(nextCanvasColor, '#FFFFFF')
+  return (roomShapes || []).reduce((closestConflict, shape) => {
+    const roomColor = normalizeHexColor(shape?.colorHex, DEFAULT_COLOR)
+    const distance = getColorDistance(normalizedCanvasColor, roomColor)
+    if (distance > CANVAS_COLOR_DISTANCE_THRESHOLD) {
+      return closestConflict
+    }
+    if (!closestConflict || distance < closestConflict.distance) {
+      return {
+        shape,
+        colorHex: roomColor,
+        distance,
+      }
+    }
+    return closestConflict
+  }, null)
 }
 
 function parseCell(cell) {
@@ -291,15 +346,16 @@ function getRequiredCanvasSize(roomShapes) {
   return { gridRows, gridCols }
 }
 
-function calculateMarkerTooltipPosition(targetRect) {
-  const tooltipWidth = 224
-  const tooltipHeight = 108
+function calculateFloatingCardPosition(targetRect, options = {}) {
+  const tooltipWidth = options.width || 224
+  const tooltipHeight = options.height || 108
   const viewportPadding = 12
+  const offset = options.offset || 10
   const centeredLeft = targetRect.left + targetRect.width / 2
-  const canShowAbove = targetRect.top >= tooltipHeight + 20
+  const canShowAbove = targetRect.top >= tooltipHeight + offset + 10
 
   let left = centeredLeft
-  let top = canShowAbove ? targetRect.top - 10 : targetRect.bottom + 10
+  let top = canShowAbove ? targetRect.top - offset : targetRect.bottom + offset
 
   const minLeft = viewportPadding + tooltipWidth / 2
   const maxLeft = window.innerWidth - viewportPadding - tooltipWidth / 2
@@ -314,6 +370,77 @@ function calculateMarkerTooltipPosition(targetRect) {
     left,
     top,
     placement: canShowAbove ? 'top' : 'bottom',
+  }
+}
+
+function buildRoomDraftSignature(draft) {
+  return JSON.stringify({
+    mode: draft?.mode || 'new',
+    locationId: String(draft?.locationId || ''),
+    roomName: String(draft?.roomName || '').trim(),
+    colorHex: String(draft?.colorHex || DEFAULT_COLOR).toUpperCase(),
+    areaTypeKey: String(draft?.areaTypeKey || ''),
+    areaTypeLabel: normalizeAreaTypeLabel(draft?.areaTypeLabel || ''),
+    hasAsset: draft?.hasAsset !== false,
+  })
+}
+
+function buildFloorFormSignature(form) {
+  return JSON.stringify({
+    name: String(form?.name || '').trim(),
+    mode: String(form?.mode || 'GRID').toUpperCase(),
+    gridRows: Number(form?.gridRows) || 12,
+    gridCols: Number(form?.gridCols) || 20,
+  })
+}
+
+function buildCanvasFormSignature(form) {
+  return JSON.stringify({
+    gridRows: Number(form?.gridRows) || 12,
+    gridCols: Number(form?.gridCols) || 20,
+    canvasBackgroundColor: String(form?.canvasBackgroundColor || '#FFFFFF').toUpperCase(),
+  })
+}
+
+function getRoomSyncMeta(shape, locations) {
+  if (!shape?.locationId) {
+    return {
+      key: 'draft',
+      label: 'Chưa gắn phòng',
+      tone: 'bg-amber-100 text-amber-700 border-amber-200',
+    }
+  }
+
+  const matchedLocation = (locations || []).find((item) => Number(item.id) === Number(shape.locationId))
+  if (!matchedLocation) {
+    return {
+      key: 'missing',
+      label: 'Liên kết thiếu',
+      tone: 'bg-rose-100 text-rose-700 border-rose-200',
+    }
+  }
+
+  return {
+    key: 'synced',
+    label: 'Đã đồng bộ',
+    tone: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  }
+}
+
+function buildSelectedCellsBounds(selectedCells, cellSize) {
+  if (!selectedCells || selectedCells.size === 0) return null
+  const parsedCells = Array.from(selectedCells).map(parseCell)
+  const rows = parsedCells.map((cell) => cell.row)
+  const cols = parsedCells.map((cell) => cell.col)
+  const minRow = Math.min(...rows)
+  const maxRow = Math.max(...rows)
+  const minCol = Math.min(...cols)
+  const maxCol = Math.max(...cols)
+  return {
+    left: minCol * cellSize,
+    top: minRow * cellSize,
+    width: (maxCol - minCol + 1) * cellSize,
+    height: (maxRow - minRow + 1) * cellSize,
   }
 }
 
@@ -336,6 +463,8 @@ function serializeRoomShapes(roomShapes) {
       }
       : null,
     colorHex: shape.colorHex || DEFAULT_COLOR,
+    areaTypeKey: shape.areaTypeKey || '',
+    areaTypeLabel: normalizeAreaTypeLabel(shape.areaTypeLabel || ''),
     hasAsset: shape.hasAsset !== false,
   }))
 }
@@ -442,14 +571,21 @@ function AssetMapManagement() {
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const pendingNavigationRef = useRef(null)
+  const pendingActionRef = useRef(null)
   const bypassLeaveGuardRef = useRef(false)
-  const contextMenuRef = useRef(null)
   const confirmActionRef = useRef(null)
   const imageSvgRef = useRef(null)
+  const historyStateRef = useRef({ past: [], future: [], lastSignature: null })
+  const historyRestoreRef = useRef(false)
+  const roomModalInitialRef = useRef(buildRoomDraftSignature(createDefaultRoomDraft()))
+  const floorModalInitialRef = useRef(buildFloorFormSignature(createDefaultFloorForm()))
+  const canvasModalInitialRef = useRef(buildCanvasFormSignature(createDefaultCanvasForm()))
   const [loading, setLoading] = useState(true)
   const [floors, setFloors] = useState([])
   const [locations, setLocations] = useState([])
   const [categories, setCategories] = useState([])
+  const [areaTypes, setAreaTypes] = useState([])
+  const [roomAssetIndex, setRoomAssetIndex] = useState([])
   const [activeFloorId, setActiveFloorId] = useState(null)
   const [selectedCells, setSelectedCells] = useState(new Set())
   const [selectedShapeId, setSelectedShapeId] = useState(null)
@@ -470,6 +606,7 @@ function AssetMapManagement() {
   const [imageImportSession, setImageImportSession] = useState(createDefaultImageImportState)
   const [selectedImportDrawingIds, setSelectedImportDrawingIds] = useState([])
   const [showFloorModal, setShowFloorModal] = useState(false)
+  const [showAreaTypeCatalogModal, setShowAreaTypeCatalogModal] = useState(false)
   const [editingFloorId, setEditingFloorId] = useState(null)
   const [floorForm, setFloorForm] = useState(createDefaultFloorForm)
   const [showCanvasModal, setShowCanvasModal] = useState(false)
@@ -536,6 +673,9 @@ function AssetMapManagement() {
   const [roomAssetsLoading, setRoomAssetsLoading] = useState(false)
   const [roomAssets, setRoomAssets] = useState([])
   const [markerTooltip, setMarkerTooltip] = useState(null)
+  const [roomPreview, setRoomPreview] = useState(null)
+  const [legendFilters, setLegendFilters] = useState([])
+  const [historyMeta, setHistoryMeta] = useState({ canUndo: false, canRedo: false })
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -630,13 +770,24 @@ function AssetMapManagement() {
     )
 
     return locations.filter((location) => {
-      if (roomDraft.mode === 'existing' && floorInteractionMode === 'add' && mappedLocationIds.has(Number(location.id))) {
+      if (roomDraft.mode === 'existing' && mappedLocationIds.has(Number(location.id))) {
         return false
       }
       if (!activeFloorId) return true
       return Number(location.floorId) === Number(activeFloorId)
     })
-  }, [activeFloorId, floorInteractionMode, floors, locations, roomDraft.mode, selectedShapeId])
+  }, [activeFloorId, floors, locations, roomDraft.mode, selectedShapeId])
+
+  const roomShapeByLocationId = useMemo(() => {
+    const next = new Map()
+    floors.forEach((floor) => {
+      ;(floor.roomShapes || []).forEach((shape) => {
+        if (!shape?.locationId) return
+        next.set(Number(shape.locationId), shape)
+      })
+    })
+    return next
+  }, [floors])
 
   const filteredLocationOptions = useMemo(() => {
     if (!searchFilters.floorId) return locations
@@ -682,17 +833,317 @@ function AssetMapManagement() {
     return next
   }, [searchResults])
 
+  const roomAssetCountMap = useMemo(() => {
+    const next = new Map()
+    roomAssetIndex.forEach((asset) => {
+      if (!asset?.locationId) return
+      next.set(asset.locationId, (next.get(asset.locationId) || 0) + 1)
+    })
+    return next
+  }, [roomAssetIndex])
+
+  const roomDraftDirty = useMemo(
+    () => showRoomModal && buildRoomDraftSignature(roomDraft) !== roomModalInitialRef.current,
+    [roomDraft, showRoomModal],
+  )
+
+  const areaTypeCatalogEntries = useMemo(
+    () => (areaTypes.length > 0
+      ? areaTypes
+      : AREA_TYPE_PRESETS.map((item, index) => ({
+        id: index + 1,
+        typeKey: item.key,
+        label: item.label,
+        description: item.description,
+        defaultHasAsset: item.defaultHasAsset !== false,
+        builtIn: true,
+        sortOrder: (index + 1) * 10,
+        usageCount: 0,
+      }))),
+    [areaTypes],
+  )
+
+  const floorFormDirty = useMemo(
+    () => showFloorModal && buildFloorFormSignature(floorForm) !== floorModalInitialRef.current,
+    [floorForm, showFloorModal],
+  )
+
+  const canvasFormDirty = useMemo(
+    () => showCanvasModal && buildCanvasFormSignature(canvasForm) !== canvasModalInitialRef.current,
+    [canvasForm, showCanvasModal],
+  )
+
+  const canvasColorConflict = useMemo(() => {
+    if (!activeFloor) return null
+    const nextCanvasColor = normalizeHexColor(canvasForm.canvasBackgroundColor, '#FFFFFF')
+    const currentCanvasColor = normalizeHexColor(activeFloor.canvasBackgroundColor, '#FFFFFF')
+    if (nextCanvasColor === currentCanvasColor) {
+      return null
+    }
+    return findCanvasColorConflict(activeFloor.roomShapes, nextCanvasColor)
+  }, [activeFloor, canvasForm.canvasBackgroundColor])
+
+  const areaTypeOptions = useMemo(
+    () => buildAreaTypeOptions(
+      areaTypeCatalogEntries,
+      floors.flatMap((floor) => (floor.roomShapes || []).map((shape) => ({
+        key: shape.areaTypeKey,
+        label: shape.areaTypeLabel,
+      }))),
+    ),
+    [areaTypeCatalogEntries, floors],
+  )
+
+  const legendItems = useMemo(() => {
+    const typeItems = new Map()
+    ;(activeFloor?.roomShapes || []).forEach((shape) => {
+      const areaType = resolveAreaTypeMeta(shape, areaTypeCatalogEntries)
+      if (!typeItems.has(areaType.filterKey)) {
+        typeItems.set(areaType.filterKey, {
+          key: areaType.filterKey,
+          label: areaType.label,
+          tone: areaType.tone,
+        })
+      }
+    })
+
+    return [
+      { key: 'asset-capable', label: 'Phòng chứa tài sản', tone: 'bg-orange-100 text-orange-700 border-orange-200' },
+      ...Array.from(typeItems.values()).sort((left, right) => left.label.localeCompare(right.label, 'vi')),
+      { key: 'empty', label: 'Phòng trống', tone: 'bg-amber-100 text-amber-700 border-amber-200' },
+      { key: 'assigned', label: 'Đã gán tài sản', tone: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+    ]
+  }, [activeFloor, areaTypeCatalogEntries])
+
+  const getLegendMatchKeys = useCallback((shape) => {
+    const keys = new Set()
+    const assetCount = roomAssetCountMap.get(shape?.locationId) || 0
+    const areaType = resolveAreaTypeMeta(shape, areaTypeCatalogEntries)
+    if (shape?.hasAsset !== false) {
+      keys.add('asset-capable')
+    }
+    keys.add(areaType.filterKey)
+    if (assetCount > 0) {
+      keys.add('assigned')
+    } else if (shape?.hasAsset !== false) {
+      keys.add('empty')
+    }
+    return keys
+  }, [areaTypeCatalogEntries, roomAssetCountMap])
+
+  const visibleShapeIdSet = useMemo(() => {
+    if (!legendFilters.length || !activeFloor) {
+      return new Set((activeFloor?.roomShapes || []).map((shape) => Number(shape.id)))
+    }
+
+    return new Set(
+      (activeFloor.roomShapes || [])
+        .filter((shape) => {
+          const keys = getLegendMatchKeys(shape)
+          return legendFilters.some((filterKey) => keys.has(filterKey))
+        })
+        .map((shape) => Number(shape.id)),
+    )
+  }, [activeFloor, getLegendMatchKeys, legendFilters])
+
+  const currentSelectionBounds = useMemo(() => {
+    if (!activeFloor) return null
+    if (isImageFloorMode(activeFloor)) {
+      if ((floorInteractionMode === 'add' || floorInteractionMode === 'edit') && imageSelectionGeometry.bounds) {
+        const bounds = imageSelectionGeometry.bounds
+        return {
+          left: bounds.minX,
+          top: bounds.minY,
+          width: Math.max(bounds.maxX - bounds.minX, 1),
+          height: Math.max(bounds.maxY - bounds.minY, 1),
+        }
+      }
+      if (selectedShape) {
+        const bounds = selectedShape.bounds || buildImageBoundsFromPoints(getShapePoints(selectedShape))
+        if (!bounds) return null
+        return {
+          left: bounds.minX,
+          top: bounds.minY,
+          width: Math.max(bounds.maxX - bounds.minX, 1),
+          height: Math.max(bounds.maxY - bounds.minY, 1),
+        }
+      }
+      return null
+    }
+
+    if ((floorInteractionMode === 'add' || floorInteractionMode === 'edit') && selectedCells.size > 0) {
+      return buildSelectedCellsBounds(selectedCells, CELL_SIZE)
+    }
+
+    if (selectedShape) {
+      const bounds = getShapeBounds(selectedShape)
+      return {
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      }
+    }
+
+    return null
+  }, [activeFloor, floorInteractionMode, imageSelectionGeometry.bounds, selectedCells, selectedShape])
+
+  const surfaceMode = useMemo(() => {
+    if (showRoomModal || floorInteractionMode === 'add') {
+      return {
+        key: 'assign',
+        label: 'Gán phòng / tài sản',
+        description: 'Đang tạo hoặc gắn khu vực với phòng nghiệp vụ và dữ liệu tài sản.',
+      }
+    }
+    if (floorInteractionMode === 'edit' || floorInteractionMode === 'move' || canvasResizeState.enabled) {
+      return {
+        key: 'layout',
+        label: 'Chỉnh sửa layout',
+        description: 'Đang thay đổi phạm vi, màu hoặc vị trí khu vực trên sơ đồ.',
+      }
+    }
+    return {
+      key: 'view',
+      label: 'Xem sơ đồ',
+      description: 'Chế độ an toàn để xem, lọc, hover và rà soát sơ đồ hiện tại.',
+    }
+  }, [canvasResizeState.enabled, floorInteractionMode, showRoomModal])
+
+  const showFloatingSelectionToolbar = useMemo(() => {
+    if (!activeFloor || !currentSelectionBounds || showRoomModal) return false
+    if (floorInteractionMode === 'view' && (drawTool === 'move' || roomDragState.active)) return false
+    if (floorInteractionMode === 'add' || floorInteractionMode === 'edit') return true
+    return floorInteractionMode === 'view' && Boolean(selectedShape)
+  }, [activeFloor, currentSelectionBounds, drawTool, floorInteractionMode, roomDragState.active, selectedShape, showRoomModal])
+
+  const viewState = useMemo(() => ({
+    loading,
+    activeFloorId,
+    floorInteractionMode,
+    drawTool,
+    selectionEnabled,
+    notesCollapsed,
+    roomsCollapsed,
+    searching,
+    scannerOpen,
+    showLeavePrompt,
+    leaveActionBusy,
+    markerTooltip,
+  }), [
+    activeFloorId,
+    drawTool,
+    floorInteractionMode,
+    leaveActionBusy,
+    loading,
+    markerTooltip,
+    notesCollapsed,
+    roomsCollapsed,
+    scannerOpen,
+    searching,
+    selectionEnabled,
+    showLeavePrompt,
+  ])
+
+  const selectionState = useMemo(() => ({
+    selectedCells,
+    selectedShapeId,
+    selectedShapeIds,
+    selectedShapes,
+    dragSelection,
+    isDraggingSelection,
+    selectionMoveState,
+    roomDragState,
+    imageSelection,
+    imageSelectionGeometry,
+    imageVertexDragState,
+    roomContextMenu,
+    canvasContextMenu,
+  }), [
+    canvasContextMenu,
+    dragSelection,
+    imageSelection,
+    imageSelectionGeometry,
+    imageVertexDragState,
+    isDraggingSelection,
+    roomContextMenu,
+    roomDragState,
+    selectedCells,
+    selectedShapeId,
+    selectedShapeIds,
+    selectedShapes,
+    selectionMoveState,
+  ])
+
+  const draftState = useMemo(() => ({
+    showImageImportModal,
+    imageImportSession,
+    selectedImportDrawingIds,
+    showFloorModal,
+    editingFloorId,
+    floorForm,
+    showCanvasModal,
+    canvasModalMode,
+    canvasForm,
+    canvasResizeState,
+    showRoomModal,
+    roomDraft,
+    nextTempShapeId,
+  }), [
+    canvasForm,
+    canvasModalMode,
+    canvasResizeState,
+    editingFloorId,
+    floorForm,
+    imageImportSession,
+    nextTempShapeId,
+    roomDraft,
+    selectedImportDrawingIds,
+    showCanvasModal,
+    showFloorModal,
+    showImageImportModal,
+    showRoomModal,
+  ])
+
+  const serverState = useMemo(() => ({
+    floors,
+    locations,
+    categories,
+    roomAssetIndex,
+    dirtyFloorIds,
+    savingLayout,
+    savingFloor,
+    importSubmitting,
+    importApplying,
+    roomAssetsLoading,
+    roomAssets,
+    searchResults,
+  }), [
+    categories,
+    dirtyFloorIds,
+    floors,
+    importApplying,
+    importSubmitting,
+    locations,
+    roomAssetIndex,
+    roomAssets,
+    roomAssetsLoading,
+    savingFloor,
+    savingLayout,
+    searchResults,
+  ])
+
   const hasUnsavedChanges = useMemo(
     () =>
       dirtyFloorIds.size > 0
       || selectedCells.size > 0
-      || showRoomModal
-      || showFloorModal
-      || showCanvasModal
+      || roomDraftDirty
+      || floorFormDirty
+      || canvasFormDirty
       || Boolean(canvasResizeState.handle)
       || isDraggingSelection
       || floorInteractionMode !== 'view',
-    [canvasResizeState.handle, dirtyFloorIds, floorInteractionMode, isDraggingSelection, selectedCells, showCanvasModal, showFloorModal, showRoomModal],
+    [canvasFormDirty, canvasResizeState.handle, dirtyFloorIds, floorFormDirty, floorInteractionMode, isDraggingSelection, roomDraftDirty, selectedCells],
   )
 
   const unsavedMessage = useMemo(() => {
@@ -708,13 +1159,13 @@ function AssetMapManagement() {
     if (floorInteractionMode === 'add') {
       return 'Bạn đang tạo phòng mới trên sơ đồ. Nếu rời trang lúc này, vùng chọn hoặc phòng đang tạo có thể bị mất.'
     }
-    if (showRoomModal) {
+    if (roomDraftDirty) {
       return 'Bạn đang tạo hoặc chỉnh sửa phòng trên sơ đồ. Nếu rời trang lúc này, thông tin phòng đang nhập có thể bị mất.'
     }
-    if (showFloorModal) {
+    if (floorFormDirty) {
       return 'Bạn đang tạo hoặc chỉnh sửa tầng. Nếu rời trang lúc này, thay đổi của tầng có thể chưa được lưu.'
     }
-    if (showCanvasModal) {
+    if (canvasFormDirty) {
       return 'Bạn đang chỉnh màu nền hoặc kích thước canvas. Nếu rời trang lúc này, thay đổi của canvas có thể chưa được lưu.'
     }
     if (selectedCells.size > 0) {
@@ -724,7 +1175,245 @@ function AssetMapManagement() {
       return 'Bạn đang có thay đổi sơ đồ chưa lưu. Nếu rời trang lúc này, các phòng vừa tạo hoặc chỉnh sửa có thể bị mất.'
     }
     return 'Bạn đang có thao tác chưa lưu. Nếu rời trang lúc này, dữ liệu có thể bị mất.'
-  }, [canvasResizeState.handle, dirtyFloorIds.size, floorInteractionMode, hasImageSelection, selectedCells.size, showCanvasModal, showFloorModal, showRoomModal])
+  }, [canvasFormDirty, canvasResizeState.handle, dirtyFloorIds.size, floorFormDirty, floorInteractionMode, roomDraftDirty, selectedCells.size])
+
+  const updateHistoryMeta = useCallback(() => {
+    const history = historyStateRef.current
+    setHistoryMeta({
+      canUndo: history.past.length > 1,
+      canRedo: history.future.length > 0,
+    })
+  }, [])
+
+  const createHistorySnapshot = useCallback(() => ({
+    floors: JSON.parse(JSON.stringify(floors)),
+    dirtyFloorIds: Array.from(dirtyFloorIds),
+    activeFloorId,
+    selectedCells: Array.from(selectedCells),
+    selectedShapeId,
+    selectedShapeIds: [...selectedShapeIds],
+    floorInteractionMode,
+    drawTool,
+    selectionEnabled,
+    showRoomModal,
+    roomDraft: { ...roomDraft },
+    showCanvasModal,
+    canvasModalMode,
+    canvasForm: { ...canvasForm },
+    canvasResizeState: { ...canvasResizeState },
+    showFloorModal,
+    editingFloorId,
+    floorForm: { ...floorForm },
+    imageSelection: JSON.parse(JSON.stringify(imageSelection)),
+    imageVertexDragState: { ...imageVertexDragState },
+    nextTempShapeId,
+  }), [
+    activeFloorId,
+    canvasForm,
+    canvasModalMode,
+    canvasResizeState,
+    dirtyFloorIds,
+    drawTool,
+    editingFloorId,
+    floorForm,
+    floorInteractionMode,
+    floors,
+    imageSelection,
+    imageVertexDragState,
+    nextTempShapeId,
+    roomDraft,
+    selectedCells,
+    selectedShapeId,
+    selectedShapeIds,
+    selectionEnabled,
+    showCanvasModal,
+    showFloorModal,
+    showRoomModal,
+  ])
+
+  const buildHistorySignature = useCallback((snapshot) => JSON.stringify({
+    floors: (snapshot.floors || []).map((floor) => ({
+      id: floor.id,
+      gridRows: floor.gridRows,
+      gridCols: floor.gridCols,
+      canvasBackgroundColor: floor.canvasBackgroundColor,
+      roomShapes: serializeRoomShapes(floor.roomShapes),
+    })),
+    dirtyFloorIds: snapshot.dirtyFloorIds,
+    activeFloorId: snapshot.activeFloorId,
+    selectedCells: snapshot.selectedCells,
+    selectedShapeId: snapshot.selectedShapeId,
+    selectedShapeIds: snapshot.selectedShapeIds,
+    floorInteractionMode: snapshot.floorInteractionMode,
+    drawTool: snapshot.drawTool,
+    selectionEnabled: snapshot.selectionEnabled,
+    showRoomModal: snapshot.showRoomModal,
+    roomDraft: snapshot.roomDraft,
+    showCanvasModal: snapshot.showCanvasModal,
+    canvasModalMode: snapshot.canvasModalMode,
+    canvasForm: snapshot.canvasForm,
+    canvasResizeState: snapshot.canvasResizeState,
+    showFloorModal: snapshot.showFloorModal,
+    editingFloorId: snapshot.editingFloorId,
+    floorForm: snapshot.floorForm,
+    imageSelection: snapshot.imageSelection,
+    nextTempShapeId: snapshot.nextTempShapeId,
+  }), [])
+
+  const pushHistorySnapshot = useCallback((snapshot, { clearFuture = true } = {}) => {
+    const signature = buildHistorySignature(snapshot)
+    const history = historyStateRef.current
+    if (signature === history.lastSignature) return
+    history.past.push(snapshot)
+    if (history.past.length > 60) {
+      history.past.shift()
+    }
+    if (clearFuture) {
+      history.future = []
+    }
+    history.lastSignature = signature
+    updateHistoryMeta()
+  }, [buildHistorySignature, updateHistoryMeta])
+
+  const captureHistoryBoundary = useCallback(() => {
+    if (historyRestoreRef.current) return
+    pushHistorySnapshot(createHistorySnapshot(), { clearFuture: false })
+  }, [createHistorySnapshot, pushHistorySnapshot])
+
+  const restoreHistorySnapshot = useCallback((snapshot) => {
+    if (!snapshot) return
+    historyRestoreRef.current = true
+    setFloors(JSON.parse(JSON.stringify(snapshot.floors || [])))
+    setDirtyFloorIds(new Set(snapshot.dirtyFloorIds || []))
+    setActiveFloorId(snapshot.activeFloorId ?? null)
+    setSelectedCells(new Set(snapshot.selectedCells || []))
+    setSelectedShapeId(snapshot.selectedShapeId ?? null)
+    setSelectedShapeIds(snapshot.selectedShapeIds || [])
+    setFloorInteractionMode(snapshot.floorInteractionMode || 'view')
+    setDrawTool(snapshot.drawTool || DEFAULT_DRAW_TOOL)
+    setSelectionEnabled(Boolean(snapshot.selectionEnabled))
+    setShowRoomModal(Boolean(snapshot.showRoomModal))
+    setRoomDraft(snapshot.roomDraft || createDefaultRoomDraft())
+    roomModalInitialRef.current = buildRoomDraftSignature(snapshot.roomDraft || createDefaultRoomDraft())
+    setShowCanvasModal(Boolean(snapshot.showCanvasModal))
+    setCanvasModalMode(snapshot.canvasModalMode || 'color')
+    setCanvasForm(snapshot.canvasForm || createDefaultCanvasForm())
+    canvasModalInitialRef.current = buildCanvasFormSignature(snapshot.canvasForm || createDefaultCanvasForm())
+    setCanvasResizeState(snapshot.canvasResizeState || {
+      enabled: false,
+      floorId: null,
+      handle: null,
+      startX: 0,
+      startY: 0,
+      startRows: 0,
+      startCols: 0,
+      requiredRows: 1,
+      requiredCols: 1,
+    })
+    setShowFloorModal(Boolean(snapshot.showFloorModal))
+    setEditingFloorId(snapshot.editingFloorId ?? null)
+    setFloorForm(snapshot.floorForm || createDefaultFloorForm())
+    floorModalInitialRef.current = buildFloorFormSignature(snapshot.floorForm || createDefaultFloorForm())
+    setImageSelection(snapshot.imageSelection || createDefaultImageSelection())
+    setImageVertexDragState(snapshot.imageVertexDragState || createDefaultImageVertexDragState())
+    setNextTempShapeId(snapshot.nextTempShapeId ?? -1)
+    window.setTimeout(() => {
+      historyRestoreRef.current = false
+    }, 0)
+  }, [])
+
+  const handleUndo = useCallback(() => {
+    const history = historyStateRef.current
+    if (history.past.length <= 1) return
+    const currentSnapshot = history.past.pop()
+    if (currentSnapshot) {
+      history.future.unshift(currentSnapshot)
+    }
+    const previousSnapshot = history.past[history.past.length - 1]
+    history.lastSignature = previousSnapshot ? buildHistorySignature(previousSnapshot) : null
+    updateHistoryMeta()
+    restoreHistorySnapshot(previousSnapshot)
+  }, [buildHistorySignature, restoreHistorySnapshot, updateHistoryMeta])
+
+  const handleRedo = useCallback(() => {
+    const history = historyStateRef.current
+    if (history.future.length === 0) return
+    const nextSnapshot = history.future.shift()
+    if (!nextSnapshot) return
+    history.past.push(nextSnapshot)
+    history.lastSignature = buildHistorySignature(nextSnapshot)
+    updateHistoryMeta()
+    restoreHistorySnapshot(nextSnapshot)
+  }, [buildHistorySignature, restoreHistorySnapshot, updateHistoryMeta])
+
+  const runPendingAction = useCallback(() => {
+    const action = pendingActionRef.current
+    pendingActionRef.current = null
+    if (typeof action === 'function') {
+      action()
+      return true
+    }
+    return false
+  }, [])
+
+  const requestGuardedAction = useCallback((action) => {
+    if (leaveActionBusy) return
+    if (hasUnsavedChanges && !bypassLeaveGuardRef.current) {
+      pendingNavigationRef.current = null
+      pendingActionRef.current = action
+      setShowLeavePrompt(true)
+      return
+    }
+    action()
+  }, [hasUnsavedChanges, leaveActionBusy])
+
+  useEffect(() => {
+    if (historyRestoreRef.current) return
+    const shouldTrackHistory = hasUnsavedChanges || hasImageSelection || canvasResizeState.enabled
+    if (!shouldTrackHistory) return
+    pushHistorySnapshot(createHistorySnapshot())
+  }, [
+    canvasResizeState.enabled,
+    createHistorySnapshot,
+    hasImageSelection,
+    hasUnsavedChanges,
+    pushHistorySnapshot,
+  ])
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      const target = event.target
+      const isTypingTarget = target instanceof HTMLElement && (
+        target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT'
+        || target.isContentEditable
+      )
+      if (isTypingTarget) return
+      const isMetaKey = event.metaKey || event.ctrlKey
+      if (!isMetaKey) return
+
+      if (event.key.toLowerCase() === 'z' && event.shiftKey) {
+        event.preventDefault()
+        handleRedo()
+        return
+      }
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        handleUndo()
+        return
+      }
+      if (event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        handleRedo()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleRedo, handleUndo])
 
   useBeforeUnload(
     useCallback(
@@ -737,6 +1426,15 @@ function AssetMapManagement() {
     ),
   )
 
+  const loadRoomAssetIndex = useCallback(async () => {
+    try {
+      const response = await axiosClient.get('/api/asset-map/assets/search')
+      setRoomAssetIndex(response.data || [])
+    } catch {
+      setRoomAssetIndex([])
+    }
+  }, [])
+
   const loadBootstrap = useCallback(async (preferredFloorId = null) => {
     setLoading(true)
     try {
@@ -745,6 +1443,7 @@ function AssetMapManagement() {
       setFloors(nextFloors)
       setLocations(response.data?.locations || [])
       setCategories(response.data?.categories || [])
+      setAreaTypes(response.data?.areaTypes || [])
       const nextActiveFloorId =
         preferredFloorId && nextFloors.some((floor) => Number(floor.id) === Number(preferredFloorId))
           ? preferredFloorId
@@ -755,14 +1454,18 @@ function AssetMapManagement() {
       setDirtyFloorIds(new Set())
       setShowFloorModal(false)
       setShowRoomModal(false)
+      roomModalInitialRef.current = buildRoomDraftSignature(createDefaultRoomDraft())
       setEditingFloorId(null)
       setFloorForm(createDefaultFloorForm())
+      floorModalInitialRef.current = buildFloorFormSignature(createDefaultFloorForm())
       setShowCanvasModal(false)
       setCanvasContextMenu(null)
       setCanvasForm(createDefaultCanvasForm())
+      canvasModalInitialRef.current = buildCanvasFormSignature(createDefaultCanvasForm())
       setImageSelection(createDefaultImageSelection())
       setImageVertexDragState(createDefaultImageVertexDragState())
       setRoomDraft(createDefaultRoomDraft())
+      setRoomPreview(null)
       setFloorInteractionMode('view')
       setDrawTool(DEFAULT_DRAW_TOOL)
       setSelectionEnabled(false)
@@ -778,13 +1481,14 @@ function AssetMapManagement() {
         startCell: null,
         baseSelection: new Set(),
       })
+      await loadRoomAssetIndex()
     } catch (error) {
       const message = error?.response?.data?.message || 'Không thể tải dữ liệu sơ đồ tài sản.'
       toast.error(message)
     } finally {
       setLoading(false)
     }
-  }, [clearSelectedRooms])
+  }, [clearSelectedRooms, loadRoomAssetIndex])
 
   const cleanupImageImportSession = useCallback(async (sessionId) => {
     if (!sessionId) return
@@ -892,13 +1596,6 @@ function AssetMapManagement() {
 
   useEffect(() => {
     const handleDocumentClick = (event) => {
-      if (roomContextMenu && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-        setRoomContextMenu(null)
-      }
-      if (canvasContextMenu && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-        setCanvasContextMenu(null)
-      }
-
       if (!hasUnsavedChanges || bypassLeaveGuardRef.current) return
 
       const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null
@@ -923,7 +1620,7 @@ function AssetMapManagement() {
     return () => {
       document.removeEventListener('click', handleDocumentClick, true)
     }
-  }, [canvasContextMenu, hasUnsavedChanges, roomContextMenu])
+  }, [hasUnsavedChanges])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -1060,6 +1757,8 @@ function AssetMapManagement() {
 
     const nextGridRows = Number(gridRows) || floor.gridRows || 12
     const nextGridCols = Number(gridCols) || floor.gridCols || 20
+    const nextCanvasColor = normalizeHexColor(canvasBackgroundColor || floor.canvasBackgroundColor || '#FFFFFF', '#FFFFFF')
+    const currentCanvasColor = normalizeHexColor(floor.canvasBackgroundColor || '#FFFFFF', '#FFFFFF')
     const requiredSize = getRequiredCanvasSize(floor.roomShapes)
 
     if (nextGridRows < requiredSize.gridRows || nextGridCols < requiredSize.gridCols) {
@@ -1069,13 +1768,23 @@ function AssetMapManagement() {
       return false
     }
 
+    if (nextCanvasColor !== currentCanvasColor) {
+      const colorConflict = findCanvasColorConflict(floor.roomShapes, nextCanvasColor)
+      if (colorConflict) {
+        toast.error(
+          `Không thể dùng ${nextCanvasColor} làm màu nền vì quá giống màu của khu vực ${colorConflict.shape?.roomName || 'đang có'} (${colorConflict.colorHex}). Hãy chọn màu khác để giữ độ tương phản trên sơ đồ.`,
+        )
+        return false
+      }
+    }
+
     try {
       const response = await axiosClient.put(`/api/asset-map/floors/${floor.id}`, {
         name: floor.name,
         gridRows: nextGridRows,
         gridCols: nextGridCols,
         sortOrder: floor.sortOrder,
-        canvasBackgroundColor: canvasBackgroundColor || floor.canvasBackgroundColor || '#FFFFFF',
+        canvasBackgroundColor: nextCanvasColor,
       })
 
       const responseFloor = response.data
@@ -1093,7 +1802,7 @@ function AssetMapManagement() {
         ...previous,
         gridRows: nextGridRows,
         gridCols: nextGridCols,
-        canvasBackgroundColor: canvasBackgroundColor || floor.canvasBackgroundColor || '#FFFFFF',
+        canvasBackgroundColor: nextCanvasColor,
       }))
       if (successMessage) {
         toast.success(successMessage)
@@ -1123,6 +1832,73 @@ function AssetMapManagement() {
     confirmActionRef.current = null
     setConfirmDialog((previous) => ({ ...previous, open: false, busy: false }))
   }, [])
+
+  const handleCreateAreaType = useCallback(async (form) => {
+    try {
+      const response = await axiosClient.post('/api/asset-map/area-types', {
+        label: String(form?.label || '').trim(),
+        description: String(form?.description || '').trim(),
+        defaultHasAsset: form?.defaultHasAsset !== false,
+      })
+      setAreaTypes((previous) => [...previous, response.data].sort((left, right) => {
+        const sortDelta = (left?.sortOrder || 0) - (right?.sortOrder || 0)
+        if (sortDelta !== 0) return sortDelta
+        return String(left?.label || '').localeCompare(String(right?.label || ''), 'vi')
+      }))
+      toast.success('Đã thêm loại khu vực mới.')
+      return response.data
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể thêm loại khu vực.'
+      toast.error(message)
+      throw error
+    }
+  }, [])
+
+  const handleUpdateAreaType = useCallback(async (areaTypeId, form) => {
+    try {
+      const response = await axiosClient.put(`/api/asset-map/area-types/${areaTypeId}`, {
+        label: String(form?.label || '').trim(),
+        description: String(form?.description || '').trim(),
+        defaultHasAsset: form?.defaultHasAsset !== false,
+      })
+      setAreaTypes((previous) => previous
+        .map((item) => (Number(item.id) === Number(areaTypeId) ? response.data : item))
+        .sort((left, right) => {
+          const sortDelta = (left?.sortOrder || 0) - (right?.sortOrder || 0)
+          if (sortDelta !== 0) return sortDelta
+          return String(left?.label || '').localeCompare(String(right?.label || ''), 'vi')
+        }))
+      toast.success('Đã cập nhật loại khu vực.')
+      return response.data
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể cập nhật loại khu vực.'
+      toast.error(message)
+      throw error
+    }
+  }, [])
+
+  const handleDeleteAreaType = useCallback((areaType) => {
+    openConfirmDialog({
+      title: 'Xóa loại khu vực',
+      message: `Bạn có chắc muốn xóa loại khu vực "${areaType?.label || ''}" không?`,
+      confirmLabel: 'Xóa loại',
+      cancelLabel: 'Giữ lại',
+      tone: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog((previous) => ({ ...previous, busy: true }))
+        try {
+          await axiosClient.delete(`/api/asset-map/area-types/${areaType.id}`)
+          setAreaTypes((previous) => previous.filter((item) => Number(item.id) !== Number(areaType.id)))
+          closeConfirmDialog()
+          toast.success('Đã xóa loại khu vực.')
+        } catch (error) {
+          const message = error?.response?.data?.message || 'Không thể xóa loại khu vực.'
+          setConfirmDialog((previous) => ({ ...previous, busy: false }))
+          toast.error(message)
+        }
+      },
+    })
+  }, [closeConfirmDialog, openConfirmDialog])
 
   useEffect(() => {
     if (floorInteractionMode !== 'move' || !activeFloor || selectedShapes.length === 0) return undefined
@@ -1292,6 +2068,7 @@ function AssetMapManagement() {
       const sourceShapeIds = new Set(sourceShapes.map((shape) => Number(shape.id)))
       const movedShapes = (activeFloor.roomShapes || []).filter((shape) => sourceShapeIds.has(Number(shape.id)))
       setRoomDragState({ active: false, floorId: null, shapeIds: [], startX: 0, startY: 0, sourceShapes: [] })
+      setDrawTool(DEFAULT_DRAW_TOOL)
       if (movedShapes.length === 0) return
 
       const changed = sourceShapes.some((sourceShape) => {
@@ -1414,32 +2191,23 @@ function AssetMapManagement() {
     setSelectionMoveState({ active: false, floorId: null, startCell: null, sourceCells: [] })
     setRoomContextMenu(null)
     setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))
+    const areaTypeDraft = resolveAreaTypeDraft(shape, areaTypeCatalogEntries)
     setRoomDraft({
       mode: shape.locationId ? 'existing' : 'new',
       locationId: shape.locationId ? String(shape.locationId) : '',
       roomName: shape.roomName || '',
       colorHex: shape.colorHex || DEFAULT_COLOR,
+      areaTypeKey: areaTypeDraft.areaTypeKey,
+      areaTypeLabel: areaTypeDraft.areaTypeLabel,
       hasAsset: shape.hasAsset !== false,
     })
-  }, [clearDragState, floors, setSelectedRooms])
+  }, [areaTypeCatalogEntries, clearDragState, floors, setSelectedRooms])
 
-  const beginMoveRoomMode = useCallback((shape, floorId) => {
-    if (!shape) return
-    const targetIds = selectedShapeIdSet.has(Number(shape.id)) && selectedShapeIds.length > 0
-      ? selectedShapeIds
-      : [shape.id]
-    setActiveFloorId(floorId)
-    setSelectedRooms(targetIds, shape.id)
-    setFloorInteractionMode('move')
-    setDrawTool('move')
-    setSelectionEnabled(false)
-    setSelectedCells(new Set())
-    clearDragState()
-    setRoomDragState({ active: false, floorId: null, shapeIds: [], startX: 0, startY: 0, sourceShapes: [] })
-    setRoomContextMenu(null)
-    setCanvasContextMenu(null)
-    setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))
-  }, [clearDragState, selectedShapeIdSet, selectedShapeIds, setSelectedRooms])
+  const openRoomModalWithDraft = useCallback((nextDraft) => {
+    roomModalInitialRef.current = buildRoomDraftSignature(nextDraft)
+    setRoomDraft(nextDraft)
+    setShowRoomModal(true)
+  }, [])
 
   const openRoomInfoModal = useCallback((shape, floorId) => {
     if (!shape) return
@@ -1451,19 +2219,22 @@ function AssetMapManagement() {
     setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))
     setImageSelection(createDefaultImageSelection())
     setImageVertexDragState(createDefaultImageVertexDragState())
-    setRoomDraft({
+    const areaTypeDraft = resolveAreaTypeDraft(shape, areaTypeCatalogEntries)
+    openRoomModalWithDraft({
       mode: shape.locationId ? 'existing' : 'new',
       locationId: shape.locationId ? String(shape.locationId) : '',
       roomName: shape.roomName || '',
       colorHex: shape.colorHex || DEFAULT_COLOR,
+      areaTypeKey: areaTypeDraft.areaTypeKey,
+      areaTypeLabel: areaTypeDraft.areaTypeLabel,
       hasAsset: shape.hasAsset !== false,
     })
-    setShowRoomModal(true)
-  }, [setSelectedRooms])
+  }, [areaTypeCatalogEntries, openRoomModalWithDraft, setSelectedRooms])
 
   const openRoomDraftModal = useCallback((shape = null, geometryOverride = null) => {
     const targetImageGeometry = geometryOverride || imageSelectionGeometry
     const imageFloor = isImageFloorMode(activeFloor)
+    let nextDraft = roomDraft
     if (floorInteractionMode === 'add') {
       if (imageFloor) {
         if (!targetImageGeometry?.points?.length || !targetImageGeometry?.bounds) {
@@ -1474,10 +2245,10 @@ function AssetMapManagement() {
         toast.error('Hãy chọn ít nhất một ô vuông để tạo phòng.')
         return
       }
-      setRoomDraft((previous) => ({
+      nextDraft = {
         ...createDefaultRoomDraft(),
-        colorHex: previous.colorHex || DEFAULT_COLOR,
-      }))
+        colorHex: roomDraft.colorHex || DEFAULT_COLOR,
+      }
     }
 
     if (floorInteractionMode === 'edit') {
@@ -1495,17 +2266,20 @@ function AssetMapManagement() {
         return
       }
       const targetShape = shape || selectedShape
-      setRoomDraft({
+      const areaTypeDraft = resolveAreaTypeDraft(targetShape, areaTypeCatalogEntries)
+      nextDraft = {
         mode: targetShape.locationId ? 'existing' : 'new',
         locationId: targetShape.locationId ? String(targetShape.locationId) : '',
         roomName: targetShape.roomName || '',
         colorHex: targetShape.colorHex || DEFAULT_COLOR,
+        areaTypeKey: areaTypeDraft.areaTypeKey,
+        areaTypeLabel: areaTypeDraft.areaTypeLabel,
         hasAsset: targetShape.hasAsset !== false,
-      })
+      }
     }
 
-    setShowRoomModal(true)
-  }, [activeFloor, floorInteractionMode, imageSelectionGeometry, selectedCells.size, selectedShape])
+    openRoomModalWithDraft(nextDraft)
+  }, [activeFloor, areaTypeCatalogEntries, floorInteractionMode, imageSelectionGeometry, openRoomModalWithDraft, roomDraft.colorHex, selectedCells.size, selectedShape])
 
   const getImagePointerPositionFromClient = useCallback((clientX, clientY, floor, svgElement = imageSvgRef.current) => {
     const svgRect = svgElement?.getBoundingClientRect?.()
@@ -1743,8 +2517,10 @@ function AssetMapManagement() {
 
   const handleCellPointerDown = (event, floor, cellKey, shape) => {
     if (Number(floor.id) !== Number(activeFloorId)) {
-      setActiveFloorId(floor.id)
-      exitInteractionMode(false)
+      requestGuardedAction(() => {
+        setActiveFloorId(floor.id)
+        exitInteractionMode(false)
+      })
       return
     }
 
@@ -1849,56 +2625,25 @@ function AssetMapManagement() {
   }
 
   const openCreateFloorModal = () => {
+    const nextFloorForm = createDefaultFloorForm()
     setEditingFloorId(null)
-    setFloorForm(createDefaultFloorForm())
+    floorModalInitialRef.current = buildFloorFormSignature(nextFloorForm)
+    setFloorForm(nextFloorForm)
     setShowFloorModal(true)
   }
 
   const openEditFloorModal = (floor) => {
-    setEditingFloorId(floor.id)
-    setFloorForm({
+    const nextFloorForm = {
       name: floor.name || '',
       mode: floor.mode || 'GRID',
       gridRows: floor.gridRows || 12,
       gridCols: floor.gridCols || 20,
-    })
+    }
+    setEditingFloorId(floor.id)
+    floorModalInitialRef.current = buildFloorFormSignature(nextFloorForm)
+    setFloorForm(nextFloorForm)
     setShowFloorModal(true)
   }
-
-  const openCanvasSettingsModal = useCallback((floor, mode) => {
-    if (!floor) return
-    setActiveFloorId(floor.id)
-    setCanvasContextMenu(null)
-    setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))
-    setCanvasModalMode(mode)
-    setCanvasForm({
-      gridRows: floor.gridRows || 12,
-      gridCols: floor.gridCols || 20,
-      canvasBackgroundColor: floor.canvasBackgroundColor || '#FFFFFF',
-    })
-    setShowCanvasModal(true)
-  }, [])
-
-  const beginCanvasResizeMode = useCallback((floor) => {
-    if (!floor) return
-    const requiredSize = getRequiredCanvasSize(floor.roomShapes)
-    setActiveFloorId(floor.id)
-    setDrawTool(DEFAULT_DRAW_TOOL)
-    setCanvasContextMenu(null)
-    setShowCanvasModal(false)
-    setCanvasResizeState({
-      enabled: true,
-      floorId: floor.id,
-      handle: null,
-      startX: 0,
-      startY: 0,
-      startRows: floor.gridRows || 12,
-      startCols: floor.gridCols || 20,
-      requiredRows: requiredSize.gridRows,
-      requiredCols: requiredSize.gridCols,
-    })
-    toast.info('Kéo viền phải, viền dưới hoặc góc phải dưới của canvas để đổi kích thước.')
-  }, [])
 
   const handleSaveFloor = async () => {
     if (!floorForm.name.trim()) {
@@ -1915,6 +2660,7 @@ function AssetMapManagement() {
       if (editingFloorId) {
         const response = await axiosClient.put(`/api/asset-map/floors/${editingFloorId}`, payload)
         setShowFloorModal(false)
+        floorModalInitialRef.current = buildFloorFormSignature(createDefaultFloorForm())
         applyFloorResponse(response.data, {
           preserveRoomShapes: true,
           selectFloor: true,
@@ -1927,6 +2673,7 @@ function AssetMapManagement() {
           mode: floorForm.mode || 'GRID',
         })
         setShowFloorModal(false)
+        floorModalInitialRef.current = buildFloorFormSignature(createDefaultFloorForm())
         setFloors((previous) => [...previous, { ...response.data, roomShapes: response.data?.roomShapes || [] }])
         setActiveFloorId(response.data?.id)
         toast.success('Tạo tầng thành công.')
@@ -1990,24 +2737,9 @@ function AssetMapManagement() {
     }))
   }
 
-  const handleCanvasContextMenu = (event, floor) => {
-    if (isImageFloorMode(floor)) return
-    if (floorInteractionMode !== 'view') return
-    event.preventDefault()
-    setActiveFloorId(floor.id)
-    clearSelectedRooms()
-    setRoomContextMenu(null)
-    setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))
-    setCanvasContextMenu({
-      floorId: floor.id,
-      x: event.clientX,
-      y: event.clientY,
-    })
-  }
-
   const handleSaveCanvasSettings = async () => {
-    const floorId = canvasContextMenu?.floorId || activeFloorId
-    return persistCanvasSettings({
+    const floorId = activeFloorId
+    const saved = await persistCanvasSettings({
       floorId,
       gridRows: canvasForm.gridRows,
       gridCols: canvasForm.gridCols,
@@ -2015,76 +2747,82 @@ function AssetMapManagement() {
       successMessage: 'Đã cập nhật canvas của tầng.',
       closeModal: true,
     })
+    if (saved) {
+      canvasModalInitialRef.current = buildCanvasFormSignature(createDefaultCanvasForm())
+    }
+    return saved
   }
 
   const handleRoomClick = (event, floor, shape) => {
     event.preventDefault()
-    setActiveFloorId(floor.id)
-    setRoomContextMenu(null)
-    setCanvasContextMenu(null)
-
-    if (floorInteractionMode === 'view' && drawTool === 'paint') {
-      setSelectedRooms([shape.id], shape.id)
-      void handlePaintColorChange(currentPaintColor, shape)
-      return
-    }
-
     const isToggleSelection = floorInteractionMode === 'view'
       && (event.metaKey || event.ctrlKey || event.shiftKey)
+    const applySelection = () => {
+      setActiveFloorId(floor.id)
+      setRoomContextMenu(null)
+      setCanvasContextMenu(null)
 
-    if (isToggleSelection) {
-      const normalizedShapeId = Number(shape.id)
-      const nextIds = selectedShapeIdSet.has(normalizedShapeId)
-        ? selectedShapeIds.filter((value) => Number(value) !== normalizedShapeId)
-        : [...selectedShapeIds, normalizedShapeId]
-      setSelectedRooms(nextIds, nextIds.length > 0 ? normalizedShapeId : null)
-      return
-    }
-
-    setSelectedRooms([shape.id], shape.id)
-  }
-
-  const handleRoomContextMenu = (event, floor, shape) => {
-    event.preventDefault()
-    setActiveFloorId(floor.id)
-    if (selectedShapeIdSet.has(Number(shape.id))) {
-      setSelectedRooms(selectedShapeIds, shape.id)
-    } else {
-      setSelectedRooms([shape.id], shape.id)
-    }
-    setCanvasContextMenu(null)
-    setRoomContextMenu({
-      floorId: floor.id,
-      shapeId: shape.id,
-      x: event.clientX,
-      y: event.clientY,
-    })
-  }
-
-  const handleOpenRoomAssets = async (shape, floorId) => {
-    setActiveFloorId(floorId)
-    setSelectedRooms([shape.id], shape.id)
-    setShowRoomAssetsModal(true)
-    setRoomAssets([])
-    setRoomAssetsLoading(true)
-    setRoomContextMenu(null)
-
-    try {
-      if (!shape.locationId) {
-        setRoomAssets([])
+      if (floorInteractionMode === 'view' && drawTool === 'paint') {
+        setSelectedRooms([shape.id], shape.id)
+        void handlePaintColorChange(currentPaintColor, shape)
         return
       }
 
-      const response = await axiosClient.get('/api/asset-map/assets/search', {
-        params: { locationId: shape.locationId, floorId },
-      })
-      setRoomAssets(response.data || [])
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể tải danh sách tài sản của phòng.'
-      toast.error(message)
-    } finally {
-      setRoomAssetsLoading(false)
+      if (isToggleSelection) {
+        const normalizedShapeId = Number(shape.id)
+        const nextIds = selectedShapeIdSet.has(normalizedShapeId)
+          ? selectedShapeIds.filter((value) => Number(value) !== normalizedShapeId)
+          : [...selectedShapeIds, normalizedShapeId]
+        setSelectedRooms(nextIds, nextIds.length > 0 ? normalizedShapeId : null)
+        return
+      }
+
+      setSelectedRooms([shape.id], shape.id)
     }
+
+    if (Number(floor.id) !== Number(activeFloorId)) {
+      requestGuardedAction(applySelection)
+      return
+    }
+
+    applySelection()
+  }
+
+  const handleOpenRoomAssets = async (shape, floorId) => {
+    const openAssetsModal = async () => {
+      setActiveFloorId(floorId)
+      setSelectedRooms([shape.id], shape.id)
+      setShowRoomAssetsModal(true)
+      setRoomAssets([])
+      setRoomAssetsLoading(true)
+      setRoomContextMenu(null)
+
+      try {
+        if (!shape.locationId) {
+          setRoomAssets([])
+          return
+        }
+
+        const response = await axiosClient.get('/api/asset-map/assets/search', {
+          params: { locationId: shape.locationId, floorId },
+        })
+        setRoomAssets(response.data || [])
+      } catch (error) {
+        const message = error?.response?.data?.message || 'Không thể tải danh sách tài sản của phòng.'
+        toast.error(message)
+      } finally {
+        setRoomAssetsLoading(false)
+      }
+    }
+
+    if (Number(floorId) !== Number(activeFloorId)) {
+      requestGuardedAction(() => {
+        void openAssetsModal()
+      })
+      return
+    }
+
+    await openAssetsModal()
   }
 
   const handlePaintColorChange = async (nextColor, targetShape = selectedShape) => {
@@ -2192,10 +2930,27 @@ function AssetMapManagement() {
       toast.error('Vui lòng nhập tên phòng.')
       return false
     }
+    const areaTypePayload = buildAreaTypePayload(roomDraft.areaTypeKey, roomDraft.areaTypeLabel, areaTypeCatalogEntries)
+    if (!areaTypePayload.areaTypeLabel) {
+      toast.error('Vui lòng chọn hoặc nhập loại khu vực.')
+      return false
+    }
 
     const location = roomDraft.mode === 'existing'
       ? locations.find((item) => Number(item.id) === Number(roomDraft.locationId))
       : null
+    const existingMappedShape = roomDraft.mode === 'existing'
+      ? roomShapeByLocationId.get(Number(roomDraft.locationId))
+      : null
+
+    if (
+      roomDraft.mode === 'existing'
+      && existingMappedShape
+      && Number(existingMappedShape.id) !== Number(editingShape?.id)
+    ) {
+      toast.error(`Phòng "${location?.roomName || existingMappedShape.roomName || ''}" đã có sơ đồ trên tầng. Hãy chọn phòng khác chưa được vẽ.`)
+      return false
+    }
 
     const nextShape = {
       id: draftShapeId,
@@ -2213,6 +2968,8 @@ function AssetMapManagement() {
         ? (isShapeRedrawMode ? imageSelectionGeometry.bounds : (editingShape?.bounds || null))
         : null,
       colorHex: roomDraft.colorHex || DEFAULT_COLOR,
+      areaTypeKey: areaTypePayload.areaTypeKey,
+      areaTypeLabel: areaTypePayload.areaTypeLabel,
       hasAsset: roomDraft.hasAsset !== false,
     }
 
@@ -2238,9 +2995,11 @@ function AssetMapManagement() {
     }
     clearDirtyFloor(activeFloor.id)
     setShowRoomModal(false)
+    roomModalInitialRef.current = buildRoomDraftSignature(createDefaultRoomDraft())
     setSelectedCells(new Set())
     setImageSelection(createDefaultImageSelection())
     setImageVertexDragState(createDefaultImageVertexDragState())
+    await loadRoomAssetIndex()
     if (isShapeRedrawMode) {
       setFloorInteractionMode('view')
       setSelectionEnabled(false)
@@ -2332,8 +3091,11 @@ function AssetMapManagement() {
     })
     setImageSelection(createDefaultImageSelection())
     setRoomDraft(createDefaultRoomDraft())
+    roomModalInitialRef.current = buildRoomDraftSignature(createDefaultRoomDraft())
     setFloorForm(createDefaultFloorForm())
+    floorModalInitialRef.current = buildFloorFormSignature(createDefaultFloorForm())
     setCanvasForm(createDefaultCanvasForm())
+    canvasModalInitialRef.current = buildCanvasFormSignature(createDefaultCanvasForm())
     setEditingFloorId(null)
     setFloorInteractionMode('view')
     setDrawTool(DEFAULT_DRAW_TOOL)
@@ -2342,6 +3104,7 @@ function AssetMapManagement() {
     setRoomDragState({ active: false, floorId: null, shapeIds: [], startX: 0, startY: 0, sourceShapes: [] })
     setRoomContextMenu(null)
     setCanvasContextMenu(null)
+    setRoomPreview(null)
   }, [clearDragState, clearSelectedRooms])
 
   const handleClearSelection = useCallback(() => {
@@ -2360,17 +3123,17 @@ function AssetMapManagement() {
     setLeaveActionBusy(true)
 
     try {
-      if (showRoomModal) {
+      if (roomDraftDirty) {
         const savedRoomDraft = await handleSaveRoomDraft()
         if (!savedRoomDraft) return
       }
 
-      if (showFloorModal) {
+      if (floorFormDirty) {
         const savedFloor = await handleSaveFloor()
         if (!savedFloor) return
       }
 
-      if (showCanvasModal) {
+      if (canvasFormDirty) {
         const savedCanvas = await handleSaveCanvasSettings()
         if (!savedCanvas) return
       }
@@ -2402,7 +3165,9 @@ function AssetMapManagement() {
         window.setTimeout(() => {
           bypassLeaveGuardRef.current = false
         }, 0)
+        return
       }
+      runPendingAction()
     } finally {
       setLeaveActionBusy(false)
     }
@@ -2423,7 +3188,9 @@ function AssetMapManagement() {
         window.setTimeout(() => {
           bypassLeaveGuardRef.current = false
         }, 0)
+        return
       }
+      runPendingAction()
     } finally {
       setLeaveActionBusy(false)
     }
@@ -2537,10 +3304,11 @@ function AssetMapManagement() {
   }, [scannerOpen, startScanner, stopScanner])
 
   useEffect(() => {
-    if (!markerTooltip) return undefined
+    if (!markerTooltip && !roomPreview) return undefined
 
     const hideTooltip = () => {
       setMarkerTooltip(null)
+      setRoomPreview(null)
     }
 
     window.addEventListener('scroll', hideTooltip, true)
@@ -2549,10 +3317,10 @@ function AssetMapManagement() {
       window.removeEventListener('scroll', hideTooltip, true)
       window.removeEventListener('resize', hideTooltip)
     }
-  }, [markerTooltip])
+  }, [markerTooltip, roomPreview])
 
   const handleMarkerTooltipShow = useCallback((event, asset) => {
-    const nextPosition = calculateMarkerTooltipPosition(event.currentTarget.getBoundingClientRect())
+    const nextPosition = calculateFloatingCardPosition(event.currentTarget.getBoundingClientRect())
     setMarkerTooltip({
       asset,
       ...nextPosition,
@@ -2562,6 +3330,190 @@ function AssetMapManagement() {
   const handleMarkerTooltipHide = useCallback((asset) => {
     setMarkerTooltip((previous) => (previous?.asset?.qaCode === asset.qaCode ? null : previous))
   }, [])
+
+  const handleRoomPreviewShow = useCallback((event, shape) => {
+    const assetCount = roomAssetCountMap.get(shape?.locationId) || 0
+    const nextPosition = calculateFloatingCardPosition(event.currentTarget.getBoundingClientRect(), {
+      width: 280,
+      height: 176,
+      offset: 14,
+    })
+    setRoomPreview({
+      shape,
+      assetCount,
+      areaType: resolveAreaTypeMeta(shape, areaTypeCatalogEntries),
+      syncMeta: getRoomSyncMeta(shape, locations),
+      ...nextPosition,
+    })
+  }, [locations, roomAssetCountMap])
+
+  const handleRoomPreviewHide = useCallback((shape) => {
+    setRoomPreview((previous) => (previous?.shape?.id === shape?.id ? null : previous))
+  }, [])
+
+  const handleToggleLegendFilter = useCallback((filterKey) => {
+    setLegendFilters((previous) =>
+      previous.includes(filterKey)
+        ? previous.filter((item) => item !== filterKey)
+        : [...previous, filterKey],
+    )
+  }, [])
+
+  const handleResetLegendFilters = useCallback(() => {
+    setLegendFilters([])
+  }, [])
+
+  const handleSearchFilterChange = useCallback((patch) => {
+    setSearchFilters((previous) => ({ ...previous, ...patch }))
+  }, [])
+
+  const handleRoomDraftChange = useCallback((patch) => {
+    setRoomDraft((previous) => ({ ...previous, ...patch }))
+  }, [])
+
+  const handleSelectFloor = useCallback((floorId, { scroll = false } = {}) => {
+    if (!floorId) return
+    const applySelection = () => {
+      setActiveFloorId(floorId)
+      setRoomContextMenu(null)
+      setCanvasContextMenu(null)
+      if (scroll) {
+        scrollToFloor(floorId)
+      }
+    }
+    if (Number(floorId) === Number(activeFloorId)) {
+      applySelection()
+      return
+    }
+    requestGuardedAction(applySelection)
+  }, [activeFloorId, requestGuardedAction, scrollToFloor])
+
+  const handleJumpToAssetFloor = useCallback((floorId) => {
+    handleSelectFloor(floorId, { scroll: true })
+  }, [handleSelectFloor])
+
+  const handleSelectRoomChip = useCallback((floorId, shape, event) => {
+    if (!shape) return
+    const applySelection = () => {
+      setActiveFloorId(floorId)
+      if (event.metaKey || event.ctrlKey || event.shiftKey) {
+        const normalizedShapeId = Number(shape.id)
+        const nextIds = selectedShapeIdSet.has(normalizedShapeId)
+          ? selectedShapeIds.filter((value) => Number(value) !== normalizedShapeId)
+          : [...selectedShapeIds, normalizedShapeId]
+        setSelectedRooms(nextIds, nextIds.length > 0 ? normalizedShapeId : null)
+      } else {
+        setSelectedRooms([shape.id], shape.id)
+      }
+      setRoomContextMenu(null)
+      setCanvasContextMenu(null)
+    }
+
+    if (Number(floorId) === Number(activeFloorId)) {
+      applySelection()
+      return
+    }
+
+    requestGuardedAction(applySelection)
+  }, [activeFloorId, requestGuardedAction, selectedShapeIdSet, selectedShapeIds, setSelectedRooms])
+
+  const handleOpenCreateFloorModal = useCallback(() => {
+    captureHistoryBoundary()
+    requestGuardedAction(() => {
+      openCreateFloorModal()
+    })
+  }, [captureHistoryBoundary, requestGuardedAction])
+
+  const handleOpenEditFloorModal = useCallback((floor) => {
+    captureHistoryBoundary()
+    requestGuardedAction(() => {
+      openEditFloorModal(floor)
+    })
+  }, [captureHistoryBoundary, requestGuardedAction])
+
+  const handleBeginAddRoomMode = useCallback((floorId) => {
+    captureHistoryBoundary()
+    requestGuardedAction(() => {
+      beginAddRoomMode(floorId)
+    })
+  }, [beginAddRoomMode, captureHistoryBoundary, requestGuardedAction])
+
+  const handleBeginEditRoomMode = useCallback((shape, floorId) => {
+    captureHistoryBoundary()
+    requestGuardedAction(() => {
+      beginEditRoomMode(shape, floorId)
+    })
+  }, [beginEditRoomMode, captureHistoryBoundary, requestGuardedAction])
+
+  const handleOpenRoomInfoModal = useCallback((shape, floorId) => {
+    captureHistoryBoundary()
+    requestGuardedAction(() => {
+      openRoomInfoModal(shape, floorId)
+    })
+  }, [captureHistoryBoundary, openRoomInfoModal, requestGuardedAction])
+
+  const handleExitInteractionMode = useCallback((keepSelectedShape = true) => {
+    requestGuardedAction(() => {
+      exitInteractionMode(keepSelectedShape)
+    })
+  }, [exitInteractionMode, requestGuardedAction])
+
+  const handleCloseRoomModal = useCallback(() => {
+    requestGuardedAction(() => {
+      setShowRoomModal(false)
+    })
+  }, [requestGuardedAction])
+
+  const handleCloseFloorModal = useCallback(() => {
+    requestGuardedAction(() => {
+      setShowFloorModal(false)
+    })
+  }, [requestGuardedAction])
+
+  const handleCloseCanvasModal = useCallback(() => {
+    requestGuardedAction(() => {
+      setShowCanvasModal(false)
+    })
+  }, [requestGuardedAction])
+
+  const handleQuickSelectionSave = useCallback(() => {
+    if (floorInteractionMode === 'view' && selectedShape) {
+      handleOpenRoomInfoModal(selectedShape, activeFloorId)
+      return
+    }
+    openRoomDraftModal(selectedShape)
+  }, [activeFloorId, floorInteractionMode, handleOpenRoomInfoModal, openRoomDraftModal, selectedShape])
+
+  const handleQuickSelectionCancel = useCallback(() => {
+    if (floorInteractionMode === 'view') {
+      clearSelectedRooms()
+      return
+    }
+    handleExitInteractionMode(floorInteractionMode === 'edit')
+  }, [clearSelectedRooms, floorInteractionMode, handleExitInteractionMode])
+
+  const handleQuickSelectionColorChange = useCallback((nextColor) => {
+    if (floorInteractionMode === 'view') {
+      void handlePaintColorChange(nextColor, selectedShape)
+      return
+    }
+    handleRoomDraftChange({ colorHex: nextColor })
+  }, [floorInteractionMode, handlePaintColorChange, handleRoomDraftChange, selectedShape])
+
+  const handleQuickSelectionEditInfo = useCallback(() => {
+    if (!selectedShape) return
+    handleOpenRoomInfoModal(selectedShape, activeFloorId)
+  }, [activeFloorId, handleOpenRoomInfoModal, selectedShape])
+
+  const handleQuickSelectionEditLayout = useCallback(() => {
+    if (!selectedShape) return
+    handleBeginEditRoomMode(selectedShape, activeFloorId)
+  }, [activeFloorId, handleBeginEditRoomMode, selectedShape])
+
+  const handleQuickSelectionOpenAssets = useCallback(() => {
+    if (!selectedShape) return
+    void handleOpenRoomAssets(selectedShape, activeFloorId)
+  }, [activeFloorId, handleOpenRoomAssets, selectedShape])
 
   const renderDrawToolButton = ({
     icon,
@@ -2633,6 +3585,14 @@ function AssetMapManagement() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              onClick={() => setShowAreaTypeCatalogModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <ListDetails size={16} />
+              Loại khu vực
+            </button>
+            <button
+              type="button"
               onClick={() => setShowImageImportModal(true)}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -2641,11 +3601,27 @@ function AssetMapManagement() {
             </button>
             <button
               type="button"
-              onClick={openCreateFloorModal}
+              onClick={handleOpenCreateFloorModal}
               className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
             >
               <Plus size={16} />
               Thêm tầng
+            </button>
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={!historyMeta.canUndo}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Hoàn tác
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={!historyMeta.canRedo}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Làm lại
             </button>
             <button
               type="button"
@@ -2679,699 +3655,122 @@ function AssetMapManagement() {
               <div
                 key={floor.id}
                 id={`asset-map-floor-${floor.id}`}
-                onClick={() => {
-                  setActiveFloorId(floor.id)
-                  setRoomContextMenu(null)
-                }}
+                onClick={() => handleSelectFloor(floor.id)}
                 className={`rounded-2xl bg-white p-4 shadow-sm transition dark:bg-slate-900 ${
                   isActive ? 'ring-2 ring-fptOrange/30' : ''
                 }`}
               >
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{floor.name}</h3>
-                      {hasDirtyChanges && (
-                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                          Chưa lưu
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {isImageFloor
-                        ? `Ảnh nền ${floor.imageWidth || '?'} x ${floor.imageHeight || '?'} · ${(floor.roomShapes || []).length} phòng đã vẽ`
-                        : `Grid ${floor.gridRows} x ${floor.gridCols} · ${(floor.roomShapes || []).length} phòng đã vẽ`}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {isActive && floorInteractionMode === 'view' && !isImageFloor && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            beginAddRoomMode(floor.id)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-                        >
-                          <Plus size={16} />
-                          Thêm phòng
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            openEditFloorModal(floor)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <Edit size={16} />
-                          Sửa tầng
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleDeleteFloor(floor)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          <Trash size={16} />
-                          Xóa tầng
-                        </button>
-                      </>
-                    )}
-                    {isActive && floorInteractionMode === 'view' && isImageFloor && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            beginAddRoomMode(floor.id)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-                        >
-                          <Plus size={16} />
-                          Thêm phòng
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            openEditFloorModal(floor)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <Edit size={16} />
-                          Sửa tầng
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleDeleteFloor(floor)
-                          }}
-                          className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
-                        >
-                          <Trash size={16} />
-                          Xóa tầng
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <FloorToolbar
+                  floor={floor}
+                  isImageFloor={isImageFloor}
+                  isActive={isActive}
+                  hasDirtyChanges={hasDirtyChanges}
+                  surfaceMode={surfaceMode}
+                  floorInteractionMode={viewState.floorInteractionMode}
+                  drawTool={viewState.drawTool}
+                  selectedShape={selectedShape}
+                  selectedShapes={selectionState.selectedShapes}
+                  selectedCellsSize={selectionState.selectedCells.size}
+                  isDraggingSelection={selectionState.isDraggingSelection}
+                  hasImageSelection={hasImageSelection}
+                  imageSelectionPointCount={(selectionState.imageSelection.points || []).length}
+                  savingLayout={serverState.savingLayout}
+                  currentPaintColor={currentPaintColor}
+                  canvasResizeEnabled={draftState.canvasResizeState.enabled}
+                  renderDrawToolButton={renderDrawToolButton}
+                  MouseToolIcon={MouseToolIcon}
+                  HandToolIcon={HandToolIcon}
+                  PaintToolIcon={PaintToolIcon}
+                  imageRectangleTool={IMAGE_RECTANGLE_TOOL}
+                  imagePolygonTool={IMAGE_POLYGON_TOOL}
+                  legendItems={legendItems}
+                  activeLegendFilters={legendFilters}
+                  visibleRoomCount={isActive ? visibleShapeIdSet.size : (floor.roomShapes || []).length}
+                  onAddRoom={() => handleBeginAddRoomMode(floor.id)}
+                  onEditFloor={() => handleOpenEditFloorModal(floor)}
+                  onDeleteFloor={() => handleDeleteFloor(floor)}
+                  onToggleLegendFilter={handleToggleLegendFilter}
+                  onResetLegendFilters={handleResetLegendFilters}
+                  onSetDrawTool={setActiveDrawTool}
+                  onClearSelection={() => {
+                    if (viewState.floorInteractionMode === 'view') {
+                      clearSelectedRooms()
+                      return
+                    }
+                    handleClearSelection()
+                  }}
+                  onDeleteActiveRegion={() => { void handleDeleteActiveRegion() }}
+                  onFinishImagePolygon={finishImagePolygon}
+                  onOpenRoomDraft={() => openRoomDraftModal(selectedShape)}
+                  onExitInteractionMode={() => handleExitInteractionMode(viewState.floorInteractionMode === 'edit')}
+                  onPaintColorChange={(nextColor) => { void handlePaintColorChange(nextColor) }}
+                  onEndCanvasResize={() => setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))}
+                />
 
-                {isActive && isImageFloor && ((floorInteractionMode === 'add' || floorInteractionMode === 'edit') || (floorInteractionMode === 'view' && selectedShapes.length > 0)) && (
-                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {floorInteractionMode !== 'view' && renderDrawToolButton({
-                        icon: <MouseToolIcon size={16} />,
-                        label: 'Vẽ rectangle',
-                        description: 'Kéo trực tiếp trên ảnh để tạo vùng hình chữ nhật cho phòng.',
-                        active: drawTool === IMAGE_RECTANGLE_TOOL,
-                        onClick: () => setActiveDrawTool(IMAGE_RECTANGLE_TOOL),
-                      })}
-                      {floorInteractionMode !== 'view' && renderDrawToolButton({
-                        icon: <Edit size={16} />,
-                        label: 'Vẽ polygon',
-                        description: 'Nhấp từng điểm trên ảnh để tạo vùng tự do theo biên dạng thực tế của phòng.',
-                        active: drawTool === IMAGE_POLYGON_TOOL,
-                        onClick: () => setActiveDrawTool(IMAGE_POLYGON_TOOL),
-                      })}
-                      {renderDrawToolButton({
-                        icon: <X size={16} />,
-                        label: 'Bỏ chọn',
-                        description: floorInteractionMode === 'view'
-                          ? 'Bỏ chọn phòng đang chọn.'
-                          : 'Xóa vùng đang vẽ trên ảnh để chọn lại từ đầu.',
-                        onClick: () => {
-                          if (floorInteractionMode === 'view') {
-                            clearSelectedRooms()
-                            return
-                          }
-                          handleClearSelection()
-                        },
-                        disabled: floorInteractionMode === 'view' ? selectedShapes.length === 0 : !hasImageSelection && !(imageSelection.points || []).length,
-                      })}
-                      {renderDrawToolButton({
-                        icon: <Trash size={16} />,
-                        label: floorInteractionMode === 'view' ? 'Xóa vùng phòng' : 'Xóa vùng',
-                        description: floorInteractionMode === 'view'
-                          ? 'Gỡ vùng phòng khỏi sơ đồ nhưng không xóa phòng nghiệp vụ trong hệ thống.'
-                          : 'Xóa nhanh vùng đang vẽ trên ảnh.',
-                        onClick: () => { void handleDeleteActiveRegion() },
-                        disabled: floorInteractionMode === 'view' ? selectedShapes.length !== 1 : !hasImageSelection && !(imageSelection.points || []).length,
-                        danger: true,
-                      })}
-                      {drawTool === IMAGE_POLYGON_TOOL && floorInteractionMode !== 'view' && (
-                        <button
-                          type="button"
-                          onClick={finishImagePolygon}
-                          disabled={!hasImageSelection}
-                          className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Save size={16} />
-                          Hoàn tất vùng
-                        </button>
-                      )}
-                      {floorInteractionMode === 'edit' && (
-                        <button
-                          type="button"
-                          onClick={() => openRoomDraftModal(selectedShape)}
-                          disabled={(!hasImageSelection && !selectedShape) || savingLayout}
-                          className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Save size={16} />
-                          Lưu phòng
-                        </button>
-                      )}
-                      {floorInteractionMode !== 'view' && (
-                        <button
-                          type="button"
-                          onClick={() => exitInteractionMode(floorInteractionMode === 'edit')}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <X size={16} />
-                          {floorInteractionMode === 'edit' ? 'Hủy sửa' : 'Hủy'}
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                      {floorInteractionMode === 'view'
-                        ? selectedShapes.length > 1
-                          ? `Đang chọn ${selectedShapes.length} phòng trên ảnh nền.`
-                          : `Đang chọn phòng ${selectedShape?.roomName || ''}.`
-                        : drawTool === IMAGE_POLYGON_TOOL
-                          ? `Nhấp từng điểm trên ảnh để tạo polygon.${(imageSelection.points || []).length > 0 ? ` Hiện có ${(imageSelection.points || []).length} điểm. Có thể kéo các chấm tròn để nắn lại biên; Enter để hoàn tất, Backspace/Delete để bỏ điểm cuối.` : ''}`
-                          : hasImageSelection
-                            ? 'Đã chọn xong một vùng trên ảnh. Có thể kéo các chấm tròn ở góc để tinh chỉnh trước khi lưu phòng.'
-                            : 'Kéo trực tiếp trên ảnh để khoanh vùng phòng bằng rectangle, hoặc chuyển sang polygon để vẽ tự do.'}
-                    </div>
-                  </div>
-                )}
-
-                {isActive && !isImageFloor && ((floorInteractionMode === 'add' || floorInteractionMode === 'edit') || (floorInteractionMode === 'view' && selectedShapes.length > 0)) && (
-                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {floorInteractionMode !== 'view' && renderDrawToolButton({
-                        icon: <MouseToolIcon size={16} />,
-                        label: 'Kéo chọn vùng',
-                        description: floorInteractionMode === 'add'
-                          ? 'Kéo chuột trên lưới để chọn vùng tạo phòng. Sau khi thả chuột, modal thông tin phòng sẽ tự mở.'
-                          : 'Kéo chuột để chọn lại phạm vi của phòng đang chỉnh sửa.',
-                        active: drawTool === 'select',
-                        onClick: () => setActiveDrawTool('select'),
-                      })}
-                      {floorInteractionMode !== 'add' && renderDrawToolButton({
-                        icon: <HandToolIcon size={16} />,
-                        label: floorInteractionMode === 'view' ? 'Kéo di chuyển phòng/cụm phòng' : 'Di chuyển vùng',
-                        active: drawTool === 'move',
-                        onClick: () => setActiveDrawTool('move'),
-                        disabled: floorInteractionMode === 'view' && selectedShapes.length === 0,
-                      })}
-                      {renderDrawToolButton({
-                        icon: <X size={16} />,
-                        label: 'Bỏ chọn',
-                        description: floorInteractionMode === 'view'
-                          ? 'Bỏ chọn toàn bộ phòng đang được chọn trên sơ đồ.'
-                          : 'Xóa vùng đang chọn để bạn chọn lại từ đầu.',
-                        onClick: () => {
-                          if (floorInteractionMode === 'view') {
-                            clearSelectedRooms()
-                            return
-                          }
-                          handleClearSelection()
-                        },
-                        disabled: floorInteractionMode === 'view' ? selectedShapes.length === 0 : selectedCells.size === 0,
-                      })}
-                      {renderDrawToolButton({
-                        icon: <Trash size={16} />,
-                        label: floorInteractionMode === 'view' ? 'Xóa vùng phòng' : 'Xóa vùng',
-                        description: floorInteractionMode === 'view'
-                          ? 'Gỡ vùng phòng khỏi sơ đồ nhưng không xóa phòng nghiệp vụ trong hệ thống.'
-                          : 'Xóa nhanh vùng đang chọn khỏi lưới hiện tại.',
-                        onClick: () => { void handleDeleteActiveRegion() },
-                        disabled: floorInteractionMode === 'view' ? selectedShapes.length !== 1 : selectedCells.size === 0,
-                        danger: true,
-                      })}
-                      {floorInteractionMode !== 'add' && renderDrawToolButton({
-                        icon: <PaintToolIcon size={16} />,
-                        label: 'Tô màu',
-                        active: drawTool === 'paint',
-                        onClick: () => setActiveDrawTool('paint'),
-                        disabled: floorInteractionMode === 'view' ? selectedShapes.length !== 1 : false,
-                      })}
-                      {floorInteractionMode !== 'add' && (
-                        <label
-                          title="Chọn màu tô"
-                          className="flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                        >
-                          <input
-                            type="color"
-                            value={currentPaintColor}
-                            onChange={(event) => { void handlePaintColorChange(event.target.value) }}
-                            className="h-6 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
-                          />
-                          <span>{currentPaintColor.toUpperCase()}</span>
-                        </label>
-                      )}
-                      {floorInteractionMode === 'add' && (
-                        <button
-                          type="button"
-                          onClick={() => exitInteractionMode(false)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                        >
-                          <X size={16} />
-                          Hủy
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                      {floorInteractionMode === 'view'
-                        ? selectedShapes.length > 1
-                          ? `Đang chọn ${selectedShapes.length} phòng. Giữ Ctrl/Cmd/Shift rồi nhấp vào phòng để chọn thêm hoặc bỏ bớt phòng, sau đó dùng bàn tay để kéo cả cụm.`
-                          : `Đang chọn phòng ${selectedShape?.roomName || ''}. Giữ Ctrl/Cmd/Shift rồi nhấp vào phòng khác để chọn nhiều phòng cùng lúc và di chuyển cả cụm.`
-                        : floorInteractionMode === 'edit'
-                          ? `Công cụ hiện tại: ${drawTool === 'move' ? 'Di chuyển vùng' : drawTool === 'paint' ? 'Tô màu phòng' : 'Kéo chọn lại phạm vi phòng'}.`
-                          : `Công cụ hiện tại: Kéo chọn vùng tạo phòng. Màu phòng được chọn trong modal khi lưu phòng.${selectedCells.size > 0 ? ` Đã chọn ${selectedCells.size} ô trống${isDraggingSelection ? ' và đang kéo chuột để quét vùng.' : '.'}` : ''}`}
-                    </div>
-                  </div>
-                )}
-
-                {isActive && !isImageFloor && floorInteractionMode === 'edit' && (
-                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <span className="rounded-lg bg-orange-100 px-3 py-2 text-sm font-semibold text-orange-700">
-                      Đang sửa phòng {selectedShape?.roomName || ''}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => openRoomDraftModal(selectedShape)}
-                      disabled={selectedCells.size === 0 || savingLayout}
-                      className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Save size={16} />
-                      Lưu phòng
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearSelection}
-                      disabled={selectedCells.size === 0}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <X size={16} />
-                      Bỏ chọn vùng
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => exitInteractionMode()}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <X size={16} />
-                      Hủy sửa
-                    </button>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                      {drawTool === 'select'
-                        ? `Kéo chuột để chọn lại phạm vi phòng. Vùng hiện tại có ${selectedCells.size} ô.`
-                        : drawTool === 'move'
-                          ? 'Dùng biểu tượng bàn tay rồi kéo trên vùng đã chọn để di chuyển phòng.'
-                          : 'Dùng thùng sơn để đổi màu phòng đang chỉnh sửa.'}
-                    </span>
-                  </div>
-                )}
-
-                {isActive && !isImageFloor && floorInteractionMode === 'move' && (
-                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <span className="inline-flex items-center gap-2 rounded-lg bg-sky-100 px-3 py-2 text-sm font-semibold text-sky-700">
-                      <Move size={16} />
-                      {selectedShapes.length > 1
-                        ? `Đang di chuyển cụm ${selectedShapes.length} phòng`
-                        : `Đang di chuyển phòng ${selectedShape?.roomName || ''}`}
-                    </span>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                      Dùng các phím mũi tên để tịnh tiến từng ô hoặc kéo trực tiếp trên một phòng đang chọn. Bấm Enter để kết thúc.
-                    </span>
-                  </div>
-                )}
-
-                {isActive && !isImageFloor && canvasResizeState.enabled && floorInteractionMode === 'view' && (
-                  <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900/60 dark:bg-sky-950/20">
-                    <span className="rounded-lg bg-sky-100 px-3 py-2 text-sm font-semibold text-sky-700">
-                      Đang đổi kích thước canvas
-                    </span>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                      Kéo ở viền phải, viền dưới hoặc góc phải dưới. Canvas sẽ tự lưu khi bạn thả chuột.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      <X size={16} />
-                      Kết thúc
-                    </button>
-                  </div>
-                )}
-
-                {isImageFloor ? (
-                  <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div
-                      className="relative overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700"
-                      style={{
-                        width: floor.imageWidth || 960,
-                        height: floor.imageHeight || 540,
-                        backgroundColor: '#FFFFFF',
-                      }}
-                    >
-                      {floor.backgroundImageUrl ? (
-                        <img
-                          src={resolveBackendMediaUrl(floor.backgroundImageUrl)}
-                          alt={floor.name}
-                          className="absolute inset-0 h-full w-full object-fill"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-                          Chưa có ảnh nền cho tầng này.
-                        </div>
-                      )}
-
-                      <svg
-                        ref={isActive ? imageSvgRef : null}
-                        className={`absolute inset-0 h-full w-full ${floorInteractionMode === 'add' || floorInteractionMode === 'edit' ? 'cursor-crosshair' : 'cursor-default'}`}
-                        viewBox={`0 0 ${floor.imageWidth || 960} ${floor.imageHeight || 540}`}
-                        onPointerDown={(event) => handleImagePointerDown(event, floor)}
-                        onPointerMove={(event) => handleImagePointerMove(event, floor)}
-                        onPointerUp={(event) => handleImagePointerUp(event, floor)}
-                        onClick={(event) => handleImageCanvasClick(event, floor)}
-                      >
-                        {(floor.roomShapes || []).map((shape) => {
-                          if (isFloorEditing && Number(shape.id) === Number(selectedShapeId)) {
-                            return null
-                          }
-                          const points = getShapePoints(shape)
-                          const bounds = buildImageBoundsFromPoints(points)
-                          if (points.length < 3 || !bounds) return null
-                          const isSelected = selectedShapeIdSet.has(Number(shape.id))
-                          const fill = isSelected
-                            ? colorWithAlpha(shape.colorHex, 0.28)
-                            : colorWithAlpha(shape.colorHex, 0.18)
-                          const stroke = isSelected ? '#f97316' : (shape.colorHex || DEFAULT_COLOR)
-                          const center = getShapeCenter(shape)
-
-                          return (
-                            <g key={`room-image-${shape.id}`}>
-                              <polygon
-                                points={pointsToSvgValue(points)}
-                                fill={fill}
-                                stroke={stroke}
-                                strokeWidth={isSelected ? 3 : 2}
-                                className={`${floorInteractionMode === 'view' ? 'cursor-pointer' : 'pointer-events-none'} transition`}
-                                onClick={floorInteractionMode === 'view' ? (event) => handleRoomClick(event, floor, shape) : undefined}
-                                onContextMenu={floorInteractionMode === 'view' ? (event) => handleRoomContextMenu(event, floor, shape) : undefined}
-                              />
-                              <text
-                                x={center.left}
-                                y={center.top}
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                                fill="#0f172a"
-                                fontSize="12"
-                                fontWeight="600"
-                                className="pointer-events-none select-none"
-                              >
-                                {shape.roomName}
-                              </text>
-                            </g>
-                          )
-                        })}
-
-                        {isActive && (floorInteractionMode === 'add' || floorInteractionMode === 'edit') && hasImageSelection && imageSelectionGeometry.bounds && (
-                          <g className="pointer-events-none">
-                            <polygon
-                              points={pointsToSvgValue(imageSelectionGeometry.points)}
-                              fill={colorWithAlpha(roomDraft.colorHex || DEFAULT_COLOR, 0.26)}
-                              stroke={roomDraft.colorHex || DEFAULT_COLOR}
-                              strokeDasharray="8 6"
-                              strokeWidth="3"
-                            />
-                          </g>
-                        )}
-
-                        {isActive && (floorInteractionMode === 'add' || floorInteractionMode === 'edit') && !imageSelection.drawing && (imageSelectionGeometry.points || []).length > 0 && (
-                          <g>
-                            {imageSelectionGeometry.points.map((point, index) => {
-                              const isDraggingPoint = imageVertexDragState.active && Number(imageVertexDragState.pointIndex) === index
-                              return (
-                                <circle
-                                  key={`image-selection-handle-${index}`}
-                                  cx={point.x}
-                                  cy={point.y}
-                                  r={isDraggingPoint ? 7 : 6}
-                                  fill="#FFFFFF"
-                                  stroke={roomDraft.colorHex || DEFAULT_COLOR}
-                                  strokeWidth="3"
-                                  className="cursor-move transition"
-                                  onPointerDown={(event) => handleImageVertexPointerDown(event, floor, index)}
-                                  onClick={(event) => {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                  }}
-                                />
-                              )
-                            })}
-                          </g>
-                        )}
-
-                        {isActive && drawTool === IMAGE_POLYGON_TOOL && (imageSelection.points || []).length > 0 && (
-                          <g className="pointer-events-none">
-                            <polyline
-                              points={pointsToSvgValue([
-                                ...(imageSelection.points || []),
-                                ...(imageSelection.hoverPoint ? [imageSelection.hoverPoint] : []),
-                              ])}
-                              fill="none"
-                              stroke={roomDraft.colorHex || DEFAULT_COLOR}
-                              strokeDasharray="8 6"
-                              strokeWidth="2.5"
-                            />
-                            {(imageSelection.points || []).map((point, index) => (
-                              <circle
-                                key={`image-point-${index}`}
-                                cx={point.x}
-                                cy={point.y}
-                                r="4"
-                                fill={roomDraft.colorHex || DEFAULT_COLOR}
-                              />
-                            ))}
-                          </g>
-                        )}
-                      </svg>
-
-                      {(floor.roomShapes || []).flatMap((shape) => {
-                        const center = getShapeCenter(shape)
-                        const assets = searchResultMap.get(shape.locationId) || []
-                        return assets.map((asset, index) => {
-                          const offset = getMarkerOffsets(index)
-                          return (
-                            <div
-                              key={`${shape.id}-${asset.qaCode}`}
-                              className="absolute -translate-x-1/2 -translate-y-1/2"
-                              style={{
-                                left: center.left + offset.x,
-                                top: center.top + offset.y,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onMouseEnter={(event) => handleMarkerTooltipShow(event, asset)}
-                                onMouseLeave={() => handleMarkerTooltipHide(asset)}
-                                onFocus={(event) => handleMarkerTooltipShow(event, asset)}
-                                onBlur={() => handleMarkerTooltipHide(asset)}
-                                className="relative h-4 w-4 rounded-full bg-red-500 shadow-[0_0_0_2px_rgba(255,255,255,0.95)]"
-                              >
-                                <span
-                                  className="pointer-events-none absolute inset-0 rounded-full bg-red-400"
-                                  style={{ animation: 'asset-map-ping 1.9s ease-out infinite' }}
-                                />
-                              </button>
-                            </div>
-                          )
-                        })
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div
-                      className="relative"
-                      style={{
-                        width: floor.gridCols * CELL_SIZE,
-                        height: floor.gridRows * CELL_SIZE,
-                      }}
-                    >
-                      <div
-                        className="absolute inset-0 rounded-xl border border-slate-300 dark:border-slate-700"
-                        style={{
-                          backgroundColor: floor.canvasBackgroundColor || '#FFFFFF',
-                        }}
-                        onContextMenu={(event) => handleCanvasContextMenu(event, floor)}
-                      />
-
-                      {isActive && canvasResizeState.enabled && floorInteractionMode === 'view' && (
-                        <>
-                          <button
-                            type="button"
-                            aria-label="Kéo thay đổi chiều rộng canvas"
-                            onMouseDown={(event) => handleCanvasResizeStart(event, floor, 'right')}
-                            className="absolute right-[-7px] top-4 bottom-4 z-20 w-4 cursor-ew-resize rounded-full bg-sky-500/70 shadow hover:bg-sky-500"
-                          />
-                          <button
-                            type="button"
-                            aria-label="Kéo thay đổi chiều cao canvas"
-                            onMouseDown={(event) => handleCanvasResizeStart(event, floor, 'bottom')}
-                            className="absolute bottom-[-7px] left-4 right-4 z-20 h-4 cursor-ns-resize rounded-full bg-sky-500/70 shadow hover:bg-sky-500"
-                          />
-                          <button
-                            type="button"
-                            aria-label="Kéo thay đổi kích thước canvas"
-                            onMouseDown={(event) => handleCanvasResizeStart(event, floor, 'corner')}
-                            className="absolute bottom-[-9px] right-[-9px] z-30 h-5 w-5 cursor-nwse-resize rounded-full border-2 border-white bg-sky-600 shadow-lg hover:bg-sky-500"
-                          />
-                        </>
-                      )}
-
-                      {showGridLines && isActive && (
-                        <div
-                          className="absolute inset-0 grid"
-                          style={{
-                            gridTemplateColumns: `repeat(${floor.gridCols}, ${CELL_SIZE}px)`,
-                            gridTemplateRows: `repeat(${floor.gridRows}, ${CELL_SIZE}px)`,
-                          }}
-                        >
-                          {Array.from({ length: floor.gridRows }).map((_, rowIndex) =>
-                            Array.from({ length: floor.gridCols }).map((__, colIndex) => {
-                              const cellKey = `${rowIndex}:${colIndex}`
-                              const rawShape = cellShapeMap.get(cellKey)
-                              const shape = Number(rawShape?.id) === editableShapeId ? null : rawShape
-                              const isSelected = selectedCells.has(cellKey)
-                              const isEditableShapeCell = Number(rawShape?.id) === Number(editableShapeId)
-                              return (
-                                <button
-                                  key={`${floor.id}-${cellKey}`}
-                                  type="button"
-                                  onMouseDown={(event) => handleCellPointerDown(event, floor, cellKey, shape)}
-                                  onMouseEnter={() => handleCellPointerEnter(floor, cellKey, shape)}
-                                  onMouseUp={handleCellPointerUp}
-                                  onDragStart={(event) => event.preventDefault()}
-                                  className={`relative border border-slate-300 transition dark:border-slate-700 ${
-                                    drawTool === 'select' && !shape ? 'hover:bg-orange-50 dark:hover:bg-orange-500/10' : ''
-                                  } ${isSelected ? 'ring-2 ring-inset ring-fptOrange' : ''}`}
-                                  style={{
-                                    width: CELL_SIZE,
-                                    height: CELL_SIZE,
-                                    backgroundColor: isSelected
-                                      ? colorWithAlpha(
-                                        isEditableShapeCell
-                                          ? (roomDraft.colorHex || rawShape?.colorHex || DEFAULT_COLOR)
-                                          : (roomDraft.colorHex || DEFAULT_COLOR),
-                                        0.28,
-                                      )
-                                      : shape
-                                        ? colorWithAlpha(shape.colorHex, 0.18)
-                                        : undefined,
-                                    cursor: drawTool === 'move'
-                                      ? (isSelected ? 'grab' : 'not-allowed')
-                                      : drawTool === 'paint'
-                                        ? 'cell'
-                                        : 'crosshair',
-                                  }}
-                                />
-                              )
-                            }),
-                          )}
-                        </div>
-                      )}
-
-                      {(floor.roomShapes || []).map((shape) => {
-                        if (isFloorEditing && Number(shape.id) === Number(selectedShapeId)) {
-                          return null
-                        }
-
-                        const bounds = getShapeBounds(shape)
-                        const isSelected = selectedShapeIdSet.has(Number(shape.id))
-                        const roomBackgroundColor = isSelected
-                          ? colorWithAlpha(shape.colorHex, 0.28)
-                          : (shape.colorHex || DEFAULT_COLOR)
-                        const roomTextColor = isSelected ? '#0f172a' : getReadableTextColor(shape.colorHex)
-
-                        return (
-                          <button
-                            key={`room-${shape.id}`}
-                            type="button"
-                            onMouseDown={(event) => handleRoomPointerDown(event, floor, shape)}
-                            onClick={(event) => handleRoomClick(event, floor, shape)}
-                            onContextMenu={(event) => handleRoomContextMenu(event, floor, shape)}
-                            className={`absolute flex items-center justify-center rounded-xl border text-center shadow-sm transition ${
-                              isSelected
-                                ? 'border-orange-400 ring-2 ring-orange-200 dark:ring-orange-500/20'
-                                : 'border-slate-300 hover:brightness-95 dark:border-slate-700'
-                            }`}
-                            style={{
-                              top: bounds.top,
-                              left: bounds.left,
-                              width: bounds.width,
-                              height: bounds.height,
-                              backgroundColor: roomBackgroundColor,
-                              color: roomTextColor,
-                              cursor: drawTool === 'move' && floorInteractionMode === 'view'
-                                ? (roomDragState.active && roomDragState.shapeIds.some((shapeId) => Number(shapeId) === Number(shape.id)) ? 'grabbing' : 'grab')
-                                : drawTool === 'paint' && floorInteractionMode === 'view'
-                                  ? 'cell'
-                                  : 'pointer',
-                            }}
-                          >
-                            <div className="pointer-events-none px-2">
-                              <span className="line-clamp-2 text-xs font-semibold">
-                                {shape.roomName}
-                              </span>
-                            </div>
-                          </button>
-                        )
-                      })}
-
-                      {(floor.roomShapes || []).flatMap((shape) => {
-                        const center = getShapeCenter(shape)
-                        const assets = searchResultMap.get(shape.locationId) || []
-                        return assets.map((asset, index) => {
-                          const offset = getMarkerOffsets(index)
-                          return (
-                            <div
-                              key={`${shape.id}-${asset.qaCode}`}
-                              className="absolute -translate-x-1/2 -translate-y-1/2"
-                              style={{
-                                left: center.left + offset.x,
-                                top: center.top + offset.y,
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onMouseEnter={(event) => handleMarkerTooltipShow(event, asset)}
-                                onMouseLeave={() => handleMarkerTooltipHide(asset)}
-                                onFocus={(event) => handleMarkerTooltipShow(event, asset)}
-                                onBlur={() => handleMarkerTooltipHide(asset)}
-                                className="relative h-4 w-4 rounded-full bg-red-500 shadow-[0_0_0_2px_rgba(255,255,255,0.95)]"
-                              >
-                                <span
-                                  className="pointer-events-none absolute inset-0 rounded-full bg-red-400"
-                                  style={{ animation: 'asset-map-ping 1.9s ease-out infinite' }}
-                                />
-                              </button>
-                            </div>
-                          )
-                        })
-                      })}
-                    </div>
-                  </div>
-                )}
+                <MapCanvas
+                  floor={floor}
+                  isActive={isActive}
+                  isImageFloor={isImageFloor}
+                  isFloorEditing={isFloorEditing}
+                  selectedShapeId={selectionState.selectedShapeId}
+                  selectedShapeIdSet={selectedShapeIdSet}
+                  selectedShapes={selectionState.selectedShapes}
+                  selectedCells={selectionState.selectedCells}
+                  editableShapeId={editableShapeId}
+                  drawTool={viewState.drawTool}
+                  floorInteractionMode={viewState.floorInteractionMode}
+                  roomDragState={selectionState.roomDragState}
+                  cellShapeMap={cellShapeMap}
+                  searchResultMap={searchResultMap}
+                  showGridLines={showGridLines}
+                  canvasResizeState={draftState.canvasResizeState}
+                  roomDraft={draftState.roomDraft}
+                  imageSelection={selectionState.imageSelection}
+                  imageSelectionGeometry={selectionState.imageSelectionGeometry}
+                  imageVertexDragState={selectionState.imageVertexDragState}
+                  imageSvgRef={imageSvgRef}
+                  cellSize={CELL_SIZE}
+                  defaultColor={DEFAULT_COLOR}
+                  getShapePoints={getShapePoints}
+                  buildImageBoundsFromPoints={buildImageBoundsFromPoints}
+                  getShapeCenter={getShapeCenter}
+                  getShapeBounds={getShapeBounds}
+                  getReadableTextColor={getReadableTextColor}
+                  colorWithAlpha={colorWithAlpha}
+                  pointsToSvgValue={pointsToSvgValue}
+                  getMarkerOffsets={getMarkerOffsets}
+                  visibleShapeIdSet={isActive ? visibleShapeIdSet : new Set((floor.roomShapes || []).map((shape) => Number(shape.id)))}
+                  selectionBounds={isActive ? currentSelectionBounds : null}
+                  showFloatingSelectionToolbar={isActive && showFloatingSelectionToolbar}
+                  quickSelectionColor={currentPaintColor}
+                  onQuickSelectionSave={handleQuickSelectionSave}
+                  onQuickSelectionCancel={handleQuickSelectionCancel}
+                  onQuickSelectionDelete={() => { void handleDeleteActiveRegion() }}
+                  onQuickSelectionBind={() => openRoomDraftModal(selectedShape)}
+                  onQuickSelectionEditInfo={handleQuickSelectionEditInfo}
+                  onQuickSelectionEditLayout={handleQuickSelectionEditLayout}
+                  onQuickSelectionMove={() => setActiveDrawTool('move')}
+                  onQuickSelectionOpenAssets={handleQuickSelectionOpenAssets}
+                  onQuickSelectionPaintMode={() => setActiveDrawTool('paint')}
+                  HandToolIcon={HandToolIcon}
+                  PaintToolIcon={PaintToolIcon}
+                  onQuickSelectionColorChange={handleQuickSelectionColorChange}
+                  onImagePointerDown={handleImagePointerDown}
+                  onImagePointerMove={handleImagePointerMove}
+                  onImagePointerUp={handleImagePointerUp}
+                  onImageCanvasClick={handleImageCanvasClick}
+                  onImageVertexPointerDown={handleImageVertexPointerDown}
+                  onCanvasResizeStart={handleCanvasResizeStart}
+                  onCellPointerDown={handleCellPointerDown}
+                  onCellPointerEnter={handleCellPointerEnter}
+                  onCellPointerUp={handleCellPointerUp}
+                  onRoomPointerDown={handleRoomPointerDown}
+                  onRoomClick={handleRoomClick}
+                  onRoomPreviewShow={handleRoomPreviewShow}
+                  onRoomPreviewHide={handleRoomPreviewHide}
+                  onMarkerTooltipShow={handleMarkerTooltipShow}
+                  onMarkerTooltipHide={handleMarkerTooltipHide}
+                />
 
                 <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
@@ -3383,13 +3782,21 @@ function AssetMapManagement() {
                         className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-orange-300 hover:text-orange-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
                       >
                         {notesCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                        {notesCollapsed ? 'Mở' : 'Thu gọn'}
+                        {notesCollapsed ? 'Xem thêm' : 'Thu gọn'}
                       </button>
                     </div>
                     {notesCollapsed ? (
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        Đã thu gọn phần hướng dẫn sử dụng. Nhấp `Mở` để xem cách thao tác trên sơ đồ.
-                      </p>
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">
+                          Trích nhanh
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                          Nhấp vào một khu vực để chọn, nhấp chuột phải để mở thao tác nhanh.
+                          {isImageFloor
+                            ? ' Với tầng IMAGE, bạn có thể vẽ phòng bằng rectangle hoặc polygon trực tiếp trên ảnh nền.'
+                            : ' Khi thêm hoặc vẽ lại phòng, hãy kéo chọn vùng trên lưới rồi lưu thông tin phòng.'}
+                        </p>
+                      </div>
                     ) : (
                       <div className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                         <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
@@ -3452,19 +3859,7 @@ function AssetMapManagement() {
                           <button
                             key={`chip-${shape.id}`}
                             type="button"
-                            onClick={(event) => {
-                              setActiveFloorId(floor.id)
-                              if (event.metaKey || event.ctrlKey || event.shiftKey) {
-                                const normalizedShapeId = Number(shape.id)
-                                const nextIds = selectedShapeIdSet.has(normalizedShapeId)
-                                  ? selectedShapeIds.filter((value) => Number(value) !== normalizedShapeId)
-                                  : [...selectedShapeIds, normalizedShapeId]
-                                setSelectedRooms(nextIds, nextIds.length > 0 ? normalizedShapeId : null)
-                              } else {
-                                setSelectedRooms([shape.id], shape.id)
-                              }
-                              setRoomContextMenu(null)
-                            }}
+                            onClick={(event) => handleSelectRoomChip(floor.id, shape, event)}
                             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                               selectedShapeIdSet.has(Number(shape.id))
                                 ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200'
@@ -3483,149 +3878,19 @@ function AssetMapManagement() {
           })}
         </div>
 
-        <aside className="space-y-4">
-          <div className="sticky top-4 space-y-4">
-            <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Tìm tài sản</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Quét QR, nhập QA code, tên tài sản hoặc lọc theo loại và phòng.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setScannerOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Camera size={16} />
-                  Quét QR
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Từ khóa</label>
-                  <input
-                    value={searchFilters.keyword}
-                    onChange={(event) => setSearchFilters((previous) => ({ ...previous, keyword: event.target.value }))}
-                    placeholder="Nhập QA code hoặc tên tài sản"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Loại tài sản</label>
-                  <select
-                    value={searchFilters.categoryId}
-                    onChange={(event) => setSearchFilters((previous) => ({ ...previous, categoryId: event.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  >
-                    <option value="">Tất cả loại</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tầng</label>
-                  <select
-                    value={searchFilters.floorId}
-                    onChange={(event) => setSearchFilters((previous) => ({ ...previous, floorId: event.target.value, locationId: '' }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  >
-                    <option value="">Tất cả tầng</option>
-                    {floors.map((floor) => (
-                      <option key={floor.id} value={floor.id}>
-                        {floor.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Phòng</label>
-                  <select
-                    value={searchFilters.locationId}
-                    onChange={(event) => setSearchFilters((previous) => ({ ...previous, locationId: event.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  >
-                    <option value="">Tất cả phòng</option>
-                    {filteredLocationOptions.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.roomName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSearch()}
-                  disabled={searching}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-                >
-                  <Search size={16} />
-                  Tìm kiếm
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetSearch}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Xóa
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Kết quả</h3>
-                <span className="text-sm text-slate-500 dark:text-slate-400">{searchResults.length} tài sản</span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {searchResults.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    Chưa có kết quả. Hãy dùng bộ lọc hoặc quét QR để hiển thị marker trên sơ đồ.
-                  </div>
-                )}
-                {searchResults.map((asset) => {
-                  const floor = floors.find((item) => Number(item.id) === Number(asset.floorId))
-                  const isMapped = floor?.roomShapes?.some((shape) => Number(shape.locationId) === Number(asset.locationId))
-                  return (
-                    <button
-                      key={asset.qaCode}
-                      type="button"
-                      onClick={() => {
-                        if (asset.floorId) {
-                          setActiveFloorId(asset.floorId)
-                          scrollToFloor(asset.floorId)
-                        }
-                      }}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:border-orange-300 hover:bg-orange-50 dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-orange-500/40 dark:hover:bg-orange-500/10"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-slate-800 dark:text-slate-100">{asset.name}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">QA: {asset.qaCode}</p>
-                        </div>
-                        <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
-                          Marker
-                        </span>
-                      </div>
-                      <div className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                        <p>Phòng hiện tại: {asset.locationName || 'Chưa rõ'}</p>
-                        <p>Tầng: {asset.floorName || 'Chưa gán tầng'}</p>
-                        <p>Loại: {asset.categoryName || 'Chưa rõ'}</p>
-                        {!isMapped && <p className="font-semibold text-amber-600">Phòng này chưa được vẽ trên sơ đồ.</p>}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </aside>
+        <AssetPlacementPanel
+          categories={serverState.categories}
+          floors={serverState.floors}
+          filteredLocationOptions={filteredLocationOptions}
+          searchFilters={searchFilters}
+          searchResults={serverState.searchResults}
+          searching={viewState.searching}
+          onSearchFilterChange={handleSearchFilterChange}
+          onOpenScanner={() => setScannerOpen(true)}
+          onSearch={() => { void handleSearch() }}
+          onResetSearch={handleResetSearch}
+          onJumpToAssetFloor={handleJumpToAssetFloor}
+        />
       </div>
 
       {markerTooltip && (
@@ -3646,227 +3911,73 @@ function AssetMapManagement() {
         </div>
       )}
 
-      {showImageImportModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="w-full max-w-5xl rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-900">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Import ảnh bản vẽ</h3>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Chọn ảnh PNG, JPG hoặc JPEG của mặt bằng để dùng làm ảnh nền sơ đồ. Sau khi tạo tầng IMAGE, bạn sẽ tự khoanh các phòng trực tiếp trên ảnh.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeImageImportModal}
-                disabled={importApplying}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Đóng
-              </button>
+      {roomPreview && (
+        <div
+          className="pointer-events-none fixed z-40 w-72 rounded-2xl border border-slate-200 bg-white/95 p-4 text-left shadow-2xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95"
+          style={{
+            left: roomPreview.left,
+            top: roomPreview.top,
+            transform: roomPreview.placement === 'top'
+              ? 'translate(-50%, -100%)'
+              : 'translate(-50%, 0)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{roomPreview.shape.roomName || 'Khu vực chưa đặt tên'}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {roomPreview.assetCount} tài sản gắn với phòng này
+              </p>
             </div>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${roomPreview.syncMeta.tone}`}>
+              {roomPreview.syncMeta.label}
+            </span>
+          </div>
 
-            <div className="mb-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/50">
-              <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-8 text-center dark:border-slate-800 dark:bg-slate-950">
-                <Upload size={22} className="text-fptOrange" />
-                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                  {importSubmitting ? 'Đang chuẩn bị ảnh nền...' : 'Bấm để chọn ảnh PNG/JPG/JPEG'}
-                </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">Ảnh sẽ được dùng làm nền sơ đồ, sau đó bạn tự khoanh các phòng trực tiếp trên ảnh.</span>
-                <input
-                  type="file"
-                  accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-                  onChange={handleImageImportFileChange}
-                  disabled={importSubmitting || importApplying}
-                  className="hidden"
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
+              <p className="text-slate-500 dark:text-slate-400">Loại khu vực</p>
+              <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{roomPreview.areaType.label}</p>
+            </div>
+            <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
+              <p className="text-slate-500 dark:text-slate-400">Màu</p>
+              <div className="mt-1 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
+                <span
+                  className="h-3 w-3 rounded-full border border-white/70 shadow"
+                  style={{ backgroundColor: roomPreview.shape.colorHex || DEFAULT_COLOR }}
                 />
-              </label>
+                {String(roomPreview.shape.colorHex || DEFAULT_COLOR).toUpperCase()}
+              </div>
             </div>
-
-            {imageImportSession?.sourceFileName && (
-              <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                <span className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">{imageImportSession.sourceFileType || 'IMAGE'}</span>
-                <span className="font-medium text-slate-700 dark:text-slate-200">{imageImportSession.sourceFileName}</span>
-              </div>
-            )}
-
-            {!importSubmitting && imageImportSession.drawings?.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ảnh nền đã tải lên</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Chọn ảnh muốn dùng để tạo tầng IMAGE, rồi tự vẽ phòng sau.</p>
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Đã chọn {selectedImportDrawingIds.length}/{imageImportSession.drawings.length}
-                  </span>
-                </div>
-
-                <div className="grid max-h-[55vh] gap-4 overflow-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
-                  {imageImportSession.drawings.map((drawing) => {
-                    const checked = selectedImportDrawingIds.includes(drawing.drawingId)
-                    return (
-                      <label
-                        key={drawing.drawingId}
-                        className={`overflow-hidden rounded-2xl border transition ${
-                          checked
-                            ? 'border-fptOrange ring-2 ring-orange-100'
-                            : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{drawing.title}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              Ảnh nền • {Math.round(drawing.width || 0)} x {Math.round(drawing.height || 0)}
-                            </p>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => handleToggleImportDrawing(drawing.drawingId)}
-                            className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
-                          />
-                        </div>
-                        <div className="bg-slate-50 dark:bg-slate-950/40">
-                          {drawing.previewUrl ? (
-                            <img
-                              src={resolveBackendMediaUrl(drawing.previewUrl)}
-                              alt={drawing.title}
-                              className="h-52 w-full object-contain"
-                            />
-                          ) : (
-                            <div className="flex h-52 items-center justify-center px-4 text-center text-sm text-slate-400 dark:text-slate-500">
-                              Chưa có preview
-                            </div>
-                          )}
-                        </div>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {!importSubmitting && imageImportSession?.sourceFileName && imageImportSession.drawings?.length === 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                Không thể đọc ảnh này để làm nền sơ đồ. Hãy thử lại bằng ảnh PNG/JPG/JPEG hợp lệ.
-              </div>
-            )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeImageImportModal}
-                disabled={importApplying}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyImageImport}
-                disabled={importSubmitting || importApplying || !selectedImportDrawingIds.length}
-                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-              >
-                {importApplying ? 'Đang tạo sơ đồ...' : 'Tạo sơ đồ'}
-              </button>
+            <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
+              <p className="text-slate-500 dark:text-slate-400">Chứa tài sản</p>
+              <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">
+                {roomPreview.shape.hasAsset !== false ? 'Có' : 'Không'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
+              <p className="text-slate-500 dark:text-slate-400">Đồng bộ</p>
+              <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{roomPreview.syncMeta.label}</p>
             </div>
           </div>
+
+          <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            {roomPreview.areaType.description}
+          </p>
         </div>
       )}
 
-      {roomContextMenu && selectedShape && (
-        <div
-          ref={contextMenuRef}
-          className="fixed z-[55] min-w-[220px] rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
-          style={{
-            top: Math.min(roomContextMenu.y, window.innerHeight - 220),
-            left: Math.min(roomContextMenu.x, window.innerWidth - 240),
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => beginEditRoomMode(selectedShape, activeFloorId)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Edit size={16} />
-            Vẽ lại phòng
-          </button>
-          <button
-            type="button"
-            onClick={() => openRoomInfoModal(selectedShape, activeFloorId)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Edit size={16} />
-            Sửa thông tin phòng
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRemoveShape(selectedShape)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-red-700 hover:bg-red-50"
-          >
-            <Trash size={16} />
-            Xóa phòng
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOpenRoomAssets(selectedShape, activeFloorId)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <ListDetails size={16} />
-            Xem danh sách tài sản
-          </button>
-          <button
-            type="button"
-            onClick={() => beginMoveRoomMode(selectedShape, activeFloorId)}
-            disabled={isImageFloorMode(activeFloor)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Move size={16} />
-            Di chuyển phòng
-          </button>
-        </div>
-      )}
-
-      {canvasContextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed z-[55] min-w-[220px] rounded-xl border border-slate-200 bg-white p-2 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
-          style={{
-            top: Math.min(canvasContextMenu.y, window.innerHeight - 180),
-            left: Math.min(canvasContextMenu.x, window.innerWidth - 260),
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              if (!activeFloor) return
-              beginAddRoomMode(activeFloor.id)
-              setCanvasContextMenu(null)
-            }}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Plus size={16} />
-            Thêm phòng
-          </button>
-          <button
-            type="button"
-            onClick={() => openCanvasSettingsModal(activeFloor, 'color')}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Edit size={16} />
-            Đổi màu nền canvas
-          </button>
-          <button
-            type="button"
-            onClick={() => beginCanvasResizeMode(activeFloor)}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <Move size={16} />
-            Thay đổi kích thước canvas
-          </button>
-        </div>
+      {showImageImportModal && (
+        <ImportSessionPanel
+          importSubmitting={serverState.importSubmitting}
+          importApplying={serverState.importApplying}
+          imageImportSession={draftState.imageImportSession}
+          selectedImportDrawingIds={draftState.selectedImportDrawingIds}
+          onClose={closeImageImportModal}
+          onFileChange={handleImageImportFileChange}
+          onToggleDrawing={handleToggleImportDrawing}
+          onApply={() => { void handleApplyImageImport() }}
+        />
       )}
 
       {showFloorModal && (
@@ -3878,7 +3989,7 @@ function AssetMapManagement() {
               </h3>
               <button
                 type="button"
-                onClick={() => setShowFloorModal(false)}
+                onClick={handleCloseFloorModal}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Đóng
@@ -3946,7 +4057,7 @@ function AssetMapManagement() {
                 </>
               )}
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={handleSaveFloor}
@@ -3972,7 +4083,7 @@ function AssetMapManagement() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowCanvasModal(false)}
+                onClick={handleCloseCanvasModal}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Đóng
@@ -4018,6 +4129,13 @@ function AssetMapManagement() {
                     {canvasForm.canvasBackgroundColor}
                   </span>
                 </div>
+                {canvasColorConflict && (
+                  <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-rose-200">
+                    Màu nền {normalizeHexColor(canvasForm.canvasBackgroundColor, '#FFFFFF')} quá giống với màu của khu vực{' '}
+                    <span className="font-semibold">{canvasColorConflict.shape?.roomName || 'đang có'}</span>{' '}
+                    ({canvasColorConflict.colorHex}). Hãy chọn màu khác để các phòng còn nhìn rõ trên bản đồ.
+                  </div>
+                )}
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
@@ -4060,7 +4178,7 @@ function AssetMapManagement() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowCanvasModal(false)}
+                onClick={handleCloseCanvasModal}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Hủy
@@ -4068,7 +4186,8 @@ function AssetMapManagement() {
               <button
                 type="button"
                 onClick={handleSaveCanvasSettings}
-                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
+                disabled={Boolean(canvasColorConflict)}
+                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Lưu canvas
               </button>
@@ -4077,153 +4196,30 @@ function AssetMapManagement() {
         </div>
       )}
 
+      {showAreaTypeCatalogModal && (
+        <AreaTypeCatalogModal
+          areaTypes={areaTypeCatalogEntries}
+          onClose={() => setShowAreaTypeCatalogModal(false)}
+          onCreate={handleCreateAreaType}
+          onUpdate={handleUpdateAreaType}
+          onDelete={handleDeleteAreaType}
+        />
+      )}
+
       {showRoomModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                {!selectedShape
-                  ? 'Tạo phòng từ vùng chọn'
-                  : floorInteractionMode === 'edit'
-                    ? 'Cập nhật phòng sau khi vẽ lại'
-                    : 'Sửa thông tin phòng'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowRoomModal(false)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Đóng
-              </button>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Kiểu gán phòng</label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRoomDraft((previous) => ({ ...previous, mode: 'new', locationId: '' }))}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      roomDraft.mode === 'new'
-                        ? 'bg-orange-100 text-orange-700'
-                        : 'border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    Tạo phòng mới
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoomDraft((previous) => ({ ...previous, mode: 'existing' }))}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      roomDraft.mode === 'existing'
-                        ? 'bg-orange-100 text-orange-700'
-                        : 'border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    Gắn phòng có sẵn
-                  </button>
-                </div>
-              </div>
-
-              {roomDraft.mode === 'existing' ? (
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Phòng có sẵn</label>
-                  <select
-                    value={roomDraft.locationId}
-                    onChange={(event) => {
-                      const nextLocationId = event.target.value
-                      const selectedLocation = locations.find((item) => String(item.id) === String(nextLocationId))
-                      setRoomDraft((previous) => ({
-                        ...previous,
-                        locationId: nextLocationId,
-                        hasAsset: selectedLocation?.hasAsset !== false,
-                      }))
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  >
-                    <option value="">Chọn phòng</option>
-                    {locationOptionsForRoomModal.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.roomName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tên phòng mới</label>
-                  <input
-                    value={roomDraft.roomName}
-                    onChange={(event) => setRoomDraft((previous) => ({ ...previous, roomName: event.target.value }))}
-                    placeholder="Ví dụ: P.201 hoặc Kho thiết bị"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Màu phòng</label>
-                <input
-                  type="color"
-                  value={roomDraft.colorHex}
-                  onChange={(event) => setRoomDraft((previous) => ({ ...previous, colorHex: event.target.value }))}
-                  className="h-11 w-full rounded-lg border border-slate-300 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-950"
-                />
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/60">
-                <div className="flex items-start gap-3">
-                  <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={roomDraft.hasAsset !== false}
-                      onChange={(event) => setRoomDraft((previous) => ({ ...previous, hasAsset: event.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
-                    />
-                    Khu vực chứa tài sản
-                  </label>
-                  <div className="group relative mt-0.5">
-                    <button
-                      type="button"
-                      className="text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-                      aria-label="Giải thích khu vực chứa tài sản"
-                    >
-                      <InfoCircle size={16} />
-                    </button>
-                    <div className="pointer-events-none absolute left-1/2 top-7 z-10 hidden w-64 -translate-x-1/2 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-5 text-white shadow-xl group-hover:block group-focus-within:block">
-                      Bật tùy chọn này nếu khu vực được phép làm vị trí đặt hoặc lưu trữ tài sản. Nếu bỏ chọn, khu vực chỉ đóng vai trò minh hoạ trên sơ đồ như hành lang, sân hoặc cổng.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
-                {selectedShape ? (
-                  floorInteractionMode === 'edit'
-                    ? (
-                      isImageFloorMode(activeFloor)
-                        ? <p>Bạn đang vẽ lại phạm vi phòng trực tiếp trên ảnh nền. Có thể dùng rectangle hoặc polygon rồi lưu lại cùng tên và màu phòng.</p>
-                        : <p>Phạm vi phòng hiện có {selectedCells.size} ô. Bạn có thể kéo chọn lại vùng trước khi lưu tên hoặc màu phòng.</p>
-                    )
-                    : <p>Bạn đang sửa thông tin của phòng hiện có. Phạm vi phòng trên sơ đồ sẽ được giữ nguyên.</p>
-                ) : (
-                  isImageFloorMode(activeFloor)
-                    ? <p>Vùng chọn hiện đang nằm trực tiếp trên ảnh nền. Khi bấm lưu, hệ thống sẽ ghi thẳng polygon hoặc rectangle này xuống backend mà không tải lại toàn trang.</p>
-                    : <p>Vùng chọn hiện có {selectedCells.size} ô vuông. Khi bấm lưu, hệ thống sẽ ghi thẳng thay đổi xuống backend mà không tải lại toàn trang.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={handleSaveRoomDraft}
-                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-              >
-                Lưu phòng trên sơ đồ
-              </button>
-            </div>
-          </div>
-        </div>
+        <RoomEditorModal
+          selectedShape={selectedShape}
+          floorInteractionMode={viewState.floorInteractionMode}
+          roomDraft={draftState.roomDraft}
+          locations={serverState.locations}
+          locationOptionsForRoomModal={locationOptionsForRoomModal}
+          areaTypeOptions={areaTypeOptions}
+          areaTypePresets={areaTypeCatalogEntries}
+          roomShapeByLocationId={roomShapeByLocationId}
+          onClose={handleCloseRoomModal}
+          onRoomDraftChange={handleRoomDraftChange}
+          onSave={() => { void handleSaveRoomDraft() }}
+        />
       )}
 
       {showRoomAssetsModal && (

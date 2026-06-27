@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -43,6 +44,7 @@ public class AssetMapService {
     private final AssetRepository assetRepository;
     private final LocationService locationService;
     private final CategoryService categoryService;
+    private final AreaTypeCatalogService areaTypeCatalogService;
     private final ObjectMapper objectMapper;
 
     public AssetMapService(
@@ -52,6 +54,7 @@ public class AssetMapService {
             AssetRepository assetRepository,
             LocationService locationService,
             CategoryService categoryService,
+            AreaTypeCatalogService areaTypeCatalogService,
             ObjectMapper objectMapper
     ) {
         this.mapFloorRepository = mapFloorRepository;
@@ -60,6 +63,7 @@ public class AssetMapService {
         this.assetRepository = assetRepository;
         this.locationService = locationService;
         this.categoryService = categoryService;
+        this.areaTypeCatalogService = areaTypeCatalogService;
         this.objectMapper = objectMapper;
     }
 
@@ -69,6 +73,7 @@ public class AssetMapService {
                 .floors(getFloors())
                 .locations(locationService.getAllLocations(null, null))
                 .categories(categoryService.getCategoryOptions())
+                .areaTypes(areaTypeCatalogService.getAllAreaTypes())
                 .build();
     }
 
@@ -203,6 +208,8 @@ public class AssetMapService {
             roomShape.setPolygonJson(imageFloor ? writePoints(points) : null);
             roomShape.setBoundsJson(imageFloor ? writeBounds(bounds) : null);
             roomShape.setColorHex(normalizeColor(shapeRequest.getColorHex(), null, "Mau phong"));
+            roomShape.setAreaTypeLabel(normalizeAreaTypeLabel(shapeRequest.getAreaTypeLabel()));
+            roomShape.setAreaTypeKey(resolveAreaTypeKey(shapeRequest.getAreaTypeKey(), roomShape.getAreaTypeLabel()));
             shapesToSave.add(roomShape);
             if (roomShape.getId() != null) {
                 retainedShapeIds.add(roomShape.getId());
@@ -345,6 +352,54 @@ public class AssetMapService {
         return requestedHasAsset == null || requestedHasAsset;
     }
 
+    private String normalizeAreaTypeLabel(String areaTypeLabel) {
+        String normalized = areaTypeLabel == null ? null : areaTypeLabel.trim().replaceAll("\\s+", " ");
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        if (normalized.length() > 120) {
+            throw new CustomException("Ten loai khu vuc khong duoc vuot qua 120 ky tu.");
+        }
+        return normalized;
+    }
+
+    private String resolveAreaTypeKey(String areaTypeKey, String areaTypeLabel) {
+        String normalizedKey = areaTypeKey == null ? null : areaTypeKey.trim().replaceAll("\\s+", "");
+        if (!StringUtils.hasText(areaTypeLabel)) {
+            return null;
+        }
+        if (!StringUtils.hasText(normalizedKey)) {
+            return "CUSTOM:" + slugifyAreaTypeLabel(areaTypeLabel);
+        }
+        if (normalizedKey.length() > 80) {
+            throw new CustomException("Ma loai khu vuc khong hop le.");
+        }
+        return normalizedKey.toUpperCase(Locale.ROOT);
+    }
+
+    private String slugifyAreaTypeLabel(String areaTypeLabel) {
+        String normalized = areaTypeLabel == null ? "" : areaTypeLabel.trim().toLowerCase(Locale.ROOT);
+        StringBuilder builder = new StringBuilder();
+        for (char character : normalized.toCharArray()) {
+            if ((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9')) {
+                builder.append(character);
+                continue;
+            }
+            switch (character) {
+                case 'à', 'á', 'ạ', 'ả', 'ã', 'â', 'ầ', 'ấ', 'ậ', 'ẩ', 'ẫ', 'ă', 'ằ', 'ắ', 'ặ', 'ẳ', 'ẵ' -> builder.append('a');
+                case 'è', 'é', 'ẹ', 'ẻ', 'ẽ', 'ê', 'ề', 'ế', 'ệ', 'ể', 'ễ' -> builder.append('e');
+                case 'ì', 'í', 'ị', 'ỉ', 'ĩ' -> builder.append('i');
+                case 'ò', 'ó', 'ọ', 'ỏ', 'õ', 'ô', 'ồ', 'ố', 'ộ', 'ổ', 'ỗ', 'ơ', 'ờ', 'ớ', 'ợ', 'ở', 'ỡ' -> builder.append('o');
+                case 'ù', 'ú', 'ụ', 'ủ', 'ũ', 'ư', 'ừ', 'ứ', 'ự', 'ử', 'ữ' -> builder.append('u');
+                case 'ỳ', 'ý', 'ỵ', 'ỷ', 'ỹ' -> builder.append('y');
+                case 'đ' -> builder.append('d');
+                default -> builder.append('-');
+            }
+        }
+        String slug = builder.toString().replaceAll("-+", "-").replaceAll("^-|-$", "");
+        return StringUtils.hasText(slug) ? slug : "custom-area";
+    }
+
     private boolean resolveHasAsset(Location location) {
         return location.getHasAsset() == null || location.getHasAsset();
     }
@@ -427,6 +482,8 @@ public class AssetMapService {
                 .points(readPoints(shape.getPolygonJson()))
                 .bounds(readBounds(shape.getBoundsJson()))
                 .colorHex(shape.getColorHex())
+                .areaTypeKey(shape.getAreaTypeKey())
+                .areaTypeLabel(shape.getAreaTypeLabel())
                 .build();
     }
 

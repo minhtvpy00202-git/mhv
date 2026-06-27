@@ -2,6 +2,9 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.assetmap.AssetMapAssetResponse;
 import com.poly.mhv.dto.assetmap.AssetMapBootstrapResponse;
+import com.poly.mhv.dto.assetmap.AreaTypeCatalogCreateRequest;
+import com.poly.mhv.dto.assetmap.AreaTypeCatalogResponse;
+import com.poly.mhv.dto.assetmap.AreaTypeCatalogUpdateRequest;
 import com.poly.mhv.dto.assetmap.FloorLayoutSaveRequest;
 import com.poly.mhv.dto.assetmap.MapFloorCreateRequest;
 import com.poly.mhv.dto.assetmap.MapFloorResponse;
@@ -11,6 +14,7 @@ import com.poly.mhv.dto.assetmapimport.AssetMapImportApplyRequest;
 import com.poly.mhv.dto.assetmapimport.AssetMapImportApplyResponse;
 import com.poly.mhv.service.AssetMapImportService;
 import com.poly.mhv.service.AssetMapService;
+import com.poly.mhv.service.AreaTypeCatalogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -42,10 +46,16 @@ public class AssetMapController {
 
     private final AssetMapService assetMapService;
     private final AssetMapImportService assetMapImportService;
+    private final AreaTypeCatalogService areaTypeCatalogService;
 
-    public AssetMapController(AssetMapService assetMapService, AssetMapImportService assetMapImportService) {
+    public AssetMapController(
+            AssetMapService assetMapService,
+            AssetMapImportService assetMapImportService,
+            AreaTypeCatalogService areaTypeCatalogService
+    ) {
         this.assetMapService = assetMapService;
         this.assetMapImportService = assetMapImportService;
+        this.areaTypeCatalogService = areaTypeCatalogService;
     }
 
     @GetMapping("/bootstrap")
@@ -58,6 +68,34 @@ public class AssetMapController {
     @Operation(summary = "Lay danh sach tang", description = "Tra ve toan bo tang cung vung phong da ve tren moi tang.")
     public ResponseEntity<List<MapFloorResponse>> getFloors() {
         return ResponseEntity.ok(assetMapService.getFloors());
+    }
+
+    @GetMapping("/area-types")
+    @Operation(summary = "Lấy danh mục loại khu vực", description = "Trả về danh sách loại khu vực dùng cho sơ đồ và form tạo phòng.")
+    public ResponseEntity<List<AreaTypeCatalogResponse>> getAreaTypes() {
+        return ResponseEntity.ok(areaTypeCatalogService.getAllAreaTypes());
+    }
+
+    @PostMapping("/area-types")
+    @Operation(summary = "Tạo loại khu vực", description = "Admin tạo thêm loại khu vực mới để dùng trong sơ đồ.")
+    public ResponseEntity<AreaTypeCatalogResponse> createAreaType(@Valid @RequestBody AreaTypeCatalogCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(areaTypeCatalogService.createAreaType(request));
+    }
+
+    @PutMapping("/area-types/{id}")
+    @Operation(summary = "Cập nhật loại khu vực", description = "Admin cập nhật nhãn hiển thị, mô tả và mặc định chứa tài sản.")
+    public ResponseEntity<AreaTypeCatalogResponse> updateAreaType(
+            @PathVariable Integer id,
+            @Valid @RequestBody AreaTypeCatalogUpdateRequest request
+    ) {
+        return ResponseEntity.ok(areaTypeCatalogService.updateAreaType(id, request));
+    }
+
+    @DeleteMapping("/area-types/{id}")
+    @Operation(summary = "Xóa loại khu vực", description = "Chỉ xóa được loại khu vực tùy chỉnh chưa được dùng trên sơ đồ.")
+    public ResponseEntity<Map<String, String>> deleteAreaType(@PathVariable Integer id) {
+        areaTypeCatalogService.deleteAreaType(id);
+        return ResponseEntity.ok(Map.of("message", "Xóa loại khu vực thành công."));
     }
 
     @PostMapping("/floors")
