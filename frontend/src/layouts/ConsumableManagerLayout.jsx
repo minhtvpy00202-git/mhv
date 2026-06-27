@@ -101,7 +101,7 @@ function ConsumableManagerLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-[200] flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
+        <header className="relative z-30 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:px-6">
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Nhân viên quản lý cấp phát vật tư</p>
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Consumable Manager'}</p>

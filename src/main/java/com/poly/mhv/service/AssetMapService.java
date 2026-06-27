@@ -208,8 +208,13 @@ public class AssetMapService {
             roomShape.setPolygonJson(imageFloor ? writePoints(points) : null);
             roomShape.setBoundsJson(imageFloor ? writeBounds(bounds) : null);
             roomShape.setColorHex(normalizeColor(shapeRequest.getColorHex(), null, "Mau phong"));
+<<<<<<< HEAD
             roomShape.setAreaTypeLabel(normalizeAreaTypeLabel(shapeRequest.getAreaTypeLabel()));
             roomShape.setAreaTypeKey(resolveAreaTypeKey(shapeRequest.getAreaTypeKey(), roomShape.getAreaTypeLabel()));
+=======
+            roomShape.setAreaTypeKey(shapeRequest.getAreaTypeKey());
+            roomShape.setAreaTypeLabel(shapeRequest.getAreaTypeLabel());
+>>>>>>> bc3f1e3b44890a3dcb36cacc1179f02b523b2376
             shapesToSave.add(roomShape);
             if (roomShape.getId() != null) {
                 retainedShapeIds.add(roomShape.getId());

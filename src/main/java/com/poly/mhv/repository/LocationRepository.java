@@ -30,4 +30,10 @@ public interface LocationRepository extends JpaRepository<Location, Integer> {
     @Modifying
     @Query("update Location l set l.hasAsset = true where l.hasAsset is null")
     int fillMissingHasAssetWithTrue();
+
+    @Query("""
+            select count(location) from Location location
+            where lower(trim(location.roomName)) <> 'kho'
+            """)
+    long countTrackableConsumableRooms();
 }

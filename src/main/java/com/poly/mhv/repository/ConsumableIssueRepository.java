@@ -16,6 +16,15 @@ public interface ConsumableIssueRepository extends JpaRepository<ConsumableIssue
     @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
     List<ConsumableIssue> findByIssuedToLocationIdOrderByIssuedAtDescIdDesc(Integer issuedToLocationId);
 
+    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
+    @Query("""
+            select issue from ConsumableIssue issue
+            join issue.issuedToLocation location
+            where lower(trim(location.roomName)) <> 'kho'
+            order by issue.issuedAt desc, issue.id desc
+            """)
+    List<ConsumableIssue> findAllTrackableRoomIssuesOrderByIssuedAtDesc();
+
     @Query(value = """
             select cast(ci.issued_at as date) as row_date,
                    sum(ci.quantity) as row_count

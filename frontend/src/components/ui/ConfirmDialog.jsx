@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 const toneClassMap = {
   danger: 'bg-red-600 hover:bg-red-700 focus:ring-red-200',
@@ -34,8 +35,11 @@ function ConfirmDialog({
 
   const confirmToneClass = toneClassMap[tone] || toneClassMap.danger
 
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4">
+  return createPortal(
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-slate-900/60 p-4"
+      style={{ zIndex: 110 }}
+    >
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
         <div className="space-y-2">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
@@ -61,7 +65,8 @@ function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

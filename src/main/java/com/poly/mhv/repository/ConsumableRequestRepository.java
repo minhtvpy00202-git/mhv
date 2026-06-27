@@ -13,6 +13,15 @@ public interface ConsumableRequestRepository extends JpaRepository<ConsumableReq
     List<ConsumableRequest> findByLocationIdOrderByCreatedAtDescIdDesc(Integer locationId);
 
     @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
+    @Query("""
+            select request from ConsumableRequest request
+            join request.location location
+            where lower(trim(location.roomName)) <> 'kho'
+            order by request.createdAt desc, request.id desc
+            """)
+    List<ConsumableRequest> findAllTrackableRoomRequestsOrderByCreatedAtDesc();
+
+    @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
     List<ConsumableRequest> findByStatusOrderByCreatedAtDescIdDesc(String status);
 
     @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
