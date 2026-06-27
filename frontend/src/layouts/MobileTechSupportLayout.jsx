@@ -158,7 +158,7 @@ function MobileTechSupportLayout() {
   return (
     <div className="brand-theme mx-auto min-h-[100dvh] w-full max-w-md bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header
-        className="sticky top-0 z-[200] flex items-center justify-between border-b px-4 py-3 text-white shadow"
+        className="sticky top-0 z-30 flex items-center justify-between border-b px-4 py-3 text-white shadow"
         style={{ backgroundColor: primaryColor, borderColor: toRgba(primaryColor, 0.28) }}
       >
         <div>

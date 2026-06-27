@@ -15,6 +15,7 @@ import com.poly.mhv.dto.asset.ConsumableLocationRemainingUpdateRequest;
 import com.poly.mhv.dto.asset.ConsumableLocationStockResponse;
 import com.poly.mhv.dto.asset.ConsumableIssueRequest;
 import com.poly.mhv.dto.asset.ConsumableIssueResponse;
+import com.poly.mhv.dto.asset.ConsumableInventorySummaryResponse;
 import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
@@ -147,9 +148,12 @@ public class AssetService {
         String initialUsageStatus = consumable
                 ? null
                 : normalizeRequestedUsageStatus(request.getUsageStatus(), request.getStatus());
-        Location location = consumable
+        Location homeLocation = consumable
                 ? getConsumableStorageLocationOrThrow()
                 : getAssetStorageLocationOrThrow(request.getLocationId(), "Không tìm thấy phòng với id: " + request.getLocationId());
+        Location currentLocation = consumable
+                ? homeLocation
+                : resolveCurrentLocation(request.getCurrentLocationId(), homeLocation);
         Asset asset = Asset.builder()
                 .qaCode(generatedQaCode)
                 .trackingMode(trackingMode)
@@ -160,8 +164,8 @@ public class AssetService {
                         : AssetStatusSupport.deriveLegacyStatus(initialTechnicalStatus, initialUsageStatus, false))
                 .technicalStatus(initialTechnicalStatus)
                 .usageStatus(initialUsageStatus)
-                .location(location)
-                .homeLocation(location)
+                .location(currentLocation)
+                .homeLocation(homeLocation)
                 .specs(normalizeSpecs(request.getSpecs()))
                 .purchasePrice(request.getPurchasePrice())
                 .purchaseDate(request.getPurchaseDate())
@@ -225,6 +229,8 @@ public class AssetService {
             int size,
             String name,
             String status,
+            String technicalStatus,
+            String usageStatus,
             String trackingMode,
             Integer categoryId,
             Integer locationId,
@@ -233,6 +239,8 @@ public class AssetService {
     ) {
         String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
         String normalizedStatus = normalizeAssetFilterStatus(status);
+        String normalizedTechnicalStatus = normalizeOptionalTechnicalStatusFilter(technicalStatus);
+        String normalizedUsageStatus = normalizeOptionalUsageStatusFilter(usageStatus);
         String normalizedTrackingMode = StringUtils.hasText(trackingMode) ? normalizeTrackingMode(trackingMode) : null;
         PageRequest pageable = PageRequest.of(
                 Math.max(0, page),
@@ -242,6 +250,8 @@ public class AssetService {
         Page<AssetAdminListItemResponse> assetPage = assetRepository.searchForAdmin(
                 normalizedName,
                 normalizedStatus,
+                normalizedTechnicalStatus,
+                normalizedUsageStatus,
                 normalizedTrackingMode,
                 categoryId,
                 locationId,
@@ -256,6 +266,32 @@ public class AssetService {
                 Math.max(1, assetPage.getTotalPages()),
                 assetPage.getTotalElements()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public ConsumableInventorySummaryResponse getConsumableInventorySummary(
+            String name,
+            Integer categoryId,
+            Integer locationId
+    ) {
+        String normalizedName = StringUtils.hasText(name) ? name.trim() : null;
+        BigDecimal totalInventoryValue = consumableReceiptLotRepository.sumOpenLotInventoryValueForInventorySummary(
+                normalizedName,
+                categoryId,
+                locationId
+        );
+        return ConsumableInventorySummaryResponse.builder()
+                .totalConsumables(assetRepository.countConsumablesForInventorySummary(normalizedName, categoryId, locationId))
+                .healthyConsumables(assetRepository.countHealthyConsumablesForInventorySummary(normalizedName, categoryId, locationId))
+                .lowStockConsumables(assetRepository.countLowStockConsumablesForInventorySummary(normalizedName, categoryId, locationId))
+                .expiredLots(consumableReceiptLotRepository.countExpiredOpenLotsForInventorySummary(
+                        LocalDate.now(),
+                        normalizedName,
+                        categoryId,
+                        locationId
+                ))
+                .totalInventoryValue(totalInventoryValue != null ? totalInventoryValue : BigDecimal.ZERO)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -298,6 +334,7 @@ public class AssetService {
         String oldCategory = getCategoryDisplayName(asset.getCategory());
         String oldStatus = isItemizedMode(asset.getTrackingMode()) ? getItemizedDisplayStatus(asset) : asset.getStatus();
         String oldHome = asset.getHomeLocation().getRoomName();
+        String oldCurrent = asset.getLocation().getRoomName();
         String trackingMode = normalizeTrackingMode(asset.getTrackingMode());
 
         if (StringUtils.hasText(request.getTrackingMode())) {
@@ -320,15 +357,22 @@ public class AssetService {
             validateCategoryCompatibility(category, trackingMode);
             asset.setCategory(category);
         }
-        if (request.getLocationId() != null) {
-            if (isItemizedMode(trackingMode)) {
-                Location location = getAssetStorageLocationOrThrow(
-                        request.getLocationId(),
-                        "Không tìm thấy phòng với id: " + request.getLocationId()
-                );
-                asset.setLocation(location);
-                asset.setHomeLocation(location);
+        if (isItemizedMode(trackingMode) && request.getLocationId() != null) {
+            Location homeLocation = getAssetStorageLocationOrThrow(
+                    request.getLocationId(),
+                    "Không tìm thấy phòng với id: " + request.getLocationId()
+            );
+            asset.setHomeLocation(homeLocation);
+            if (request.getCurrentLocationId() == null && oldCurrent.equals(oldHome)) {
+                asset.setLocation(homeLocation);
             }
+        }
+        if (isItemizedMode(trackingMode) && request.getCurrentLocationId() != null) {
+            Location currentLocation = getAssetStorageLocationOrThrow(
+                    request.getCurrentLocationId(),
+                    "Không tìm thấy phòng hiện tại với id: " + request.getCurrentLocationId()
+            );
+            asset.setLocation(currentLocation);
         }
         if (request.getSpecs() != null) {
             asset.setSpecs(normalizeSpecs(request.getSpecs()));
@@ -594,6 +638,23 @@ public class AssetService {
                         .map(this::mapToConsumableIssueResponse)
                         .toList())
                 .requestHistory(consumableRequestRepository.findByLocationIdOrderByCreatedAtDescIdDesc(locationId).stream()
+                        .map(this::mapToConsumableRequestResponse)
+                        .toList())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public ConsumableLocationOverviewResponse getAllTrackableConsumableRoomsOverview() {
+        return ConsumableLocationOverviewResponse.builder()
+                .locationName("Tất cả phòng")
+                .roomCount(Math.toIntExact(locationRepository.countTrackableConsumableRooms()))
+                .stocks(consumableLocationStockRepository.findAllTrackableRoomStocksOrderByLocationAndAsset().stream()
+                        .map(this::mapToConsumableLocationStockResponse)
+                        .toList())
+                .issueHistory(consumableIssueRepository.findAllTrackableRoomIssuesOrderByIssuedAtDesc().stream()
+                        .map(this::mapToConsumableIssueResponse)
+                        .toList())
+                .requestHistory(consumableRequestRepository.findAllTrackableRoomRequestsOrderByCreatedAtDesc().stream()
                         .map(this::mapToConsumableRequestResponse)
                         .toList())
                 .build();
@@ -1098,6 +1159,10 @@ public class AssetService {
                 .build();
     }
 
+    public void evictAssetCaches(String qaCode) {
+        invalidateAssetCaches(qaCode);
+    }
+
     private void invalidateAssetCaches(String qaCode) {
         if (!StringUtils.hasText(qaCode)) {
             return;
@@ -1302,6 +1367,16 @@ public class AssetService {
         return location;
     }
 
+    private Location resolveCurrentLocation(Integer currentLocationId, Location homeLocation) {
+        if (currentLocationId == null) {
+            return homeLocation;
+        }
+        return getAssetStorageLocationOrThrow(
+                currentLocationId,
+                "Không tìm thấy phòng hiện tại với id: " + currentLocationId
+        );
+    }
+
     private void validatePurchaseInfo(
             java.math.BigDecimal purchasePrice,
             LocalDate purchaseDate,
@@ -1403,6 +1478,20 @@ public class AssetService {
         return AssetStatusSupport.normalizeDisplayStatusFilter(normalized);
     }
 
+    private String normalizeOptionalTechnicalStatusFilter(String technicalStatus) {
+        if (!StringUtils.hasText(technicalStatus)) {
+            return null;
+        }
+        return AssetStatusSupport.normalizeTechnicalStatus(technicalStatus);
+    }
+
+    private String normalizeOptionalUsageStatusFilter(String usageStatus) {
+        if (!StringUtils.hasText(usageStatus)) {
+            return null;
+        }
+        return AssetStatusSupport.normalizeUsageStatus(usageStatus);
+    }
+
     private String normalizeRequestedTechnicalStatus(String technicalStatus, String legacyStatus) {
         try {
             if (StringUtils.hasText(technicalStatus)) {
@@ -1473,13 +1562,24 @@ public class AssetService {
         if (asset == null || !isItemizedMode(asset.getTrackingMode())) {
             return;
         }
-        asset.setTechnicalStatus(getItemizedTechnicalStatus(asset));
+        asset.setTechnicalStatus(normalizeCurrentTechnicalStatus(asset));
         asset.setUsageStatus(getItemizedUsageStatus(asset));
         asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
                 asset.getTechnicalStatus(),
                 asset.getUsageStatus(),
                 repairInProgress
         ));
+    }
+
+    private String normalizeCurrentTechnicalStatus(Asset asset) {
+        if (asset == null || !StringUtils.hasText(asset.getTechnicalStatus())) {
+            return getItemizedTechnicalStatus(asset);
+        }
+        try {
+            return AssetStatusSupport.normalizeTechnicalStatus(asset.getTechnicalStatus());
+        } catch (IllegalArgumentException ex) {
+            throw new CustomException(ex.getMessage());
+        }
     }
 
     private void applyLegacyStatusSelection(Asset asset, String rawStatus) {

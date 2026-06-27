@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mhv-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mhv}
+      POSTGRES_USER: ${POSTGRES_USER:-mhv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mhv} -d ${POSTGRES_DB:-mhv}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mhv-internal
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: mhv-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-mhv}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-mhv}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_STORAGE_PROVIDER: local
+      APP_UPLOAD_DIR: /app/uploads
+      APP_SEED_DEMO_USERS_ENABLED: ${APP_SEED_DEMO_USERS_ENABLED:-false}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost}
+    volumes:
+      - uploads_data:/app/uploads
+    expose:
+      - "8080"
+    networks:
+      - mhv-internal
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/single-vps/Dockerfile.web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    container_name: mhv-web
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    networks:
+      - mhv-internal
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  mhv-internal:
+    driver: bridge

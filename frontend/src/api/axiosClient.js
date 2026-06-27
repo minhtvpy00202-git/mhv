@@ -1,7 +1,7 @@
 import axios from 'axios'
+import { getApiBaseUrl, normalizeRequestPath } from './apiPath'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
-const BASE_URL_HAS_API_SUFFIX = /\/api$/i.test(API_BASE_URL)
+const API_BASE_URL = getApiBaseUrl()
 
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
@@ -13,8 +13,8 @@ const axiosClient = axios.create({
 
 axiosClient.interceptors.request.use(
   (config) => {
-    if (BASE_URL_HAS_API_SUFFIX && typeof config.url === 'string' && config.url.startsWith('/api/')) {
-      config.url = config.url.slice(4)
+    if (typeof config.url === 'string' && config.url.startsWith('/')) {
+      config.url = normalizeRequestPath(config.url, API_BASE_URL)
     }
     const token = localStorage.getItem('auth_token')
     if (token) {

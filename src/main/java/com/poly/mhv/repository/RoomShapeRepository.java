@@ -18,6 +18,8 @@ public interface RoomShapeRepository extends JpaRepository<RoomShape, Long> {
     @EntityGraph(attributePaths = {"floor", "location", "location.floor"})
     Optional<RoomShape> findByLocationId(Integer locationId);
 
+    long countByAreaTypeKeyIgnoreCase(String areaTypeKey);
+
     @Query("""
             select rs from RoomShape rs
             join fetch rs.floor f

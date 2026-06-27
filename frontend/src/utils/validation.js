@@ -60,6 +60,9 @@ export function validateAssetForm(form) {
     if (!isPositiveNumber(form?.locationId)) {
       errors.locationId = 'Vui lòng chọn phòng gốc hợp lệ.'
     }
+    if (form?.currentLocationId && !isPositiveNumber(form.currentLocationId)) {
+      errors.currentLocationId = 'Vui lòng chọn phòng hiện tại hợp lệ.'
+    }
     if (!String(form?.technicalStatus || '').trim()) {
       errors.technicalStatus = 'Vui lòng chọn tình trạng kỹ thuật.'
     }

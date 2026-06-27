@@ -16,4 +16,5 @@ public class AssetMapBootstrapResponse {
     private List<MapFloorResponse> floors;
     private List<LocationResponse> locations;
     private List<CategoryOptionResponse> categories;
+    private List<AreaTypeCatalogResponse> areaTypes;
 }

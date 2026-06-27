@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class ConsumableLocationOverviewResponse {
     private Integer locationId;
     private String locationName;
+    private Integer roomCount;
     private List<ConsumableLocationStockResponse> stocks;
     private List<ConsumableIssueResponse> issueHistory;
     private List<ConsumableRequestResponse> requestHistory;
