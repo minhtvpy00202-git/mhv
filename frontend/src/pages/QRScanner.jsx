@@ -244,7 +244,7 @@ function QRScanner() {
       </div>
 
       {showActionModal && (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-4">
             <h3 className="text-base font-semibold text-slate-800">Xác nhận thao tác thiết bị</h3>
             <p className="mt-1 text-sm text-slate-600">Mã QA: {scannedQaCode}</p>

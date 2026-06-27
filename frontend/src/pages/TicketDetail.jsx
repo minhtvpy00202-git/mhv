@@ -42,13 +42,14 @@ function TicketDetail() {
   const [loading, setLoading] = useState(false)
   const [showChat, setShowChat] = useState(true)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
-  
+
   // Extension & Review States
   const [events, setEvents] = useState([])
   const [showExtensionModal, setShowExtensionModal] = useState(false)
   const [extMinutes, setExtMinutes] = useState('60')
   const [customExtMinutes, setCustomExtMinutes] = useState('')
   const [extReason, setExtReason] = useState('')
+  const [quickReason, setQuickReason] = useState('Chờ linh kiện thay thế')
   const [reviewRejectReason, setReviewRejectReason] = useState('')
   const [showRejectPrompt, setShowRejectPrompt] = useState(false)
   const [submittingExtension, setSubmittingExtension] = useState(false)
@@ -104,7 +105,7 @@ function TicketDetail() {
     if (!lastRequest) return null
 
     const lastRequestIndex = sorted.indexOf(lastRequest)
-    const hasResponse = sorted.slice(0, lastRequestIndex).some(e => 
+    const hasResponse = sorted.slice(0, lastRequestIndex).some(e =>
       e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
     )
 
@@ -136,15 +137,15 @@ function TicketDetail() {
   const lastExtensionReview = useMemo(() => {
     if (!events || events.length === 0) return null
     const sorted = [...events].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-    
-    const lastResponse = sorted.find(e => 
+
+    const lastResponse = sorted.find(e =>
       e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
     )
     if (!lastResponse) return null
 
     const responseIndex = sorted.indexOf(lastResponse)
     const matchingRequest = sorted.slice(responseIndex + 1).find(e => e.eventType === 'EXTENSION_REQUESTED')
-    
+
     let requestedMinutes = 0
     if (matchingRequest && matchingRequest.detail) {
       const lines = matchingRequest.detail.split('\n')
@@ -197,8 +198,8 @@ function TicketDetail() {
     : isTechMobileRoute
       ? '/tech-mobile/tickets'
       : isTechRoute
-      ? '/tech/tickets'
-      : '/mobile/home'
+        ? '/tech/tickets'
+        : '/mobile/home'
   const isMobileRoute = isStandardMobileRoute || isTechMobileRoute
   const canOpenChat = !isTechSupportRoute || Number(ticket?.assigneeId) === Number(user?.userId)
   const canRateSatisfaction = ticket?.status === 'RESOLVED'
@@ -218,9 +219,13 @@ function TicketDetail() {
 
   const handleRequestExtension = async (e) => {
     e.preventDefault()
-    if (!extReason || extReason.trim().length < 10) {
-      toast.error('Lý do gia hạn phải tối thiểu 10 ký tự.')
-      return
+    let finalReason = quickReason
+    if (quickReason === 'other') {
+      if (!extReason || extReason.trim().length < 10) {
+        toast.error('Lý do gia hạn phải tối thiểu 10 ký tự.')
+        return
+      }
+      finalReason = extReason.trim()
     }
     const mins = extMinutes === 'custom' ? Number(customExtMinutes) : Number(extMinutes)
     if (!mins || Number.isNaN(mins) || mins <= 0) {
@@ -231,11 +236,12 @@ function TicketDetail() {
     try {
       await axiosClient.post(`/api/tickets/${ticketId}/request-extension`, {
         requestedMinutes: mins,
-        reason: extReason.trim()
+        reason: finalReason
       })
       toast.success('Đã gửi yêu cầu gia hạn thời gian thành công!')
       setShowExtensionModal(false)
       setExtReason('')
+      setQuickReason('Chờ linh kiện thay thế')
       setCustomExtMinutes('')
       await Promise.all([loadTicket(), loadEvents()])
     } catch (error) {
@@ -312,7 +318,7 @@ function TicketDetail() {
               <div className="bg-white/80 p-3 rounded-xl border border-orange-100 text-xs text-slate-700 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-300">
                 <span className="font-semibold">Lý do xin gia hạn:</span> {pendingExtension.reason}
               </div>
-              
+
               {showRejectPrompt ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-350">Lý do từ chối gia hạn:</label>
@@ -369,7 +375,7 @@ function TicketDetail() {
               let btnText = 'Yêu cầu gia hạn'
               let showBtn = true
               let isPending = false
-              
+
               if (pendingExtension) {
                 cardBg = 'bg-amber-50/70 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/20'
                 titleText = `Đang chờ Admin duyệt gia hạn (+${pendingExtension.requestedMinutes} phút)`
@@ -391,12 +397,11 @@ function TicketDetail() {
               return (
                 <div className={`rounded-[28px] border p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 ${cardBg}`}>
                   <div className="flex-1 min-w-[280px]">
-                    <p className={`text-xs font-bold ${
-                      isPending ? 'text-amber-800 dark:text-amber-300' :
-                      lastExtensionReview?.eventType === 'EXTENSION_APPROVED' ? 'text-emerald-800 dark:text-emerald-300' :
-                      lastExtensionReview?.eventType === 'EXTENSION_REJECTED' ? 'text-red-800 dark:text-red-350' :
-                      'text-slate-800 dark:text-slate-100'
-                    }`}>
+                    <p className={`text-xs font-bold ${isPending ? 'text-amber-800 dark:text-amber-300' :
+                        lastExtensionReview?.eventType === 'EXTENSION_APPROVED' ? 'text-emerald-800 dark:text-emerald-300' :
+                          lastExtensionReview?.eventType === 'EXTENSION_REJECTED' ? 'text-red-800 dark:text-red-350' :
+                            'text-slate-800 dark:text-slate-100'
+                      }`}>
                       {titleText}
                     </p>
                     <p className="text-[11px] text-slate-550 dark:text-slate-400 leading-normal mt-0.5">
@@ -423,7 +428,7 @@ function TicketDetail() {
             })()
           )}
 
-          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className={`grid gap-4 ${isMobileRoute ? 'grid-cols-1' : 'lg:grid-cols-[1.15fr_0.85fr]'}`}>
             <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -445,32 +450,64 @@ function TicketDetail() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mức ưu tiên</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{ticket.priority}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mức xử lý của ticket hiện tại.</p>
-                </div>
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Tạo lúc</p>
-                  <p className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">{formatVietnamDateTime(ticket.createdAt)}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Thời điểm ghi nhận sự cố.</p>
-                </div>
-                <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400 font-semibold text-fptOrange">Hạn SLA</p>
-                  <div className="mt-2 space-y-1">
-                    <p className="text-xs text-slate-600 dark:text-slate-350">
-                      Hạn xử lý (Min): <span className="font-semibold text-slate-900 dark:text-slate-50">{formatVietnamDateTime(ticket.dueDate)}</span>
-                    </p>
-                    {maxSlaDate && (
-                      <p className="text-xs text-slate-600 dark:text-slate-350">
-                        Hạn trễ phạt (Max): <span className="font-semibold text-red-600 dark:text-red-400">{formatVietnamDateTime(maxSlaDate)}</span>
-                      </p>
-                    )}
+              {isMobileRoute ? (
+                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mức ưu tiên</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                      ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800' :
+                      ticket.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>{ticket.priority === 'HIGH' ? 'Cao' : ticket.priority === 'MEDIUM' ? 'Trung bình' : 'Thấp'}</span>
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 leading-tight">Hoàn thành trong khoảng này không bị phạt điểm.</p>
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Tạo lúc</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(ticket.createdAt)}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hạn xử lý (Min)</span>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(ticket.dueDate)}</span>
+                    </div>
+                    {maxSlaDate && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-red-500">Hạn trễ phạt (Max)</span>
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400">{formatVietnamDateTime(maxSlaDate)}</span>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 pt-0.5 leading-normal">
+                      * Hoàn thành trong khoảng này không bị phạt điểm.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-5 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mức ưu tiên</p>
+                    <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{ticket.priority}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mức xử lý của ticket hiện tại.</p>
+                  </div>
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Tạo lúc</p>
+                    <p className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">{formatVietnamDateTime(ticket.createdAt)}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Thời điểm ghi nhận sự cố.</p>
+                  </div>
+                  <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 font-semibold text-fptOrange">Hạn SLA</p>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-slate-600 dark:text-slate-350">
+                        Hạn xử lý (Min): <span className="font-semibold text-slate-900 dark:text-slate-50">{formatVietnamDateTime(ticket.dueDate)}</span>
+                      </p>
+                      {maxSlaDate && (
+                        <p className="text-xs text-slate-600 dark:text-slate-350">
+                          Hạn trễ phạt (Max): <span className="font-semibold text-red-600 dark:text-red-400">{formatVietnamDateTime(maxSlaDate)}</span>
+                        </p>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 leading-tight">Hoàn thành trong khoảng này không bị phạt điểm.</p>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Mô tả sự cố</p>
@@ -657,13 +694,13 @@ function TicketDetail() {
 
       {/* SLA Extension Modal */}
       {showExtensionModal && (
-        <div className="fixed inset-0 z-45 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
             <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">Xin gia hạn thời gian sửa chữa</h3>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Yêu cầu sẽ được chuyển đến Admin hệ thống để phê duyệt.
             </p>
-            
+
             <form onSubmit={handleRequestExtension} className="mt-4 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-355 mb-1">Số phút gia hạn thêm:</label>
@@ -700,16 +737,32 @@ function TicketDetail() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-355 mb-1">Lý do xin gia hạn (tối thiểu 10 ký tự):</label>
-                <textarea
-                  value={extReason}
-                  onChange={(e) => setExtReason(e.target.value)}
-                  required
-                  rows={3}
-                  placeholder="Ví dụ: Lỗi hỏng tụ điện và chập vi mạch nguồn, cần tháo linh kiện mang về phòng kỹ thuật để đo đạc và thay thế linh kiện mới..."
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-fptOrange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-355 mb-1">Danh mục lý do gia hạn nhanh:</label>
+                <select
+                  value={quickReason}
+                  onChange={(e) => setQuickReason(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-fptOrange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <option value="Chờ linh kiện thay thế">Chờ linh kiện thay thế</option>
+                  <option value="Thiết bị lỗi phức tạp cần đo đạc thêm">Thiết bị lỗi phức tạp cần đo đạc thêm</option>
+                  <option value="Hẹn lại thời gian sửa chữa với người dùng">Hẹn lại thời gian sửa chữa với người dùng</option>
+                  <option value="other">Khác (Nhập lý do chi tiết bên dưới...)</option>
+                </select>
               </div>
+
+              {quickReason === 'other' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-355 mb-1">Lý do xin gia hạn chi tiết (tối thiểu 10 ký tự):</label>
+                  <textarea
+                    value={extReason}
+                    onChange={(e) => setExtReason(e.target.value)}
+                    required
+                    rows={3}
+                    placeholder="Ví dụ: Lỗi hỏng tụ điện và chập vi mạch nguồn, cần tháo linh kiện mang về phòng kỹ thuật để đo đạc và thay thế linh kiện mới..."
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-fptOrange dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              )}
 
               <div className="pt-2 flex gap-2">
                 <button
@@ -724,6 +777,7 @@ function TicketDetail() {
                   onClick={() => {
                     setShowExtensionModal(false)
                     setExtReason('')
+                    setQuickReason('Chờ linh kiện thay thế')
                   }}
                   className="flex-1 rounded-xl border border-slate-300 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900 transition"
                 >

@@ -11,5 +11,7 @@ public interface TicketEventRepository extends JpaRepository<TicketEvent, Intege
     List<TicketEvent> findByTicketIdInOrderByTicketIdAscOccurredAtAscIdAsc(List<Integer> ticketIds);
 
     List<TicketEvent> findByEventTypeOrderByOccurredAtDesc(String eventType);
+
+    boolean existsByTicketIdAndEventType(Integer ticketId, String eventType);
 }
 

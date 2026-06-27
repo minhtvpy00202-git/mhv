@@ -96,4 +96,16 @@ public class TicketResponse {
 
     @Schema(description = "Thời gian xử lý mong muốn tối đa (tính bằng phút)", example = "120", nullable = true)
     private Integer maxSlaMinutes;
+
+    @Schema(description = "Số lần gia hạn đã được duyệt", example = "1", nullable = true)
+    private Integer approvedExtensionCount;
+
+    @Schema(description = "Số lần gia hạn tối đa cho phép", example = "3", nullable = true)
+    private Integer maxExtensionCount;
+
+    @Schema(description = "Tổng thời gian gia hạn đã duyệt (phút)", example = "60", nullable = true)
+    private Integer totalApprovedExtensionMinutes;
+
+    @Schema(description = "Tổng thời gian gia hạn tối đa cho phép (phút)", example = "1440", nullable = true)
+    private Integer maxExtensionMinutes;
 }

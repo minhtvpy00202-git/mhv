@@ -471,7 +471,7 @@ function Home() {
       </CollapsibleSection>
 
       {previewImageUrl && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl dark:bg-slate-950">
             <img src={resolveBackendMediaUrl(previewImageUrl)} alt="error-preview" className="h-[300px] w-full rounded-2xl object-cover" />
             <button
