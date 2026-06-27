@@ -1346,12 +1346,8 @@ public class AssetService {
     }
 
     private Location getConsumableStorageLocationOrThrow() {
-        Location location = locationRepository.findFirstByRoomNameIgnoreCase(DEFAULT_CONSUMABLE_STORAGE_ROOM)
+        return locationRepository.findFirstByRoomNameIgnoreCase(DEFAULT_CONSUMABLE_STORAGE_ROOM)
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng lưu trữ mặc định '" + DEFAULT_CONSUMABLE_STORAGE_ROOM + "'."));
-        if (location.getHasAsset() != null && !location.getHasAsset()) {
-            throw new CustomException("Phòng lưu trữ mặc định phải là khu vực chứa tài sản.");
-        }
-        return location;
     }
 
     private Location getLocationOrThrow(Integer locationId, String notFoundMessage) {
@@ -1360,11 +1356,7 @@ public class AssetService {
     }
 
     private Location getAssetStorageLocationOrThrow(Integer locationId, String notFoundMessage) {
-        Location location = getLocationOrThrow(locationId, notFoundMessage);
-        if (location.getHasAsset() != null && !location.getHasAsset()) {
-            throw new CustomException("Khu vực này không được phép chứa tài sản.");
-        }
-        return location;
+        return getLocationOrThrow(locationId, notFoundMessage);
     }
 
     private Location resolveCurrentLocation(Integer currentLocationId, Location homeLocation) {

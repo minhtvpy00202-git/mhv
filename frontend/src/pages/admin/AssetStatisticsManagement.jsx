@@ -21,6 +21,7 @@ import {
   YAxis,
 } from 'recharts'
 import axiosClient from '../../api/axiosClient'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 
 const chartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#0891b2', '#ca8a04']
 const chartCursor = { fill: 'rgba(148, 163, 184, 0.12)' }
@@ -323,7 +324,7 @@ function AssetStatisticsManagement() {
         const [statisticsResponse, categoriesResponse, locationsResponse] = await Promise.all([
           axiosClient.get('/api/assets/statistics/bootstrap', { params: buildParams(initialFilters) }),
           axiosClient.get('/api/categories/options'),
-          axiosClient.get('/api/locations', { params: { hasAsset: true } }),
+          axiosClient.get('/api/locations'),
         ])
         if (!mounted) return
         setStatistics(statisticsResponse.data || null)
@@ -468,29 +469,29 @@ function AssetStatisticsManagement() {
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Loại</span>
-            <select
+            <SearchableSelect
               value={filters.categoryId}
-              onChange={(event) => setFilters((prev) => ({ ...prev, categoryId: event.target.value }))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-fptOrange focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">Tất cả loại</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
-              ))}
-            </select>
+              onChange={(nextValue) => setFilters((prev) => ({ ...prev, categoryId: String(nextValue || '') }))}
+              options={categories}
+              getOptionValue={(category) => category.id}
+              getOptionLabel={(category) => category.name}
+              placeholder="Gõ để tìm loại"
+              emptyOptionLabel="Tất cả loại"
+              inputClassName="bg-white text-slate-900 focus:border-fptOrange dark:bg-slate-900 dark:text-slate-100"
+            />
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-600 dark:text-slate-300">Vị trí</span>
-            <select
+            <SearchableSelect
               value={filters.locationId}
-              onChange={(event) => setFilters((prev) => ({ ...prev, locationId: event.target.value }))}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-fptOrange focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">Tất cả vị trí</option>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>{location.roomName}</option>
-              ))}
-            </select>
+              onChange={(nextValue) => setFilters((prev) => ({ ...prev, locationId: String(nextValue || '') }))}
+              options={locations}
+              getOptionValue={(location) => location.id}
+              getOptionLabel={(location) => location.roomName}
+              placeholder="Gõ để tìm vị trí"
+              emptyOptionLabel="Tất cả vị trí"
+              inputClassName="bg-white text-slate-900 focus:border-fptOrange dark:bg-slate-900 dark:text-slate-100"
+            />
           </label>
           <div className="flex items-end gap-2">
             <button

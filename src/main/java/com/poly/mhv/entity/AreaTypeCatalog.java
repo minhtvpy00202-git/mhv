@@ -32,12 +32,14 @@ public class AreaTypeCatalog {
     @Column(name = "label", nullable = false, unique = true, length = 120)
     private String label;
 
+    @Column(name = "area_group_key", length = 80)
+    private String areaGroupKey;
+
+    @Column(name = "area_group_label", length = 120)
+    private String areaGroupLabel;
+
     @Column(name = "description", length = 255)
     private String description;
-
-    @Column(name = "default_has_asset", nullable = false)
-    @Builder.Default
-    private Boolean defaultHasAsset = true;
 
     @Column(name = "built_in", nullable = false)
     @Builder.Default

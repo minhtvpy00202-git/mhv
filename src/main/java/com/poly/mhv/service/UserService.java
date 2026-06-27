@@ -68,11 +68,14 @@ public class UserService {
         if (appUserRepository.existsByUsername(username)) {
             throw new CustomException("Tên đăng nhập đã tồn tại, vui lòng chọn tên đăng nhập khác");
         }
+        String normalizedEmail = normalizeEmail(request.getEmail());
+        validateEmailUniqueness(normalizedEmail, null);
         AppUser appUser = AppUser.builder()
                 .username(username)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role("NhanVien")
                 .fullName(request.getFullName().trim())
+                .email(normalizedEmail)
                 .birthday(request.getBirthday())
                 .phone(request.getPhone().trim())
                 .status("Hoạt động")
@@ -166,6 +169,7 @@ public class UserService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(validatedRole)
                 .fullName(request.getFullName().trim())
+                .email(validateEmailForWrite(request.getEmail(), null))
                 .birthday(request.getBirthday())
                 .phone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null)
                 .status(validateStatus(request.getStatus()))
@@ -218,6 +222,7 @@ public class UserService {
             appUser.setUsername(username);
         }
         appUser.setFullName(request.getFullName().trim());
+        appUser.setEmail(validateEmailForWrite(request.getEmail(), appUser.getId()));
         appUser.setBirthday(request.getBirthday());
         appUser.setPhone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null);
         String validatedRole = validateRole(request.getRole());
@@ -322,6 +327,7 @@ public class UserService {
                 .username(appUser.getUsername())
                 .role(appUser.getRole())
                 .fullName(appUser.getFullName())
+                .email(appUser.getEmail())
                 .birthday(appUser.getBirthday())
                 .phone(appUser.getPhone())
                 .status(appUser.getStatus())
@@ -370,6 +376,30 @@ public class UserService {
             throw new CustomException("Trạng thái không hợp lệ.");
         }
         return normalizedStatus;
+    }
+
+    private String validateEmailForWrite(String email, Integer currentUserId) {
+        String normalizedEmail = normalizeEmail(email);
+        validateEmailUniqueness(normalizedEmail, currentUserId);
+        return normalizedEmail;
+    }
+
+    private void validateEmailUniqueness(String normalizedEmail, Integer currentUserId) {
+        if (!StringUtils.hasText(normalizedEmail)) {
+            return;
+        }
+        appUserRepository.findByEmailIgnoreCase(normalizedEmail)
+                .filter(existingUser -> currentUserId == null || !existingUser.getId().equals(currentUserId))
+                .ifPresent(existingUser -> {
+                    throw new CustomException("Email đã tồn tại, vui lòng dùng email khác.");
+                });
+    }
+
+    private String normalizeEmail(String email) {
+        if (!StringUtils.hasText(email)) {
+            return null;
+        }
+        return email.trim().toLowerCase();
     }
 
     private List<TechSupportType> resolveTechSupportTypes(String role, UserAdminRequest request) {

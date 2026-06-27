@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Bao cao MHV</title>
+  <style>
+    @page {
+      size: A4;
+      margin-top: 2cm;
+      margin-right: 2cm;
+      margin-bottom: 2cm;
+      margin-left: 3cm;
+    }
+
+    body {
+      font-family: "Times New Roman", serif;
+      font-size: 13pt;
+      line-height: 1.25;
+      color: #000000;
+      margin: 0;
+    }
+
+    p, li, td, th, div, span {
+      font-family: "Times New Roman", serif;
+      font-size: 13pt;
+      line-height: 1.25;
+      color: #000000;
+    }
+
+    .title {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 18pt;
+      text-transform: uppercase;
+    }
+
+    .section-title {
+      font-weight: bold;
+      margin-top: 14pt;
+      margin-bottom: 8pt;
+    }
+
+    .sub-title {
+      font-weight: bold;
+      margin-top: 10pt;
+      margin-bottom: 6pt;
+    }
+
+    p {
+      margin-top: 0;
+      margin-bottom: 6pt;
+      text-align: justify;
+    }
+
+    ul {
+      margin-top: 0;
+      margin-bottom: 6pt;
+      padding-left: 20pt;
+    }
+
+    li {
+      margin-bottom: 4pt;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 8pt;
+      margin-bottom: 10pt;
+    }
+
+    th, td {
+      border: 1px solid #000000;
+      padding: 6pt;
+      vertical-align: top;
+      word-wrap: break-word;
+    }
+
+    th {
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .center {
+      text-align: center;
+    }
+
+    .placeholder {
+      border: 1px solid #000000;
+      padding: 14pt;
+      margin-top: 6pt;
+      margin-bottom: 10pt;
+      min-height: 48pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="title">Báo Cáo Hệ Thống Quản Lý Tài Sản, Vật Tư Và Hỗ Trợ Kỹ Thuật MHV</div>
+
+  <div class="section-title">Nộp báo cáo, bao gồm:</div>
+  <p>- Giới thiệu tổng quan hệ thống.</p>
+  <p>- Khảo sát hiện trạng các hệ thống lân cận.</p>
+  <p>- Thiết kế hệ thống: (PDF hoặc Drawio)</p>
+  <p>+ Use-case diagrams: Tổng quan + chi tiết.</p>
+  <p>+ Thiết kế ERD + Database physical diagram.</p>
+  <p>+ Class diagram.</p>
+
+  <div class="section-title">1. Giới thiệu tổng quan hệ thống</div>
+  <p>
+    MHV là hệ thống quản lý tài sản, vật tư tiêu hao và theo dõi yêu cầu hỗ trợ kỹ thuật trong tổ chức.
+    Hệ thống được xây dựng nhằm giải quyết đồng thời nhiều bài toán nghiệp vụ như quản lý tài sản cố định,
+    quản lý vật tư tiêu hao, mượn và trả thiết bị bằng mã QR, tiếp nhận và điều phối ticket báo hỏng,
+    kiểm kê định kỳ, định vị tài sản trên sơ đồ tầng, cũng như hỗ trợ thống kê và xuất báo cáo phục vụ quản trị.
+  </p>
+  <p>
+    Về người dùng, hệ thống hiện có bốn nhóm vai trò chính gồm: Admin, Người dùng, Kỹ thuật viên và Quản lý vật tư.
+    Admin chịu trách nhiệm quản trị danh mục, tài sản, sơ đồ, ticket, kiểm kê, người dùng và báo cáo. Người dùng có thể mượn
+    hoặc trả thiết bị, báo hỏng và theo dõi tiến độ xử lý. Kỹ thuật viên tiếp nhận và xử lý ticket, thực hiện kiểm kê và theo dõi KPI cá nhân.
+    Quản lý vật tư chịu trách nhiệm nhập kho, cấp phát, theo dõi tồn kho và xử lý các nghiệp vụ liên quan đến vật tư tiêu hao.
+  </p>
+  <p>
+    Về mặt chức năng, hệ thống MHV nổi bật ở khả năng kết hợp giữa quản lý tài sản truyền thống với hỗ trợ helpdesk và bản đồ trực quan.
+    Không chỉ lưu thông tin tài sản và lịch sử sử dụng, hệ thống còn cho phép vẽ khu vực trên sơ đồ tầng, gắn phòng hoặc khu vực nghiệp vụ,
+    đặt tài sản lên mặt bằng và tra cứu trực quan vị trí tài sản. Bên cạnh đó, hệ thống có cơ chế gợi ý kỹ thuật viên xử lý ticket dựa trên
+    chuyên môn, tải công việc hiện tại và kinh nghiệm đã xử lý các loại thiết bị tương ứng.
+  </p>
+  <p>
+    Về công nghệ, hệ thống được phát triển theo mô hình full-stack với backend sử dụng Spring Boot, Spring Security, JWT và PostgreSQL;
+    frontend sử dụng React và Vite; các chức năng realtime dùng WebSocket và STOMP; các chức năng quét mã sử dụng QR code; phần import sơ đồ
+    mặt bằng được hỗ trợ bởi dịch vụ phân tích bản vẽ riêng. Kiến trúc này phù hợp cho việc triển khai trên môi trường tự host hoặc VPS.
+  </p>
+
+  <div class="section-title">2. Khảo sát hiện trạng các hệ thống lân cận</div>
+  <p>
+    Để đánh giá vị trí của hệ thống MHV trong bối cảnh các phần mềm cùng nhóm trên thị trường, nhóm tiến hành khảo sát và đối chiếu
+    với bốn giải pháp tiêu biểu gồm Freshservice, Jira Service Management, ServiceDesk Plus và GLPI. Các hệ thống này đại diện cho
+    nhóm phần mềm IT asset management và helpdesk đang được sử dụng khá phổ biến trong doanh nghiệp.
+  </p>
+  <p>
+    Việc so sánh được thực hiện theo các tiêu chí chức năng cốt lõi liên quan trực tiếp đến bài toán của MHV như quản lý tài sản,
+    quản lý vật tư, helpdesk, QR nghiệp vụ, kiểm kê, sơ đồ định vị tài sản, import CAD, chat realtime và khả năng triển khai tự host.
+    Kết quả khảo sát cho thấy MHV có nhiều điểm mạnh khác biệt ở các tính năng trực quan theo mặt bằng và các thao tác nghiệp vụ sát
+    môi trường triển khai thực tế tại trường học hoặc doanh nghiệp.
+  </p>
+
+  <div class="sub-title">Bảng so sánh chức năng giữa MHV và một số hệ thống tương tự</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Tính năng</th>
+        <th>MHV</th>
+        <th>Freshservice</th>
+        <th>Jira Service Management</th>
+        <th>ServiceDesk Plus</th>
+        <th>GLPI</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Đăng nhập, JWT, phân quyền nhiều vai trò</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quản lý người dùng nội bộ</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Dashboard tổng quan và KPI</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Thông báo trong hệ thống</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quản lý tài sản cố định</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quản lý vật tư tiêu hao</td><td class="center">✓</td><td class="center">✓</td><td class="center">✗</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Danh mục loại tài sản</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quản lý phòng hoặc khu vực lưu trữ</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quản lý nhà cung cấp</td><td class="center">✓</td><td class="center">✓</td><td class="center">✗</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Mượn và trả tài sản</td><td class="center">✓</td><td class="center">✓</td><td class="center">✗</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Quét QR để mượn, trả và kiểm kê</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Ticket báo hỏng và helpdesk</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>SLA và gia hạn SLA</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Gợi ý phân công kỹ thuật viên</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✗</td></tr>
+      <tr><td>Chat realtime trong ticket</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Upload ảnh hoặc ghi âm trong trao đổi ticket</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Kiểm kê tài sản định kỳ</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Scanner kiểm kê trên mobile</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Thống kê tài sản và lịch sử sử dụng</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Xuất Excel báo cáo</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Xuất Word biên bản nghiệp vụ</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✓</td><td class="center">✗</td></tr>
+      <tr><td>Sơ đồ tầng hoặc bản đồ định vị tài sản</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Vẽ vùng phòng hoặc khu vực trên canvas</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Gắn tài sản trực tiếp lên sơ đồ</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Danh mục loại khu vực theo nhóm không gian</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Import mặt bằng hoặc CAD vào sơ đồ</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Tìm tài sản trực quan theo tầng hoặc phòng</td><td class="center">✓</td><td class="center">✗</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td></tr>
+      <tr><td>Branding hoặc đổi cấu hình thương hiệu</td><td class="center">✓</td><td class="center">✓</td><td class="center">✗</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>Tự host trên một VPS</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✓</td><td class="center">✓</td></tr>
+      <tr><td>WebSocket hoặc chat thời gian thực</td><td class="center">✓</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td><td class="center">✗</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Từ bảng khảo sát có thể thấy phần lớn các hệ thống đối sánh đều mạnh ở các chức năng helpdesk, quản lý tài sản cơ bản, dashboard và báo cáo.
+    Tuy nhiên, MHV có một số điểm khác biệt nổi bật như quét QR phục vụ trực tiếp cho mượn, trả và kiểm kê; chat realtime trong ticket; sơ đồ tầng
+    để định vị tài sản; vẽ vùng khu vực trên canvas; gắn tài sản trực tiếp lên sơ đồ; phân nhóm loại khu vực theo không gian sử dụng và import bản vẽ CAD.
+    Đây là các điểm mạnh giúp hệ thống bám sát hơn vào bối cảnh triển khai thực tế tại trường học, văn phòng hoặc đơn vị có nhiều không gian vận hành.
+  </p>
+  <p>
+    Từ kết quả khảo sát, nhóm định hướng hệ thống MHV theo hướng không chỉ là một phần mềm quản lý tài sản đơn thuần mà là một nền tảng kết hợp
+    quản lý tài sản, helpdesk kỹ thuật, kiểm kê và trực quan hóa vị trí tài sản trên mặt bằng. Điều này tạo ra lợi thế khác biệt so với nhiều phần mềm
+    cùng nhóm đang thiên về quản lý ticket hoặc quản lý ITSM truyền thống.
+  </p>
+
+  <div class="section-title">3. Thiết kế hệ thống (PDF hoặc Drawio)</div>
+  <div class="sub-title">3.1. Use-case diagrams: Tổng quan và chi tiết</div>
+  <p>
+    Phần này trình bày các sơ đồ use-case ở hai mức độ: sơ đồ tổng quan toàn hệ thống và các sơ đồ chi tiết cho từng module chính như quản lý tài sản,
+    quản lý sơ đồ và định vị tài sản, quản lý ticket hỗ trợ, kiểm kê tài sản, quản lý vật tư tiêu hao và quản trị danh mục. Các sơ đồ này giúp làm rõ
+    actor tham gia, phạm vi chức năng và mối quan hệ include hoặc extend giữa các nghiệp vụ.
+  </p>
+  <div class="placeholder">Chèn use-case diagrams tổng quan và chi tiết tại đây.</div>
+
+  <div class="sub-title">3.2. Thiết kế ERD và Database physical diagram</div>
+  <p>
+    Phần này trình bày sơ đồ thực thể liên kết của hệ thống và sơ đồ database physical diagram để mô tả rõ cấu trúc dữ liệu triển khai thực tế.
+    Các bảng dữ liệu trung tâm gồm người dùng, tài sản, loại tài sản, nhà cung cấp, phòng hoặc khu vực, tầng sơ đồ, vùng khu vực trên sơ đồ, ticket,
+    sự kiện ticket, lịch sử sử dụng, kiểm kê, vật tư tiêu hao, tồn kho theo phòng và các bảng cấu hình liên quan.
+  </p>
+  <div class="placeholder">Chèn ERD và Database physical diagram tại đây.</div>
+
+  <div class="sub-title">3.3. Class diagram</div>
+  <p>
+    Phần này trình bày class diagram nhằm mô tả các lớp nghiệp vụ chính trong hệ thống, thuộc tính cốt lõi, mối quan hệ kế thừa hoặc liên kết giữa các lớp,
+    cũng như sự phân chia theo các nhóm như thực thể tài sản, helpdesk, kiểm kê, vật tư tiêu hao, sơ đồ và cấu hình hệ thống. Class diagram giúp làm rõ
+    cách hệ thống được tổ chức ở mức thiết kế hướng đối tượng trước khi hiện thực hóa bằng mã nguồn.
+  </p>
+  <div class="placeholder">Chèn class diagram tại đây.</div>
+</body>
+</html>

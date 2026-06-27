@@ -9,6 +9,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Only expose PostgreSQL to the VPS itself. Local machines should use an SSH tunnel.
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mhv} -d ${POSTGRES_DB:-mhv}"]
       interval: 10s

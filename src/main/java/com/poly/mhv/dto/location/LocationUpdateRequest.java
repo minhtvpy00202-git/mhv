@@ -19,5 +19,8 @@ public class LocationUpdateRequest {
 
     private Integer floorId;
 
-    private Boolean hasAsset;
+    private String areaTypeKey;
+
+    @Size(max = 150, message = "Tên loại khu vực không được vượt quá 150 ký tự.")
+    private String areaTypeLabel;
 }

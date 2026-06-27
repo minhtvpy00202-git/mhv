@@ -1,6 +1,7 @@
 package com.poly.mhv.dto.auth;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
@@ -28,6 +29,10 @@ public class RegisterRequest {
     @NotBlank(message = "Họ và tên là bắt buộc.")
     @Size(min = 2, max = 100, message = "Họ và tên phải từ 2 đến 100 ký tự.")
     private String fullName;
+
+    @Email(message = "Email không đúng định dạng.")
+    @Size(max = 150, message = "Email không được vượt quá 150 ký tự.")
+    private String email;
 
     @NotNull(message = "Ngày sinh là bắt buộc.")
     @Past(message = "Ngày sinh phải là ngày trong quá khứ.")

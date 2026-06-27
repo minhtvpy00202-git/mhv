@@ -59,9 +59,10 @@ function createDefaultRoomDraft() {
     locationId: '',
     roomName: '',
     colorHex: DEFAULT_COLOR,
-    areaTypeKey: 'ROOM',
-    areaTypeLabel: 'Phòng',
-    hasAsset: true,
+    areaTypeKey: '',
+    areaTypeLabel: '',
+    areaGroupKey: '',
+    areaGroupLabel: '',
   }
 }
 
@@ -381,7 +382,8 @@ function buildRoomDraftSignature(draft) {
     colorHex: String(draft?.colorHex || DEFAULT_COLOR).toUpperCase(),
     areaTypeKey: String(draft?.areaTypeKey || ''),
     areaTypeLabel: normalizeAreaTypeLabel(draft?.areaTypeLabel || ''),
-    hasAsset: draft?.hasAsset !== false,
+    areaGroupKey: String(draft?.areaGroupKey || ''),
+    areaGroupLabel: normalizeAreaTypeLabel(draft?.areaGroupLabel || ''),
   })
 }
 
@@ -465,7 +467,6 @@ function serializeRoomShapes(roomShapes) {
     colorHex: shape.colorHex || DEFAULT_COLOR,
     areaTypeKey: shape.areaTypeKey || '',
     areaTypeLabel: normalizeAreaTypeLabel(shape.areaTypeLabel || ''),
-    hasAsset: shape.hasAsset !== false,
   }))
 }
 
@@ -854,8 +855,9 @@ function AssetMapManagement() {
         id: index + 1,
         typeKey: item.key,
         label: item.label,
+        areaGroupKey: item.areaGroupKey,
+        areaGroupLabel: item.areaGroupLabel,
         description: item.description,
-        defaultHasAsset: item.defaultHasAsset !== false,
         builtIn: true,
         sortOrder: (index + 1) * 10,
         usageCount: 0,
@@ -906,11 +908,9 @@ function AssetMapManagement() {
         })
       }
     })
-
     return [
-      { key: 'asset-capable', label: 'Phòng chứa tài sản', tone: 'bg-orange-100 text-orange-700 border-orange-200' },
       ...Array.from(typeItems.values()).sort((left, right) => left.label.localeCompare(right.label, 'vi')),
-      { key: 'empty', label: 'Phòng trống', tone: 'bg-amber-100 text-amber-700 border-amber-200' },
+      { key: 'empty', label: 'Chưa gắn tài sản', tone: 'bg-amber-100 text-amber-700 border-amber-200' },
       { key: 'assigned', label: 'Đã gán tài sản', tone: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
     ]
   }, [activeFloor, areaTypeCatalogEntries])
@@ -919,13 +919,10 @@ function AssetMapManagement() {
     const keys = new Set()
     const assetCount = roomAssetCountMap.get(shape?.locationId) || 0
     const areaType = resolveAreaTypeMeta(shape, areaTypeCatalogEntries)
-    if (shape?.hasAsset !== false) {
-      keys.add('asset-capable')
-    }
     keys.add(areaType.filterKey)
     if (assetCount > 0) {
       keys.add('assigned')
-    } else if (shape?.hasAsset !== false) {
+    } else {
       keys.add('empty')
     }
     return keys
@@ -1837,8 +1834,8 @@ function AssetMapManagement() {
     try {
       const response = await axiosClient.post('/api/asset-map/area-types', {
         label: String(form?.label || '').trim(),
+        areaGroupLabel: String(form?.areaGroupLabel || '').trim(),
         description: String(form?.description || '').trim(),
-        defaultHasAsset: form?.defaultHasAsset !== false,
       })
       setAreaTypes((previous) => [...previous, response.data].sort((left, right) => {
         const sortDelta = (left?.sortOrder || 0) - (right?.sortOrder || 0)
@@ -1858,8 +1855,8 @@ function AssetMapManagement() {
     try {
       const response = await axiosClient.put(`/api/asset-map/area-types/${areaTypeId}`, {
         label: String(form?.label || '').trim(),
+        areaGroupLabel: String(form?.areaGroupLabel || '').trim(),
         description: String(form?.description || '').trim(),
-        defaultHasAsset: form?.defaultHasAsset !== false,
       })
       setAreaTypes((previous) => previous
         .map((item) => (Number(item.id) === Number(areaTypeId) ? response.data : item))
@@ -2199,7 +2196,8 @@ function AssetMapManagement() {
       colorHex: shape.colorHex || DEFAULT_COLOR,
       areaTypeKey: areaTypeDraft.areaTypeKey,
       areaTypeLabel: areaTypeDraft.areaTypeLabel,
-      hasAsset: shape.hasAsset !== false,
+      areaGroupKey: areaTypeDraft.areaGroupKey,
+      areaGroupLabel: areaTypeDraft.areaGroupLabel,
     })
   }, [areaTypeCatalogEntries, clearDragState, floors, setSelectedRooms])
 
@@ -2227,7 +2225,8 @@ function AssetMapManagement() {
       colorHex: shape.colorHex || DEFAULT_COLOR,
       areaTypeKey: areaTypeDraft.areaTypeKey,
       areaTypeLabel: areaTypeDraft.areaTypeLabel,
-      hasAsset: shape.hasAsset !== false,
+      areaGroupKey: areaTypeDraft.areaGroupKey,
+      areaGroupLabel: areaTypeDraft.areaGroupLabel,
     })
   }, [areaTypeCatalogEntries, openRoomModalWithDraft, setSelectedRooms])
 
@@ -2274,7 +2273,8 @@ function AssetMapManagement() {
         colorHex: targetShape.colorHex || DEFAULT_COLOR,
         areaTypeKey: areaTypeDraft.areaTypeKey,
         areaTypeLabel: areaTypeDraft.areaTypeLabel,
-        hasAsset: targetShape.hasAsset !== false,
+        areaGroupKey: areaTypeDraft.areaGroupKey,
+        areaGroupLabel: areaTypeDraft.areaGroupLabel,
       }
     }
 
@@ -2930,7 +2930,12 @@ function AssetMapManagement() {
       toast.error('Vui lòng nhập tên phòng.')
       return false
     }
-    const areaTypePayload = buildAreaTypePayload(roomDraft.areaTypeKey, roomDraft.areaTypeLabel, areaTypeCatalogEntries)
+    const areaTypePayload = buildAreaTypePayload(
+      roomDraft.areaTypeKey,
+      roomDraft.areaTypeLabel,
+      areaTypeCatalogEntries,
+      roomDraft.areaGroupLabel,
+    )
     if (!areaTypePayload.areaTypeLabel) {
       toast.error('Vui lòng chọn hoặc nhập loại khu vực.')
       return false
@@ -2970,7 +2975,6 @@ function AssetMapManagement() {
       colorHex: roomDraft.colorHex || DEFAULT_COLOR,
       areaTypeKey: areaTypePayload.areaTypeKey,
       areaTypeLabel: areaTypePayload.areaTypeLabel,
-      hasAsset: roomDraft.hasAsset !== false,
     }
 
     const nextShapes = [...(activeFloor.roomShapes || [])]
@@ -3948,12 +3952,6 @@ function AssetMapManagement() {
                 />
                 {String(roomPreview.shape.colorHex || DEFAULT_COLOR).toUpperCase()}
               </div>
-            </div>
-            <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
-              <p className="text-slate-500 dark:text-slate-400">Chứa tài sản</p>
-              <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">
-                {roomPreview.shape.hasAsset !== false ? 'Có' : 'Không'}
-              </p>
             </div>
             <div className="rounded-xl bg-slate-100 px-3 py-2 dark:bg-slate-800">
               <p className="text-slate-500 dark:text-slate-400">Đồng bộ</p>

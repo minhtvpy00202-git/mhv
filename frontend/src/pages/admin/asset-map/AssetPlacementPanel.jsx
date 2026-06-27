@@ -1,4 +1,5 @@
 import { IconCamera as Camera, IconSearch as Search } from '@tabler/icons-react'
+import SearchableSelect from '../../../components/ui/SearchableSelect'
 
 export default function AssetPlacementPanel({
   categories,
@@ -44,18 +45,15 @@ export default function AssetPlacementPanel({
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Loại tài sản</label>
-              <select
+              <SearchableSelect
                 value={searchFilters.categoryId}
-                onChange={(event) => onSearchFilterChange({ categoryId: event.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              >
-                <option value="">Tất cả loại</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(nextValue) => onSearchFilterChange({ categoryId: String(nextValue || '') })}
+                options={categories}
+                getOptionValue={(category) => category.id}
+                getOptionLabel={(category) => category.name}
+                placeholder="Gõ để tìm loại tài sản"
+                emptyOptionLabel="Tất cả loại"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tầng</label>
@@ -74,18 +72,15 @@ export default function AssetPlacementPanel({
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Phòng</label>
-              <select
+              <SearchableSelect
                 value={searchFilters.locationId}
-                onChange={(event) => onSearchFilterChange({ locationId: event.target.value })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              >
-                <option value="">Tất cả phòng</option>
-                {filteredLocationOptions.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.roomName}
-                  </option>
-                ))}
-              </select>
+                onChange={(nextValue) => onSearchFilterChange({ locationId: String(nextValue || '') })}
+                options={filteredLocationOptions}
+                getOptionValue={(location) => location.id}
+                getOptionLabel={(location) => location.roomName}
+                placeholder="Gõ để tìm phòng"
+                emptyOptionLabel="Tất cả phòng"
+              />
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
@@ -190,18 +191,16 @@ function TicketManagement() {
               </option>
             ))}
           </select>
-          <select
+          <SearchableSelect
             value={filters.assigneeId}
-            onChange={(event) => setFilters((prev) => ({ ...prev, assigneeId: event.target.value }))}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fptOrange"
-          >
-            <option value="">Tất cả kỹ thuật viên</option>
-            {techSupports.map((tech) => (
-              <option key={tech.id} value={tech.id}>
-                {tech.fullName || tech.username}
-              </option>
-            ))}
-          </select>
+            onChange={(nextValue) => setFilters((prev) => ({ ...prev, assigneeId: String(nextValue || '') }))}
+            options={techSupports}
+            getOptionValue={(tech) => tech.id}
+            getOptionLabel={(tech) => tech.fullName || tech.username}
+            getOptionSearchText={(tech) => `${tech.fullName || ''} ${tech.username || ''}`}
+            placeholder="Gõ để tìm kỹ thuật viên"
+            emptyOptionLabel="Tất cả kỹ thuật viên"
+          />
           <button
             type="button"
             onClick={() => loadTickets(0, filters)}
@@ -291,21 +290,20 @@ function TicketManagement() {
                             return <p className="whitespace-nowrap text-xs text-amber-700">Chưa có KTV đúng chuyên môn</p>
                           }
                           return (
-                            <select
+                            <SearchableSelect
                               value={assignDraft[ticket.id] || ''}
-                              onChange={(event) =>
-                                setAssignDraft((prev) => ({ ...prev, [ticket.id]: event.target.value }))
+                              onChange={(nextValue) =>
+                                setAssignDraft((prev) => ({ ...prev, [ticket.id]: String(nextValue || '') }))
                               }
-                              className="rounded border border-slate-300 px-2 py-1 text-xs"
-                            >
-                              <option value="">Chọn kỹ thuật viên</option>
-                              {techs.map((tech) => (
-                                <option key={tech.id} value={tech.id}>
-                                  {tech.fullName || tech.username}
-                                  {tech.recommendationReason ? ` (Gợi ý: ${tech.recommendationReason})` : ''}
-                                </option>
-                              ))}
-                            </select>
+                              options={techs}
+                              getOptionValue={(tech) => tech.id}
+                              getOptionLabel={(tech) => tech.fullName || tech.username}
+                              getOptionDescription={(tech) => tech.recommendationReason ? `Gợi ý: ${tech.recommendationReason}` : ''}
+                              getOptionSearchText={(tech) => `${tech.fullName || ''} ${tech.username || ''} ${tech.recommendationReason || ''}`}
+                              placeholder="Gõ để tìm kỹ thuật viên"
+                              emptyOptionLabel="Chọn kỹ thuật viên"
+                              inputClassName="rounded border border-slate-300 px-2 py-1 text-xs"
+                            />
                           )
                         })()}
                         <ActionIconButton

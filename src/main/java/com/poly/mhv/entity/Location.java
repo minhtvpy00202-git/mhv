@@ -34,9 +34,11 @@ public class Location {
     @Column(name = "room_name", nullable = false, length = 100)
     private String roomName;
 
-    @Column(name = "has_asset", columnDefinition = "boolean default true")
-    @Builder.Default
-    private Boolean hasAsset = true;
+    @Column(name = "area_type_key", length = 100)
+    private String areaTypeKey;
+
+    @Column(name = "area_type_label", length = 150)
+    private String areaTypeLabel;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "floor_id")

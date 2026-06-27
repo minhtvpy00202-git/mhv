@@ -6,15 +6,13 @@ import com.poly.mhv.dto.location.LocationUpdateRequest;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.MapFloor;
 import com.poly.mhv.exception.CustomException;
-import java.util.LinkedHashSet;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.MapFloorRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,23 +43,18 @@ public class LocationService {
 
     @Transactional(readOnly = true)
     public List<LocationResponse> getAllLocations(String keyword) {
-        return getAllLocations(keyword, null);
-    }
-
-    @Transactional(readOnly = true)
-    public List<LocationResponse> getAllLocations(String keyword, Boolean hasAsset) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         long now = System.currentTimeMillis();
-        if (normalizedKeyword == null && hasAsset == null) {
+        if (normalizedKeyword == null) {
             List<LocationResponse> cacheSnapshot = cachedAllLocations;
             if (cacheSnapshot != null && cachedAllLocationsExpiresAt > now) {
                 return cacheSnapshot;
             }
         }
-        List<LocationResponse> items = locationRepository.searchByKeyword(normalizedKeyword, hasAsset).stream()
+        List<LocationResponse> items = locationRepository.searchByKeyword(normalizedKeyword).stream()
                 .map(this::mapToResponse)
                 .toList();
-        if (normalizedKeyword == null && hasAsset == null) {
+        if (normalizedKeyword == null) {
             cachedAllLocations = items;
             cachedAllLocationsExpiresAt = now + LOCATION_CACHE_TTL_MS;
         }
@@ -83,7 +76,8 @@ public class LocationService {
         Location location = Location.builder()
                 .roomName(normalizedRoomName)
                 .floor(resolveFloor(request.getFloorId()))
-                .hasAsset(resolveCreateHasAsset(request.getHasAsset()))
+                .areaTypeKey(normalizeAreaTypeValue(request.getAreaTypeKey()))
+                .areaTypeLabel(normalizeAreaTypeValue(request.getAreaTypeLabel()))
                 .build();
         LocationResponse response = mapToResponse(locationRepository.save(location));
         invalidateLocationCache();
@@ -100,7 +94,8 @@ public class LocationService {
 
         location.setRoomName(normalizedRoomName);
         location.setFloor(resolveFloor(request.getFloorId()));
-        applyHasAssetUpdate(location, request.getHasAsset());
+        location.setAreaTypeKey(normalizeAreaTypeValue(request.getAreaTypeKey()));
+        location.setAreaTypeLabel(normalizeAreaTypeValue(request.getAreaTypeLabel()));
         LocationResponse response = mapToResponse(locationRepository.save(location));
         invalidateLocationCache();
         return response;
@@ -137,15 +132,6 @@ public class LocationService {
     private void invalidateLocationCache() {
         cachedAllLocations = null;
         cachedAllLocationsExpiresAt = 0L;
-    }
-
-    @EventListener(ApplicationReadyEvent.class)
-    @Transactional
-    public void ensureLegacyHasAssetDefaults() {
-        int updatedRows = locationRepository.fillMissingHasAssetWithTrue();
-        if (updatedRows > 0) {
-            invalidateLocationCache();
-        }
     }
 
     private Location getLocationOrThrow(Integer id) {
@@ -187,33 +173,9 @@ public class LocationService {
         return normalizedRoomName;
     }
 
-    private boolean resolveCreateHasAsset(Boolean requestedHasAsset) {
-        return requestedHasAsset == null || requestedHasAsset;
-    }
-
-    private boolean resolveHasAsset(Location location) {
-        return location.getHasAsset() == null || location.getHasAsset();
-    }
-
-    private void applyHasAssetUpdate(Location location, Boolean requestedHasAsset) {
-        if (requestedHasAsset == null) {
-            if (location.getHasAsset() == null) {
-                location.setHasAsset(true);
-            }
-            return;
-        }
-
-        boolean currentHasAsset = resolveHasAsset(location);
-        if (currentHasAsset == requestedHasAsset) {
-            location.setHasAsset(requestedHasAsset);
-            return;
-        }
-
-        long linkedAssets = assetRepository.countByLocationIdOrHomeLocationId(location.getId(), location.getId());
-        if (linkedAssets > 0) {
-            throw new CustomException("Không thể đổi trạng thái chứa tài sản vì khu vực này đã có tài sản được gán.");
-        }
-        location.setHasAsset(requestedHasAsset);
+    private String normalizeAreaTypeValue(String value) {
+        String normalizedValue = value == null ? null : value.trim();
+        return StringUtils.hasText(normalizedValue) ? normalizedValue : null;
     }
 
     private LocationResponse mapToResponse(Location location) {
@@ -222,7 +184,8 @@ public class LocationService {
                 .roomName(location.getRoomName())
                 .floorId(location.getFloor() != null ? location.getFloor().getId() : null)
                 .floorName(location.getFloor() != null ? location.getFloor().getName() : null)
-                .hasAsset(resolveHasAsset(location))
+                .areaTypeKey(location.getAreaTypeKey())
+                .areaTypeLabel(location.getAreaTypeLabel())
                 .build();
     }
 }

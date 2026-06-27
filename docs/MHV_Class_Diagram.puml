@@ -1,0 +1,307 @@
+@startuml
+' Class diagram mức báo cáo cho hệ thống MHV
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+hide empty methods
+
+title MHV Class Diagram
+
+package "Người dùng & Phân quyền" {
+  class AppUser {
+    +id: Integer
+    +username: String
+    +password: String
+    +role: String
+    +fullName: String
+    +email: String
+    +birthday: LocalDate
+    +phone: String
+    +status: String
+  }
+
+  class TechSupportType {
+    +id: Integer
+    +name: String
+  }
+}
+
+package "Tài sản & Danh mục" {
+  class Category {
+    +id: Integer
+    +name: String
+    +codePrefix: String
+    +categoryKind: String
+    +specTemplates: String
+  }
+
+  class Supplier {
+    +id: Integer
+    +name: String
+    +address: String
+    +phoneNumber: String
+  }
+
+  class Asset {
+    +qaCode: String
+    +name: String
+    +status: String
+    +technicalStatus: String
+    +usageStatus: String
+    +trackingMode: String
+    +purchasePrice: BigDecimal
+    +purchaseDate: LocalDate
+    +warrantyExpirationDate: LocalDate
+    +expirationDate: LocalDate
+    +quantityOnHand: Integer
+    +minimumStock: Integer
+    +unit: String
+  }
+
+  class UsageHistory {
+    +id: Integer
+    +startTime: LocalDateTime
+    +endTime: LocalDateTime
+  }
+}
+
+package "Sơ đồ & Không gian" {
+  class MapFloor {
+    +id: Integer
+    +name: String
+    +sortOrder: Integer
+    +gridRows: Integer
+    +gridCols: Integer
+    +canvasBackgroundColor: String
+    +mode: MapFloorMode
+    +backgroundImageUrl: String
+    +imageWidth: Integer
+    +imageHeight: Integer
+  }
+
+  class Location {
+    +id: Integer
+    +roomName: String
+    +areaTypeKey: String
+    +areaTypeLabel: String
+  }
+
+  class RoomShape {
+    +id: Long
+    +cellsJson: String
+    +polygonJson: String
+    +boundsJson: String
+    +colorHex: String
+    +areaTypeKey: String
+    +areaTypeLabel: String
+    +createdAt: LocalDateTime
+    +updatedAt: LocalDateTime
+  }
+
+  class AreaTypeCatalog {
+    +id: Integer
+    +typeKey: String
+    +label: String
+    +areaGroupKey: String
+    +areaGroupLabel: String
+    +description: String
+    +builtIn: Boolean
+    +sortOrder: Integer
+  }
+}
+
+package "Helpdesk & Ticket" {
+  class Ticket {
+    +id: Integer
+    +description: String
+    +imageUrl: String
+    +priority: String
+    +status: String
+    +createdAt: LocalDateTime
+    +dueDate: LocalDateTime
+    +acceptedAt: LocalDateTime
+    +resolvedAt: LocalDateTime
+    +satisfactionScore: Integer
+    +satisfactionComment: String
+  }
+
+  class ChatMessage {
+    +id: Integer
+    +content: String
+    +mediaUrl: String
+    +mediaType: String
+    +createdAt: LocalDateTime
+  }
+
+  class TicketEvent {
+    +id: Integer
+    +eventType: String
+    +actorId: Integer
+    +actorName: String
+    +message: String
+    +detailJson: String
+    +occurredAt: LocalDateTime
+  }
+}
+
+package "Kiểm kê" {
+  class InventoryAudit {
+    +id: Integer
+    +startedAt: LocalDateTime
+    +completedAt: LocalDateTime
+    +dueDate: LocalDateTime
+    +status: String
+    +expectedCount: Integer
+    +scannedCount: Integer
+    +missingCount: Integer
+    +notes: String
+  }
+
+  class InventoryAuditItem {
+    +id: Integer
+    +assetQaCode: String
+    +assetName: String
+    +scannedAt: LocalDateTime
+    +scannedByUsername: String
+  }
+
+  class InventoryAuditMissing {
+    +id: Integer
+    +assetQaCode: String
+    +assetName: String
+    +locationName: String
+    +resolutionStatus: String
+    +resolvedAt: LocalDateTime
+    +resolvedByUsername: String
+  }
+}
+
+package "Vật tư tiêu hao" {
+  class ConsumableReceiptLot {
+    +id: Long
+    +lotCode: String
+    +quantityReceived: Integer
+    +quantityRemaining: Integer
+    +unitPrice: BigDecimal
+    +receivedDate: LocalDate
+    +expirationDate: LocalDate
+    +receivedAt: LocalDateTime
+    +note: String
+  }
+
+  class ConsumableIssue {
+    +id: Long
+    +quantity: Integer
+    +unitPrice: BigDecimal
+    +note: String
+    +issuedAt: LocalDateTime
+  }
+
+  class ConsumableLocationStock {
+    +id: Long
+    +quantityIssued: Integer
+    +quantityRemaining: Integer
+    +unitPrice: BigDecimal
+    +lastIssuedAt: LocalDateTime
+    +lastUpdatedAt: LocalDateTime
+    +lastNote: String
+  }
+
+  class ConsumableRequest {
+    +id: Long
+    +quantityRequested: Integer
+    +reason: String
+    +status: String
+    +decisionNote: String
+    +createdAt: LocalDateTime
+    +resolvedAt: LocalDateTime
+  }
+
+  class ConsumableDisposalRequest {
+    +id: Long
+    +quantityRequested: Integer
+    +reason: String
+    +status: String
+    +decisionNote: String
+    +createdAt: LocalDateTime
+    +resolvedAt: LocalDateTime
+  }
+
+  class ConsumableDisposalRequestItem {
+    +id: Long
+    +quantityRequested: Integer
+  }
+}
+
+AppUser "0..*" -- "0..*" TechSupportType : expertise
+TechSupportType "1" <-- "0..*" Category : supports
+Category "1" <-- "0..*" Asset : classifies
+Supplier "0..1" <-- "0..*" Asset : supplies
+
+Location "1" <-- "0..*" Asset : currentLocation
+Location "1" <-- "0..*" Asset : homeLocation
+MapFloor "0..1" <-- "0..*" Location : contains
+MapFloor "1" <-- "0..*" RoomShape : has
+Location "1" <-- "0..1" RoomShape : visualizedBy
+AreaTypeCatalog ..> Location : area type
+AreaTypeCatalog ..> RoomShape : area type
+
+Asset "1" <-- "0..*" UsageHistory : asset
+AppUser "1" <-- "0..*" UsageHistory : user
+Location "1" <-- "0..*" UsageHistory : fromLocation
+Location "1" <-- "0..*" UsageHistory : toLocation
+
+Asset "1" <-- "0..*" Ticket : reportedOn
+AppUser "1" <-- "0..*" Ticket : reporter
+AppUser "0..1" <-- "0..*" Ticket : assignee
+Ticket "1" <-- "0..*" ChatMessage : has
+AppUser "1" <-- "0..*" ChatMessage : sender
+Ticket "1" <-- "0..*" TicketEvent : timeline
+
+Location "1" <-- "0..*" InventoryAudit : auditedAt
+AppUser "1" <-- "0..*" InventoryAudit : createdBy
+InventoryAudit "1" <-- "0..*" InventoryAuditItem : scannedItems
+InventoryAudit "1" <-- "0..*" InventoryAuditMissing : missingItems
+
+Asset "1" <-- "0..*" ConsumableReceiptLot : receiptLots
+Supplier "0..1" <-- "0..*" ConsumableReceiptLot : supplier
+AppUser "0..1" <-- "0..*" ConsumableReceiptLot : receivedBy
+
+Asset "1" <-- "0..*" ConsumableIssue : issuedAsset
+Location "1" <-- "0..*" ConsumableIssue : issuedTo
+AppUser "1" <-- "0..*" ConsumableIssue : issuedBy
+
+Asset "1" <-- "0..*" ConsumableLocationStock : stockOf
+Location "1" <-- "0..*" ConsumableLocationStock : stockedAt
+AppUser "0..1" <-- "0..*" ConsumableLocationStock : lastUpdatedBy
+
+Asset "1" <-- "0..*" ConsumableRequest : requestedAsset
+Location "1" <-- "0..*" ConsumableRequest : requestLocation
+AppUser "1" <-- "0..*" ConsumableRequest : requestedBy
+AppUser "0..1" <-- "0..*" ConsumableRequest : resolvedBy
+
+Asset "1" <-- "0..*" ConsumableDisposalRequest : disposalOf
+ConsumableReceiptLot "1" <-- "0..*" ConsumableDisposalRequest : basedOnLot
+AppUser "1" <-- "0..*" ConsumableDisposalRequest : requestedBy
+AppUser "0..1" <-- "0..*" ConsumableDisposalRequest : resolvedBy
+ConsumableDisposalRequest "1" <-- "0..*" ConsumableDisposalRequestItem : has
+ConsumableReceiptLot "1" <-- "0..*" ConsumableDisposalRequestItem : fromLot
+
+note bottom of AreaTypeCatalog
+Danh mục loại khu vực dùng chung cho
+Location và RoomShape ở module sơ đồ.
+Không map JPA trực tiếp nhưng có quan hệ nghiệp vụ.
+end note
+
+note bottom of TicketEvent
+TicketEvent là timeline/audit log của ticket,
+khác với ChatMessage là nội dung trao đổi realtime.
+end note
+
+note "Sơ đồ này ở mức báo cáo:\n- Giữ lớp nghiệp vụ chính\n- Lược bớt lớp cấu hình rời như Notification, AppSetting\n- Phù hợp chèn vào báo cáo hoặc chuyển sang Draw.io" as N1
+N1 .. AppUser
+
+@enduml

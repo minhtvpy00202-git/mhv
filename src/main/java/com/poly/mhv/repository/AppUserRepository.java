@@ -11,9 +11,19 @@ import org.springframework.data.repository.query.Param;
 
 public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
     Optional<AppUser> findByUsername(String username);
+
+    @Query("""
+            select distinct u from AppUser u
+            left join fetch u.techSupportTypes
+            where lower(u.username) = lower(:username)
+            """)
+    Optional<AppUser> findByUsernameWithTechSupportTypes(@Param("username") String username);
+
     List<AppUser> findByRole(String role);
     List<AppUser> findAllByOrderByUsernameAsc();
     boolean existsByUsername(String username);
+    boolean existsByEmailIgnoreCase(String email);
+    Optional<AppUser> findByEmailIgnoreCase(String email);
 
     @Query("""
             SELECT DISTINCT u FROM AppUser u
@@ -33,7 +43,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Integer> {
     @Query("""
             SELECT u FROM AppUser u
             WHERE (COALESCE(:keyword, '') = '' OR LOWER(u.username) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))
+                OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                OR LOWER(COALESCE(u.email, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))
               AND (COALESCE(:role, '') = '' OR u.role = :role)
               AND (COALESCE(:status, '') = '' OR u.status = :status)
             ORDER BY u.id DESC

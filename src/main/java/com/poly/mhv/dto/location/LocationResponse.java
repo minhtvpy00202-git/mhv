@@ -14,5 +14,6 @@ public class LocationResponse {
     private String roomName;
     private Integer floorId;
     private String floorName;
-    private Boolean hasAsset;
+    private String areaTypeKey;
+    private String areaTypeLabel;
 }

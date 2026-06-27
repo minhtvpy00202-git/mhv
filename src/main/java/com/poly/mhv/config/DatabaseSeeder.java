@@ -4,6 +4,7 @@ import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.TechSupportType;
 import com.poly.mhv.repository.TechSupportTypeRepository;
 import com.poly.mhv.repository.AppUserRepository;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Map;
 import org.springframework.boot.CommandLineRunner;
@@ -40,12 +41,13 @@ public class DatabaseSeeder implements CommandLineRunner {
         if (!demoUsersEnabled) {
             return;
         }
-        upsertDemoUser("admin", "123456", "Admin");
-        upsertDemoUser("nhanvien", "123456", "NhanVien");
-        upsertTechSupportUser("techsup1", "123456", 1, "Kỹ thuật viên công nghệ");
-        upsertTechSupportUser("techsup2", "123456", 2, "Kỹ thuật viên thiết bị giảng dạy");
-        upsertTechSupportUser("techsup3", "123456", 3, "Kỹ thuật viên thiết bị thí nghiệm");
-        upsertTechSupportUser("techsup4", "123456", 4, "Kỹ thuật viên thiết bị thể dục thể thao");
+        upsertDemoUser("admin", "123456", "Admin", "Nguyễn Minh Quân", "admin@mhv.local", LocalDate.of(1990, 5, 12), "0901234567");
+        upsertDemoUser("nhanvien", "123456", "NhanVien", "Trần Thu Hà", "nhanvien@mhv.local", LocalDate.of(1998, 9, 23), "0901234568");
+        upsertDemoUser("consumable", "123456", "ConsumableManager", "Phan Khánh Linh", "consumable@mhv.local", LocalDate.of(1996, 6, 14), "0901234573");
+        upsertTechSupportUser("techsup1", "123456", 1, "Nguyễn Hoàng Anh", "techsup1@mhv.local", LocalDate.of(1994, 3, 18), "0901234569");
+        upsertTechSupportUser("techsup2", "123456", 2, "Lê Quỳnh Mai", "techsup2@mhv.local", LocalDate.of(1995, 11, 7), "0901234570");
+        upsertTechSupportUser("techsup3", "123456", 3, "Phạm Đức Huy", "techsup3@mhv.local", LocalDate.of(1993, 8, 29), "0901234571");
+        upsertTechSupportUser("techsup4", "123456", 4, "Võ Bảo Ngọc", "techsup4@mhv.local", LocalDate.of(1997, 1, 15), "0901234572");
     }
 
     private void seedTechSupportTypes() {
@@ -64,37 +66,94 @@ public class DatabaseSeeder implements CommandLineRunner {
         });
     }
 
-    private void upsertDemoUser(String username, String rawPassword, String role) {
-        AppUser appUser = appUserRepository.findByUsername(username)
-                .orElse(AppUser.builder().username(username).build());
+    private void upsertDemoUser(
+            String username,
+            String rawPassword,
+            String role,
+            String fullName,
+            String email,
+            LocalDate birthday,
+            String phone
+    ) {
+        AppUser appUser = appUserRepository.findByUsernameWithTechSupportTypes(username)
+                .orElseGet(() -> AppUser.builder()
+                        .username(username)
+                        .techSupportTypes(new ArrayList<>())
+                        .build());
 
-        boolean passwordMatched = passwordEncoder.matches(rawPassword, appUser.getPassword() == null ? "" : appUser.getPassword());
-        if (!passwordMatched) {
+        if (!hasPassword(appUser)) {
             appUser.setPassword(passwordEncoder.encode(rawPassword));
         }
-        appUser.setRole(role);
-        appUser.setStatus("Hoạt động");
-        appUser.setTechSupportTypes(new ArrayList<>());
-        if (appUser.getFullName() == null || appUser.getFullName().isBlank()) {
-            appUser.setFullName(username);
+        if (isBlank(appUser.getRole())) {
+            appUser.setRole(role);
+        }
+        if (isBlank(appUser.getStatus())) {
+            appUser.setStatus("Hoạt động");
+        }
+        if (appUser.getTechSupportTypes() == null) {
+            appUser.setTechSupportTypes(new ArrayList<>());
+        }
+        if (isBlank(appUser.getFullName())) {
+            appUser.setFullName(fullName);
+        }
+        if (isBlank(appUser.getEmail())) {
+            appUser.setEmail(email);
+        }
+        if (appUser.getBirthday() == null) {
+            appUser.setBirthday(birthday);
+        }
+        if (isBlank(appUser.getPhone())) {
+            appUser.setPhone(phone);
         }
         appUserRepository.save(appUser);
     }
 
-    private void upsertTechSupportUser(String username, String rawPassword, Integer techTypeId, String fullName) {
-        AppUser appUser = appUserRepository.findByUsername(username)
-                .orElse(AppUser.builder().username(username).build());
+    private void upsertTechSupportUser(
+            String username,
+            String rawPassword,
+            Integer techTypeId,
+            String fullName,
+            String email,
+            LocalDate birthday,
+            String phone
+    ) {
+        AppUser appUser = appUserRepository.findByUsernameWithTechSupportTypes(username)
+                .orElseGet(() -> AppUser.builder().username(username).build());
 
-        boolean passwordMatched = passwordEncoder.matches(rawPassword, appUser.getPassword() == null ? "" : appUser.getPassword());
-        if (!passwordMatched) {
+        if (!hasPassword(appUser)) {
             appUser.setPassword(passwordEncoder.encode(rawPassword));
         }
-        appUser.setRole("TechSupport");
-        appUser.setStatus("Hoạt động");
-        appUser.setFullName(fullName);
+        if (isBlank(appUser.getRole())) {
+            appUser.setRole("TechSupport");
+        }
+        if (isBlank(appUser.getStatus())) {
+            appUser.setStatus("Hoạt động");
+        }
+        if (isBlank(appUser.getFullName())) {
+            appUser.setFullName(fullName);
+        }
+        if (isBlank(appUser.getEmail())) {
+            appUser.setEmail(email);
+        }
+        if (appUser.getBirthday() == null) {
+            appUser.setBirthday(birthday);
+        }
+        if (isBlank(appUser.getPhone())) {
+            appUser.setPhone(phone);
+        }
         TechSupportType techSupportType = techSupportTypeRepository.findById(techTypeId)
                 .orElseThrow(() -> new IllegalStateException("Thiếu nhóm kỹ thuật id=" + techTypeId));
-        appUser.setTechSupportTypes(new ArrayList<>(java.util.List.of(techSupportType)));
+        if (appUser.getTechSupportTypes() == null || appUser.getTechSupportTypes().isEmpty()) {
+            appUser.setTechSupportTypes(new ArrayList<>(java.util.List.of(techSupportType)));
+        }
         appUserRepository.save(appUser);
+    }
+
+    private boolean hasPassword(AppUser appUser) {
+        return !isBlank(appUser.getPassword());
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

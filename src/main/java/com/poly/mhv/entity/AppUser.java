@@ -43,6 +43,9 @@ public class AppUser {
     @Column(name = "full_name", length = 100)
     private String fullName;
 
+    @Column(unique = true, length = 150)
+    private String email;
+
     @Column(name = "birthday")
     private LocalDate birthday;
 

@@ -15,6 +15,7 @@ public class JwtResponse {
     private Integer id;
     private String username;
     private String fullName;
+    private String email;
     private String role;
     private List<Integer> techTypeIds;
     private List<String> techTypeNames;

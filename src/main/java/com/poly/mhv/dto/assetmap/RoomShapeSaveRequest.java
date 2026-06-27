@@ -34,6 +34,4 @@ public class RoomShapeSaveRequest {
 
     @Size(max = 120, message = "Ten loai khu vuc khong duoc vuot qua 120 ky tu.")
     private String areaTypeLabel;
-
-    private Boolean hasAsset;
 }

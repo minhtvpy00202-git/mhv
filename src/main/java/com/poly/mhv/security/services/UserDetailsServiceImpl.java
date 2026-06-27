@@ -20,7 +20,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        AppUser appUser = appUserRepository.findByUsername(username)
+        AppUser appUser = appUserRepository.findByUsernameWithTechSupportTypes(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy user: " + username));
         return UserDetailsImpl.build(appUser);
     }

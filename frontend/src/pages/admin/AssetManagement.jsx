@@ -29,6 +29,7 @@ import ActionIconButton from '../../components/ui/ActionIconButton'
 import ModalOverlay from '../../components/ui/ModalOverlay'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import { useAuth } from '../../context/AuthContext'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { mergeSpecEntries, normalizeSpecTemplates, parseSpecsToEntries, stringifySpecs } from '../../utils/assetSpecs'
@@ -399,7 +400,6 @@ function getInitialTrackingMode(initialSection, restrictToConsumable) {
 function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed', showTabSwitcher = false }) {
   const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
-  const supplierOptionsRef = useRef(null)
   const { user } = useAuth()
   const isAdmin = user?.role === 'Admin'
   const [assets, setAssets] = useState([])
@@ -503,8 +503,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   })
   const [formMode, setFormMode] = useState('create')
   const [selectedQaCode, setSelectedQaCode] = useState(null)
-  const [showSupplierOptions, setShowSupplierOptions] = useState(false)
-  const [supplierKeyword, setSupplierKeyword] = useState('')
   const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false)
   const [creatingSupplier, setCreatingSupplier] = useState(false)
   const [supplierForm, setSupplierForm] = useState({ name: '', address: '', phoneNumber: '' })
@@ -677,26 +675,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     () => locations.find((location) => String(location?.roomName || '').trim().toLowerCase() === 'kho') || null,
     [locations],
   )
-
-  const filteredSupplierOptions = useMemo(() => {
-    const keyword = supplierKeyword.trim().toLowerCase()
-    if (!keyword) return suppliers
-    return suppliers.filter((supplier) => getSupplierLabel(supplier).toLowerCase().includes(keyword))
-  }, [supplierKeyword, suppliers])
-
-  useEffect(() => {
-    const handlePointerDownOutside = (event) => {
-      const target = event.target
-      if (showSupplierOptions && supplierOptionsRef.current && !supplierOptionsRef.current.contains(target)) {
-        setShowSupplierOptions(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDownOutside)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDownOutside)
-    }
-  }, [showSupplierOptions])
 
   useEffect(() => {
     if (!openActionMenuQaCode) return
@@ -1047,7 +1025,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
           totalPages: assetPage.totalPages || 1,
           totalItems: assetPage.totalItems || 0,
         })
-        setLocations((data.locations || []).filter((location) => location?.hasAsset !== false))
+        setLocations(data.locations || [])
         setCategories(data.categories || [])
         setCategoryDetailsById({})
         setAssetDetailsByQaCode({})
@@ -1105,8 +1083,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
 
   const resetForm = () => {
     setSelectedQaCode(null)
-    setSupplierKeyword('')
-    setShowSupplierOptions(false)
     setFormErrors({})
     setForm({
       trackingMode: activeTrackingMode,
@@ -1508,7 +1484,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       const categoryTemplates = await getCategorySpecTemplates(detail.categoryId || asset.categoryId)
       setSelectedQaCode(asset.qaCode)
       setQrImage('')
-      setSupplierKeyword(detail.supplierName || asset.supplierName || '')
       setForm({
         trackingMode: detail.trackingMode || 'ITEMIZED',
         name: detail.name || asset.name,
@@ -1594,8 +1569,6 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       const createdSupplier = response.data
       setSuppliers((prev) => [...prev, createdSupplier].sort((a, b) => getSupplierLabel(a).localeCompare(getSupplierLabel(b), 'vi')))
       setForm((prev) => ({ ...prev, supplierId: String(createdSupplier.id) }))
-      setSupplierKeyword(getSupplierLabel(createdSupplier))
-      setShowSupplierOptions(false)
       setFormErrors((prev) => ({ ...prev, supplierId: '' }))
       toast.success('Đã thêm nhà cung cấp mới.')
       closeSupplierCreateModal()
@@ -2671,33 +2644,33 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                     <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-3">
                       <div>
                         <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Loại vật tư</label>
-                        <select
+                        <SearchableSelect
                           value={consumableFilterDraft.categoryId}
-                          onChange={(e) => setConsumableFilterDraft((prev) => ({
+                          onChange={(nextValue) => setConsumableFilterDraft((prev) => ({
                             ...prev,
-                            categoryId: e.target.value,
-                            categoryKeyword: getCategoryLabel(categories.find((category) => String(category.id) === e.target.value)) || '',
+                            categoryId: String(nextValue || ''),
+                            categoryKeyword: getCategoryLabel(categories.find((category) => String(category.id) === String(nextValue || ''))) || '',
                           }))}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        >
-                          <option value="">Tất cả loại</option>
-                          {filteredCategoryOptions.map((category) => (
-                            <option key={category.id} value={category.id}>{getCategoryLabel(category)}</option>
-                          ))}
-                        </select>
+                          options={filteredCategoryOptions}
+                          getOptionValue={(category) => category.id}
+                          getOptionLabel={(category) => getCategoryLabel(category)}
+                          placeholder="Gõ để tìm loại vật tư"
+                          emptyOptionLabel="Tất cả loại"
+                          inputClassName="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Kho</label>
-                        <select
+                        <SearchableSelect
                           value={consumableFilterDraft.locationId}
-                          onChange={(e) => setConsumableFilterDraft((prev) => ({ ...prev, locationId: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                        >
-                          <option value="">Tất cả kho</option>
-                          {locations.map((location) => (
-                            <option key={location.id} value={location.id}>{location.roomName}</option>
-                          ))}
-                        </select>
+                          onChange={(nextValue) => setConsumableFilterDraft((prev) => ({ ...prev, locationId: String(nextValue || '') }))}
+                          options={locations}
+                          getOptionValue={(location) => location.id}
+                          getOptionLabel={(location) => location.roomName}
+                          placeholder="Gõ để tìm kho"
+                          emptyOptionLabel="Tất cả kho"
+                          inputClassName="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Trạng thái tồn kho</label>
@@ -3025,25 +2998,23 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
                     Loại thiết bị
                   </label>
-                  <select
+                  <SearchableSelect
                     value={itemizedFilterDraft.categoryId}
-                    onChange={(e) => {
-                      const categoryId = e.target.value
+                    onChange={(nextValue) => {
+                      const categoryId = String(nextValue || '')
                       setItemizedFilterDraft((prev) => ({
                         ...prev,
                         categoryId,
                         categoryKeyword: getCategoryLabel(categories.find((category) => String(category.id) === categoryId)) || '',
                       }))
                     }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="">Tất cả loại</option>
-                    {filteredCategoryOptions.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {getCategoryLabel(category)}
-                      </option>
-                    ))}
-                  </select>
+                    options={filteredCategoryOptions}
+                    getOptionValue={(category) => category.id}
+                    getOptionLabel={(category) => getCategoryLabel(category)}
+                    placeholder="Gõ để tìm loại thiết bị"
+                    emptyOptionLabel="Tất cả loại"
+                    inputClassName="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
@@ -3079,10 +3050,10 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
                     Phòng / vị trí
                   </label>
-                  <select
+                  <SearchableSelect
                     value={itemizedFilterDraft.locationId}
-                    onChange={(e) => {
-                      const locationId = e.target.value
+                    onChange={(nextValue) => {
+                      const locationId = String(nextValue || '')
                       const location = sortedLocations.find((item) => String(item.id) === locationId)
                       setItemizedFilterDraft((prev) => ({
                         ...prev,
@@ -3090,15 +3061,13 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                         locationKeyword: location?.roomName || '',
                       }))
                     }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  >
-                    <option value="">Tất cả phòng</option>
-                    {sortedLocations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.roomName}
-                      </option>
-                    ))}
-                  </select>
+                    options={sortedLocations}
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName}
+                    placeholder="Gõ để tìm phòng / vị trí"
+                    emptyOptionLabel="Tất cả phòng"
+                    inputClassName="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
                 </div>
               </div>
             )}
@@ -3432,18 +3401,16 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Loại vật phẩm' : 'Loại thiết bị'}</label>
-                <select
+                <SearchableSelect
                   value={form.categoryId}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
-                  className={getFieldClass(Boolean(formErrors.categoryId))}
-                >
-                  <option value="">Chọn loại</option>
-                  {formCategoryOptions.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {getCategoryLabel(category)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(nextValue) => handleCategoryChange(String(nextValue || ''))}
+                  options={formCategoryOptions}
+                  getOptionValue={(category) => category.id}
+                  getOptionLabel={(category) => getCategoryLabel(category)}
+                  placeholder="Gõ để tìm loại"
+                  emptyOptionLabel="Chọn loại"
+                  inputClassName={getFieldClass(Boolean(formErrors.categoryId))}
+                />
                 {formErrors.categoryId && <p className="mt-1 text-xs text-red-600">{formErrors.categoryId}</p>}
                 <p className="mt-1 text-xs text-slate-500">
                   Chỉ hiển thị category phù hợp với kiểu theo dõi đang chọn.
@@ -3451,31 +3418,23 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Kho lưu trữ' : 'Phòng gốc'}</label>
-                <select
+                <SearchableSelect
                   value={form.locationId}
-                  onChange={(e) => {
+                  onChange={(nextValue) => {
                     if (isConsumableForm) return
-                    setForm((prev) => ({ ...prev, locationId: e.target.value }))
+                    setForm((prev) => ({ ...prev, locationId: String(nextValue || '') }))
                     setFormErrors((prev) => ({ ...prev, locationId: '' }))
                   }}
                   disabled={isConsumableForm}
-                  className={`${getFieldClass(Boolean(formErrors.locationId))} ${isConsumableForm ? 'cursor-not-allowed bg-slate-100 text-slate-600' : ''}`}
-                >
-                  {isConsumableForm ? (
-                    <option value={consumableStorageLocation?.id || ''}>
-                      {consumableStorageLocation?.roomName || 'Chưa tìm thấy phòng Kho'}
-                    </option>
-                  ) : (
-                    <>
-                      <option value="">Chọn phòng</option>
-                      {locations.map((location) => (
-                        <option key={location.id} value={location.id}>
-                          {location.roomName}
-                        </option>
-                      ))}
-                    </>
-                  )}
-                </select>
+                  options={isConsumableForm
+                    ? [{ id: consumableStorageLocation?.id || '', roomName: consumableStorageLocation?.roomName || 'Chưa tìm thấy phòng Kho' }]
+                    : locations}
+                  getOptionValue={(location) => location.id}
+                  getOptionLabel={(location) => location.roomName}
+                  placeholder={isConsumableForm ? 'Kho lưu trữ' : 'Gõ để tìm phòng'}
+                  emptyOptionLabel={isConsumableForm ? undefined : 'Chọn phòng'}
+                  inputClassName={`${getFieldClass(Boolean(formErrors.locationId))} ${isConsumableForm ? 'cursor-not-allowed bg-slate-100 text-slate-600' : ''}`}
+                />
                 {formErrors.locationId && <p className="mt-1 text-xs text-red-600">{formErrors.locationId}</p>}
                 {isConsumableForm && (
                   <p className="mt-1 text-xs text-slate-500">
@@ -3647,45 +3606,21 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                     +
                   </button>
                 </div>
-                <div ref={supplierOptionsRef} className="relative">
-                  <input
-                    value={supplierKeyword}
-                    onFocus={() => setShowSupplierOptions(true)}
-                    onChange={(e) => {
-                      setSupplierKeyword(e.target.value)
-                      setForm((prev) => ({ ...prev, supplierId: '' }))
-                      setShowSupplierOptions(true)
-                      setFormErrors((prev) => ({ ...prev, supplierId: '' }))
-                    }}
-                    className={getFieldClass(Boolean(formErrors.supplierId))}
-                    placeholder="Gõ để tìm nhà cung cấp"
-                  />
-                  {showSupplierOptions && (
-                    <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                      {filteredSupplierOptions.map((supplier) => (
-                        <button
-                          key={supplier.id}
-                          type="button"
-                          onClick={() => {
-                            setForm((prev) => ({ ...prev, supplierId: String(supplier.id) }))
-                            setSupplierKeyword(getSupplierLabel(supplier))
-                            setShowSupplierOptions(false)
-                            setFormErrors((prev) => ({ ...prev, supplierId: '' }))
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                        >
-                          <div>
-                            <p className="font-medium text-slate-700">{getSupplierLabel(supplier)}</p>
-                            <p className="text-xs text-slate-500">{supplier.phoneNumber || 'Chưa có SĐT'}</p>
-                          </div>
-                        </button>
-                      ))}
-                      {filteredSupplierOptions.length === 0 && (
-                        <p className="px-3 py-2 text-sm text-slate-500">Không có nhà cung cấp phù hợp.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <SearchableSelect
+                  value={form.supplierId}
+                  onChange={(nextValue) => {
+                    setForm((prev) => ({ ...prev, supplierId: String(nextValue || '') }))
+                    setFormErrors((prev) => ({ ...prev, supplierId: '' }))
+                  }}
+                  options={suppliers}
+                  getOptionValue={(supplier) => supplier.id}
+                  getOptionLabel={(supplier) => getSupplierLabel(supplier)}
+                  getOptionDescription={(supplier) => supplier.phoneNumber || 'Chưa có SĐT'}
+                  placeholder="Gõ để tìm nhà cung cấp"
+                  emptyOptionLabel="Chọn nhà cung cấp"
+                  emptyText="Không có nhà cung cấp phù hợp."
+                  inputClassName={getFieldClass(Boolean(formErrors.supplierId))}
+                />
                 {formErrors.supplierId && <p className="mt-1 text-xs text-red-600">{formErrors.supplierId}</p>}
                 {isConsumableForm && <p className="mt-1 text-xs text-slate-500">Trường này là tùy chọn với vật phẩm tiêu hao.</p>}
               </div>
@@ -3849,18 +3784,16 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Phòng nhận</label>
-                  <select
+                  <SearchableSelect
                     value={issueForm.issuedToLocationId}
-                    onChange={(e) => setIssueForm((prev) => ({ ...prev, issuedToLocationId: e.target.value }))}
-                    className={getFieldClass(false)}
-                  >
-                    <option value="">Chọn phòng nhận</option>
-                    {locations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.roomName}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(nextValue) => setIssueForm((prev) => ({ ...prev, issuedToLocationId: String(nextValue || '') }))}
+                    options={locations}
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName}
+                    placeholder="Gõ để tìm phòng nhận"
+                    emptyOptionLabel="Chọn phòng nhận"
+                    inputClassName={getFieldClass(false)}
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng cấp phát</label>
@@ -4045,18 +3978,17 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                 )}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Nhà cung cấp</label>
-                  <select
+                  <SearchableSelect
                     value={receiveForm.supplierId}
-                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, supplierId: e.target.value }))}
-                    className={getFieldClass(false)}
-                  >
-                    <option value="">Chọn nhà cung cấp</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {getSupplierLabel(supplier)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(nextValue) => setReceiveForm((prev) => ({ ...prev, supplierId: String(nextValue || '') }))}
+                    options={suppliers}
+                    getOptionValue={(supplier) => supplier.id}
+                    getOptionLabel={(supplier) => getSupplierLabel(supplier)}
+                    getOptionDescription={(supplier) => supplier.phoneNumber || 'Chưa có SĐT'}
+                    placeholder="Gõ để tìm nhà cung cấp"
+                    emptyOptionLabel="Chọn nhà cung cấp"
+                    inputClassName={getFieldClass(false)}
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-slate-700">Ghi chú lô nhập</label>
@@ -4127,21 +4059,21 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
             <div className="grid gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Vật tư cần cấp phát</label>
-                <select
+                <SearchableSelect
                   value={consumableRequestForm.assetQaCode}
-                  onChange={(e) => {
-                    setSelectedRequestAssetQaCode(e.target.value)
-                    setConsumableRequestForm((prev) => ({ ...prev, assetQaCode: e.target.value }))
+                  onChange={(nextValue) => {
+                    const qaCode = String(nextValue || '')
+                    setSelectedRequestAssetQaCode(qaCode)
+                    setConsumableRequestForm((prev) => ({ ...prev, assetQaCode: qaCode }))
                   }}
-                  className={getFieldClass(false)}
-                >
-                  <option value="">Chọn vật tư</option>
-                  {consumableRequestAssetOptions.map((option) => (
-                    <option key={option.qaCode} value={option.qaCode}>
-                      {option.name} ({option.qaCode})
-                    </option>
-                  ))}
-                </select>
+                  options={consumableRequestAssetOptions}
+                  getOptionValue={(option) => option.qaCode}
+                  getOptionLabel={(option) => `${option.name} (${option.qaCode})`}
+                  getOptionSearchText={(option) => `${option.name} ${option.qaCode}`}
+                  placeholder="Gõ để tìm vật tư"
+                  emptyOptionLabel="Chọn vật tư"
+                  inputClassName={getFieldClass(false)}
+                />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng cần cấp phát</label>

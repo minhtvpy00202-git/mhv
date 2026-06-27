@@ -1,4 +1,4 @@
-import { IconInfoCircle as InfoCircle, IconLayersIntersect as Layers, IconPlus as Plus, IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
+import { IconLayersIntersect as Layers, IconPlus as Plus, IconTool as Wrench, IconTrash as Trash2 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -6,18 +6,22 @@ import axiosClient from '../../api/axiosClient'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
+import AreaTypeFields from './asset-map/AreaTypeFields'
+import { buildAreaTypeOptions, buildAreaTypePayload, resolveAreaTypeDraft } from './asset-map/areaTypes'
 
 const PAGE_SIZE = 10
 const locationColumnOptions = [
   { key: 'id', label: 'ID' },
   { key: 'roomName', label: 'Tên phòng / khu vực' },
+  { key: 'areaTypeLabel', label: 'Loại khu vực' },
   { key: 'floorName', label: 'Tầng' },
   { key: 'actions', label: 'Thao tác' },
 ]
-const defaultLocationVisibleColumnKeys = ['id', 'roomName', 'floorName', 'actions']
+const defaultLocationVisibleColumnKeys = ['id', 'roomName', 'areaTypeLabel', 'floorName', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -44,13 +48,17 @@ function LocationManagement() {
   const [selectedLocationId, setSelectedLocationId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [floors, setFloors] = useState([])
+  const [areaTypeCatalog, setAreaTypeCatalog] = useState([])
   const [filters, setFilters] = useState({
     keyword: '',
   })
   const [form, setForm] = useState({
     roomName: '',
     floorId: '',
-    hasAsset: true,
+    areaTypeKey: '',
+    areaTypeLabel: '',
+    areaGroupKey: '',
+    areaGroupLabel: '',
   })
   const [floorForm, setFloorForm] = useState({
     name: '',
@@ -77,6 +85,28 @@ function LocationManagement() {
   })
 
   const isEditing = Boolean(selectedLocationId)
+  const areaTypeCatalogEntries = useMemo(
+    () => (areaTypeCatalog || []).map((item) => ({
+      id: item.id,
+      typeKey: item.typeKey,
+      label: item.label,
+      areaGroupKey: item.areaGroupKey,
+      areaGroupLabel: item.areaGroupLabel,
+      description: item.description,
+      builtIn: item.builtIn !== false,
+    })),
+    [areaTypeCatalog],
+  )
+  const areaTypeOptions = useMemo(
+    () => buildAreaTypeOptions(
+      areaTypeCatalogEntries,
+      locations.map((location) => ({
+        key: location.areaTypeKey,
+        label: location.areaTypeLabel,
+      })),
+    ),
+    [areaTypeCatalogEntries, locations],
+  )
   const totalPages = Math.max(1, Math.ceil(sortedLocations.length / PAGE_SIZE))
   const paginatedLocations = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -106,6 +136,17 @@ function LocationManagement() {
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
       cellClassName: 'px-3 py-2',
       render: (location) => location.roomName,
+    },
+    {
+      key: 'areaTypeLabel',
+      label: (
+        <button type="button" onClick={() => handleSort('areaTypeLabel')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('areaTypeLabel', 'Loại khu vực')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
+      cellClassName: 'px-3 py-2',
+      render: (location) => location.areaTypeLabel || 'Chưa phân loại',
     },
     {
       key: 'floorName',
@@ -156,7 +197,7 @@ function LocationManagement() {
   const loadLocations = useCallback(async (nextFilters = filters) => {
     setLoading(true)
     try {
-      const params = { hasAsset: true }
+      const params = {}
       if (nextFilters.keyword.trim()) params.keyword = nextFilters.keyword.trim()
       const response = await axiosClient.get('/api/locations', { params })
       setLocations(response.data || [])
@@ -179,16 +220,27 @@ function LocationManagement() {
     }
   }, [])
 
+  const loadAreaTypes = useCallback(async () => {
+    try {
+      const response = await axiosClient.get('/api/asset-map/area-types')
+      setAreaTypeCatalog(response.data || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể tải danh mục loại khu vực.'
+      toast.error(message)
+    }
+  }, [])
+
   useEffect(() => {
     const bootstrapTimer = window.setTimeout(() => {
       void loadLocations()
       void loadFloors()
+      void loadAreaTypes()
     }, 0)
 
     return () => {
       window.clearTimeout(bootstrapTimer)
     }
-  }, [loadFloors, loadLocations])
+  }, [loadAreaTypes, loadFloors, loadLocations])
 
   useDebouncedEffect(() => {
     void loadLocations(filters)
@@ -200,7 +252,7 @@ function LocationManagement() {
 
   const resetForm = () => {
     setSelectedLocationId(null)
-    setForm({ roomName: '', floorId: '', hasAsset: true })
+    setForm({ roomName: '', floorId: '', areaTypeKey: '', areaTypeLabel: '', areaGroupKey: '', areaGroupLabel: '' })
   }
 
   const closeFormModal = () => {
@@ -222,10 +274,14 @@ function LocationManagement() {
 
   const handleSelectLocation = (location) => {
     setSelectedLocationId(location.id)
+    const areaTypeDraft = resolveAreaTypeDraft(location, areaTypeCatalogEntries)
     setForm({
       roomName: location.roomName || '',
       floorId: location.floorId != null ? String(location.floorId) : '',
-      hasAsset: location.hasAsset !== false,
+      areaTypeKey: areaTypeDraft.areaTypeKey,
+      areaTypeLabel: areaTypeDraft.areaTypeLabel,
+      areaGroupKey: areaTypeDraft.areaGroupKey,
+      areaGroupLabel: areaTypeDraft.areaGroupLabel,
     })
     setShowFormModal(true)
   }
@@ -255,12 +311,18 @@ function LocationManagement() {
       toast.error('Vui lòng nhập tên phòng hoặc khu vực.')
       return
     }
+    const areaTypePayload = buildAreaTypePayload(form.areaTypeKey, form.areaTypeLabel, areaTypeCatalogEntries, form.areaGroupLabel)
+    if (!areaTypePayload.areaTypeLabel) {
+      toast.error('Vui lòng chọn loại khu vực.')
+      return
+    }
     setSubmitting(true)
     try {
       await axiosClient.post('/api/locations', {
         roomName: form.roomName.trim(),
         floorId: form.floorId ? Number(form.floorId) : null,
-        hasAsset: Boolean(form.hasAsset),
+        areaTypeKey: areaTypePayload.areaTypeKey,
+        areaTypeLabel: areaTypePayload.areaTypeLabel,
       })
       toast.success('Thêm phòng thành công.')
       closeFormModal()
@@ -279,12 +341,18 @@ function LocationManagement() {
       toast.error('Vui lòng nhập tên phòng hoặc khu vực.')
       return
     }
+    const areaTypePayload = buildAreaTypePayload(form.areaTypeKey, form.areaTypeLabel, areaTypeCatalogEntries, form.areaGroupLabel)
+    if (!areaTypePayload.areaTypeLabel) {
+      toast.error('Vui lòng chọn loại khu vực.')
+      return
+    }
     setSubmitting(true)
     try {
       await axiosClient.put(`/api/locations/${selectedLocationId}`, {
         roomName: form.roomName.trim(),
         floorId: form.floorId ? Number(form.floorId) : null,
-        hasAsset: Boolean(form.hasAsset),
+        areaTypeKey: areaTypePayload.areaTypeKey,
+        areaTypeLabel: areaTypePayload.areaTypeLabel,
       })
       toast.success('Cập nhật phòng thành công.')
       closeFormModal()
@@ -478,7 +546,7 @@ function LocationManagement() {
           <input
             value={filters.keyword}
             onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
-            placeholder="Tìm theo tên phòng hoặc khu vực"
+            placeholder="Tìm theo tên phòng, khu vực"
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
           />
           <button
@@ -695,44 +763,24 @@ function LocationManagement() {
                   <Plus size={16} />
                 </button>
               </div>
-              <select
+              <SearchableSelect
                 value={form.floorId}
-                onChange={(e) => setForm((prev) => ({ ...prev, floorId: e.target.value }))}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              >
-                <option value="">Chưa gán tầng</option>
-                {floors.map((floor) => (
-                  <option key={floor.id} value={floor.id}>
-                    {floor.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(nextValue) => setForm((prev) => ({ ...prev, floorId: String(nextValue || '') }))}
+                options={floors}
+                getOptionValue={(floor) => floor.id}
+                getOptionLabel={(floor) => floor.name}
+                placeholder="Gõ để tìm tầng"
+                emptyOptionLabel="Chưa gán tầng"
+              />
             </div>
 
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(form.hasAsset)}
-                    onChange={(e) => setForm((prev) => ({ ...prev, hasAsset: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
-                  />
-                  Khu vực chứa tài sản
-                </label>
-                <div className="group relative mt-0.5">
-                  <button
-                    type="button"
-                    className="text-slate-400 transition hover:text-slate-600"
-                    aria-label="Giải thích khu vực chứa tài sản"
-                  >
-                    <InfoCircle size={16} />
-                  </button>
-                  <div className="pointer-events-none absolute left-1/2 top-7 z-10 hidden w-64 -translate-x-1/2 rounded-xl bg-slate-900 px-3 py-2 text-xs leading-5 text-white shadow-xl group-hover:block group-focus-within:block">
-                    Bật tùy chọn này nếu khu vực được phép dùng làm vị trí đặt hoặc lưu trữ tài sản. Nếu bỏ chọn, khu vực chỉ dùng để hiển thị trên sơ đồ như hành lang, sân hoặc cổng.
-                  </div>
-                </div>
-              </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <AreaTypeFields
+                draft={form}
+                onDraftChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                areaTypeOptions={areaTypeOptions}
+                areaTypePresets={areaTypeCatalogEntries}
+              />
             </div>
 
             <div className="mt-4 flex gap-2">

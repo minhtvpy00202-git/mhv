@@ -43,11 +43,8 @@ public class LocationController {
             @ApiResponse(responseCode = "200", description = "Lấy danh sách phòng thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<List<LocationResponse>> getAllLocations(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Boolean hasAsset
-    ) {
-        return ResponseEntity.ok(locationService.getAllLocations(keyword, hasAsset));
+    public ResponseEntity<List<LocationResponse>> getAllLocations(@RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(locationService.getAllLocations(keyword));
     }
 
     @GetMapping("/{id}")

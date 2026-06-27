@@ -79,10 +79,8 @@ function QRScanner() {
 
   async function fetchLocations() {
     try {
-      const response = await axiosClient.get('/api/locations', {
-        params: { hasAsset: true },
-      })
-      setLocations((response.data || []).filter((location) => location?.hasAsset !== false))
+      const response = await axiosClient.get('/api/locations')
+      setLocations(response.data || [])
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách phòng.'
       toast.error(message)

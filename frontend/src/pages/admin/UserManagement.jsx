@@ -34,6 +34,7 @@ const PAGE_SIZE = 10
 const userColumnOptions = [
   { key: 'username', label: 'Username' },
   { key: 'fullName', label: 'Họ tên' },
+  { key: 'email', label: 'Email' },
   { key: 'birthday', label: 'Ngày sinh' },
   { key: 'phone', label: 'Số điện thoại' },
   { key: 'role', label: 'Vai trò' },
@@ -41,7 +42,7 @@ const userColumnOptions = [
   { key: 'status', label: 'Trạng thái' },
   { key: 'actions', label: 'Thao tác' },
 ]
-const defaultUserVisibleColumnKeys = ['username', 'fullName', 'phone', 'role', 'status', 'actions']
+const defaultUserVisibleColumnKeys = ['username', 'fullName', 'email', 'phone', 'role', 'status', 'actions']
 
 function createDefaultConfirmDialog() {
   return {
@@ -79,6 +80,7 @@ function UserManagement() {
     username: '',
     password: '',
     fullName: '',
+    email: '',
     birthday: '',
     phone: '',
     role: 'NhanVien',
@@ -162,6 +164,7 @@ function UserManagement() {
       username: '',
       password: '',
       fullName: '',
+      email: '',
       birthday: '',
       phone: '',
       role: 'NhanVien',
@@ -186,6 +189,7 @@ function UserManagement() {
       username: item.username || '',
       password: '',
       fullName: item.fullName || '',
+      email: item.email || '',
       birthday: item.birthday || '',
       phone: item.phone || '',
       role: item.role || 'NhanVien',
@@ -198,6 +202,10 @@ function UserManagement() {
   const handleCreate = async () => {
     if (!form.username || !form.password || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
       toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
+      return
+    }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error('Email không đúng định dạng.')
       return
     }
     if (!/^0\d{9}$/.test(form.phone.trim())) {
@@ -218,6 +226,7 @@ function UserManagement() {
         username: form.username.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
+        email: form.email.trim() || null,
         birthday: form.birthday,
         phone: form.phone.trim(),
         role: form.role,
@@ -241,6 +250,18 @@ function UserManagement() {
       toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
       return
     }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error('Email không đúng định dạng.')
+      return
+    }
+    if (form.phone && !/^0\d{9}$/.test(form.phone.trim())) {
+      toast.error('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.')
+      return
+    }
+    if (form.birthday && new Date(form.birthday) >= new Date()) {
+      toast.error('Ngày sinh phải là ngày trong quá khứ.')
+      return
+    }
     if (isTechSupportRole && form.techTypeIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
       return
@@ -251,6 +272,7 @@ function UserManagement() {
         username: form.username.trim(),
         password: form.password || null,
         fullName: form.fullName.trim(),
+        email: form.email.trim() || null,
         birthday: form.birthday || null,
         phone: form.phone.trim() || null,
         role: form.role,
@@ -337,6 +359,17 @@ function UserManagement() {
       headClassName: 'whitespace-nowrap px-3 py-2 text-left',
       cellClassName: 'px-3 py-2',
       render: (row) => row.fullName || '-',
+    },
+    {
+      key: 'email',
+      label: (
+        <button type="button" onClick={() => handleSort('email')} className="whitespace-nowrap hover:text-fptOrange">
+          {getSortLabel('email', 'Email')}
+        </button>
+      ),
+      headClassName: 'whitespace-nowrap px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (row) => row.email || '-',
     },
     {
       key: 'birthday',
@@ -435,7 +468,7 @@ function UserManagement() {
           <input
             value={filters.keyword}
             onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
-            placeholder="Tìm username / họ tên"
+            placeholder="Tìm username / họ tên / email"
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
           />
           <select
@@ -619,6 +652,16 @@ function UserManagement() {
                   onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                   placeholder="Nhập họ và tên"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  placeholder="Nhập email"
                 />
               </div>
               <div>

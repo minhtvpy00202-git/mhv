@@ -161,7 +161,7 @@ public class AssetController {
     ) {
         return ResponseEntity.ok(new AssetManagementBootstrapResponse(
                 assetService.getAssets(page, size, name, status, technicalStatus, usageStatus, trackingMode, categoryId, locationId, sortKey, sortDirection),
-                locationService.getAllLocations(null, true),
+                locationService.getAllLocations(null),
                 categoryService.getCategoryOptions(),
                 supplierService.getAll(null)
         ));

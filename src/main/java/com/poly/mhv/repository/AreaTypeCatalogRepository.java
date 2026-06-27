@@ -18,4 +18,6 @@ public interface AreaTypeCatalogRepository extends JpaRepository<AreaTypeCatalog
     boolean existsByLabelIgnoreCaseAndIdNot(String label, Integer id);
 
     Optional<AreaTypeCatalog> findByTypeKeyIgnoreCase(String typeKey);
+
+    Optional<AreaTypeCatalog> findByLabelIgnoreCase(String label);
 }

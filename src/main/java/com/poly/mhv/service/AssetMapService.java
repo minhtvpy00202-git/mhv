@@ -71,7 +71,7 @@ public class AssetMapService {
     public AssetMapBootstrapResponse getBootstrap() {
         return AssetMapBootstrapResponse.builder()
                 .floors(getFloors())
-                .locations(locationService.getAllLocations(null, null))
+                .locations(locationService.getAllLocations(null))
                 .categories(categoryService.getCategoryOptions())
                 .areaTypes(areaTypeCatalogService.getAllAreaTypes())
                 .build();
@@ -272,7 +272,6 @@ public class AssetMapService {
 
     private Location resolveLocation(RoomShapeSaveRequest shapeRequest, MapFloor floor) {
         String normalizedRoomName = normalizeRoomName(shapeRequest.getRoomName(), shapeRequest.getLocationId());
-        boolean requestedHasAsset = resolveRequestedHasAsset(shapeRequest.getHasAsset());
         if (shapeRequest.getLocationId() != null) {
             Location location = locationRepository.findById(shapeRequest.getLocationId())
                     .orElseThrow(() -> new CustomException("Khong tim thay phong de gan vao so do."));
@@ -284,8 +283,6 @@ public class AssetMapService {
             if (StringUtils.hasText(normalizedRoomName)) {
                 location.setRoomName(normalizedRoomName);
             }
-            validateHasAssetChange(location, requestedHasAsset);
-            location.setHasAsset(requestedHasAsset);
             location.setFloor(floor);
             return locationRepository.save(location);
         }
@@ -299,7 +296,6 @@ public class AssetMapService {
         return locationRepository.save(Location.builder()
                 .roomName(normalizedRoomName)
                 .floor(floor)
-                .hasAsset(requestedHasAsset)
                 .build());
     }
 
@@ -348,33 +344,29 @@ public class AssetMapService {
         return StringUtils.hasText(normalized) ? normalized : null;
     }
 
-    private boolean resolveRequestedHasAsset(Boolean requestedHasAsset) {
-        return requestedHasAsset == null || requestedHasAsset;
-    }
-
     private String normalizeAreaTypeLabel(String areaTypeLabel) {
-        String normalized = areaTypeLabel == null ? null : areaTypeLabel.trim().replaceAll("\\s+", " ");
-        if (!StringUtils.hasText(normalized)) {
+        String resolved = areaTypeLabel == null ? null : areaTypeLabel.trim().replaceAll("\\s+", " ");
+        if (!StringUtils.hasText(resolved)) {
             return null;
         }
-        if (normalized.length() > 120) {
+        if (resolved.length() > 120) {
             throw new CustomException("Ten loai khu vuc khong duoc vuot qua 120 ky tu.");
         }
-        return normalized;
+        return resolved;
     }
 
     private String resolveAreaTypeKey(String areaTypeKey, String areaTypeLabel) {
-        String normalizedKey = areaTypeKey == null ? null : areaTypeKey.trim().replaceAll("\\s+", "");
+        String resolved = areaTypeKey == null ? null : areaTypeKey.trim().replaceAll("\\s+", "");
         if (!StringUtils.hasText(areaTypeLabel)) {
             return null;
         }
-        if (!StringUtils.hasText(normalizedKey)) {
+        if (!StringUtils.hasText(resolved)) {
             return "CUSTOM:" + slugifyAreaTypeLabel(areaTypeLabel);
         }
-        if (normalizedKey.length() > 80) {
+        if (resolved.length() > 80) {
             throw new CustomException("Ma loai khu vuc khong hop le.");
         }
-        return normalizedKey.toUpperCase(Locale.ROOT);
+        return resolved.toUpperCase(Locale.ROOT);
     }
 
     private String slugifyAreaTypeLabel(String areaTypeLabel) {
@@ -398,19 +390,6 @@ public class AssetMapService {
         }
         String slug = builder.toString().replaceAll("-+", "-").replaceAll("^-|-$", "");
         return StringUtils.hasText(slug) ? slug : "custom-area";
-    }
-
-    private boolean resolveHasAsset(Location location) {
-        return location.getHasAsset() == null || location.getHasAsset();
-    }
-
-    private void validateHasAssetChange(Location location, boolean requestedHasAsset) {
-        if (resolveHasAsset(location) == requestedHasAsset) {
-            return;
-        }
-        if (assetRepository.countByLocationIdOrHomeLocationId(location.getId(), location.getId()) > 0) {
-            throw new CustomException("Khong the doi trang thai chua tai san vi khu vuc nay da co tai san duoc gan.");
-        }
     }
 
     private Integer normalizeGridSize(Integer value, Integer fallback, String label) {
@@ -477,7 +456,6 @@ public class AssetMapService {
                 .floorName(shape.getFloor().getName())
                 .locationId(shape.getLocation().getId())
                 .roomName(shape.getLocation().getRoomName())
-                .hasAsset(resolveHasAsset(shape.getLocation()))
                 .cells(readCells(shape.getCellsJson()))
                 .points(readPoints(shape.getPolygonJson()))
                 .bounds(readBounds(shape.getBoundsJson()))

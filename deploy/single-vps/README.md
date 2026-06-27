@@ -139,3 +139,45 @@ Neu co nhieu anh/media hoac import nhieu, nen uu tien:
 
 - `4 GB RAM`
 - hoac gan them DO Volume cho data
+
+## 10. Tach DB giua App Platform va VPS
+
+Bo file nay chi anh huong toi stack tren Droplet:
+
+- `web` + `app` + `postgres` tren VPS se dung PostgreSQL noi bo cua VPS
+- App Platform van co the tiep tuc dung Managed PostgreSQL cua DigitalOcean qua environment variables rieng cua App Platform
+
+Nghia la:
+
+- `http://your-duckdns-domain` se doc/ghi vao DB tren VPS
+- App Platform van doc/ghi vao Database Cluster neu ban giu nguyen `SPRING_DATASOURCE_*` trong App Platform
+
+## 11. Chay local nhung dung DB tren VPS
+
+Neu ban muon backend chay tren may ca nhan nhung dung cung DB voi VPS:
+
+1. Tren VPS, `docker-compose.yml` da publish Postgres vao `127.0.0.1:5432` cua chinh VPS.
+2. Tren may ca nhan, mo SSH tunnel:
+
+```bash
+ssh -N -L 5433:127.0.0.1:5432 root@YOUR_VPS_IP
+```
+
+3. Chay backend local voi profile `vpsdb`.
+
+Spring Boot da co file [application-vpsdb.properties](file:///Users/tranminh/FPOLY/AI/mhv/src/main/resources/application-vpsdb.properties) voi default:
+
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5433/mhv
+spring.datasource.username=mhv
+```
+
+Chi can set trong IntelliJ:
+
+```env
+SPRING_PROFILES_ACTIVE=vpsdb
+SPRING_DATASOURCE_PASSWORD=your_vps_postgres_password
+JWT_SECRET=your_jwt_secret
+```
+
+Neu muon override host/port/db/user, ban co the set lai `SPRING_DATASOURCE_URL` va `SPRING_DATASOURCE_USERNAME` nhu binh thuong.

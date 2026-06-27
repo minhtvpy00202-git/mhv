@@ -6,6 +6,7 @@ import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
@@ -409,18 +410,15 @@ function CategoryManagement() {
                 placeholder="Tìm theo tên loại thiết bị"
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
             />
-            <select
-                value={filters.techTypeId}
-                onChange={(e) => setFilters((prev) => ({ ...prev, techTypeId: e.target.value }))}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            >
-              <option value="">Tất cả nhóm kỹ thuật</option>
-              {techSupportTypeOptions.map((item) => (
-                  <option key={item.techTypeId} value={item.techTypeId}>
-                    {item.label}
-                  </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={filters.techTypeId}
+              onChange={(nextValue) => setFilters((prev) => ({ ...prev, techTypeId: String(nextValue || '') }))}
+              options={techSupportTypeOptions}
+              getOptionValue={(item) => item.techTypeId}
+              getOptionLabel={(item) => item.label}
+              placeholder="Gõ để tìm nhóm kỹ thuật"
+              emptyOptionLabel="Tất cả nhóm kỹ thuật"
+            />
             <div className="grid gap-2 sm:grid-cols-2">
               <button
                   type="button"
@@ -589,22 +587,20 @@ function CategoryManagement() {
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Nhóm kỹ thuật phụ trách</label>
-                    <select
-                        value={form.techTypeId}
-                        onChange={(e) => {
-                          setForm((prev) => ({ ...prev, techTypeId: e.target.value }))
-                          setFormErrors((prev) => ({ ...prev, techTypeId: '' }))
-                        }}
-                        disabled={isConsumableCategory(form.categoryKind)}
-                        className={getFieldClass(Boolean(formErrors.techTypeId))}
-                    >
-                      <option value="">{isConsumableCategory(form.categoryKind) ? 'Không áp dụng cho vật tư tiêu hao' : 'Chọn nhóm kỹ thuật'}</option>
-                      {techSupportTypeOptions.map((item) => (
-                          <option key={item.techTypeId} value={item.techTypeId}>
-                            {item.label}
-                          </option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={form.techTypeId}
+                      onChange={(nextValue) => {
+                        setForm((prev) => ({ ...prev, techTypeId: String(nextValue || '') }))
+                        setFormErrors((prev) => ({ ...prev, techTypeId: '' }))
+                      }}
+                      options={techSupportTypeOptions}
+                      getOptionValue={(item) => item.techTypeId}
+                      getOptionLabel={(item) => item.label}
+                      placeholder="Gõ để tìm nhóm kỹ thuật"
+                      emptyOptionLabel={isConsumableCategory(form.categoryKind) ? 'Không áp dụng cho vật tư tiêu hao' : 'Chọn nhóm kỹ thuật'}
+                      disabled={isConsumableCategory(form.categoryKind)}
+                      inputClassName={getFieldClass(Boolean(formErrors.techTypeId))}
+                    />
                     {isConsumableCategory(form.categoryKind) && (
                         <p className="mt-1 text-xs text-slate-500">Category tiêu hao không cần gán nhóm kỹ thuật viên.</p>
                     )}

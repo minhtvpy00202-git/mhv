@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
+import { buildAreaGroupOptions } from './areaTypes'
 
 function createDefaultForm() {
   return {
     label: '',
+    areaGroupLabel: '',
     description: '',
-    defaultHasAsset: true,
   }
 }
 
@@ -23,6 +24,7 @@ export default function AreaTypeCatalogModal({
     () => (areaTypes || []).find((item) => Number(item.id) === Number(editingId)) || null,
     [areaTypes, editingId],
   )
+  const areaGroupOptions = useMemo(() => buildAreaGroupOptions(areaTypes), [areaTypes])
 
   const resetForm = () => {
     setEditingId(null)
@@ -33,8 +35,8 @@ export default function AreaTypeCatalogModal({
     setEditingId(item.id)
     setForm({
       label: item.label || '',
+      areaGroupLabel: item.areaGroupLabel || '',
       description: item.description || '',
-      defaultHasAsset: item.defaultHasAsset !== false,
     })
   }
 
@@ -89,7 +91,7 @@ export default function AreaTypeCatalogModal({
           <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
             <div className="grid grid-cols-[minmax(0,1.4fr)_100px_100px_110px_84px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400">
               <span>Loại khu vực</span>
-              <span>Chứa tài sản</span>
+              <span>Nhóm</span>
               <span>Đang dùng</span>
               <span>Loại</span>
               <span className="text-right">Tác vụ</span>
@@ -108,7 +110,7 @@ export default function AreaTypeCatalogModal({
                       `{item.typeKey}`{item.description ? ` · ${item.description}` : ''}
                     </p>
                   </div>
-                  <div className="text-slate-600 dark:text-slate-300">{item.defaultHasAsset !== false ? 'Có' : 'Không'}</div>
+                  <div className="text-slate-600 dark:text-slate-300">{item.areaGroupLabel || 'Chưa phân nhóm'}</div>
                   <div className="text-slate-600 dark:text-slate-300">{item.usageCount || 0}</div>
                   <div>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -151,7 +153,7 @@ export default function AreaTypeCatalogModal({
                 </h4>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {editingItem
-                    ? 'Có thể đổi tên hiển thị, mô tả và mặc định chứa tài sản.'
+                    ? 'Có thể đổi tên hiển thị, nhóm khu vực và mô tả.'
                     : 'Tạo loại mới để dùng trong danh sách chọn khi thêm hoặc sửa phòng.'}
                 </p>
               </div>
@@ -177,6 +179,21 @@ export default function AreaTypeCatalogModal({
                 />
               </div>
               <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Nhóm khu vực</label>
+                <select
+                  value={form.areaGroupLabel}
+                  onChange={(event) => setForm((previous) => ({ ...previous, areaGroupLabel: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="">Chọn nhóm khu vực</option>
+                  {areaGroupOptions.map((option) => (
+                    <option key={option.key} value={option.label}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Mô tả</label>
                 <textarea
                   rows={4}
@@ -186,15 +203,6 @@ export default function AreaTypeCatalogModal({
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={form.defaultHasAsset !== false}
-                  onChange={(event) => setForm((previous) => ({ ...previous, defaultHasAsset: event.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
-                />
-                Mặc định là khu vực có thể chứa tài sản
-              </label>
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
@@ -209,7 +217,7 @@ export default function AreaTypeCatalogModal({
               <button
                 type="button"
                 onClick={() => { void handleSubmit() }}
-                disabled={submitting || !form.label.trim()}
+                disabled={submitting || !form.label.trim() || !form.areaGroupLabel.trim()}
                 className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-50"
               >
                 {submitting ? 'Đang lưu...' : (editingItem ? 'Lưu thay đổi' : 'Thêm loại')}

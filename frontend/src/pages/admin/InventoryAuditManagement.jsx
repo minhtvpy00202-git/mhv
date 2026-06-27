@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx' // Import thư viện xuất Excel từ Frontend
 import axiosClient from '../../api/axiosClient'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime, toDateTimeLocalValue } from '../../utils/datetime'
 
@@ -178,7 +179,7 @@ function InventoryAuditManagement() {
       })
       const data = response.data || {}
       const auditPage = data.audits || {}
-      setLocations((data.locations || []).filter((location) => location?.hasAsset !== false))
+      setLocations(data.locations || [])
       setAudits(auditPage.items || [])
       setPageInfo({
         page: auditPage.page ?? 0,
@@ -462,18 +463,15 @@ function InventoryAuditManagement() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="space-y-1">
               <span className="text-xs font-medium text-slate-500">Phòng kiểm kê</span>
-              <select
-                  value={form.locationId}
-                  onChange={(e) => setForm((prev) => ({ ...prev, locationId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-              >
-                <option value="">Chọn phòng kiểm kê</option>
-                {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.roomName}
-                    </option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.locationId}
+                onChange={(nextValue) => setForm((prev) => ({ ...prev, locationId: String(nextValue || '') }))}
+                options={locations}
+                getOptionValue={(location) => location.id}
+                getOptionLabel={(location) => location.roomName}
+                placeholder="Gõ để tìm phòng kiểm kê"
+                emptyOptionLabel="Chọn phòng kiểm kê"
+              />
             </label>
 
             <label className="space-y-1">

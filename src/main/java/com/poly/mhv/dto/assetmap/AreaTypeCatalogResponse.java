@@ -13,8 +13,9 @@ public class AreaTypeCatalogResponse {
     private Integer id;
     private String typeKey;
     private String label;
+    private String areaGroupKey;
+    private String areaGroupLabel;
     private String description;
-    private Boolean defaultHasAsset;
     private Boolean builtIn;
     private Integer sortOrder;
     private Long usageCount;

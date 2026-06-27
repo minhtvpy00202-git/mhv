@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
+import SearchableSelect from '../../components/ui/SearchableSelect'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { getTechnicalStatusLabel } from '../../utils/assetStatus'
@@ -75,7 +76,6 @@ function UsageHistoryManagement() {
             },
           }),
           axiosClient.get('/api/locations', {
-            params: { hasAsset: true },
           }),
           axiosClient.get('/api/users/borrowers'),
         ])
@@ -87,7 +87,7 @@ function UsageHistoryManagement() {
           totalPages: historyData.totalPages || 1,
           totalItems: historyData.totalItems || 0,
         })
-        setLocations((locationRes.data || []).filter((location) => location?.hasAsset !== false))
+        setLocations(locationRes.data || [])
         setUsers(userRes.data || [])
         setSortState(defaultSortState)
       } catch (error) {
@@ -306,18 +306,16 @@ function UsageHistoryManagement() {
             </div>
           )}
         </div>
-        <select
+        <SearchableSelect
           value={filters.userId}
-          onChange={(e) => setFilters((prev) => ({ ...prev, userId: e.target.value }))}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-        >
-          <option value="">Tất cả người mượn</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.username}
-            </option>
-          ))}
-        </select>
+          onChange={(nextValue) => setFilters((prev) => ({ ...prev, userId: String(nextValue || '') }))}
+          options={users}
+          getOptionValue={(user) => user.id}
+          getOptionLabel={(user) => user.fullName || user.username}
+          getOptionSearchText={(user) => `${user.fullName || ''} ${user.username || ''}`}
+          placeholder="Gõ để tìm người mượn"
+          emptyOptionLabel="Tất cả người mượn"
+        />
         <input
           type="date"
           value={filters.startDate}
