@@ -521,6 +521,7 @@ public class TicketService {
                 .maxSlaMinutes(maxSla)
                 .build();
     }
+    
 
     private List<AppUser> getEligibleTechSupportsByAsset(Asset asset) {
         Integer techTypeId = getAssetTechTypeId(asset);
