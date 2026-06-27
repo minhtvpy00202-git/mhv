@@ -211,6 +211,12 @@ public class AssetController {
         return ResponseEntity.ok(assetService.getConsumableLocationStocks(qaCode));
     }
 
+    @GetMapping("/consumables/rooms-overview")
+    @Operation(summary = "Tổng hợp vật tư tất cả phòng", description = "Trả về tồn kho, lịch sử cấp phát và yêu cầu của tất cả phòng (trừ Kho) trong một lần gọi.")
+    public ResponseEntity<ConsumableLocationOverviewResponse> getAllTrackableConsumableRoomsOverview() {
+        return ResponseEntity.ok(assetService.getAllTrackableConsumableRoomsOverview());
+    }
+
     @GetMapping("/locations/{locationId}/consumables")
     @Operation(summary = "Tổng hợp vật tư theo phòng", description = "Trả về các vật tư đã cấp phát cho phòng cùng lịch sử cấp phát theo phòng.")
     public ResponseEntity<ConsumableLocationOverviewResponse> getConsumableLocationOverview(@PathVariable Integer locationId) {

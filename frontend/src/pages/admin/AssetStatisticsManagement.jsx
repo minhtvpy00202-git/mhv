@@ -658,6 +658,13 @@ function AssetStatisticsManagement() {
 
           {activeTab === 'consumables' && (
             <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <KpiCard label="Giá trị tồn" value={formatCurrency(summary.consumableInventoryValue)} helper={`${formatNumber(summary.consumableCount)} mã vật tư`} tone="green" />
+                <KpiCard label="Vật tư cần nhập" value={formatNumber(summary.lowStockConsumableCount)} helper="Dưới hoặc bằng ngưỡng cảnh báo" tone="orange" />
+                <KpiCard label="Lô hết hạn" value={formatNumber(summary.expiredLotCount)} helper={`${formatNumber(summary.expiringSoonLotCount)} lô sắp hết hạn 30 ngày`} tone="red" />
+                <KpiCard label="Phiếu chờ duyệt" value={formatNumber(summary.pendingConsumableRequestCount)} helper={`${formatNumber(summary.pendingDisposalRequestCount)} phiếu tiêu huỷ chờ duyệt`} tone="slate" />
+              </div>
+
               <div className="grid gap-4 xl:grid-cols-3">
                 <Section title="Tồn kho vật tư" subtitle="Đủ dùng, cần nhập và hết hàng.">
                   <div className="h-72">

@@ -52,6 +52,12 @@ public class RoomShape {
     @Column(name = "color_hex", length = 20)
     private String colorHex;
 
+    @Column(name = "area_type_key", length = 80)
+    private String areaTypeKey;
+
+    @Column(name = "area_type_label", length = 120)
+    private String areaTypeLabel;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

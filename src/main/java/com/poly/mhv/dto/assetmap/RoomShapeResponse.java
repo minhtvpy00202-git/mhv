@@ -21,4 +21,6 @@ public class RoomShapeResponse {
     private List<AssetMapPointDto> points;
     private AssetMapBoundsDto bounds;
     private String colorHex;
+    private String areaTypeKey;
+    private String areaTypeLabel;
 }
