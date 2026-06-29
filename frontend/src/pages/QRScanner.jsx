@@ -25,6 +25,8 @@ function QRScanner() {
   const [locationQuery, setLocationQuery] = useState('')
   const [showLocationOptions, setShowLocationOptions] = useState(false)
   const [loadingAction, setLoadingAction] = useState(false)
+  const [manualQaCode, setManualQaCode] = useState('')
+  const [manualLookupLoading, setManualLookupLoading] = useState(false)
   const { user } = useAuth()
 
   const userId = useMemo(() => user?.userId ?? null, [user])
@@ -133,14 +135,11 @@ function QRScanner() {
           const qaCode = extractQaCode(decodedText)
           if (!qaCode) return
           await stopScanner()
-          setScannedQaCode(qaCode)
-          const exists = await fetchAssetInfo(qaCode)
+          const exists = await openActionModalByQaCode(qaCode)
           if (!exists) {
-            setScannedQaCode('')
             startScanner()
             return
           }
-          setShowActionModal(true)
         },
         () => {},
       )
@@ -148,6 +147,20 @@ function QRScanner() {
     } catch {
       toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.')
     }
+  }
+
+  const openActionModalByQaCode = async (qaCode) => {
+    const normalizedQaCode = String(qaCode || '').trim()
+    if (!normalizedQaCode) return false
+    setScannedQaCode(normalizedQaCode)
+    setManualQaCode(normalizedQaCode)
+    const exists = await fetchAssetInfo(normalizedQaCode)
+    if (!exists) {
+      setScannedQaCode('')
+      return false
+    }
+    setShowActionModal(true)
+    return true
   }
 
   async function stopScanner() {
@@ -177,8 +190,25 @@ function QRScanner() {
     setScannedSpecs([])
     setToLocationId('')
     setLocationQuery('')
+    setManualQaCode('')
     setShowLocationOptions(false)
     startScanner()
+  }
+
+  const handleManualLookup = async () => {
+    const normalizedQaCode = extractQaCode(manualQaCode)
+    if (!normalizedQaCode) {
+      toast.error('Vui lòng nhập mã QA của thiết bị.')
+      return
+    }
+    setManualLookupLoading(true)
+    keepScannerAliveRef.current = false
+    await stopScanner()
+    const exists = await openActionModalByQaCode(normalizedQaCode)
+    if (!exists) {
+      startScanner()
+    }
+    setManualLookupLoading(false)
   }
 
   const handleCheckout = async () => {
@@ -239,11 +269,37 @@ function QRScanner() {
       <div className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-lg font-semibold text-slate-800">Quét mã QR thiết bị</h2>
         <div id={scannerElementId} className="overflow-hidden rounded-xl border border-slate-200" />
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-800">Hoặc nhập tay mã QA</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Dùng khi mã QR bị mờ, hỏng hoặc camera trên thiết bị không hoạt động.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={manualQaCode}
+              onChange={(event) => setManualQaCode(event.target.value)}
+              placeholder="Ví dụ: QA000123"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void handleManualLookup()
+              }}
+              disabled={manualLookupLoading}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {manualLookupLoading ? 'Đang kiểm tra...' : 'Tra cứu mã'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {showActionModal && (
-        <div className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-4">
+        <div className="fixed inset-0 z-[1000] flex items-end justify-center overflow-y-auto bg-black/50 p-4 sm:items-center sm:p-6">
+          <div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-2xl bg-white p-4">
+            <div className="overflow-y-auto pr-1">
             <h3 className="text-base font-semibold text-slate-800">Xác nhận thao tác thiết bị</h3>
             <p className="mt-1 text-sm text-slate-600">Mã QA: {scannedQaCode}</p>
             <p className="text-sm text-slate-600">Tên thiết bị: {scannedAssetName || 'Đang tải...'}</p>
@@ -304,6 +360,7 @@ function QRScanner() {
                 <p className="text-xs text-slate-500">Phòng sẽ lọc theo tiền tố A-Z hoặc số bạn nhập.</p>
               </div>
             )}
+            </div>
 
             <div className={`mt-4 grid gap-2 ${canCheckout && canCheckin ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {canCheckout && (

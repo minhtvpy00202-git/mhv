@@ -32,6 +32,12 @@ function createDefaultConfirmDialog() {
   }
 }
 
+function normalizeTechSupportTypeForm(form) {
+  return {
+    name: String(form?.name || '').trim(),
+  }
+}
+
 function TechSupportTypeManagement() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +50,9 @@ function TechSupportTypeManagement() {
     keyword: '',
   })
   const [form, setForm] = useState({
+    name: '',
+  })
+  const [initialForm, setInitialForm] = useState({
     name: '',
   })
   const { sortedItems, handleSort, getSortLabel } = useTableSort(items, {
@@ -66,6 +75,12 @@ function TechSupportTypeManagement() {
   })
 
   const isEditing = Boolean(selectedId)
+  const normalizedForm = useMemo(() => normalizeTechSupportTypeForm(form), [form])
+  const normalizedInitialForm = useMemo(() => normalizeTechSupportTypeForm(initialForm), [initialForm])
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizedForm) !== JSON.stringify(normalizedInitialForm),
+    [normalizedForm, normalizedInitialForm],
+  )
   const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE_SIZE))
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -170,12 +185,40 @@ function TechSupportTypeManagement() {
 
   const resetForm = () => {
     setSelectedId(null)
-    setForm({ name: '' })
+    const emptyForm = { name: '' }
+    setForm(emptyForm)
+    setInitialForm(emptyForm)
   }
 
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
+  }
+
+  const discardFormModal = () => {
+    setConfirmDialog(createDefaultConfirmDialog())
+    closeFormModal()
+  }
+
+  const requestCloseFormModal = () => {
+    if (submitting) return
+    if (!hasFormChanges) {
+      closeFormModal()
+      return
+    }
+    setConfirmDialog({
+      open: true,
+      title: 'Lưu thay đổi trước khi đóng?',
+      message: 'Bạn có thay đổi chưa lưu trong biểu mẫu loại kỹ thuật viên. Bạn có muốn lưu trước khi đóng không?',
+      confirmLabel: 'Có',
+      cancelLabel: 'Không',
+      tone: 'primary',
+      busy: false,
+      onConfirm: async () => (isEditing ? handleUpdate() : handleCreate()),
+      onCancel: () => {
+        discardFormModal()
+      },
+    })
   }
 
   const openCreateModal = () => {
@@ -185,14 +228,16 @@ function TechSupportTypeManagement() {
 
   const handleSelect = (item) => {
     setSelectedId(item.id)
-    setForm({ name: item.name || '' })
+    const nextForm = { name: item.name || '' }
+    setForm(nextForm)
+    setInitialForm(nextForm)
     setShowFormModal(true)
   }
 
   const handleCreate = async () => {
     if (!form.name.trim()) {
       toast.error('Vui lòng nhập tên loại kỹ thuật viên.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -200,9 +245,11 @@ function TechSupportTypeManagement() {
       toast.success('Thêm loại kỹ thuật viên thành công.')
       closeFormModal()
       await loadItems()
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm loại kỹ thuật viên thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -210,9 +257,13 @@ function TechSupportTypeManagement() {
 
   const handleUpdate = async () => {
     if (!selectedId) return
+    if (!hasFormChanges) {
+      toast.info('Loại kỹ thuật viên chưa có thay đổi để lưu.')
+      return false
+    }
     if (!form.name.trim()) {
       toast.error('Vui lòng nhập tên loại kỹ thuật viên.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -220,9 +271,11 @@ function TechSupportTypeManagement() {
       toast.success('Cập nhật loại kỹ thuật viên thành công.')
       closeFormModal()
       await loadItems()
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Cập nhật loại kỹ thuật viên thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -426,22 +479,22 @@ function TechSupportTypeManagement() {
       </div>
 
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center sm:p-6">
+          <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <h4 className="text-base font-semibold text-slate-800">
                 {isEditing ? `Chỉnh sửa loại kỹ thuật viên #${selectedId}` : 'Thêm mới loại kỹ thuật viên'}
               </h4>
               <button
                 type="button"
-                onClick={closeFormModal}
+                onClick={requestCloseFormModal}
                 className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Đóng
               </button>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid flex-1 gap-3 overflow-y-auto pr-1">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Tên loại kỹ thuật viên</label>
                 <input
@@ -459,11 +512,11 @@ function TechSupportTypeManagement() {
               )}
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={isEditing ? handleUpdate : handleCreate}
-                disabled={submitting}
+                disabled={submitting || (isEditing && !hasFormChanges)}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
                   isEditing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-fptOrange hover:bg-fptOrangeDark'
                 }`}

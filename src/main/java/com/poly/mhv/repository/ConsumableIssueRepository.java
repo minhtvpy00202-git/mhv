@@ -10,20 +10,27 @@ import org.springframework.data.repository.query.Param;
 
 public interface ConsumableIssueRepository extends JpaRepository<ConsumableIssue, Long> {
 
-    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
+    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "sourceWarehouseLocation", "issuedBy"})
     List<ConsumableIssue> findByAssetQaCodeOrderByIssuedAtDescIdDesc(String assetQaCode);
 
-    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
+    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "sourceWarehouseLocation", "issuedBy"})
     List<ConsumableIssue> findByIssuedToLocationIdOrderByIssuedAtDescIdDesc(Integer issuedToLocationId);
 
-    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "issuedBy"})
+    @EntityGraph(attributePaths = {"asset", "issuedToLocation", "sourceWarehouseLocation", "issuedBy"})
     @Query("""
             select issue from ConsumableIssue issue
             join issue.issuedToLocation location
-            where lower(trim(location.roomName)) <> 'kho'
+            where not exists (
+                select 1
+                from AreaTypeCatalog areaType
+                where upper(areaType.typeKey) = upper(location.areaTypeKey)
+                  and coalesce(areaType.isStorageWarehouse, false) = true
+            )
             order by issue.issuedAt desc, issue.id desc
             """)
     List<ConsumableIssue> findAllTrackableRoomIssuesOrderByIssuedAtDesc();
+
+    long countBySourceWarehouseLocationId(Integer sourceWarehouseLocationId);
 
     @Query(value = """
             select cast(ci.issued_at as date) as row_date,

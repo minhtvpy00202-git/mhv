@@ -3,6 +3,7 @@ package com.poly.mhv.service;
 import com.poly.mhv.dto.supplier.SupplierCreateRequest;
 import com.poly.mhv.dto.supplier.SupplierResponse;
 import com.poly.mhv.dto.supplier.SupplierUpdateRequest;
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetRepository;
@@ -21,12 +22,21 @@ public class SupplierService {
 
     private final SupplierRepository supplierRepository;
     private final AssetRepository assetRepository;
+    private final NotificationService notificationService;
+    private final CurrentUserProvider currentUserProvider;
     private volatile List<SupplierResponse> cachedAllSuppliers;
     private volatile long cachedAllSuppliersExpiresAt;
 
-    public SupplierService(SupplierRepository supplierRepository, AssetRepository assetRepository) {
+    public SupplierService(
+            SupplierRepository supplierRepository,
+            AssetRepository assetRepository,
+            NotificationService notificationService,
+            CurrentUserProvider currentUserProvider
+    ) {
         this.supplierRepository = supplierRepository;
         this.assetRepository = assetRepository;
+        this.notificationService = notificationService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +77,23 @@ public class SupplierService {
                 .address(normalizeAddress(request.getAddress()))
                 .phoneNumber(normalizePhoneNumber(request.getPhoneNumber()))
                 .build();
-        SupplierResponse response = mapToResponse(supplierRepository.save(supplier));
+        Supplier saved = supplierRepository.save(supplier);
+        SupplierResponse response = mapToResponse(saved);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "SUPPLIER_CREATE",
+                "Tạo nhà cung cấp",
+                actorDisplayName + " đã tạo nhà cung cấp " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        "Nhà cung cấp", saved.getName(),
+                        "Địa chỉ", saved.getAddress(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateSupplierCache();
         return response;
     }
@@ -82,7 +108,23 @@ public class SupplierService {
         supplier.setName(normalizedName);
         supplier.setAddress(normalizeAddress(request.getAddress()));
         supplier.setPhoneNumber(normalizePhoneNumber(request.getPhoneNumber()));
-        SupplierResponse response = mapToResponse(supplierRepository.save(supplier));
+        Supplier saved = supplierRepository.save(supplier);
+        SupplierResponse response = mapToResponse(saved);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "SUPPLIER_UPDATE",
+                "Cập nhật nhà cung cấp",
+                actorDisplayName + " đã cập nhật nhà cung cấp " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        "Nhà cung cấp", saved.getName(),
+                        "Địa chỉ", saved.getAddress(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateSupplierCache();
         return response;
     }
@@ -94,7 +136,22 @@ public class SupplierService {
         if (linkedAssets > 0) {
             throw new CustomException("Không thể xóa nhà cung cấp đang được gán cho " + linkedAssets + " thiết bị.");
         }
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         supplierRepository.delete(supplier);
+        notificationService.createNotification(
+                "SUPPLIER_DELETE",
+                "Xóa nhà cung cấp",
+                actorDisplayName + " đã xóa nhà cung cấp " + supplier.getName() + ".",
+                actor.getUsername(),
+                null,
+                supplier.getName(),
+                Map.of(
+                        "Nhà cung cấp", supplier.getName(),
+                        "Địa chỉ", supplier.getAddress(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateSupplierCache();
     }
 
@@ -164,5 +221,15 @@ public class SupplierService {
                 .phoneNumber(supplier.getPhoneNumber())
                 .assetCount(assetCountsBySupplierId.getOrDefault(supplier.getId(), 0L))
                 .build();
+    }
+
+    private String getActorDisplayName(AppUser actor) {
+        if (actor == null) {
+            return "Hệ thống";
+        }
+        if (StringUtils.hasText(actor.getFullName())) {
+            return actor.getFullName().trim();
+        }
+        return actor.getUsername();
     }
 }

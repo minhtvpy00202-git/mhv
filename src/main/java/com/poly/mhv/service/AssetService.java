@@ -20,6 +20,10 @@ import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
+import com.poly.mhv.dto.asset.ConsumableWarehouseOverviewResponse;
+import com.poly.mhv.dto.asset.ConsumableWarehouseStockResponse;
+import com.poly.mhv.dto.asset.ConsumableWarehouseTransferRequest;
+import com.poly.mhv.dto.asset.ConsumableWarehouseTransferResponse;
 import com.poly.mhv.dto.asset.ExpiredConsumableLotResponse;
 import com.poly.mhv.dto.asset.AssetResponse;
 import com.poly.mhv.dto.asset.AssetUpdateRequest;
@@ -34,10 +38,12 @@ import com.poly.mhv.entity.ConsumableIssue;
 import com.poly.mhv.entity.ConsumableLocationStock;
 import com.poly.mhv.entity.ConsumableReceiptLot;
 import com.poly.mhv.entity.ConsumableRequest;
+import com.poly.mhv.entity.ConsumableWarehouseTransfer;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
+import com.poly.mhv.repository.AreaTypeCatalogRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestItemRepository;
@@ -46,6 +52,7 @@ import com.poly.mhv.repository.ConsumableIssueRepository;
 import com.poly.mhv.repository.ConsumableLocationStockRepository;
 import com.poly.mhv.repository.ConsumableReceiptLotRepository;
 import com.poly.mhv.repository.ConsumableRequestRepository;
+import com.poly.mhv.repository.ConsumableWarehouseTransferRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
 import com.poly.mhv.util.AssetStatusSupport;
@@ -81,15 +88,16 @@ public class AssetService {
     private static final String TRACKING_MODE_CONSUMABLE = "CONSUMABLE";
     private static final String CATEGORY_KIND_ITEMIZED = "ITEMIZED";
     private static final String CATEGORY_KIND_CONSUMABLE = "CONSUMABLE";
-    private static final String DEFAULT_CONSUMABLE_STORAGE_ROOM = "Kho";
 
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
+    private final AreaTypeCatalogRepository areaTypeCatalogRepository;
     private final CategoryRepository categoryRepository;
     private final ConsumableIssueRepository consumableIssueRepository;
     private final ConsumableLocationStockRepository consumableLocationStockRepository;
     private final ConsumableReceiptLotRepository consumableReceiptLotRepository;
     private final ConsumableRequestRepository consumableRequestRepository;
+    private final ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository;
     private final ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository;
     private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
     private final LocationRepository locationRepository;
@@ -103,11 +111,13 @@ public class AssetService {
     public AssetService(
             AssetRepository assetRepository,
             AppUserRepository appUserRepository,
+            AreaTypeCatalogRepository areaTypeCatalogRepository,
             CategoryRepository categoryRepository,
             ConsumableIssueRepository consumableIssueRepository,
             ConsumableLocationStockRepository consumableLocationStockRepository,
             ConsumableReceiptLotRepository consumableReceiptLotRepository,
             ConsumableRequestRepository consumableRequestRepository,
+            ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository,
             ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository,
             ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
             LocationRepository locationRepository,
@@ -118,11 +128,13 @@ public class AssetService {
     ) {
         this.assetRepository = assetRepository;
         this.appUserRepository = appUserRepository;
+        this.areaTypeCatalogRepository = areaTypeCatalogRepository;
         this.categoryRepository = categoryRepository;
         this.consumableIssueRepository = consumableIssueRepository;
         this.consumableLocationStockRepository = consumableLocationStockRepository;
         this.consumableReceiptLotRepository = consumableReceiptLotRepository;
         this.consumableRequestRepository = consumableRequestRepository;
+        this.consumableWarehouseTransferRepository = consumableWarehouseTransferRepository;
         this.consumableDisposalRequestItemRepository = consumableDisposalRequestItemRepository;
         this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
         this.locationRepository = locationRepository;
@@ -136,6 +148,9 @@ public class AssetService {
     public AssetResponse createAsset(AssetCreateRequest request) {
         String trackingMode = normalizeTrackingMode(request != null ? request.getTrackingMode() : null);
         validateCreateRequest(request, trackingMode);
+        if (request == null) {
+            throw new CustomException("Dữ liệu tạo thiết bị không được để trống.");
+        }
         Category category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại thiết bị với id: " + request.getCategoryId()));
         validateCategoryCompatibility(category, trackingMode);
@@ -149,7 +164,7 @@ public class AssetService {
                 ? null
                 : normalizeRequestedUsageStatus(request.getUsageStatus(), request.getStatus());
         Location homeLocation = consumable
-                ? getConsumableStorageLocationOrThrow()
+                ? getConsumableWarehouseLocationOrThrow(request.getLocationId(), "Không tìm thấy kho lưu trữ với id: " + request.getLocationId())
                 : getAssetStorageLocationOrThrow(request.getLocationId(), "Không tìm thấy phòng với id: " + request.getLocationId());
         Location currentLocation = consumable
                 ? homeLocation
@@ -187,6 +202,7 @@ public class AssetService {
             createConsumableReceiptLot(
                     saved,
                     supplier,
+                    homeLocation,
                     safeInteger(saved.getQuantityOnHand()),
                     saved.getPurchasePrice(),
                     request.getPurchaseDate(),
@@ -390,9 +406,14 @@ public class AssetService {
             asset.setSupplier(getSupplierOrThrow(request.getSupplierId()));
         }
         if (isConsumableMode(trackingMode)) {
-            Location storageLocation = getConsumableStorageLocationOrThrow();
-            asset.setLocation(storageLocation);
-            asset.setHomeLocation(storageLocation);
+            if (request.getLocationId() != null) {
+                Location storageLocation = getConsumableWarehouseLocationOrThrow(
+                        request.getLocationId(),
+                        "Không tìm thấy kho lưu trữ với id: " + request.getLocationId()
+                );
+                asset.setLocation(storageLocation);
+                asset.setHomeLocation(storageLocation);
+            }
             if (request.getQuantityOnHand() != null) {
                 if (!request.getQuantityOnHand().equals(asset.getQuantityOnHand())) {
                     throw new CustomException("Tồn kho tổng được quản lý theo từng lô nhập. Vui lòng dùng chức năng nhập hàng để cập nhật.");
@@ -434,8 +455,8 @@ public class AssetService {
         notificationService.createNotification(
                 "ASSET_UPDATE",
                 isConsumableMode(trackingMode) ? "Cập nhật vật tư tiêu hao" : "Cập nhật thiết bị",
-                actorDisplayName + " đã cập nhật " + (isConsumableMode(trackingMode) ? "vật tư" : "thiết bị") + " " + updated.getName()
-                        + " tại phòng gốc " + updated.getHomeLocation().getRoomName() + ".",
+                actorDisplayName + " đã " + (isConsumableMode(trackingMode) ? "chỉnh sửa vật tư " : "chỉnh sửa thiết bị ")
+                        + updated.getName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
@@ -474,6 +495,9 @@ public class AssetService {
         if (request.getIssuedToLocationId() == null) {
             throw new CustomException("issuedToLocationId là bắt buộc.");
         }
+        if (request.getSourceWarehouseLocationId() == null) {
+            throw new CustomException("sourceWarehouseLocationId là bắt buộc.");
+        }
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new CustomException("quantity phải lớn hơn 0.");
         }
@@ -485,13 +509,17 @@ public class AssetService {
                 request.getIssuedToLocationId(),
                 "Không tìm thấy phòng nhận với id: " + request.getIssuedToLocationId()
         );
+        Location sourceWarehouseLocation = getConsumableWarehouseLocationOrThrow(
+                request.getSourceWarehouseLocationId(),
+                "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
+        );
         AppUser actor = getCurrentUser();
         LocalDateTime now = LocalDateTime.now();
-        List<LotAllocation> allocations = allocateConsumableLots(asset, request.getQuantity());
+        List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, request.getQuantity());
         BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, request.getQuantity());
         String issueNote = appendLotAllocationNote(request.getNote(), allocations);
 
-        asset.setQuantityOnHand(currentQuantity - request.getQuantity());
+        recalculateConsumableQuantityOnHand(asset);
         refreshConsumableExpirySummary(asset);
         asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
         Asset updated = assetRepository.save(asset);
@@ -500,6 +528,7 @@ public class AssetService {
         ConsumableIssue issue = ConsumableIssue.builder()
                 .asset(updated)
                 .issuedToLocation(issuedToLocation)
+                .sourceWarehouseLocation(sourceWarehouseLocation)
                 .issuedBy(actor)
                 .quantity(request.getQuantity())
                 .unitPrice(unitPrice)
@@ -515,7 +544,8 @@ public class AssetService {
                 "CONSUMABLE_ISSUED",
                 "Cấp phát vật tư",
                 actorDisplayName + " đã cấp phát " + request.getQuantity() + " " + safeUnit(updated)
-                        + " " + updated.getName() + " cho phòng " + issuedToLocation.getRoomName() + ".",
+                        + " " + updated.getName() + " từ kho " + sourceWarehouseLocation.getRoomName()
+                        + " cho phòng " + issuedToLocation.getRoomName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
@@ -523,6 +553,7 @@ public class AssetService {
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
                         "Số lượng cấp phát", request.getQuantity(),
                         "Đơn vị tính", safeUnit(updated),
+                        "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng nhận", issuedToLocation.getRoomName(),
                         "Tồn còn lại", safeInteger(updated.getQuantityOnHand()),
                         "Người thực hiện", actorDisplayName
@@ -549,22 +580,24 @@ public class AssetService {
             throw new CustomException("Đơn giá nhập phải lớn hơn 0.");
         }
         Supplier supplier = getSupplierOrThrow(request.getSupplierId());
-        int currentQuantity = safeInteger(asset.getQuantityOnHand());
-        int nextQuantity = currentQuantity + receiptQuantity;
+        Location warehouseLocation = getConsumableWarehouseLocationOrThrow(
+                request.getWarehouseLocationId(),
+                "Không tìm thấy kho nhập với id: " + request.getWarehouseLocationId()
+        );
         BigDecimal averageUnitPrice = calculateAverageUnitPrice(
                 asset.getPurchasePrice(),
-                currentQuantity,
+                safeInteger(asset.getQuantityOnHand()),
                 request.getUnitPrice(),
                 receiptQuantity
         );
         AppUser actor = getCurrentUser();
 
-        asset.setQuantityOnHand(nextQuantity);
         asset.setPurchasePrice(averageUnitPrice);
         asset.setSupplier(supplier);
         createConsumableReceiptLot(
                 asset,
                 supplier,
+                warehouseLocation,
                 receiptQuantity,
                 request.getUnitPrice(),
                 request.getReceivedDate(),
@@ -573,6 +606,7 @@ public class AssetService {
                 request.getNote(),
                 actor
         );
+        recalculateConsumableQuantityOnHand(asset);
         refreshConsumableExpirySummary(asset);
         asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
         Asset updated = assetRepository.save(asset);
@@ -583,7 +617,7 @@ public class AssetService {
                 "CONSUMABLE_RECEIVED",
                 "Nhập hàng vật tư",
                 actorDisplayName + " đã nhập thêm " + receiptQuantity + " " + safeUnit(updated)
-                        + " " + updated.getName() + " về kho " + updated.getHomeLocation().getRoomName() + ".",
+                        + " " + updated.getName() + " về kho " + warehouseLocation.getRoomName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
@@ -593,12 +627,103 @@ public class AssetService {
                         "Đơn giá lô nhập", request.getUnitPrice(),
                         "Đơn giá trung bình", averageUnitPrice,
                         "Nhà cung cấp", supplier.getName(),
-                        "Tồn sau nhập", nextQuantity + " " + safeUnit(updated),
+                        "Kho nhập", warehouseLocation.getRoomName(),
+                        "Tồn sau nhập", safeInteger(updated.getQuantityOnHand()) + " " + safeUnit(updated),
                         "Người thực hiện", actorDisplayName
                 ),
                 consumableNotificationTargets(null, null)
         );
         return mapToAssetResponse(updated, false, true);
+    }
+
+    @Transactional
+    public ConsumableWarehouseTransferResponse transferConsumableBetweenWarehouses(
+            String qaCode,
+            ConsumableWarehouseTransferRequest request
+    ) {
+        Asset asset = assetRepository.findDetailByQaCode(qaCode)
+                .orElseThrow(() -> new CustomException("Không tìm thấy tài sản với mã: " + qaCode));
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ chuyển kho nội bộ.");
+        }
+        if (request == null) {
+            throw new CustomException("Dữ liệu chuyển kho không được để trống.");
+        }
+        int quantityTransferred = safePositiveInteger(request.getQuantity(), "Số lượng chuyển kho phải lớn hơn 0.");
+        Location sourceWarehouse = getConsumableWarehouseLocationOrThrow(
+                request.getSourceWarehouseLocationId(),
+                "Không tìm thấy kho nguồn với id: " + request.getSourceWarehouseLocationId()
+        );
+        Location targetWarehouse = getConsumableWarehouseLocationOrThrow(
+                request.getTargetWarehouseLocationId(),
+                "Không tìm thấy kho đích với id: " + request.getTargetWarehouseLocationId()
+        );
+        if (sourceWarehouse.getId().equals(targetWarehouse.getId())) {
+            throw new CustomException("Kho nguồn và kho đích phải khác nhau.");
+        }
+
+        AppUser actor = getCurrentUser();
+        LocalDateTime now = LocalDateTime.now();
+        List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouse, quantityTransferred);
+        BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, quantityTransferred);
+        String transferNote = buildWarehouseTransferNote(request.getNote(), sourceWarehouse, targetWarehouse, allocations);
+
+        for (LotAllocation allocation : allocations) {
+            ConsumableReceiptLot sourceLot = allocation.lot();
+            createConsumableReceiptLot(
+                    asset,
+                    sourceLot.getSupplier(),
+                    targetWarehouse,
+                    allocation.quantity(),
+                    sourceLot.getUnitPrice(),
+                    sourceLot.getReceivedDate(),
+                    sourceLot.getExpirationDate(),
+                    sourceLot.getLotCode(),
+                    "Chuyển nội bộ từ kho " + sourceWarehouse.getRoomName() + " sang kho " + targetWarehouse.getRoomName()
+                            + (StringUtils.hasText(request.getNote()) ? ". " + request.getNote().trim() : ""),
+                    actor
+            );
+        }
+
+        recalculateConsumableQuantityOnHand(asset); // Just to be safe
+        refreshConsumableExpirySummary(asset);
+        asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
+        asset = assetRepository.save(asset);
+        ConsumableWarehouseTransfer savedTransfer = consumableWarehouseTransferRepository.save(
+                ConsumableWarehouseTransfer.builder()
+                        .asset(asset)
+                        .sourceWarehouseLocation(sourceWarehouse)
+                        .targetWarehouseLocation(targetWarehouse)
+                        .quantityTransferred(quantityTransferred)
+                        .unitPrice(unitPrice)
+                        .transferredAt(now)
+                        .transferredBy(actor)
+                        .note(transferNote)
+                        .build()
+        );
+        notifyLowStockIfNeeded(asset, actor);
+
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CONSUMABLE_WAREHOUSE_TRANSFER",
+                "Chuyển kho nội bộ vật tư",
+                actorDisplayName + " đã chuyển " + quantityTransferred + " " + safeUnit(asset)
+                        + " " + asset.getName() + " từ kho " + sourceWarehouse.getRoomName()
+                        + " sang kho " + targetWarehouse.getRoomName() + ".",
+                actor.getUsername(),
+                asset.getQaCode(),
+                asset.getName(),
+                Map.of(
+                        "Vật tư", asset.getQaCode() + " - " + asset.getName(),
+                        "Kho nguồn", sourceWarehouse.getRoomName(),
+                        "Kho đích", targetWarehouse.getRoomName(),
+                        "Số lượng chuyển", quantityTransferred,
+                        "Đơn vị tính", safeUnit(asset),
+                        "Người thực hiện", actorDisplayName
+                ),
+                consumableNotificationTargets(null, null)
+        );
+        return mapToConsumableWarehouseTransferResponse(savedTransfer);
     }
 
     @Transactional(readOnly = true)
@@ -677,6 +802,61 @@ public class AssetService {
                 .findByQuantityRemainingGreaterThanAndExpirationDateBeforeOrderByExpirationDateAscReceivedDateAscIdAsc(0, today)
                 .stream()
                 .map((lot) -> mapToExpiredConsumableLotResponse(lot, today))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ConsumableWarehouseOverviewResponse getConsumableWarehouseOverview(Integer warehouseLocationId) {
+        Location selectedWarehouse = warehouseLocationId != null
+                ? getConsumableWarehouseLocationOrThrow(warehouseLocationId, "Không tìm thấy kho với id: " + warehouseLocationId)
+                : null;
+        List<ConsumableWarehouseStockResponse> stocks = buildConsumableWarehouseStockResponses(selectedWarehouse);
+        List<ConsumableWarehouseTransferResponse> transferHistory = getConsumableWarehouseTransfers(null).stream()
+                .filter(item -> selectedWarehouse == null
+                        || selectedWarehouse.getId().equals(item.getSourceWarehouseLocationId())
+                        || selectedWarehouse.getId().equals(item.getTargetWarehouseLocationId()))
+                .toList();
+        BigDecimal totalInventoryValue = stocks.stream()
+                .map(ConsumableWarehouseStockResponse::getInventoryValue)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long lowStockCount = stocks.stream().filter(item -> Boolean.TRUE.equals(item.getLowStock())).count();
+        long outOfStockCount = stocks.stream().filter(item -> Boolean.TRUE.equals(item.getOutOfStock())).count();
+        return ConsumableWarehouseOverviewResponse.builder()
+                .warehouseLocationId(selectedWarehouse != null ? selectedWarehouse.getId() : null)
+                .warehouseLocationName(selectedWarehouse != null ? selectedWarehouse.getRoomName() : "Tất cả kho")
+                .warehouseCount(selectedWarehouse != null ? 1 : getStorageWarehouses().size())
+                .stockRowCount(stocks.size())
+                .lowStockCount((int) lowStockCount)
+                .outOfStockCount((int) outOfStockCount)
+                .totalInventoryValue(totalInventoryValue)
+                .stocks(stocks)
+                .transferHistory(transferHistory)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsumableWarehouseStockResponse> getConsumableWarehouseAlerts(Integer warehouseLocationId) {
+        return buildConsumableWarehouseStockResponses(
+                warehouseLocationId != null
+                        ? getConsumableWarehouseLocationOrThrow(warehouseLocationId, "Không tìm thấy kho với id: " + warehouseLocationId)
+                        : null
+        ).stream()
+                .filter(item -> Boolean.TRUE.equals(item.getLowStock()) || Boolean.TRUE.equals(item.getOutOfStock()))
+                .sorted(Comparator
+                        .comparing(ConsumableWarehouseStockResponse::getOutOfStock, Comparator.nullsLast(Boolean::compareTo)).reversed()
+                        .thenComparing(ConsumableWarehouseStockResponse::getWarehouseLocationName, Comparator.nullsLast(String::compareToIgnoreCase))
+                        .thenComparing(ConsumableWarehouseStockResponse::getAssetName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConsumableWarehouseTransferResponse> getConsumableWarehouseTransfers(String qaCode) {
+        List<ConsumableWarehouseTransfer> transfers = StringUtils.hasText(qaCode)
+                ? consumableWarehouseTransferRepository.findByAssetQaCodeOrderByTransferredAtDescIdDesc(qaCode.trim())
+                : consumableWarehouseTransferRepository.findAllByOrderByTransferredAtDescIdDesc();
+        return transfers.stream()
+                .map(this::mapToConsumableWarehouseTransferResponse)
                 .toList();
     }
 
@@ -795,7 +975,7 @@ public class AssetService {
             lot.setQuantityRemaining(lotQuantityRemaining - quantityToDispose);
             consumableReceiptLotRepository.save(lot);
         }
-        asset.setQuantityOnHand(currentQuantity - totalQuantityToDispose);
+        recalculateConsumableQuantityOnHand(asset);
         refreshConsumableExpirySummary(asset);
         asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
         Asset updatedAsset = assetRepository.save(asset);
@@ -880,6 +1060,9 @@ public class AssetService {
         if (!StringUtils.hasText(request.getAssetQaCode())) {
             throw new CustomException("Mã vật tư là bắt buộc.");
         }
+        if (request.getSourceWarehouseLocationId() == null) {
+            throw new CustomException("Kho xuất là bắt buộc.");
+        }
         if (request.getQuantityRequested() == null || request.getQuantityRequested() <= 0) {
             throw new CustomException("Số lượng yêu cầu phải lớn hơn 0.");
         }
@@ -892,10 +1075,15 @@ public class AssetService {
         if (!isConsumableMode(asset.getTrackingMode())) {
             throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ yêu cầu cấp phát.");
         }
+        Location sourceWarehouseLocation = getConsumableWarehouseLocationOrThrow(
+                request.getSourceWarehouseLocationId(),
+                "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
+        );
         AppUser requester = getCurrentUser();
         ConsumableRequest consumableRequest = ConsumableRequest.builder()
                 .asset(asset)
                 .location(location)
+                .sourceWarehouseLocation(sourceWarehouseLocation)
                 .requestedBy(requester)
                 .quantityRequested(request.getQuantityRequested())
                 .reason(request.getReason().trim())
@@ -912,6 +1100,7 @@ public class AssetService {
                 asset.getName(),
                 Map.of(
                         "Vật tư", asset.getQaCode() + " - " + asset.getName(),
+                        "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng yêu cầu", location.getRoomName(),
                         "Số lượng yêu cầu", request.getQuantityRequested(),
                         "Lý do", request.getReason().trim(),
@@ -941,12 +1130,13 @@ public class AssetService {
 
         AppUser actor = getCurrentUser();
         LocalDateTime now = LocalDateTime.now();
-        List<LotAllocation> allocations = allocateConsumableLots(asset, consumableRequest.getQuantityRequested());
+        Location sourceWarehouseLocation = resolveConsumableRequestSourceWarehouse(consumableRequest, request);
+        List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, consumableRequest.getQuantityRequested());
         BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, consumableRequest.getQuantityRequested());
         String decisionNote = request != null && StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null;
         String issueNote = appendLotAllocationNote(buildConsumableRequestIssueNote(consumableRequest, decisionNote), allocations);
 
-        asset.setQuantityOnHand(currentQuantity - consumableRequest.getQuantityRequested());
+        recalculateConsumableQuantityOnHand(asset);
         refreshConsumableExpirySummary(asset);
         asset.setStatus(computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock()));
         Asset updated = assetRepository.save(asset);
@@ -955,6 +1145,7 @@ public class AssetService {
         ConsumableIssue issue = ConsumableIssue.builder()
                 .asset(updated)
                 .issuedToLocation(consumableRequest.getLocation())
+                .sourceWarehouseLocation(sourceWarehouseLocation)
                 .issuedBy(actor)
                 .quantity(consumableRequest.getQuantityRequested())
                 .unitPrice(unitPrice)
@@ -973,6 +1164,7 @@ public class AssetService {
         );
 
         consumableRequest.setStatus("APPROVED");
+        consumableRequest.setSourceWarehouseLocation(sourceWarehouseLocation);
         consumableRequest.setDecisionNote(decisionNote);
         consumableRequest.setResolvedAt(now);
         consumableRequest.setResolvedBy(actor);
@@ -984,13 +1176,15 @@ public class AssetService {
                 "CONSUMABLE_REQUEST_APPROVED",
                 "Phiếu yêu cầu cấp phát đã được duyệt",
                 actorDisplayName + " đã duyệt cấp phát " + consumableRequest.getQuantityRequested() + " " + safeUnit(updated)
-                        + " " + updated.getName() + " cho phòng " + consumableRequest.getLocation().getRoomName() + ".",
+                        + " " + updated.getName() + " từ kho " + sourceWarehouseLocation.getRoomName()
+                        + " cho phòng " + consumableRequest.getLocation().getRoomName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
                 Map.of(
                         "Phiếu yêu cầu", "#" + consumableRequest.getId(),
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
+                        "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng nhận", consumableRequest.getLocation().getRoomName(),
                         "Số lượng cấp phát", consumableRequest.getQuantityRequested(),
                         "Người duyệt", actorDisplayName,
@@ -1036,6 +1230,9 @@ public class AssetService {
                 Map.of(
                         "Phiếu yêu cầu", "#" + consumableRequest.getId(),
                         "Vật tư", consumableRequest.getAsset().getQaCode() + " - " + consumableRequest.getAsset().getName(),
+                        "Kho xuất", consumableRequest.getSourceWarehouseLocation() != null
+                                ? consumableRequest.getSourceWarehouseLocation().getRoomName()
+                                : "",
                         "Phòng nhận", consumableRequest.getLocation().getRoomName(),
                         "Số lượng yêu cầu", consumableRequest.getQuantityRequested(),
                         "Người duyệt", actorDisplayName,
@@ -1345,18 +1542,30 @@ public class AssetService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy nhà cung cấp với id: " + supplierId));
     }
 
-    private Location getConsumableStorageLocationOrThrow() {
-        return locationRepository.findFirstByRoomNameIgnoreCase(DEFAULT_CONSUMABLE_STORAGE_ROOM)
-                .orElseThrow(() -> new CustomException("Không tìm thấy phòng lưu trữ mặc định '" + DEFAULT_CONSUMABLE_STORAGE_ROOM + "'."));
-    }
-
     private Location getLocationOrThrow(Integer locationId, String notFoundMessage) {
         return locationRepository.findById(locationId)
                 .orElseThrow(() -> new CustomException(notFoundMessage));
     }
 
+    private Location getConsumableWarehouseLocationOrThrow(Integer locationId, String notFoundMessage) {
+        Location location = getLocationOrThrow(locationId, notFoundMessage);
+        if (!isStorageWarehouse(location)) {
+            throw new CustomException("Phòng được chọn không phải kho lưu trữ.");
+        }
+        return location;
+    }
+
     private Location getAssetStorageLocationOrThrow(Integer locationId, String notFoundMessage) {
         return getLocationOrThrow(locationId, notFoundMessage);
+    }
+
+    private boolean isStorageWarehouse(Location location) {
+        if (location == null || !StringUtils.hasText(location.getAreaTypeKey())) {
+            return false;
+        }
+        return areaTypeCatalogRepository.findByTypeKeyIgnoreCase(location.getAreaTypeKey())
+                .map(areaType -> Boolean.TRUE.equals(areaType.getIsStorageWarehouse()))
+                .orElse(false);
     }
 
     private Location resolveCurrentLocation(Integer currentLocationId, Location homeLocation) {
@@ -1735,6 +1944,7 @@ public class AssetService {
     private void createConsumableReceiptLot(
             Asset asset,
             Supplier supplier,
+            Location warehouseLocation,
             int quantity,
             BigDecimal unitPrice,
             LocalDate receivedDate,
@@ -1756,6 +1966,7 @@ public class AssetService {
         ConsumableReceiptLot lot = ConsumableReceiptLot.builder()
                 .asset(asset)
                 .supplier(supplier)
+                .warehouseLocation(warehouseLocation)
                 .quantityReceived(quantity)
                 .quantityRemaining(quantity)
                 .unitPrice(unitPrice.setScale(2, RoundingMode.HALF_UP))
@@ -1804,14 +2015,21 @@ public class AssetService {
         asset.setExpirationDate(nearestExpirationDate);
     }
 
-    private List<LotAllocation> allocateConsumableLots(Asset asset, int quantityRequested) {
+    private List<LotAllocation> allocateConsumableLots(Asset asset, Location sourceWarehouseLocation, int quantityRequested) {
+        if (sourceWarehouseLocation == null || sourceWarehouseLocation.getId() == null) {
+            throw new CustomException("Kho xuất không hợp lệ.");
+        }
         List<ConsumableReceiptLot> availableLots = consumableReceiptLotRepository
-                .findByAssetQaCodeAndQuantityRemainingGreaterThan(asset.getQaCode(), 0)
+                .findByAssetQaCodeAndWarehouseLocationIdAndQuantityRemainingGreaterThan(
+                        asset.getQaCode(),
+                        sourceWarehouseLocation.getId(),
+                        0
+                )
                 .stream()
                 .sorted(buildLotAllocationComparator(isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled())))
                 .toList();
         if (availableLots.isEmpty()) {
-            throw new CustomException("Không tìm thấy lô hàng còn tồn để cấp phát.");
+            throw new CustomException("Không tìm thấy lô hàng còn tồn trong kho " + sourceWarehouseLocation.getRoomName() + " để cấp phát.");
         }
         int remainingQuantity = quantityRequested;
         List<LotAllocation> allocations = new java.util.ArrayList<>();
@@ -1828,7 +2046,7 @@ public class AssetService {
             remainingQuantity -= allocatable;
         }
         if (remainingQuantity > 0) {
-            throw new CustomException("Số lượng tồn theo từng lô không đủ để cấp phát.");
+            throw new CustomException("Số lượng tồn theo từng lô trong kho " + sourceWarehouseLocation.getRoomName() + " không đủ để cấp phát.");
         }
         return allocations;
     }
@@ -1893,6 +2111,7 @@ public class AssetService {
     private ConsumableReceiptLotResponse mapToConsumableReceiptLotResponse(ConsumableReceiptLot lot) {
         AppUser receivedBy = lot.getReceivedBy();
         Supplier supplier = lot.getSupplier();
+        Location warehouseLocation = lot.getWarehouseLocation();
         return ConsumableReceiptLotResponse.builder()
                 .id(lot.getId())
                 .lotCode(lot.getLotCode())
@@ -1903,6 +2122,8 @@ public class AssetService {
                 .expirationDate(lot.getExpirationDate())
                 .supplierId(supplier != null ? supplier.getId() : null)
                 .supplierName(supplier != null ? supplier.getName() : null)
+                .warehouseLocationId(warehouseLocation != null ? warehouseLocation.getId() : null)
+                .warehouseLocationName(warehouseLocation != null ? warehouseLocation.getRoomName() : null)
                 .receivedAt(lot.getReceivedAt())
                 .receivedByUserId(receivedBy != null ? receivedBy.getId() : null)
                 .receivedByUsername(receivedBy != null ? receivedBy.getUsername() : null)
@@ -1970,32 +2191,119 @@ public class AssetService {
                 .build();
     }
 
+    private List<Location> getStorageWarehouses() {
+        return locationRepository.searchByKeyword(null).stream()
+                .filter(this::isStorageWarehouse)
+                .toList();
+    }
+
+    private List<ConsumableWarehouseStockResponse> buildConsumableWarehouseStockResponses(Location selectedWarehouse) {
+        List<ConsumableReceiptLot> activeLots = consumableReceiptLotRepository
+                .findAllByOrderByWarehouseLocationRoomNameAscAssetNameAscReceivedDateAscIdAsc();
+
+        Map<String, WarehouseStockAccumulator> groupedStocks = new LinkedHashMap<>();
+        for (ConsumableReceiptLot lot : activeLots) {
+            Location warehouseLocation = lot.getWarehouseLocation();
+            if (warehouseLocation == null || warehouseLocation.getId() == null || !isStorageWarehouse(warehouseLocation)) {
+                continue;
+            }
+            if (selectedWarehouse != null && !selectedWarehouse.getId().equals(warehouseLocation.getId())) {
+                continue;
+            }
+            Asset asset = lot.getAsset();
+            String key = warehouseLocation.getId() + "::" + asset.getQaCode();
+            WarehouseStockAccumulator accumulator = groupedStocks.computeIfAbsent(
+                    key,
+                    ignored -> new WarehouseStockAccumulator(warehouseLocation, asset)
+            );
+            accumulator.addLot(lot);
+        }
+
+        return groupedStocks.values().stream()
+                .map(WarehouseStockAccumulator::toResponse)
+                .sorted(Comparator
+                        .comparing(ConsumableWarehouseStockResponse::getWarehouseLocationName, Comparator.nullsLast(String::compareToIgnoreCase))
+                        .thenComparing(ConsumableWarehouseStockResponse::getAssetName, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .toList();
+    }
+
+    private ConsumableWarehouseTransferResponse mapToConsumableWarehouseTransferResponse(ConsumableWarehouseTransfer transfer) {
+        AppUser transferredBy = transfer.getTransferredBy();
+        return ConsumableWarehouseTransferResponse.builder()
+                .id(transfer.getId())
+                .assetQaCode(transfer.getAsset().getQaCode())
+                .assetName(transfer.getAsset().getName())
+                .sourceWarehouseLocationId(transfer.getSourceWarehouseLocation().getId())
+                .sourceWarehouseLocationName(transfer.getSourceWarehouseLocation().getRoomName())
+                .targetWarehouseLocationId(transfer.getTargetWarehouseLocation().getId())
+                .targetWarehouseLocationName(transfer.getTargetWarehouseLocation().getRoomName())
+                .quantityTransferred(transfer.getQuantityTransferred())
+                .unit(transfer.getAsset().getUnit())
+                .unitPrice(transfer.getUnitPrice())
+                .transferredAt(transfer.getTransferredAt())
+                .transferredByUserId(transferredBy != null ? transferredBy.getId() : null)
+                .transferredByUsername(transferredBy != null ? transferredBy.getUsername() : null)
+                .transferredByFullName(transferredBy != null ? transferredBy.getFullName() : null)
+                .note(transfer.getNote())
+                .build();
+    }
+
+    private String buildWarehouseTransferNote(
+            String baseNote,
+            Location sourceWarehouse,
+            Location targetWarehouse,
+            List<LotAllocation> allocations
+    ) {
+        String transferHeadline = "Chuyển kho nội bộ từ " + sourceWarehouse.getRoomName() + " sang " + targetWarehouse.getRoomName();
+        return appendLotAllocationNote(
+                StringUtils.hasText(baseNote)
+                        ? transferHeadline + ". " + baseNote.trim()
+                        : transferHeadline + ".",
+                allocations
+        );
+    }
+
+    private void recalculateConsumableQuantityOnHand(Asset asset) {
+        if (!isConsumableMode(asset.getTrackingMode())) {
+            return;
+        }
+        Integer totalQty = consumableReceiptLotRepository.calculateTotalQuantityRemainingForAsset(asset.getQaCode());
+        asset.setQuantityOnHand(totalQty != null ? totalQty : 0);
+    }
+
     private void notifyLowStockIfNeeded(Asset asset, AppUser actor) {
         if (!isConsumableMode(asset.getTrackingMode())) {
             return;
         }
-        int quantityOnHand = safeInteger(asset.getQuantityOnHand());
-        int minimumStock = safeInteger(asset.getMinimumStock());
-        if (quantityOnHand > minimumStock) {
-            return;
+        // Check per warehouse
+        List<Location> warehouses = getStorageWarehouses();
+        for (Location warehouse : warehouses) {
+            Integer warehouseQty = consumableReceiptLotRepository.calculateQuantityRemainingForAssetInWarehouse(
+                    asset.getQaCode(), 
+                    warehouse.getId()
+            );
+            int qty = safeInteger(warehouseQty);
+            int minStock = safeInteger(asset.getMinimumStock());
+            if (qty <= minStock) {
+                notificationService.createNotification(
+                        "CONSUMABLE_LOW_STOCK",
+                        "Vật tư cần nhập thêm",
+                        asset.getName() + " hiện còn " + qty + " " + safeUnit(asset)
+                                + " tại kho " + warehouse.getRoomName() + ".",
+                        actor != null ? actor.getUsername() : "system",
+                        asset.getQaCode(),
+                        asset.getName(),
+                        Map.of(
+                                "Vật tư", asset.getQaCode() + " - " + asset.getName(),
+                                "Tồn hiện tại", qty,
+                                "Ngưỡng cảnh báo", minStock,
+                                "Đơn vị tính", safeUnit(asset),
+                                "Kho", warehouse.getRoomName()
+                        ),
+                        consumableNotificationTargets(null, null)
+                );
+            }
         }
-        notificationService.createNotification(
-                "CONSUMABLE_LOW_STOCK",
-                "Vật tư cần nhập thêm",
-                asset.getName() + " hiện còn " + quantityOnHand + " " + safeUnit(asset)
-                        + " tại kho/phòng " + asset.getHomeLocation().getRoomName() + ".",
-                actor != null ? actor.getUsername() : "system",
-                asset.getQaCode(),
-                asset.getName(),
-                Map.of(
-                        "Vật tư", asset.getQaCode() + " - " + asset.getName(),
-                        "Tồn hiện tại", quantityOnHand,
-                        "Ngưỡng cảnh báo", minimumStock,
-                        "Đơn vị tính", safeUnit(asset),
-                        "Phòng lưu", asset.getHomeLocation().getRoomName()
-                ),
-                consumableNotificationTargets(null, null)
-        );
     }
 
     private List<NotificationTarget> adminNotificationTargets(String adminPath) {
@@ -2013,12 +2321,15 @@ public class AssetService {
     }
 
     private ConsumableIssueResponse mapToConsumableIssueResponse(ConsumableIssue issue) {
+        Location sourceWarehouseLocation = issue.getSourceWarehouseLocation();
         return ConsumableIssueResponse.builder()
                 .id(issue.getId())
                 .assetQaCode(issue.getAsset().getQaCode())
                 .assetName(issue.getAsset().getName())
                 .issuedToLocationId(issue.getIssuedToLocation().getId())
                 .issuedToLocationName(issue.getIssuedToLocation().getRoomName())
+                .sourceWarehouseLocationId(sourceWarehouseLocation != null ? sourceWarehouseLocation.getId() : null)
+                .sourceWarehouseLocationName(sourceWarehouseLocation != null ? sourceWarehouseLocation.getRoomName() : null)
                 .quantity(issue.getQuantity())
                 .unit(issue.getAsset().getUnit())
                 .unitPrice(issue.getUnitPrice())
@@ -2033,12 +2344,15 @@ public class AssetService {
     private ConsumableRequestResponse mapToConsumableRequestResponse(ConsumableRequest request) {
         AppUser requestedBy = request.getRequestedBy();
         AppUser resolvedBy = request.getResolvedBy();
+        Location sourceWarehouseLocation = request.getSourceWarehouseLocation();
         return ConsumableRequestResponse.builder()
                 .id(request.getId())
                 .assetQaCode(request.getAsset().getQaCode())
                 .assetName(request.getAsset().getName())
                 .locationId(request.getLocation().getId())
                 .locationName(request.getLocation().getRoomName())
+                .sourceWarehouseLocationId(sourceWarehouseLocation != null ? sourceWarehouseLocation.getId() : null)
+                .sourceWarehouseLocationName(sourceWarehouseLocation != null ? sourceWarehouseLocation.getRoomName() : null)
                 .quantityRequested(request.getQuantityRequested())
                 .unit(request.getAsset().getUnit())
                 .reason(request.getReason())
@@ -2130,6 +2444,40 @@ public class AssetService {
             builder.append(" Ghi chú duyệt: ").append(decisionNote.trim());
         }
         return builder.toString();
+    }
+
+    private Location resolveConsumableRequestSourceWarehouse(
+            ConsumableRequest consumableRequest,
+            ConsumableRequestDecisionRequest request
+    ) {
+        Integer overrideWarehouseId = request != null ? request.getSourceWarehouseLocationId() : null;
+        if (overrideWarehouseId != null) {
+            return getConsumableWarehouseLocationOrThrow(
+                    overrideWarehouseId,
+                    "Không tìm thấy kho xuất với id: " + overrideWarehouseId
+            );
+        }
+
+        Location existingSourceWarehouse = consumableRequest.getSourceWarehouseLocation();
+        if (existingSourceWarehouse != null && existingSourceWarehouse.getId() != null) {
+            return getConsumableWarehouseLocationOrThrow(
+                    existingSourceWarehouse.getId(),
+                    "Không tìm thấy kho xuất với id: " + existingSourceWarehouse.getId()
+            );
+        }
+
+        Asset asset = consumableRequest.getAsset();
+        Integer fallbackWarehouseId = asset != null && asset.getHomeLocation() != null ? asset.getHomeLocation().getId() : null;
+        if (fallbackWarehouseId == null && asset != null && asset.getLocation() != null) {
+            fallbackWarehouseId = asset.getLocation().getId();
+        }
+        if (fallbackWarehouseId == null) {
+            throw new CustomException("Phiếu yêu cầu chưa có kho xuất nguồn.");
+        }
+        return getConsumableWarehouseLocationOrThrow(
+                fallbackWarehouseId,
+                "Không tìm thấy kho xuất với id: " + fallbackWarehouseId
+        );
     }
 
     private String normalizeSpecs(String specs) {
@@ -2274,6 +2622,65 @@ public class AssetService {
                         .quantityRequested(request.getQuantityRequested())
                         .build()
         );
+    }
+
+    private class WarehouseStockAccumulator {
+        private final Location warehouseLocation;
+        private final Asset asset;
+        private int quantityRemaining;
+        private BigDecimal inventoryValue = BigDecimal.ZERO;
+        private LocalDate nearestExpirationDate;
+        private int activeLotCount;
+
+        private WarehouseStockAccumulator(Location warehouseLocation, Asset asset) {
+            this.warehouseLocation = warehouseLocation;
+            this.asset = asset;
+        }
+
+        void addLot(ConsumableReceiptLot lot) {
+            if (lot == null) {
+                return;
+            }
+            int remaining = Math.max(0, lot.getQuantityRemaining() == null ? 0 : lot.getQuantityRemaining());
+            if (remaining <= 0) {
+                return;
+            }
+            quantityRemaining += remaining;
+            activeLotCount += 1;
+            if (lot.getUnitPrice() != null) {
+                inventoryValue = inventoryValue.add(lot.getUnitPrice().multiply(BigDecimal.valueOf(remaining)));
+            }
+            if (lot.getExpirationDate() != null && (nearestExpirationDate == null || lot.getExpirationDate().isBefore(nearestExpirationDate))) {
+                nearestExpirationDate = lot.getExpirationDate();
+            }
+        }
+
+        ConsumableWarehouseStockResponse toResponse() {
+            int minimumStock = asset != null ? (asset.getMinimumStock() == null ? 0 : asset.getMinimumStock()) : 0;
+            boolean outOfStock = quantityRemaining <= 0;
+            boolean lowStock = !outOfStock && quantityRemaining <= minimumStock;
+            BigDecimal averageUnitPrice = quantityRemaining > 0
+                    ? inventoryValue.divide(BigDecimal.valueOf(quantityRemaining), 2, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            return ConsumableWarehouseStockResponse.builder()
+                    .warehouseLocationId(warehouseLocation != null ? warehouseLocation.getId() : null)
+                    .warehouseLocationName(warehouseLocation != null ? warehouseLocation.getRoomName() : null)
+                    .assetQaCode(asset != null ? asset.getQaCode() : null)
+                    .assetName(asset != null ? asset.getName() : null)
+                    .categoryId(asset != null && asset.getCategory() != null ? asset.getCategory().getId() : null)
+                    .categoryName(asset != null ? getCategoryDisplayName(asset.getCategory()) : null)
+                    .quantityRemaining(quantityRemaining)
+                    .minimumStock(minimumStock)
+                    .unit(asset != null ? asset.getUnit() : null)
+                    .averageUnitPrice(averageUnitPrice)
+                    .inventoryValue(inventoryValue)
+                    .lowStock(lowStock)
+                    .outOfStock(outOfStock)
+                    .expiryTrackingEnabled(asset != null && isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled()))
+                    .nearestExpirationDate(nearestExpirationDate)
+                    .activeLotCount(activeLotCount)
+                    .build();
+        }
     }
 
     private record CachedAssetResponse(AssetResponse response, long expiresAt) {

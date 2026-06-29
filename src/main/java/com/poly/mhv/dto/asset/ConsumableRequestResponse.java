@@ -16,6 +16,8 @@ public class ConsumableRequestResponse {
     private String assetName;
     private Integer locationId;
     private String locationName;
+    private Integer sourceWarehouseLocationId;
+    private String sourceWarehouseLocationName;
     private Integer quantityRequested;
     private String unit;
     private String reason;

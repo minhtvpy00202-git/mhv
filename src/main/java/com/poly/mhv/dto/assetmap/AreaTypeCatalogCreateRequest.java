@@ -23,4 +23,6 @@ public class AreaTypeCatalogCreateRequest {
 
     @Size(max = 255, message = "Mo ta loai khu vuc khong duoc vuot qua 255 ky tu.")
     private String description;
+
+    private Boolean isStorageWarehouse;
 }

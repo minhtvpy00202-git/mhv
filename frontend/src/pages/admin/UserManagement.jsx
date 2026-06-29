@@ -57,6 +57,23 @@ function createDefaultConfirmDialog() {
   }
 }
 
+function normalizeUserForm(form) {
+  return {
+    username: String(form?.username || '').trim(),
+    password: String(form?.password || ''),
+    fullName: String(form?.fullName || '').trim(),
+    email: String(form?.email || '').trim(),
+    birthday: String(form?.birthday || '').trim(),
+    phone: String(form?.phone || '').trim(),
+    role: String(form?.role || 'NhanVien').trim(),
+    techTypeIds: (Array.isArray(form?.techTypeIds) ? form.techTypeIds : [])
+      .map((value) => Number(value))
+      .filter((value) => !Number.isNaN(value))
+      .sort((a, b) => a - b),
+    status: String(form?.status || 'Hoạt động').trim(),
+  }
+}
+
 function UserManagement() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -77,6 +94,17 @@ function UserManagement() {
     status: '',
   })
   const [form, setForm] = useState({
+    username: '',
+    password: '',
+    fullName: '',
+    email: '',
+    birthday: '',
+    phone: '',
+    role: 'NhanVien',
+    techTypeIds: [],
+    status: 'Hoạt động',
+  })
+  const [initialForm, setInitialForm] = useState({
     username: '',
     password: '',
     fullName: '',
@@ -108,6 +136,12 @@ function UserManagement() {
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
   const isTechSupportRole = form.role === 'TechSupport'
+  const normalizedForm = useMemo(() => normalizeUserForm(form), [form])
+  const normalizedInitialForm = useMemo(() => normalizeUserForm(initialForm), [initialForm])
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizedForm) !== JSON.stringify(normalizedInitialForm),
+    [normalizedForm, normalizedInitialForm],
+  )
 
   const loadUsers = async (page = 0, nextFilters = filters) => {
     setLoading(true)
@@ -160,7 +194,7 @@ function UserManagement() {
 
   const resetForm = () => {
     setSelectedUserId(null)
-    setForm({
+    const emptyForm = {
       username: '',
       password: '',
       fullName: '',
@@ -170,12 +204,40 @@ function UserManagement() {
       role: 'NhanVien',
       techTypeIds: [],
       status: 'Hoạt động',
-    })
+    }
+    setForm(emptyForm)
+    setInitialForm(emptyForm)
   }
 
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
+  }
+
+  const discardFormModal = () => {
+    setConfirmDialog(createDefaultConfirmDialog())
+    closeFormModal()
+  }
+
+  const requestCloseFormModal = () => {
+    if (submitting) return
+    if (!hasFormChanges) {
+      closeFormModal()
+      return
+    }
+    setConfirmDialog({
+      open: true,
+      title: 'Lưu thay đổi trước khi đóng?',
+      message: 'Bạn có thay đổi chưa lưu trong biểu mẫu tài khoản. Bạn có muốn lưu trước khi đóng không?',
+      confirmLabel: 'Có',
+      cancelLabel: 'Không',
+      tone: 'primary',
+      busy: false,
+      onConfirm: async () => (isEditing ? handleUpdate() : handleCreate()),
+      onCancel: () => {
+        discardFormModal()
+      },
+    })
   }
 
   const openCreateModal = () => {
@@ -184,8 +246,7 @@ function UserManagement() {
   }
 
   const handleSelect = (item) => {
-    setSelectedUserId(item.id)
-    setForm({
+    const nextForm = {
       username: item.username || '',
       password: '',
       fullName: item.fullName || '',
@@ -195,30 +256,33 @@ function UserManagement() {
       role: item.role || 'NhanVien',
       techTypeIds: item.techTypeIds || [],
       status: item.status || 'Hoạt động',
-    })
+    }
+    setSelectedUserId(item.id)
+    setForm(nextForm)
+    setInitialForm(nextForm)
     setShowFormModal(true)
   }
 
   const handleCreate = async () => {
     if (!form.username || !form.password || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
       toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
-      return
+      return false
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       toast.error('Email không đúng định dạng.')
-      return
+      return false
     }
     if (!/^0\d{9}$/.test(form.phone.trim())) {
       toast.error('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.')
-      return
+      return false
     }
     if (new Date(form.birthday) >= new Date()) {
       toast.error('Ngày sinh phải là ngày trong quá khứ.')
-      return
+      return false
     }
     if (isTechSupportRole && form.techTypeIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -236,9 +300,11 @@ function UserManagement() {
       toast.success('Thêm tài khoản thành công.')
       closeFormModal()
       await loadUsers(pageInfo.page)
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm tài khoản thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -246,25 +312,29 @@ function UserManagement() {
 
   const handleUpdate = async () => {
     if (!selectedUserId) return
+    if (!hasFormChanges) {
+      toast.info('Tài khoản chưa có thay đổi để lưu.')
+      return false
+    }
     if (!form.username || !form.fullName) {
       toast.error('Vui lòng nhập đầy đủ thông tin bắt buộc.')
-      return
+      return false
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       toast.error('Email không đúng định dạng.')
-      return
+      return false
     }
     if (form.phone && !/^0\d{9}$/.test(form.phone.trim())) {
       toast.error('Số điện thoại phải gồm đúng 10 số và bắt đầu bằng 0.')
-      return
+      return false
     }
     if (form.birthday && new Date(form.birthday) >= new Date()) {
       toast.error('Ngày sinh phải là ngày trong quá khứ.')
-      return
+      return false
     }
     if (isTechSupportRole && form.techTypeIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -282,9 +352,11 @@ function UserManagement() {
       toast.success('Cập nhật tài khoản thành công.')
       closeFormModal()
       await loadUsers(pageInfo.page)
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Cập nhật tài khoản thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -614,7 +686,7 @@ function UserManagement() {
               <h3 className="text-lg font-semibold text-slate-800">{isEditing ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'}</h3>
               <button
                 type="button"
-                onClick={closeFormModal}
+                onClick={requestCloseFormModal}
                 className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Đóng
@@ -763,7 +835,7 @@ function UserManagement() {
               <button
                 type="button"
                 onClick={handleUpdate}
-                disabled={submitting || !isEditing}
+                disabled={submitting || !isEditing || !hasFormChanges}
                 className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
                 Cập nhật
@@ -778,7 +850,7 @@ function UserManagement() {
               </button>
               <button
                 type="button"
-                onClick={closeFormModal}
+                onClick={requestCloseFormModal}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Hủy

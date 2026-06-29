@@ -25,36 +25,39 @@ import org.springframework.util.StringUtils;
 public class AreaTypeCatalogService {
 
     private static final List<AreaTypeSeed> DEFAULT_AREA_TYPES = List.of(
-            new AreaTypeSeed("OFFICE_DEPARTMENT", "Văn phòng / Phòng ban", "Dùng cho phòng Marketing, phòng Giám đốc, phòng Kế toán hoặc phòng Giáo viên.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", 10),
-            new AreaTypeSeed("MEETING_ROOM", "Phòng họp / Thảo luận", "Meeting room, phòng họp hội đồng hoặc không gian thảo luận nhóm.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", 20),
-            new AreaTypeSeed("CLASSROOM_TRAINING", "Phòng học / Không gian đào tạo", "Dùng cho lớp học ở trường hoặc phòng training nội bộ, onboarding ở công ty.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", 30),
-            new AreaTypeSeed("STORAGE_WAREHOUSE", "Kho lưu trữ", "Kho vật tư, kho văn phòng phẩm hoặc kho thiết bị.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", 40),
-            new AreaTypeSeed("TECH_SERVER_ROOM", "Phòng Kỹ thuật / Máy chủ", "Phòng Server, trạm điện hoặc khu kỹ thuật chuyên trách vận hành.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", 50),
-            new AreaTypeSeed("LAB_RD", "Phòng Thí nghiệm / R&D", "Phòng Lab trường học hoặc phòng nghiên cứu sản phẩm của công ty.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", 60),
-            new AreaTypeSeed("MEDICAL_ROOM", "Phòng Y tế", "Khu vực y tế, chăm sóc sức khỏe hoặc sơ cứu.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", 70),
-            new AreaTypeSeed("LOBBY_RECEPTION", "Sảnh / Khu vực lễ tân", "Lobby, tiền sảnh hoặc nơi đón tiếp khách.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", 80),
-            new AreaTypeSeed("PANTRY_DINING", "Khu vực ăn uống / Pantry", "Nhà ăn sinh viên, căn tin hoặc khu vực pha trà, cà phê cho nhân viên.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", 90),
-            new AreaTypeSeed("EVENT_HALL", "Khu vực sự kiện / Hội trường", "Nơi tổ chức sinh hoạt chung, hội thảo, sự kiện hoặc hội trường.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", 100),
-            new AreaTypeSeed("CORRIDOR_BALCONY", "Hành lang / Ban công", "Không gian chung và lưu thông, thường có camera, đèn, điều hòa hoặc thiết bị PCCC cố định.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", 110),
-            new AreaTypeSeed("STAIR_ELEVATOR", "Cầu thang / Thang máy", "Khu vực di chuyển theo tầng, vẫn có thể chứa nhiều tài sản cố định như camera hoặc thiết bị an toàn.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", 120),
-            new AreaTypeSeed("RESTROOM", "Nhà vệ sinh", "Không gian tiện ích chung, vẫn có thể phát sinh thiết bị cố định phục vụ vận hành.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", 130),
-            new AreaTypeSeed("PARKING", "Bãi đỗ xe", "Khu vực gửi xe, trông xe hoặc đỗ phương tiện.", "OUTDOOR", "Không gian Ngoài trời", 140),
-            new AreaTypeSeed("OUTDOOR_CAMPUS", "Sân bãi / Khuôn viên", "Bao gồm sân tập, sân bóng, sân sinh hoạt chung hoặc khuôn viên ngoài trời.", "OUTDOOR", "Không gian Ngoài trời", 150),
-            new AreaTypeSeed("GATE_GUARD", "Cổng / Trạm gác", "Cổng ra vào, chốt bảo vệ hoặc trạm gác kiểm soát truy cập.", "OUTDOOR", "Không gian Ngoài trời", 160)
+            new AreaTypeSeed("OFFICE_DEPARTMENT", "Văn phòng / Phòng ban", "Dùng cho phòng Marketing, phòng Giám đốc, phòng Kế toán hoặc phòng Giáo viên.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", false, 10),
+            new AreaTypeSeed("MEETING_ROOM", "Phòng họp / Thảo luận", "Meeting room, phòng họp hội đồng hoặc không gian thảo luận nhóm.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", false, 20),
+            new AreaTypeSeed("CLASSROOM_TRAINING", "Phòng học / Không gian đào tạo", "Dùng cho lớp học ở trường hoặc phòng training nội bộ, onboarding ở công ty.", "WORKSPACE_TRAINING", "Không gian Làm việc & Đào tạo", false, 30),
+            new AreaTypeSeed("STORAGE_WAREHOUSE", "Kho lưu trữ", "Kho vật tư, kho văn phòng phẩm hoặc kho thiết bị.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", true, 40),
+            new AreaTypeSeed("TECH_SERVER_ROOM", "Phòng Kỹ thuật / Máy chủ", "Phòng Server, trạm điện hoặc khu kỹ thuật chuyên trách vận hành.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", false, 50),
+            new AreaTypeSeed("LAB_RD", "Phòng Thí nghiệm / R&D", "Phòng Lab trường học hoặc phòng nghiên cứu sản phẩm của công ty.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", false, 60),
+            new AreaTypeSeed("MEDICAL_ROOM", "Phòng Y tế", "Khu vực y tế, chăm sóc sức khỏe hoặc sơ cứu.", "SPECIALIZED_OPERATION", "Không gian Chuyên dụng & Vận hành", false, 70),
+            new AreaTypeSeed("LOBBY_RECEPTION", "Sảnh / Khu vực lễ tân", "Lobby, tiền sảnh hoặc nơi đón tiếp khách.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", false, 80),
+            new AreaTypeSeed("PANTRY_DINING", "Khu vực ăn uống / Pantry", "Nhà ăn sinh viên, căn tin hoặc khu vực pha trà, cà phê cho nhân viên.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", false, 90),
+            new AreaTypeSeed("EVENT_HALL", "Khu vực sự kiện / Hội trường", "Nơi tổ chức sinh hoạt chung, hội thảo, sự kiện hoặc hội trường.", "AMENITY_COMMUNICATION", "Không gian Tiện ích & Giao tiếp", false, 100),
+            new AreaTypeSeed("CORRIDOR_BALCONY", "Hành lang / Ban công", "Không gian chung và lưu thông, thường có camera, đèn, điều hòa hoặc thiết bị PCCC cố định.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", false, 110),
+            new AreaTypeSeed("STAIR_ELEVATOR", "Cầu thang / Thang máy", "Khu vực di chuyển theo tầng, vẫn có thể chứa nhiều tài sản cố định như camera hoặc thiết bị an toàn.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", false, 120),
+            new AreaTypeSeed("RESTROOM", "Nhà vệ sinh", "Không gian tiện ích chung, vẫn có thể phát sinh thiết bị cố định phục vụ vận hành.", "COMMON_CIRCULATION", "Không gian Chung & Lưu thông", false, 130),
+            new AreaTypeSeed("PARKING", "Bãi đỗ xe", "Khu vực gửi xe, trông xe hoặc đỗ phương tiện.", "OUTDOOR", "Không gian Ngoài trời", false, 140),
+            new AreaTypeSeed("OUTDOOR_CAMPUS", "Sân bãi / Khuôn viên", "Bao gồm sân tập, sân bóng, sân sinh hoạt chung hoặc khuôn viên ngoài trời.", "OUTDOOR", "Không gian Ngoài trời", false, 150),
+            new AreaTypeSeed("GATE_GUARD", "Cổng / Trạm gác", "Cổng ra vào, chốt bảo vệ hoặc trạm gác kiểm soát truy cập.", "OUTDOOR", "Không gian Ngoài trời", false, 160)
     );
 
     private final AreaTypeCatalogRepository areaTypeCatalogRepository;
     private final RoomShapeRepository roomShapeRepository;
     private final LocationRepository locationRepository;
+    private final LocationService locationService;
 
     public AreaTypeCatalogService(
             AreaTypeCatalogRepository areaTypeCatalogRepository,
             RoomShapeRepository roomShapeRepository,
-            LocationRepository locationRepository
+            LocationRepository locationRepository,
+            LocationService locationService
     ) {
         this.areaTypeCatalogRepository = areaTypeCatalogRepository;
         this.roomShapeRepository = roomShapeRepository;
         this.locationRepository = locationRepository;
+        this.locationService = locationService;
     }
 
     @Transactional(readOnly = true)
@@ -84,9 +87,11 @@ public class AreaTypeCatalogService {
                 .areaGroupKey(normalizedAreaGroupKey)
                 .areaGroupLabel(normalizedAreaGroupLabel)
                 .description(normalizeDescription(request.getDescription()))
+                .isStorageWarehouse(Boolean.TRUE.equals(request.getIsStorageWarehouse()))
                 .builtIn(false)
                 .sortOrder(nextSortOrder())
                 .build());
+        locationService.invalidateLocationCache();
         return mapToResponse(saved);
     }
 
@@ -100,12 +105,16 @@ public class AreaTypeCatalogService {
         if (areaTypeCatalogRepository.existsByLabelIgnoreCaseAndIdNot(normalizedLabel, id)) {
             throw new CustomException("Tên loại khu vực đã tồn tại.");
         }
+        validateStorageWarehouseToggle(areaType, request.getIsStorageWarehouse());
 
         areaType.setLabel(normalizedLabel);
         areaType.setAreaGroupKey(normalizedAreaGroupKey);
         areaType.setAreaGroupLabel(normalizedAreaGroupLabel);
         areaType.setDescription(normalizeDescription(request.getDescription()));
-        return mapToResponse(areaTypeCatalogRepository.save(areaType));
+        areaType.setIsStorageWarehouse(Boolean.TRUE.equals(request.getIsStorageWarehouse()));
+        AreaTypeCatalog saved = areaTypeCatalogRepository.save(areaType);
+        locationService.invalidateLocationCache();
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -120,6 +129,7 @@ public class AreaTypeCatalogService {
             throw new CustomException("Không thể xóa loại khu vực đang được dùng ở " + usageCount + " khu vực.");
         }
         areaTypeCatalogRepository.delete(areaType);
+        locationService.invalidateLocationCache();
     }
 
     @Transactional
@@ -137,6 +147,7 @@ public class AreaTypeCatalogService {
             areaType.setAreaGroupKey(seed.areaGroupKey());
             areaType.setAreaGroupLabel(seed.areaGroupLabel());
             areaType.setDescription(seed.description());
+            areaType.setIsStorageWarehouse(seed.isStorageWarehouse());
             areaType.setBuiltIn(true);
             areaType.setSortOrder(seed.sortOrder());
             areaTypeCatalogRepository.save(areaType);
@@ -152,6 +163,7 @@ public class AreaTypeCatalogService {
         if (!obsoleteBuiltIns.isEmpty()) {
             areaTypeCatalogRepository.deleteAll(obsoleteBuiltIns);
         }
+        locationService.invalidateLocationCache();
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -173,10 +185,21 @@ public class AreaTypeCatalogService {
                 .areaGroupKey(areaType.getAreaGroupKey())
                 .areaGroupLabel(areaType.getAreaGroupLabel())
                 .description(areaType.getDescription())
+                .isStorageWarehouse(Boolean.TRUE.equals(areaType.getIsStorageWarehouse()))
                 .builtIn(Boolean.TRUE.equals(areaType.getBuiltIn()))
                 .sortOrder(areaType.getSortOrder())
                 .usageCount(countUsage(areaType.getTypeKey()))
                 .build();
+    }
+
+    private void validateStorageWarehouseToggle(AreaTypeCatalog areaType, Boolean nextValue) {
+        if (areaType == null || !Boolean.TRUE.equals(areaType.getIsStorageWarehouse()) || Boolean.TRUE.equals(nextValue)) {
+            return;
+        }
+        long linkedLocations = locationRepository.countByAreaTypeKeyIgnoreCase(areaType.getTypeKey());
+        if (linkedLocations > 0) {
+            throw new CustomException("Không thể bỏ đánh dấu kho lưu trữ khi vẫn còn " + linkedLocations + " phòng đang dùng loại khu vực này.");
+        }
     }
 
     private long countUsage(String areaTypeKey) {
@@ -232,6 +255,7 @@ public class AreaTypeCatalogService {
             String description,
             String areaGroupKey,
             String areaGroupLabel,
+            boolean isStorageWarehouse,
             int sortOrder
     ) {
     }

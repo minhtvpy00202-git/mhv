@@ -29,6 +29,7 @@ const TicketSatisfactionReview = lazy(() => import('./pages/TicketSatisfactionRe
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'))
 const AssetManagement = lazy(() => import('./pages/admin/AssetManagement'))
 const AssetMapManagement = lazy(() => import('./pages/admin/AssetMapManagement'))
+const AreaTypeCatalogManagement = lazy(() => import('./pages/admin/AreaTypeCatalogManagement'))
 const SupplierManagement = lazy(() => import('./pages/admin/SupplierManagement'))
 const CategoryManagement = lazy(() => import('./pages/admin/CategoryManagement'))
 const LocationManagement = lazy(() => import('./pages/admin/LocationManagement'))
@@ -168,11 +169,17 @@ function App() {
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
           <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
           <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
-          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables" initialSection="consumables" />)} />
+          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
+          <Route path="/admin/assets/consumables/warehouses" element={withSuspense(<AssetManagement key="assets-consumables-warehouses" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
+          <Route path="/admin/assets/consumables/requests" element={withSuspense(<AssetManagement key="assets-consumables-requests" initialSection="consumables" initialConsumableWorkspace="REQUESTS" />)} />
+          <Route path="/admin/assets/consumables/disposal" element={withSuspense(<AssetManagement key="assets-consumables-disposal" initialSection="consumables" initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
           <Route path="/admin/suppliers" element={withSuspense(<SupplierManagement />)} />
-          <Route path="/admin/categories" element={withSuspense(<CategoryManagement />)} />
+          <Route path="/admin/categories" element={<Navigate to="/admin/categories/fixed" replace />} />
+          <Route path="/admin/categories/fixed" element={withSuspense(<CategoryManagement lockedCategoryKind="ITEMIZED" />)} />
+          <Route path="/admin/categories/consumables" element={withSuspense(<CategoryManagement lockedCategoryKind="CONSUMABLE" />)} />
           <Route path="/admin/locations" element={withSuspense(<LocationManagement />)} />
+          <Route path="/admin/locations/area-types" element={withSuspense(<AreaTypeCatalogManagement />)} />
           <Route path="/admin/tech-support-types" element={withSuspense(<TechSupportTypeManagement />)} />
           <Route path="/admin/asset-statistics" element={withSuspense(<AssetStatisticsManagement />)} />
           <Route path="/admin/usage-history" element={withSuspense(<UsageHistoryManagement />)} />

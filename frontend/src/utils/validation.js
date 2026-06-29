@@ -138,17 +138,18 @@ export function validateSupplierForm(form) {
   return errors
 }
 
-export function validateCategoryForm(form) {
+export function validateCategoryForm(form, options = {}) {
   const errors = {}
   const name = String(form?.name || '').trim()
   const specTemplates = Array.isArray(form?.specTemplates) ? form.specTemplates : []
   const categoryKind = String(form?.categoryKind || 'ITEMIZED').trim().toUpperCase()
+  const itemLabel = String(options?.itemLabel || 'loại thiết bị').trim() || 'loại thiết bị'
 
   if (name.length < 2 || name.length > 50) {
-    errors.name = 'Tên loại thiết bị phải từ 2 đến 50 ký tự.'
+    errors.name = `Tên ${itemLabel} phải từ 2 đến 50 ký tự.`
   }
   if (!['ITEMIZED', 'CONSUMABLE'].includes(categoryKind)) {
-    errors.categoryKind = 'Vui lòng chọn loại category hợp lệ.'
+    errors.categoryKind = 'Vui lòng chọn cách quản lý hợp lệ.'
   }
   if (categoryKind !== 'CONSUMABLE' && !isPositiveNumber(form?.techTypeId)) {
     errors.techTypeId = 'Vui lòng chọn nhóm kỹ thuật hợp lệ.'

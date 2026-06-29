@@ -22,7 +22,12 @@ public interface ConsumableLocationStockRepository extends JpaRepository<Consuma
     @Query("""
             select stock from ConsumableLocationStock stock
             join stock.location location
-            where lower(trim(location.roomName)) <> 'kho'
+            where not exists (
+                select 1
+                from AreaTypeCatalog areaType
+                where upper(areaType.typeKey) = upper(location.areaTypeKey)
+                  and coalesce(areaType.isStorageWarehouse, false) = true
+            )
             order by location.roomName asc, stock.asset.name asc
             """)
     List<ConsumableLocationStock> findAllTrackableRoomStocksOrderByLocationAndAsset();

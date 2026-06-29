@@ -16,7 +16,7 @@ import { buildAreaTypeOptions, buildAreaTypePayload, resolveAreaTypeDraft } from
 const PAGE_SIZE = 10
 const locationColumnOptions = [
   { key: 'id', label: 'ID' },
-  { key: 'roomName', label: 'Tên phòng / khu vực' },
+  { key: 'roomName', label: 'Tên khu vực' },
   { key: 'areaTypeLabel', label: 'Loại khu vực' },
   { key: 'floorName', label: 'Tầng' },
   { key: 'actions', label: 'Thao tác' },
@@ -33,6 +33,22 @@ function createDefaultConfirmDialog() {
     tone: 'danger',
     busy: false,
     onConfirm: null,
+  }
+}
+
+function normalizeLocationForm(form, areaTypeCatalogEntries) {
+  const areaTypePayload = buildAreaTypePayload(
+    form?.areaTypeKey,
+    form?.areaTypeLabel,
+    areaTypeCatalogEntries,
+    form?.areaGroupLabel,
+  )
+
+  return {
+    roomName: String(form?.roomName || '').trim(),
+    floorId: form?.floorId != null ? String(form.floorId) : '',
+    areaTypeKey: String(areaTypePayload.areaTypeKey || '').trim(),
+    areaTypeLabel: String(areaTypePayload.areaTypeLabel || '').trim(),
   }
 }
 
@@ -53,6 +69,14 @@ function LocationManagement() {
     keyword: '',
   })
   const [form, setForm] = useState({
+    roomName: '',
+    floorId: '',
+    areaTypeKey: '',
+    areaTypeLabel: '',
+    areaGroupKey: '',
+    areaGroupLabel: '',
+  })
+  const [initialForm, setInitialForm] = useState({
     roomName: '',
     floorId: '',
     areaTypeKey: '',
@@ -107,6 +131,18 @@ function LocationManagement() {
     ),
     [areaTypeCatalogEntries, locations],
   )
+  const normalizedForm = useMemo(
+    () => normalizeLocationForm(form, areaTypeCatalogEntries),
+    [areaTypeCatalogEntries, form],
+  )
+  const normalizedInitialForm = useMemo(
+    () => normalizeLocationForm(initialForm, areaTypeCatalogEntries),
+    [areaTypeCatalogEntries, initialForm],
+  )
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizedForm) !== JSON.stringify(normalizedInitialForm),
+    [normalizedForm, normalizedInitialForm],
+  )
   const totalPages = Math.max(1, Math.ceil(sortedLocations.length / PAGE_SIZE))
   const paginatedLocations = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -130,7 +166,7 @@ function LocationManagement() {
       key: 'roomName',
       label: (
         <button type="button" onClick={() => handleSort('roomName')} className="whitespace-nowrap hover:text-fptOrange">
-          {getSortLabel('roomName', 'Tên phòng / khu vực')}
+          {getSortLabel('roomName', 'Tên khu vực')}
         </button>
       ),
       headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
@@ -252,12 +288,40 @@ function LocationManagement() {
 
   const resetForm = () => {
     setSelectedLocationId(null)
-    setForm({ roomName: '', floorId: '', areaTypeKey: '', areaTypeLabel: '', areaGroupKey: '', areaGroupLabel: '' })
+    const emptyForm = { roomName: '', floorId: '', areaTypeKey: '', areaTypeLabel: '', areaGroupKey: '', areaGroupLabel: '' }
+    setForm(emptyForm)
+    setInitialForm(emptyForm)
   }
 
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
+  }
+
+  const discardFormModal = () => {
+    setConfirmDialog(createDefaultConfirmDialog())
+    closeFormModal()
+  }
+
+  const requestCloseFormModal = () => {
+    if (submitting) return
+    if (!hasFormChanges) {
+      closeFormModal()
+      return
+    }
+    setConfirmDialog({
+      open: true,
+      title: 'Lưu thay đổi trước khi đóng?',
+      message: 'Bạn có thay đổi chưa lưu trong biểu mẫu phòng hoặc khu vực. Bạn có muốn lưu trước khi đóng không?',
+      confirmLabel: 'Có',
+      cancelLabel: 'Không',
+      tone: 'primary',
+      busy: false,
+      onConfirm: async () => (isEditing ? handleUpdate() : handleCreate()),
+      onCancel: () => {
+        discardFormModal()
+      },
+    })
   }
 
   const openCreateFloorModal = (options = {}) => {
@@ -275,14 +339,16 @@ function LocationManagement() {
   const handleSelectLocation = (location) => {
     setSelectedLocationId(location.id)
     const areaTypeDraft = resolveAreaTypeDraft(location, areaTypeCatalogEntries)
-    setForm({
+    const nextForm = {
       roomName: location.roomName || '',
       floorId: location.floorId != null ? String(location.floorId) : '',
       areaTypeKey: areaTypeDraft.areaTypeKey,
       areaTypeLabel: areaTypeDraft.areaTypeLabel,
       areaGroupKey: areaTypeDraft.areaGroupKey,
       areaGroupLabel: areaTypeDraft.areaGroupLabel,
-    })
+    }
+    setForm(nextForm)
+    setInitialForm(nextForm)
     setShowFormModal(true)
   }
 
@@ -309,12 +375,12 @@ function LocationManagement() {
   const handleCreate = async () => {
     if (!form.roomName.trim()) {
       toast.error('Vui lòng nhập tên phòng hoặc khu vực.')
-      return
+      return false
     }
     const areaTypePayload = buildAreaTypePayload(form.areaTypeKey, form.areaTypeLabel, areaTypeCatalogEntries, form.areaGroupLabel)
     if (!areaTypePayload.areaTypeLabel) {
       toast.error('Vui lòng chọn loại khu vực.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -327,9 +393,11 @@ function LocationManagement() {
       toast.success('Thêm phòng thành công.')
       closeFormModal()
       await loadLocations()
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Thêm phòng thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -337,14 +405,18 @@ function LocationManagement() {
 
   const handleUpdate = async () => {
     if (!selectedLocationId) return
+    if (!hasFormChanges) {
+      toast.info('Phòng hoặc khu vực chưa có thay đổi để lưu.')
+      return false
+    }
     if (!form.roomName.trim()) {
       toast.error('Vui lòng nhập tên phòng hoặc khu vực.')
-      return
+      return false
     }
     const areaTypePayload = buildAreaTypePayload(form.areaTypeKey, form.areaTypeLabel, areaTypeCatalogEntries, form.areaGroupLabel)
     if (!areaTypePayload.areaTypeLabel) {
       toast.error('Vui lòng chọn loại khu vực.')
-      return
+      return false
     }
     setSubmitting(true)
     try {
@@ -357,9 +429,11 @@ function LocationManagement() {
       toast.success('Cập nhật phòng thành công.')
       closeFormModal()
       await loadLocations()
+      return true
     } catch (error) {
       const message = error?.response?.data?.message || 'Cập nhật phòng thất bại.'
       toast.error(message)
+      return false
     } finally {
       setSubmitting(false)
     }
@@ -486,7 +560,7 @@ function LocationManagement() {
       <div className="rounded-xl bg-white p-4 shadow-sm dark:bg-slate-900">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Quản lý phòng - khu vực</h2>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Quản lý khu vực</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Theo dõi phòng học hoặc khu vực lưu trữ thiết bị trong hệ thống, đồng thời gán tầng cho sơ đồ định vị.</p>
           </div>
           <div className="flex gap-2">
@@ -725,23 +799,24 @@ function LocationManagement() {
       </div>
 
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center sm:p-6">
+          <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <h4 className="text-base font-semibold text-slate-800">
                 {isEditing ? `Chỉnh sửa phòng #${selectedLocationId}` : 'Thêm mới phòng'}
               </h4>
               <button
                 type="button"
-                onClick={closeFormModal}
+                onClick={requestCloseFormModal}
                 className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Đóng
               </button>
             </div>
 
+            <div className="flex-1 overflow-y-auto pr-1">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Tên phòng / khu vực</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Tên khu vực</label>
               <input
                 value={form.roomName}
                 onChange={(e) => setForm((prev) => ({ ...prev, roomName: e.target.value }))}
@@ -782,12 +857,13 @@ function LocationManagement() {
                 areaTypePresets={areaTypeCatalogEntries}
               />
             </div>
+            </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={isEditing ? handleUpdate : handleCreate}
-                disabled={submitting}
+                disabled={submitting || (isEditing && !hasFormChanges)}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
                   isEditing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-fptOrange hover:bg-fptOrangeDark'
                 }`}

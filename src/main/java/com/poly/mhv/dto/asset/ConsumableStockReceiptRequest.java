@@ -28,6 +28,10 @@ public class ConsumableStockReceiptRequest {
     @Positive(message = "Nhà cung cấp không hợp lệ.")
     private Integer supplierId;
 
+    @NotNull(message = "Kho nhập là bắt buộc.")
+    @Positive(message = "Kho nhập không hợp lệ.")
+    private Integer warehouseLocationId;
+
     private String lotCode;
 
     @NotNull(message = "Ngày nhập là bắt buộc.")

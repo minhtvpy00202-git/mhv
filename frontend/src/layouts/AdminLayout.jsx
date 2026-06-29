@@ -20,7 +20,7 @@ import {
 } from '@tabler/icons-react'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import ThemeToggle from '../components/ThemeToggle'
@@ -32,42 +32,149 @@ import { formatVietnamDateTime } from '../utils/datetime'
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
   {
-    id: 'shared-management',
-    label: 'Quản lý chung',
+    id: 'assets-root',
+    label: 'Tài sản',
     icon: Boxes,
     children: [
       {
-        id: 'asset-management',
-        label: 'Quản lý tài sản',
-        icon: Boxes,
+        id: 'fixed-assets',
+        label: 'Tài sản cố định',
+        icon: PackageSearch,
         children: [
-          { to: '/admin/assets/fixed', label: 'Tài sản cố định', icon: PackageSearch },
-          { to: '/admin/assets/consumables', label: 'Vật tư tiêu hao', icon: Boxes },
-          { to: '/admin/asset-statistics', label: 'Thống kê', icon: BarChart3 },
+          { to: '/admin/assets/fixed', label: 'Danh sách tài sản', icon: PackageSearch },
+          { to: '/admin/categories/fixed', label: 'Loại thiết bị', icon: Tags },
+          { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
         ],
       },
-      { to: '/admin/asset-map', label: 'Sơ đồ định vị tài sản', icon: MapPin },
-      { to: '/admin/suppliers', label: 'Quản lý nhà cung cấp', icon: PackageSearch },
-      { to: '/admin/categories', label: 'Quản lý loại thiết bị', icon: Tags },
-      { to: '/admin/tech-support-types', label: 'Quản lý loại kỹ thuật viên', icon: Wrench },
-      { to: '/admin/locations', label: 'Quản lý phòng - khu vực', icon: MapPin },
+      {
+        id: 'consumable-assets',
+        label: 'Vật tư tiêu hao',
+        icon: Boxes,
+        children: [
+          { to: '/admin/assets/consumables', label: 'Danh sách vật tư', icon: Boxes },
+          { to: '/admin/categories/consumables', label: 'Loại vật tư', icon: Tags },
+          { to: '/admin/assets/consumables/warehouses', label: 'Kho vật tư', icon: PackageSearch },
+          { to: '/admin/assets/consumables/requests', label: 'Yêu cầu cấp phát / sử dụng', icon: Clock },
+          { to: '/admin/assets/consumables/disposal', label: 'Thanh lý / hủy vật tư', icon: Wrench },
+        ],
+      },
+      { to: '/admin/asset-statistics', label: 'Thống kê tài sản', icon: BarChart3 },
     ],
   },
-  { to: '/admin/users', label: 'Quản lý tài khoản', icon: Users },
-  { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
   {
-    id: 'tickets-management-submenu',
-    label: 'Ticket sửa chữa',
+    id: 'space-root',
+    label: 'Không gian & vị trí',
+    icon: MapPin,
+    children: [
+      { to: '/admin/asset-map', label: 'Sơ đồ định vị tài sản', icon: MapPin },
+      {
+        id: 'locations-root',
+        label: 'Khu vực',
+        icon: MapPin,
+        children: [
+          { to: '/admin/locations', label: 'Danh sách khu vực', icon: MapPin },
+          { to: '/admin/locations/area-types', label: 'Loại khu vực', icon: Tags },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'operations-root',
+    label: 'Vận hành kỹ thuật',
     icon: Ticket,
     children: [
-      { to: '/admin/tickets', label: 'Danh sách ticket', icon: Ticket },
-      { to: '/admin/tickets/extensions', label: 'Duyệt yêu cầu', icon: Clock },
+      {
+        id: 'tickets-root',
+        label: 'Ticket sửa chữa',
+        icon: Ticket,
+        children: [
+          { to: '/admin/tickets', label: 'Danh sách ticket', icon: Ticket },
+          { to: '/admin/tickets/extensions', label: 'Duyệt yêu cầu gia hạn / SLA', icon: Clock },
+        ],
+      },
+      { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
     ],
   },
-  { to: '/admin/inventory-audits', label: 'Kiểm kê định kỳ', icon: ClipboardCheck },
-
-  { to: '/admin/branding', label: 'Cài đặt thương hiệu', icon: Settings },
+  {
+    id: 'partners-root',
+    label: 'Đối tác & người dùng',
+    icon: Users,
+    children: [
+      { to: '/admin/suppliers', label: 'Nhà cung cấp', icon: PackageSearch },
+      { to: '/admin/users', label: 'Tài khoản người dùng', icon: Users },
+      { to: '/admin/tech-support-types', label: 'Loại kỹ thuật viên', icon: Wrench },
+    ],
+  },
+  {
+    id: 'settings-root',
+    label: 'Cài đặt hệ thống',
+    icon: Settings,
+    children: [
+      { to: '/admin/branding', label: 'Cài đặt thương hiệu', icon: Settings },
+    ],
+  },
 ]
+
+function getMenuPath(item) {
+  if (!item?.to) return ''
+  return typeof item.to === 'string' ? item.to.split('?')[0] : item.to.pathname || ''
+}
+
+function collectMenuPaths(items, bucket = []) {
+  ;(items || []).forEach((item) => {
+    const itemPath = getMenuPath(item)
+    if (itemPath) {
+      bucket.push(itemPath)
+    }
+    if (item?.children?.length) {
+      collectMenuPaths(item.children, bucket)
+    }
+  })
+  return bucket
+}
+
+const menuPaths = collectMenuPaths(menuItems)
+
+function isMenuActiveForPath(item, pathname) {
+  if (item.children?.length) return item.children.some((child) => isMenuActiveForPath(child, pathname))
+  const itemPath = getMenuPath(item)
+  if (!itemPath) return false
+  if (itemPath === '/admin/assets/fixed' && pathname === '/admin/assets') return true
+  if (pathname === itemPath) return true
+  const hasMoreSpecificMatch = menuPaths.some(
+    (path) =>
+      path !== itemPath
+      && path.startsWith(`${itemPath}/`)
+      && (pathname === path || pathname.startsWith(`${path}/`)),
+  )
+  if (hasMoreSpecificMatch) return false
+  return pathname.startsWith(`${itemPath}/`)
+}
+
+function collectExpandedMenuState(items, pathname, bucket = {}) {
+  ;(items || []).forEach((item) => {
+    if (!item?.children?.length) return
+    if (item.id && item.children.some((child) => isMenuActiveForPath(child, pathname))) {
+      bucket[item.id] = true
+    }
+    collectExpandedMenuState(item.children, pathname, bucket)
+  })
+  return bucket
+}
+
+function getNotificationSubjectLabel(notification) {
+  const eventType = String(notification?.eventType || '').toUpperCase()
+  const title = String(notification?.title || '').toLowerCase()
+
+  if (eventType.startsWith('USER_')) return null
+  if (eventType.startsWith('CATEGORY_')) return null
+  if (eventType.startsWith('SUPPLIER_')) return null
+  if (eventType.startsWith('LOCATION_')) return null
+  if (eventType.startsWith('TECH_SUPPORT_TYPE_')) return null
+  if (eventType.startsWith('ASSET_')) return title.includes('vật tư') ? 'Vật tư' : 'Thiết bị'
+  if (eventType.startsWith('TICKET_')) return 'Thiết bị'
+  return 'Đối tượng'
+}
 
 function AdminLayout() {
   const { user, logout } = useAuth()
@@ -78,7 +185,11 @@ function AdminLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
-  const [expandedMenus, setExpandedMenus] = useState({ 'shared-management': true, 'asset-management': true, 'tickets-management-submenu': true })
+  const [expandedMenus, setExpandedMenus] = useState({
+    'assets-root': true,
+    'fixed-assets': true,
+    'consumable-assets': true,
+  })
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -94,35 +205,13 @@ function AdminLayout() {
   }, [])
 
   useEffect(() => {
-    if (
-      location.pathname.startsWith('/admin/assets')
-      || location.pathname.startsWith('/admin/asset-statistics')
-      || location.pathname.startsWith('/admin/asset-map')
-      || location.pathname.startsWith('/admin/suppliers')
-      || location.pathname.startsWith('/admin/categories')
-      || location.pathname.startsWith('/admin/tech-support-types')
-      || location.pathname.startsWith('/admin/locations')
-    ) {
-      const syncMenuTimer = window.setTimeout(() => {
-        setExpandedMenus((prev) => ({
-          ...prev,
-          'shared-management': true,
-          ...(location.pathname.startsWith('/admin/assets') || location.pathname.startsWith('/admin/asset-statistics')
-            ? { 'asset-management': true }
-            : {}),
-        }))
-      }, 0)
-      return () => window.clearTimeout(syncMenuTimer)
-    }
-    if (
-      location.pathname.startsWith('/admin/tickets')
-    ) {
-      const syncMenuTimer = window.setTimeout(() => {
-        setExpandedMenus((prev) => ({ ...prev, 'tickets-management-submenu': true }))
-      }, 0)
-      return () => window.clearTimeout(syncMenuTimer)
-    }
-    return undefined
+    const syncMenuTimer = window.setTimeout(() => {
+      setExpandedMenus((prev) => ({
+        ...prev,
+        ...collectExpandedMenuState(menuItems, location.pathname),
+      }))
+    }, 0)
+    return () => window.clearTimeout(syncMenuTimer)
   }, [location.pathname])
 
   useEffect(() => {
@@ -174,17 +263,8 @@ function AdminLayout() {
     window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
   }
 
-  const getMenuPath = (item) => {
-    if (!item?.to) return ''
-    return typeof item.to === 'string' ? item.to.split('?')[0] : item.to.pathname || ''
-  }
-
   const isMenuItemActive = (item) => {
-    if (item.children?.length) return item.children.some((child) => isMenuItemActive(child))
-    const itemPath = getMenuPath(item)
-    if (!itemPath) return false
-    if (itemPath === '/admin/assets/fixed' && location.pathname === '/admin/assets') return true
-    return location.pathname === itemPath || location.pathname.startsWith(`${itemPath}/`)
+    return isMenuActiveForPath(item, location.pathname)
   }
 
   const getMenuItemClass = (active, depth, parent = false) => {
@@ -203,20 +283,21 @@ function AdminLayout() {
 
     if (!item.children?.length) {
       return (
-        <NavLink key={key} to={item.to} className={() => getMenuItemClass(active, depth)}>
+        <Link key={key} to={item.to} className={getMenuItemClass(active, depth)}>
           <Icon size={depth >= 2 ? 15 : depth === 1 ? 16 : 18} />
           <span>{item.label}</span>
-        </NavLink>
+        </Link>
       )
     }
 
     const isExpanded = expandedMenus[item.id]
+    const buttonActive = Boolean(item.to) && active
     return (
       <div key={key} className="space-y-1">
         <button
           type="button"
           onClick={() => setExpandedMenus((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-          className={`${getMenuItemClass(active, depth, true)} w-full justify-between`}
+          className={`${getMenuItemClass(buttonActive, depth, true)} w-full justify-between`}
         >
           <span className="flex items-center gap-2">
             <Icon size={depth >= 2 ? 15 : depth === 1 ? 16 : 18} />
@@ -348,7 +429,9 @@ function AdminLayout() {
                     {notifications.length === 0 && (
                       <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo.</p>
                     )}
-                    {notifications.map((notification) => (
+                    {notifications.map((notification) => {
+                      const subjectLabel = getNotificationSubjectLabel(notification)
+                      return (
                       <button
                         key={notification.id}
                         type="button"
@@ -361,13 +444,18 @@ function AdminLayout() {
                         }`}
                       >
                         <p>{notification.title}</p>
-                        {notification.assetName && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">Thiết bị: {notification.assetName}</p>}
+                        {notification.assetName && subjectLabel && (
+                          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                            {subjectLabel}: {notification.assetName}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
                         <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
                           {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
                         </p>
                       </button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

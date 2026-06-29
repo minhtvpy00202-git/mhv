@@ -16,6 +16,7 @@ function ConfirmDialog({
   tone = 'danger',
   busy = false,
   onConfirm,
+  onCancel,
   onClose,
 }) {
   useEffect(() => {
@@ -34,6 +35,7 @@ function ConfirmDialog({
   if (!open) return null
 
   const confirmToneClass = toneClassMap[tone] || toneClassMap.danger
+  const handleCancel = onCancel || onClose
 
   return createPortal(
     <div
@@ -49,7 +51,7 @@ function ConfirmDialog({
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCancel}
             disabled={busy}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >

@@ -23,6 +23,20 @@ const navItems = [
   { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History, end: true },
 ]
 
+function getNotificationSubjectLabel(notification) {
+  const eventType = String(notification?.eventType || '').toUpperCase()
+  const title = String(notification?.title || '').toLowerCase()
+
+  if (eventType.startsWith('USER_')) return null
+  if (eventType.startsWith('CATEGORY_')) return null
+  if (eventType.startsWith('SUPPLIER_')) return null
+  if (eventType.startsWith('LOCATION_')) return null
+  if (eventType.startsWith('TECH_SUPPORT_TYPE_')) return null
+  if (eventType.startsWith('ASSET_')) return title.includes('vật tư') ? 'Vật tư' : 'Thiết bị'
+  if (eventType.startsWith('TICKET_')) return 'Thiết bị'
+  return 'Đối tượng'
+}
+
 function TechSupportLayout() {
   const { user, logout } = useAuth()
   const { branding } = useBranding()
@@ -300,7 +314,9 @@ function TechSupportLayout() {
                     {notifications.length === 0 && chatNotifications.length === 0 && (
                       <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo.</p>
                     )}
-                    {notifications.map((notification) => (
+                    {notifications.map((notification) => {
+                      const subjectLabel = getNotificationSubjectLabel(notification)
+                      return (
                       <button
                         key={notification.id}
                         type="button"
@@ -313,13 +329,18 @@ function TechSupportLayout() {
                         }`}
                       >
                         <p>{notification.title}</p>
-                        {notification.assetName && <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">Thiết bị: {notification.assetName}</p>}
+                        {notification.assetName && subjectLabel && (
+                          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                            {subjectLabel}: {notification.assetName}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{notification.message}</p>
                         <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
                           {formatVietnamDateTime(notification.occurredAt, 'Vừa xong')}
                         </p>
                       </button>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

@@ -16,4 +16,5 @@ public class LocationResponse {
     private String floorName;
     private String areaTypeKey;
     private String areaTypeLabel;
+    private Boolean isStorageWarehouse;
 }

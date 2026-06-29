@@ -38,6 +38,14 @@ function getFieldClass(hasError) {
   return `w-full rounded-lg border px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
 }
 
+function normalizeSupplierForm(form) {
+  return {
+    name: String(form?.name || '').trim(),
+    address: String(form?.address || '').trim(),
+    phoneNumber: String(form?.phoneNumber || '').trim(),
+  }
+}
+
 function SupplierManagement() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -48,6 +56,7 @@ function SupplierManagement() {
   const [currentPage, setCurrentPage] = useState(1)
   const [filters, setFilters] = useState({ keyword: '' })
   const [form, setForm] = useState({ name: '', address: '', phoneNumber: '' })
+  const [initialForm, setInitialForm] = useState({ name: '', address: '', phoneNumber: '' })
   const [formErrors, setFormErrors] = useState({})
   const { sortedItems, handleSort, getSortLabel } = useTableSort(items, {
     initialKey: 'id',
@@ -69,6 +78,12 @@ function SupplierManagement() {
   })
 
   const isEditing = Boolean(selectedId)
+  const normalizedForm = useMemo(() => normalizeSupplierForm(form), [form])
+  const normalizedInitialForm = useMemo(() => normalizeSupplierForm(initialForm), [initialForm])
+  const hasFormChanges = useMemo(
+    () => JSON.stringify(normalizedForm) !== JSON.stringify(normalizedInitialForm),
+    [normalizedForm, normalizedInitialForm],
+  )
   const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE_SIZE))
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
@@ -185,6 +200,7 @@ function SupplierManagement() {
   const resetForm = () => {
     setSelectedId(null)
     setForm({ name: '', address: '', phoneNumber: '' })
+    setInitialForm({ name: '', address: '', phoneNumber: '' })
     setFormErrors({})
   }
 
@@ -199,12 +215,14 @@ function SupplierManagement() {
   }
 
   const handleSelect = (item) => {
-    setSelectedId(item.id)
-    setForm({
+    const nextForm = {
       name: item.name || '',
       address: item.address || '',
       phoneNumber: item.phoneNumber || '',
-    })
+    }
+    setSelectedId(item.id)
+    setForm(nextForm)
+    setInitialForm(nextForm)
     setShowFormModal(true)
   }
 
@@ -235,6 +253,10 @@ function SupplierManagement() {
 
   const handleUpdate = async () => {
     if (!selectedId) return
+    if (!hasFormChanges) {
+      toast.info('Nhà cung cấp chưa có thay đổi để lưu.')
+      return
+    }
     const nextErrors = validateSupplierForm(form)
     setFormErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
@@ -243,11 +265,7 @@ function SupplierManagement() {
     }
     setSubmitting(true)
     try {
-      await axiosClient.put(`/api/suppliers/${selectedId}`, {
-        name: form.name.trim(),
-        address: form.address.trim(),
-        phoneNumber: form.phoneNumber.trim(),
-      })
+      await axiosClient.put(`/api/suppliers/${selectedId}`, normalizedForm)
       toast.success('Cập nhật nhà cung cấp thành công.')
       closeFormModal()
       await loadItems()
@@ -458,9 +476,9 @@ function SupplierManagement() {
       </div>
 
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:items-center sm:p-6">
+          <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <h4 className="text-base font-semibold text-slate-800">
                 {isEditing ? `Chỉnh sửa nhà cung cấp #${selectedId}` : 'Thêm mới nhà cung cấp'}
               </h4>
@@ -473,7 +491,7 @@ function SupplierManagement() {
               </button>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid flex-1 gap-3 overflow-y-auto pr-1">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Tên nhà cung cấp</label>
                 <input
@@ -521,11 +539,11 @@ function SupplierManagement() {
               )}
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={isEditing ? handleUpdate : handleCreate}
-                disabled={submitting}
+                disabled={submitting || (isEditing && !hasFormChanges)}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
                   isEditing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-fptOrange hover:bg-fptOrangeDark'
                 }`}

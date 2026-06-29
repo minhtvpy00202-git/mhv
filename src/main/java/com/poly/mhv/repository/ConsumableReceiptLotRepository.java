@@ -12,24 +12,39 @@ import org.springframework.data.repository.query.Param;
 
 public interface ConsumableReceiptLotRepository extends JpaRepository<ConsumableReceiptLot, Long> {
 
-    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy"})
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
     List<ConsumableReceiptLot> findByAssetQaCodeOrderByReceivedDateDescIdDesc(String assetQaCode);
 
-    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy"})
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
     List<ConsumableReceiptLot> findByAssetQaCodeAndQuantityRemainingGreaterThan(String assetQaCode, Integer quantityRemaining);
 
-    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy"})
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
+    List<ConsumableReceiptLot> findByAssetQaCodeAndWarehouseLocationIdAndQuantityRemainingGreaterThan(
+            String assetQaCode,
+            Integer warehouseLocationId,
+            Integer quantityRemaining
+    );
+
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
     List<ConsumableReceiptLot> findByAssetQaCodeOrderByReceivedDateAscIdAsc(String assetQaCode);
 
-    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy"})
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
     List<ConsumableReceiptLot> findByQuantityRemainingGreaterThanAndExpirationDateBeforeOrderByExpirationDateAscReceivedDateAscIdAsc(
             Integer quantityRemaining,
             LocalDate expirationDate
     );
 
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
+    List<ConsumableReceiptLot> findByQuantityRemainingGreaterThanOrderByWarehouseLocationRoomNameAscAssetNameAscReceivedDateAscIdAsc(Integer quantityRemaining);
+
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
+    List<ConsumableReceiptLot> findAllByOrderByWarehouseLocationRoomNameAscAssetNameAscReceivedDateAscIdAsc();
+
     @Override
-    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy"})
+    @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})
     Optional<ConsumableReceiptLot> findById(Long id);
+
+    long countByWarehouseLocationId(Integer warehouseLocationId);
 
     boolean existsByAssetQaCodeAndQuantityRemainingGreaterThanAndExpirationDateIsNotNull(String assetQaCode, Integer quantityRemaining);
 
@@ -154,4 +169,19 @@ public interface ConsumableReceiptLotRepository extends JpaRepository<Consumable
             @Param("categoryId") Integer categoryId,
             @Param("locationId") Integer locationId
     );
+
+    @Query("""
+            select coalesce(sum(lot.quantityRemaining), 0)
+            from ConsumableReceiptLot lot
+            where lot.asset.qaCode = :assetQaCode
+            """)
+    Integer calculateTotalQuantityRemainingForAsset(@Param("assetQaCode") String assetQaCode);
+
+    @Query("""
+            select coalesce(sum(lot.quantityRemaining), 0)
+            from ConsumableReceiptLot lot
+            where lot.asset.qaCode = :assetQaCode
+            and lot.warehouseLocation.id = :warehouseLocationId
+            """)
+    Integer calculateQuantityRemainingForAssetInWarehouse(@Param("assetQaCode") String assetQaCode, @Param("warehouseLocationId") Integer warehouseLocationId);
 }

@@ -29,9 +29,14 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
             left join c.techSupportType t
             where (coalesce(:keyword, '') = '' or lower(c.name) like lower(concat('%', :keyword, '%')))
               and (:techTypeId is null or t.id = :techTypeId)
+              and (:categoryKind is null or upper(coalesce(c.categoryKind, 'ITEMIZED')) = :categoryKind)
             order by c.name asc
             """)
-    List<CategorySummaryRow> searchForAdmin(@Param("keyword") String keyword, @Param("techTypeId") Integer techTypeId);
+    List<CategorySummaryRow> searchForAdmin(
+            @Param("keyword") String keyword,
+            @Param("techTypeId") Integer techTypeId,
+            @Param("categoryKind") String categoryKind
+    );
 
     @Query("""
             select new com.poly.mhv.dto.category.CategoryOptionResponse(

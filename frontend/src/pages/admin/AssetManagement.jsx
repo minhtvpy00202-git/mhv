@@ -80,14 +80,19 @@ const defaultSortState = {
 const CONSUMABLE_WORKSPACE_STORAGE_KEY = 'mhv-admin-consumable-workspace'
 const CONSUMABLE_WORKSPACES = new Set(['OVERVIEW', 'ROOMS', 'DISPOSAL', 'REQUESTS'])
 
-function readStoredConsumableWorkspace(isAdminUser) {
+function normalizeConsumableWorkspace(workspace, isAdminUser) {
+  const normalized = String(workspace || '').trim().toUpperCase()
+  if (!normalized || !CONSUMABLE_WORKSPACES.has(normalized)) return 'OVERVIEW'
+  if (normalized === 'REQUESTS' && !isAdminUser) return 'OVERVIEW'
+  return normalized
+}
+
+function readStoredConsumableWorkspace(isAdminUser, fallbackWorkspace = 'OVERVIEW') {
   try {
     const stored = window.localStorage.getItem(CONSUMABLE_WORKSPACE_STORAGE_KEY)
-    if (!stored || !CONSUMABLE_WORKSPACES.has(stored)) return 'OVERVIEW'
-    if (stored === 'REQUESTS' && !isAdminUser) return 'OVERVIEW'
-    return stored
+    return normalizeConsumableWorkspace(stored || fallbackWorkspace, isAdminUser)
   } catch {
-    return 'OVERVIEW'
+    return normalizeConsumableWorkspace(fallbackWorkspace, isAdminUser)
   }
 }
 
@@ -362,6 +367,51 @@ function buildConsumableExpiryGroups(asset, detail) {
     })
 }
 
+function buildWarehouseOptionsFromAssetDetail(detail, fallbackLocations = []) {
+  const receiptLots = Array.isArray(detail?.receiptLots) ? detail.receiptLots : []
+  const grouped = new Map()
+
+  receiptLots
+    .filter((lot) => Number(lot?.quantityRemaining ?? 0) > 0 && lot?.warehouseLocationId)
+    .forEach((lot) => {
+      const key = String(lot.warehouseLocationId)
+      const previous = grouped.get(key) || {
+        id: lot.warehouseLocationId,
+        roomName: lot.warehouseLocationName || `Kho #${lot.warehouseLocationId}`,
+        quantityRemaining: 0,
+        lotCount: 0,
+      }
+      previous.quantityRemaining += Number(lot?.quantityRemaining ?? 0)
+      previous.lotCount += 1
+      grouped.set(key, previous)
+    })
+
+  if (grouped.size > 0) {
+    return Array.from(grouped.values())
+      .sort((left, right) => String(left.roomName || '').localeCompare(String(right.roomName || ''), 'vi'))
+  }
+
+  const fallbackWarehouseId = detail?.homeLocationId || detail?.locationId
+  const fallbackWarehouseName = detail?.homeLocationName || detail?.locationName
+  if (fallbackWarehouseId && fallbackWarehouseName) {
+    return [{
+      id: fallbackWarehouseId,
+      roomName: fallbackWarehouseName,
+      quantityRemaining: Number(detail?.quantityOnHand ?? 0),
+      lotCount: 0,
+    }]
+  }
+
+  return (fallbackLocations || [])
+    .filter((location) => Boolean(location?.isStorageWarehouse ?? location?.storageWarehouse))
+    .map((location) => ({
+      id: location.id,
+      roomName: location.roomName,
+      quantityRemaining: 0,
+      lotCount: 0,
+    }))
+}
+
 function getConsumableRequestStatusMeta(status) {
   const normalizedStatus = String(status || 'PENDING').trim().toUpperCase()
   if (normalizedStatus === 'APPROVED') {
@@ -397,7 +447,12 @@ function getInitialTrackingMode(initialSection, restrictToConsumable) {
   return initialSection === 'consumables' ? 'CONSUMABLE' : 'ITEMIZED'
 }
 
-function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed', showTabSwitcher = false }) {
+function AssetManagement({
+  restrictToConsumable = false,
+  initialSection = 'fixed',
+  showTabSwitcher = false,
+  initialConsumableWorkspace = 'OVERVIEW',
+}) {
   const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
   const { user } = useAuth()
@@ -439,6 +494,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     quantity: '',
     unitPrice: '',
     supplierId: '',
+    warehouseLocationId: '',
     lotCode: '',
     receivedDate: '',
     expirationDate: '',
@@ -449,6 +505,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [issueLocationStocks, setIssueLocationStocks] = useState([])
   const [issueForm, setIssueForm] = useState({
     issuedToLocationId: '',
+    sourceWarehouseLocationId: '',
     quantity: '',
     note: '',
   })
@@ -458,6 +515,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [consumableRequestLocationId, setConsumableRequestLocationId] = useState('')
   const [consumableRequestForm, setConsumableRequestForm] = useState({
     assetQaCode: '',
+    sourceWarehouseLocationId: '',
     quantityRequested: '',
     reason: '',
   })
@@ -467,6 +525,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [consumableDecisionSubmitting, setConsumableDecisionSubmitting] = useState(false)
   const [selectedConsumableRequest, setSelectedConsumableRequest] = useState(null)
   const [consumableDecisionAction, setConsumableDecisionAction] = useState('APPROVE')
+  const [consumableDecisionSourceWarehouseLocationId, setConsumableDecisionSourceWarehouseLocationId] = useState('')
   const [consumableDecisionNote, setConsumableDecisionNote] = useState('')
   const [expiredLots, setExpiredLots] = useState([])
   const [expiredLotsLoading, setExpiredLotsLoading] = useState(false)
@@ -510,7 +569,9 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   const [activeTab, setActiveTab] = useState(initialTrackingMode)
   const [openActionMenuQaCode, setOpenActionMenuQaCode] = useState(null)
   const [actionMenuPos, setActionMenuPos] = useState({ top: 0, bottom: 'auto', right: 0 })
-  const [consumableWorkspace, setConsumableWorkspace] = useState(() => readStoredConsumableWorkspace(user?.role === 'Admin'))
+  const [consumableWorkspace, setConsumableWorkspace] = useState(() => (
+    readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
+  ))
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [showConsumableAdvancedFilters, setShowConsumableAdvancedFilters] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -671,10 +732,11 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     () => categories.filter((category) => categoryMatchesTrackingMode(category, form.trackingMode)),
     [categories, form.trackingMode],
   )
-  const consumableStorageLocation = useMemo(
-    () => locations.find((location) => String(location?.roomName || '').trim().toLowerCase() === 'kho') || null,
+  const warehouseLocations = useMemo(
+    () => locations.filter((location) => Boolean(location?.isStorageWarehouse ?? location?.storageWarehouse)),
     [locations],
   )
+  const defaultConsumableWarehouseLocation = warehouseLocations[0] || null
 
   useEffect(() => {
     if (!openActionMenuQaCode) return
@@ -723,6 +785,25 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     const merged = [...roomStockOptions, ...inventoryOptions]
     return merged.filter((option, index, collection) => collection.findIndex((item) => item.qaCode === option.qaCode) === index)
   }, [activeTrackingMode, assets, roomOverview?.stocks])
+  const issueWarehouseOptions = useMemo(
+    () => buildWarehouseOptionsFromAssetDetail(selectedIssueAsset, warehouseLocations),
+    [selectedIssueAsset, warehouseLocations],
+  )
+  const selectedRequestAssetDetail = useMemo(
+    () => assetDetailsByQaCode[selectedRequestAssetQaCode] || null,
+    [assetDetailsByQaCode, selectedRequestAssetQaCode],
+  )
+  const consumableRequestWarehouseOptions = useMemo(
+    () => buildWarehouseOptionsFromAssetDetail(selectedRequestAssetDetail, warehouseLocations),
+    [selectedRequestAssetDetail, warehouseLocations],
+  )
+  const consumableDecisionWarehouseOptions = useMemo(
+    () => buildWarehouseOptionsFromAssetDetail(
+      assetDetailsByQaCode[selectedConsumableRequest?.assetQaCode] || null,
+      warehouseLocations,
+    ),
+    [assetDetailsByQaCode, selectedConsumableRequest?.assetQaCode, warehouseLocations],
+  )
   const consumableExpiryGroupsByQaCode = useMemo(
     () =>
       assets.reduce((accumulator, asset) => {
@@ -993,15 +1074,13 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   }
 
   useEffect(() => {
-    if (!isConsumableForm || !consumableStorageLocation?.id) return
-    const storageLocationId = String(consumableStorageLocation.id)
-    if (String(form.locationId || '') === storageLocationId) return
+    if (!isConsumableForm || form.locationId || !defaultConsumableWarehouseLocation?.id) return
     const syncStorageLocationTimer = window.setTimeout(() => {
-      setForm((prev) => ({ ...prev, locationId: storageLocationId }))
+      setForm((prev) => ({ ...prev, locationId: String(defaultConsumableWarehouseLocation.id) }))
       setFormErrors((prev) => ({ ...prev, locationId: '' }))
     }, 0)
     return () => window.clearTimeout(syncStorageLocationTimer)
-  }, [consumableStorageLocation?.id, form.locationId, isConsumableForm])
+  }, [defaultConsumableWarehouseLocation?.id, form.locationId, isConsumableForm])
 
   useEffect(() => {
     const bootstrapTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
@@ -1062,6 +1141,14 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
   }, [consumableWorkspace, ensureRoomLoaded, isConsumableTab])
 
   useEffect(() => {
+    if (!isConsumableMode(initialTrackingMode)) return
+    setConsumableWorkspace((previous) => {
+      const nextWorkspace = readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
+      return previous === nextWorkspace ? previous : nextWorkspace
+    })
+  }, [initialConsumableWorkspace, initialTrackingMode, user?.role])
+
+  useEffect(() => {
     if (!isConsumableTab || !isAdmin) return
     void loadPendingConsumableRequests()
   }, [isAdmin, isConsumableTab])
@@ -1088,7 +1175,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       trackingMode: activeTrackingMode,
       name: '',
       categoryId: '',
-      locationId: activeTrackingMode === 'CONSUMABLE' && consumableStorageLocation?.id ? String(consumableStorageLocation.id) : '',
+      locationId: activeTrackingMode === 'CONSUMABLE' && defaultConsumableWarehouseLocation?.id ? String(defaultConsumableWarehouseLocation.id) : '',
       technicalStatus: 'Hoạt động tốt',
       usageStatus: 'Tại vị trí gốc',
       supplierId: '',
@@ -1133,7 +1220,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     }
     setSortState(defaultSortState)
     setQrImage('')
-    setConsumableWorkspace('OVERVIEW')
+    setConsumableWorkspace(normalizeConsumableWorkspace(initialConsumableWorkspace, isAdmin))
     if (showFormModal) {
       setShowFormModal(false)
       resetForm()
@@ -1190,6 +1277,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     setIssueLocationStocks([])
     setIssueForm({
       issuedToLocationId: '',
+      sourceWarehouseLocationId: '',
       quantity: '',
       note: '',
     })
@@ -1202,6 +1290,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       quantity: '',
       unitPrice: '',
       supplierId: '',
+      warehouseLocationId: '',
       lotCode: '',
       receivedDate: '',
       expirationDate: '',
@@ -1215,6 +1304,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     setConsumableRequestLocationId('')
     setConsumableRequestForm({
       assetQaCode: '',
+      sourceWarehouseLocationId: '',
       quantityRequested: '',
       reason: '',
     })
@@ -1224,6 +1314,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     setShowConsumableDecisionModal(false)
     setSelectedConsumableRequest(null)
     setConsumableDecisionAction('APPROVE')
+    setConsumableDecisionSourceWarehouseLocationId('')
     setConsumableDecisionNote('')
   }
 
@@ -1345,7 +1436,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         trackingMode: form.trackingMode,
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
-        locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
+        locationId: Number(form.locationId),
         status: isConsumableMode(form.trackingMode) ? 'Còn hàng' : itemizedStatusOptions[0].value,
         technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
         usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
@@ -1396,7 +1487,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         trackingMode: form.trackingMode,
         name: form.name.trim(),
         categoryId: Number(form.categoryId),
-        locationId: Number(isConsumableMode(form.trackingMode) ? consumableStorageLocation?.id || form.locationId : form.locationId),
+        locationId: Number(form.locationId),
         technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
         usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
         specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
@@ -1488,9 +1579,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         trackingMode: detail.trackingMode || 'ITEMIZED',
         name: detail.name || asset.name,
         categoryId: String(detail.categoryId || asset.categoryId),
-        locationId: isConsumableMode(detail.trackingMode || asset.trackingMode)
-          ? String(consumableStorageLocation?.id || detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId || '')
-          : String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId),
+        locationId: String(detail.homeLocationId || detail.locationId || asset.homeLocationId || asset.locationId || ''),
         technicalStatus: detail.technicalStatus || asset.technicalStatus || 'Hoạt động tốt',
         usageStatus: detail.usageStatus || asset.usageStatus || 'Tại vị trí gốc',
         supplierId: detail.supplierId ? String(detail.supplierId) : '',
@@ -1617,11 +1706,13 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         axiosClient.get(`/api/assets/${qaCode}/issues`),
         fetchConsumableLocationStocks(qaCode),
       ])
+      const initialWarehouseOptions = buildWarehouseOptionsFromAssetDetail(detail, warehouseLocations)
       setSelectedIssueAsset(detail)
       setIssueHistory(historyResponse.data || [])
       setIssueLocationStocks(locationStocks || [])
       setIssueForm({
         issuedToLocationId: locationId ? String(locationId) : '',
+        sourceWarehouseLocationId: String(detail?.homeLocationId || initialWarehouseOptions[0]?.id || ''),
         quantity: '',
         note: '',
       })
@@ -1651,6 +1742,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         quantity: '',
         unitPrice: detail?.purchasePrice ? String(detail.purchasePrice) : '',
         supplierId: detail?.supplierId ? String(detail.supplierId) : '',
+        warehouseLocationId: String(detail?.homeLocationId || defaultConsumableWarehouseLocation?.id || ''),
         lotCode: '',
         receivedDate: new Date().toISOString().slice(0, 10),
         expirationDate: '',
@@ -1663,23 +1755,31 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
     }
   }
 
-  const handleOpenConsumableRequestModal = (assetQaCode = '', locationId = '') => {
+  const handleOpenConsumableRequestModal = async (assetQaCode = '', locationId = '') => {
     const resolvedAssetQaCode = assetQaCode || selectedRequestAssetQaCode || consumableRequestAssetOptions[0]?.qaCode || ''
     const resolvedLocationId = locationId
       || (String(selectedRoomId) !== ALL_ROOMS_ID ? selectedRoomId : '')
+    const detail = resolvedAssetQaCode ? await fetchAssetDetail(resolvedAssetQaCode).catch(() => null) : null
+    const initialWarehouseOptions = buildWarehouseOptionsFromAssetDetail(detail, warehouseLocations)
     setSelectedRequestAssetQaCode(resolvedAssetQaCode)
     setConsumableRequestLocationId(resolvedLocationId ? String(resolvedLocationId) : '')
     setConsumableRequestForm({
       assetQaCode: resolvedAssetQaCode,
+      sourceWarehouseLocationId: String(detail?.homeLocationId || initialWarehouseOptions[0]?.id || ''),
       quantityRequested: '',
       reason: '',
     })
     setShowConsumableRequestModal(true)
   }
 
-  const handleOpenConsumableDecisionModal = (request, action) => {
+  const handleOpenConsumableDecisionModal = async (request, action) => {
+    const detail = request?.assetQaCode ? await fetchAssetDetail(request.assetQaCode).catch(() => null) : null
+    const initialWarehouseOptions = buildWarehouseOptionsFromAssetDetail(detail, warehouseLocations)
     setSelectedConsumableRequest(request)
     setConsumableDecisionAction(action)
+    setConsumableDecisionSourceWarehouseLocationId(
+      String(request?.sourceWarehouseLocationId || detail?.homeLocationId || initialWarehouseOptions[0]?.id || ''),
+    )
     setConsumableDecisionNote(action === 'REJECT' ? '' : (request?.decisionNote || ''))
     setShowConsumableDecisionModal(true)
   }
@@ -1726,6 +1826,10 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       toast.error('Vui lòng chọn nhà cung cấp cho lô nhập.')
       return
     }
+    if (!receiveForm.warehouseLocationId) {
+      toast.error('Vui lòng chọn kho nhập cho lô hàng này.')
+      return
+    }
     if (!receiveForm.receivedDate) {
       toast.error('Vui lòng chọn ngày nhập lô.')
       return
@@ -1744,6 +1848,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
         quantity,
         unitPrice,
         supplierId: Number(receiveForm.supplierId),
+        warehouseLocationId: Number(receiveForm.warehouseLocationId),
         lotCode: receiveForm.lotCode.trim() || null,
         receivedDate: receiveForm.receivedDate,
         expirationDate: selectedReceiveAsset.expiryTrackingEnabled ? (receiveForm.expirationDate || null) : null,
@@ -1786,10 +1891,15 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       toast.error('Vui lòng nhập lý do cần cấp phát.')
       return
     }
+    if (!consumableRequestForm.sourceWarehouseLocationId) {
+      toast.error('Vui lòng chọn kho xuất cho phiếu yêu cầu.')
+      return
+    }
     setConsumableRequestSubmitting(true)
     try {
       await axiosClient.post(`/api/assets/locations/${requestLocationId}/consumable-requests`, {
         assetQaCode,
+        sourceWarehouseLocationId: Number(consumableRequestForm.sourceWarehouseLocationId),
         quantityRequested,
         reason: consumableRequestForm.reason.trim(),
       })
@@ -1813,10 +1923,17 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       toast.error('Vui lòng nhập lý do từ chối phiếu yêu cầu.')
       return
     }
+    if (consumableDecisionAction === 'APPROVE' && !consumableDecisionSourceWarehouseLocationId) {
+      toast.error('Vui lòng chọn kho xuất trước khi duyệt cấp phát.')
+      return
+    }
     setConsumableDecisionSubmitting(true)
     try {
       const endpoint = consumableDecisionAction === 'APPROVE' ? 'approve' : 'reject'
       await axiosClient.post(`/api/assets/consumable-requests/${selectedConsumableRequest.id}/${endpoint}`, {
+        sourceWarehouseLocationId: consumableDecisionAction === 'APPROVE'
+          ? Number(consumableDecisionSourceWarehouseLocationId)
+          : null,
         note: consumableDecisionNote.trim(),
       })
       toast.success(consumableDecisionAction === 'APPROVE' ? 'Đã duyệt cấp phát phiếu yêu cầu.' : 'Đã từ chối phiếu yêu cầu.')
@@ -1938,10 +2055,15 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       toast.error('Vui lòng chọn phòng nhận.')
       return
     }
+    if (!issueForm.sourceWarehouseLocationId) {
+      toast.error('Vui lòng chọn kho xuất.')
+      return
+    }
     setIssueSubmitting(true)
     try {
       await axiosClient.post(`/api/assets/${selectedIssueAsset.qaCode}/issues`, {
         issuedToLocationId: Number(issueForm.issuedToLocationId),
+        sourceWarehouseLocationId: Number(issueForm.sourceWarehouseLocationId),
         quantity,
         note: issueForm.note.trim(),
       })
@@ -1960,6 +2082,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
       }))
       setIssueForm({
         issuedToLocationId: '',
+        sourceWarehouseLocationId: '',
         quantity: '',
         note: '',
       })
@@ -2745,7 +2868,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                           const min = Number(asset.minimumStock ?? 0)
                           // qty=0 luôn cảnh báo; qty>0 nhưng dưới ngưỡng → amber; ok → emerald
                           const stockTone = qty <= 0 ? 'red' : (min > 0 && qty <= min ? 'amber' : 'emerald')
-                          const storageLocation = consumableStorageLocation?.roomName || asset.homeLocationName || '–'
+                          const storageLocation = asset.homeLocationName || '–'
                           const inventoryValue = calculateInventoryValue(asset)
                           return (
                             <tr key={asset.qaCode} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
@@ -3421,24 +3544,22 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                 <SearchableSelect
                   value={form.locationId}
                   onChange={(nextValue) => {
-                    if (isConsumableForm) return
                     setForm((prev) => ({ ...prev, locationId: String(nextValue || '') }))
                     setFormErrors((prev) => ({ ...prev, locationId: '' }))
                   }}
-                  disabled={isConsumableForm}
                   options={isConsumableForm
-                    ? [{ id: consumableStorageLocation?.id || '', roomName: consumableStorageLocation?.roomName || 'Chưa tìm thấy phòng Kho' }]
+                    ? warehouseLocations
                     : locations}
                   getOptionValue={(location) => location.id}
                   getOptionLabel={(location) => location.roomName}
                   placeholder={isConsumableForm ? 'Kho lưu trữ' : 'Gõ để tìm phòng'}
                   emptyOptionLabel={isConsumableForm ? undefined : 'Chọn phòng'}
-                  inputClassName={`${getFieldClass(Boolean(formErrors.locationId))} ${isConsumableForm ? 'cursor-not-allowed bg-slate-100 text-slate-600' : ''}`}
+                  inputClassName={getFieldClass(Boolean(formErrors.locationId))}
                 />
                 {formErrors.locationId && <p className="mt-1 text-xs text-red-600">{formErrors.locationId}</p>}
                 {isConsumableForm && (
                   <p className="mt-1 text-xs text-slate-500">
-                    Vật tư tiêu hao luôn được ghi nhận về phòng `Kho` trước khi cấp phát, nên không thể thay đổi kho lưu trữ tại đây.
+                    Chỉ hiển thị các khu vực có loại được đánh dấu là kho lưu trữ.
                   </p>
                 )}
               </div>
@@ -3796,6 +3917,20 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                   />
                 </div>
                 <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Xuất từ kho</label>
+                  <SearchableSelect
+                    value={issueForm.sourceWarehouseLocationId}
+                    onChange={(nextValue) => setIssueForm((prev) => ({ ...prev, sourceWarehouseLocationId: String(nextValue || '') }))}
+                    options={issueWarehouseOptions}
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName}
+                    getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedIssueAsset.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                    placeholder="Gõ để tìm kho xuất"
+                    emptyOptionLabel="Chọn kho xuất"
+                    inputClassName={getFieldClass(false)}
+                  />
+                </div>
+                <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng cấp phát</label>
                   <input
                     type="number"
@@ -3880,6 +4015,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                       <p className="font-medium text-slate-700">
                         {item.quantity} {item.unit || ''} {'->'} {item.issuedToLocationName}
                       </p>
+                      <p className="text-slate-500">Xuất từ kho: {item.sourceWarehouseLocationName || 'Chưa ghi nhận'}</p>
                       <p className="text-slate-500">
                         {item.issuedByFullName || item.issuedByUsername} • {formatDateTime(item.issuedAt)}
                       </p>
@@ -3901,8 +4037,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
 
       {showReceiveModal && selectedReceiveAsset && (
         <ModalOverlay zIndex={107} className="bg-slate-900/50">
-          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Nhập hàng vật tư</h4>
                 <p className="text-sm text-slate-500">
@@ -3918,9 +4054,9 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </button>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid flex-1 gap-3 overflow-y-auto pr-1">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                <p>Kho hiện tại: {selectedReceiveAsset.homeLocationName || selectedReceiveAsset.locationName || 'Chưa cập nhật'}</p>
+                <p>Kho mặc định của vật tư: {selectedReceiveAsset.homeLocationName || selectedReceiveAsset.locationName || 'Chưa cập nhật'}</p>
                 <p>Đơn giá trung bình hiện tại: {formatCurrency(selectedReceiveAsset.purchasePrice)}</p>
                 <p>Quản lý hạn dùng theo lô: {selectedReceiveAsset.expiryTrackingEnabled ? 'Có' : 'Không'}</p>
               </div>
@@ -3963,6 +4099,20 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                     value={receiveForm.receivedDate}
                     onChange={(e) => setReceiveForm((prev) => ({ ...prev, receivedDate: e.target.value }))}
                     className={getFieldClass(false)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nhập vào kho</label>
+                  <SearchableSelect
+                    value={receiveForm.warehouseLocationId}
+                    onChange={(nextValue) => setReceiveForm((prev) => ({ ...prev, warehouseLocationId: String(nextValue || '') }))}
+                    options={warehouseLocations}
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName}
+                    getOptionDescription={(location) => location.floorName || location.areaTypeLabel || 'Kho lưu trữ'}
+                    placeholder="Gõ để tìm kho nhập"
+                    emptyOptionLabel="Chọn kho nhập"
+                    inputClassName={getFieldClass(false)}
                   />
                 </div>
                 {selectedReceiveAsset.expiryTrackingEnabled && (
@@ -4016,6 +4166,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                         </span>
                       </div>
                       <p className="mt-1">Còn lại: {lot.quantityRemaining ?? 0} / {lot.quantityReceived ?? 0} {selectedReceiveAsset.unit || ''}</p>
+                      <p>Kho nhập: {lot.warehouseLocationName || 'Chưa gắn kho'}</p>
                       <p>Ngày nhập: {formatDate(lot.receivedDate)} | Hạn dùng: {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).dateLabel}</p>
                     </div>
                   ))}
@@ -4023,7 +4174,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={handleReceiveConsumable}
@@ -4039,8 +4190,8 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
 
       {showConsumableRequestModal && (
         <ModalOverlay zIndex={107} className="bg-slate-900/50">
-          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex shrink-0 items-center justify-between">
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Yêu cầu cấp phát vật tư</h4>
                 <p className="text-sm text-slate-500">
@@ -4056,15 +4207,21 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </button>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid flex-1 gap-3 overflow-y-auto pr-1">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Vật tư cần cấp phát</label>
                 <SearchableSelect
                   value={consumableRequestForm.assetQaCode}
-                  onChange={(nextValue) => {
+                  onChange={async (nextValue) => {
                     const qaCode = String(nextValue || '')
+                    const detail = qaCode ? await fetchAssetDetail(qaCode).catch(() => null) : null
+                    const nextWarehouseOptions = buildWarehouseOptionsFromAssetDetail(detail, warehouseLocations)
                     setSelectedRequestAssetQaCode(qaCode)
-                    setConsumableRequestForm((prev) => ({ ...prev, assetQaCode: qaCode }))
+                    setConsumableRequestForm((prev) => ({
+                      ...prev,
+                      assetQaCode: qaCode,
+                      sourceWarehouseLocationId: String(detail?.homeLocationId || nextWarehouseOptions[0]?.id || ''),
+                    }))
                   }}
                   options={consumableRequestAssetOptions}
                   getOptionValue={(option) => option.qaCode}
@@ -4072,6 +4229,20 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
                   getOptionSearchText={(option) => `${option.name} ${option.qaCode}`}
                   placeholder="Gõ để tìm vật tư"
                   emptyOptionLabel="Chọn vật tư"
+                  inputClassName={getFieldClass(false)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Kho xuất đề nghị</label>
+                <SearchableSelect
+                  value={consumableRequestForm.sourceWarehouseLocationId}
+                  onChange={(nextValue) => setConsumableRequestForm((prev) => ({ ...prev, sourceWarehouseLocationId: String(nextValue || '') }))}
+                  options={consumableRequestWarehouseOptions}
+                  getOptionValue={(location) => location.id}
+                  getOptionLabel={(location) => location.roomName}
+                  getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedRequestAssetDetail?.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                  placeholder="Gõ để tìm kho xuất"
+                  emptyOptionLabel="Chọn kho xuất"
                   inputClassName={getFieldClass(false)}
                 />
               </div>
@@ -4098,7 +4269,7 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex shrink-0 gap-2">
               <button
                 type="button"
                 onClick={handleCreateConsumableRequest}
@@ -4270,9 +4441,26 @@ function AssetManagement({ restrictToConsumable = false, initialSection = 'fixed
             <div className="grid gap-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
                 <p>Số lượng yêu cầu: {selectedConsumableRequest.quantityRequested} {selectedConsumableRequest.unit || ''}</p>
+                <p>Kho xuất đề nghị: {selectedConsumableRequest.sourceWarehouseLocationName || 'Chưa chọn'}</p>
                 <p>Người tạo phiếu: {selectedConsumableRequest.requestedByFullName || selectedConsumableRequest.requestedByUsername}</p>
                 <p>Lý do: {selectedConsumableRequest.reason}</p>
               </div>
+              {consumableDecisionAction === 'APPROVE' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Kho xuất thực tế</label>
+                  <SearchableSelect
+                    value={consumableDecisionSourceWarehouseLocationId}
+                    onChange={(nextValue) => setConsumableDecisionSourceWarehouseLocationId(String(nextValue || ''))}
+                    options={consumableDecisionWarehouseOptions}
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName}
+                    getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedConsumableRequest.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                    placeholder="Gõ để tìm kho xuất"
+                    emptyOptionLabel="Chọn kho xuất"
+                    inputClassName={getFieldClass(false)}
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   {consumableDecisionAction === 'APPROVE' ? 'Ghi chú duyệt' : 'Lý do từ chối'}

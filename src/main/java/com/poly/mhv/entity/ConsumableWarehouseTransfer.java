@@ -18,12 +18,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "consumable_issues")
+@Table(name = "consumable_warehouse_transfers")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ConsumableIssue {
+public class ConsumableWarehouseTransfer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -35,29 +35,29 @@ public class ConsumableIssue {
     private Asset asset;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_to_location_id", nullable = false)
-    @JsonIgnoreProperties({"assets"})
-    private Location issuedToLocation;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "source_warehouse_location_id")
+    @JoinColumn(name = "source_warehouse_location_id", nullable = false)
     @JsonIgnoreProperties({"assets", "roomShapes"})
     private Location sourceWarehouseLocation;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "issued_by_user_id", nullable = false)
-    @JsonIgnoreProperties({"techSupportTypes"})
-    private AppUser issuedBy;
+    @JoinColumn(name = "target_warehouse_location_id", nullable = false)
+    @JsonIgnoreProperties({"assets", "roomShapes"})
+    private Location targetWarehouseLocation;
 
-    @Column(nullable = false)
-    private Integer quantity;
+    @Column(name = "quantity_transferred", nullable = false)
+    private Integer quantityTransferred;
 
     @Column(name = "unit_price", precision = 19, scale = 2)
     private BigDecimal unitPrice;
 
-    @Column(columnDefinition = "TEXT")
-    private String note;
+    @Column(name = "transferred_at", nullable = false)
+    private LocalDateTime transferredAt;
 
-    @Column(name = "issued_at", nullable = false)
-    private LocalDateTime issuedAt;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transferred_by_user_id", nullable = false)
+    @JsonIgnoreProperties({"techSupportTypes"})
+    private AppUser transferredBy;
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
 }

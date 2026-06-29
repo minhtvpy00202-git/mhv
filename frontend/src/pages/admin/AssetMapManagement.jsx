@@ -2,7 +2,6 @@ import {
   IconChevronDown as ChevronDown,
   IconChevronUp as ChevronUp,
   IconInfoCircle as InfoCircle,
-  IconListDetails as ListDetails,
   IconPlus as Plus,
   IconRefresh as Refresh,
   IconUpload as Upload,
@@ -13,7 +12,6 @@ import { useBeforeUnload, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
-import AreaTypeCatalogModal from './asset-map/AreaTypeCatalogModal'
 import AssetPlacementPanel from './asset-map/AssetPlacementPanel'
 import {
   AREA_TYPE_PRESETS,
@@ -607,7 +605,6 @@ function AssetMapManagement() {
   const [imageImportSession, setImageImportSession] = useState(createDefaultImageImportState)
   const [selectedImportDrawingIds, setSelectedImportDrawingIds] = useState([])
   const [showFloorModal, setShowFloorModal] = useState(false)
-  const [showAreaTypeCatalogModal, setShowAreaTypeCatalogModal] = useState(false)
   const [editingFloorId, setEditingFloorId] = useState(null)
   const [floorForm, setFloorForm] = useState(createDefaultFloorForm)
   const [showCanvasModal, setShowCanvasModal] = useState(false)
@@ -1829,73 +1826,6 @@ function AssetMapManagement() {
     confirmActionRef.current = null
     setConfirmDialog((previous) => ({ ...previous, open: false, busy: false }))
   }, [])
-
-  const handleCreateAreaType = useCallback(async (form) => {
-    try {
-      const response = await axiosClient.post('/api/asset-map/area-types', {
-        label: String(form?.label || '').trim(),
-        areaGroupLabel: String(form?.areaGroupLabel || '').trim(),
-        description: String(form?.description || '').trim(),
-      })
-      setAreaTypes((previous) => [...previous, response.data].sort((left, right) => {
-        const sortDelta = (left?.sortOrder || 0) - (right?.sortOrder || 0)
-        if (sortDelta !== 0) return sortDelta
-        return String(left?.label || '').localeCompare(String(right?.label || ''), 'vi')
-      }))
-      toast.success('Đã thêm loại khu vực mới.')
-      return response.data
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể thêm loại khu vực.'
-      toast.error(message)
-      throw error
-    }
-  }, [])
-
-  const handleUpdateAreaType = useCallback(async (areaTypeId, form) => {
-    try {
-      const response = await axiosClient.put(`/api/asset-map/area-types/${areaTypeId}`, {
-        label: String(form?.label || '').trim(),
-        areaGroupLabel: String(form?.areaGroupLabel || '').trim(),
-        description: String(form?.description || '').trim(),
-      })
-      setAreaTypes((previous) => previous
-        .map((item) => (Number(item.id) === Number(areaTypeId) ? response.data : item))
-        .sort((left, right) => {
-          const sortDelta = (left?.sortOrder || 0) - (right?.sortOrder || 0)
-          if (sortDelta !== 0) return sortDelta
-          return String(left?.label || '').localeCompare(String(right?.label || ''), 'vi')
-        }))
-      toast.success('Đã cập nhật loại khu vực.')
-      return response.data
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể cập nhật loại khu vực.'
-      toast.error(message)
-      throw error
-    }
-  }, [])
-
-  const handleDeleteAreaType = useCallback((areaType) => {
-    openConfirmDialog({
-      title: 'Xóa loại khu vực',
-      message: `Bạn có chắc muốn xóa loại khu vực "${areaType?.label || ''}" không?`,
-      confirmLabel: 'Xóa loại',
-      cancelLabel: 'Giữ lại',
-      tone: 'danger',
-      onConfirm: async () => {
-        setConfirmDialog((previous) => ({ ...previous, busy: true }))
-        try {
-          await axiosClient.delete(`/api/asset-map/area-types/${areaType.id}`)
-          setAreaTypes((previous) => previous.filter((item) => Number(item.id) !== Number(areaType.id)))
-          closeConfirmDialog()
-          toast.success('Đã xóa loại khu vực.')
-        } catch (error) {
-          const message = error?.response?.data?.message || 'Không thể xóa loại khu vực.'
-          setConfirmDialog((previous) => ({ ...previous, busy: false }))
-          toast.error(message)
-        }
-      },
-    })
-  }, [closeConfirmDialog, openConfirmDialog])
 
   useEffect(() => {
     if (floorInteractionMode !== 'move' || !activeFloor || selectedShapes.length === 0) return undefined
@@ -3589,10 +3519,10 @@ function AssetMapManagement() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setShowAreaTypeCatalogModal(true)}
+              onClick={() => navigate('/admin/locations/area-types')}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
-              <ListDetails size={16} />
+              <ChevronDown size={16} />
               Loại khu vực
             </button>
             <button
@@ -4192,16 +4122,6 @@ function AssetMapManagement() {
             </div>
           </div>
         </div>
-      )}
-
-      {showAreaTypeCatalogModal && (
-        <AreaTypeCatalogModal
-          areaTypes={areaTypeCatalogEntries}
-          onClose={() => setShowAreaTypeCatalogModal(false)}
-          onCreate={handleCreateAreaType}
-          onUpdate={handleUpdateAreaType}
-          onDelete={handleDeleteAreaType}
-        />
       )}
 
       {showRoomModal && (

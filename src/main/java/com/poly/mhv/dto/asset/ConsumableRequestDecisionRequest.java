@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 @Builder
 public class ConsumableRequestDecisionRequest {
 
+    private Integer sourceWarehouseLocationId;
+
     @Size(max = 1000, message = "Ghi chú xử lý không được vượt quá 1000 ký tự.")
     private String note;
 }

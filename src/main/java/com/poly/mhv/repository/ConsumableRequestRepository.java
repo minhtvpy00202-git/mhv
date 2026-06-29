@@ -9,23 +9,30 @@ import org.springframework.data.repository.query.Param;
 
 public interface ConsumableRequestRepository extends JpaRepository<ConsumableRequest, Long> {
 
-    @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"asset", "location", "sourceWarehouseLocation", "requestedBy", "resolvedBy"})
     List<ConsumableRequest> findByLocationIdOrderByCreatedAtDescIdDesc(Integer locationId);
 
-    @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"asset", "location", "sourceWarehouseLocation", "requestedBy", "resolvedBy"})
     @Query("""
             select request from ConsumableRequest request
             join request.location location
-            where lower(trim(location.roomName)) <> 'kho'
+            where not exists (
+                select 1
+                from AreaTypeCatalog areaType
+                where upper(areaType.typeKey) = upper(location.areaTypeKey)
+                  and coalesce(areaType.isStorageWarehouse, false) = true
+            )
             order by request.createdAt desc, request.id desc
             """)
     List<ConsumableRequest> findAllTrackableRoomRequestsOrderByCreatedAtDesc();
 
-    @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"asset", "location", "sourceWarehouseLocation", "requestedBy", "resolvedBy"})
     List<ConsumableRequest> findByStatusOrderByCreatedAtDescIdDesc(String status);
 
-    @EntityGraph(attributePaths = {"asset", "location", "requestedBy", "resolvedBy"})
+    @EntityGraph(attributePaths = {"asset", "location", "sourceWarehouseLocation", "requestedBy", "resolvedBy"})
     List<ConsumableRequest> findAllByOrderByCreatedAtDescIdDesc();
+
+    long countBySourceWarehouseLocationId(Integer sourceWarehouseLocationId);
 
     @Query("""
             select count(request)

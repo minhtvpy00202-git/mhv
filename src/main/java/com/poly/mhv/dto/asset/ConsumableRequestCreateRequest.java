@@ -18,6 +18,10 @@ public class ConsumableRequestCreateRequest {
     @NotBlank(message = "Mã vật tư là bắt buộc.")
     private String assetQaCode;
 
+    @NotNull(message = "Kho xuất là bắt buộc.")
+    @Positive(message = "Kho xuất không hợp lệ.")
+    private Integer sourceWarehouseLocationId;
+
     @NotNull(message = "Số lượng yêu cầu là bắt buộc.")
     @Positive(message = "Số lượng yêu cầu phải lớn hơn 0.")
     private Integer quantityRequested;

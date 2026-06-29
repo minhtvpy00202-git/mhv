@@ -16,9 +16,9 @@ export default function RoomEditorModal({
   onSave,
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-4 sm:items-center sm:p-6">
+      <div className="flex max-h-[92vh] w-full max-w-xl flex-col rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-900">
+        <div className="mb-4 flex shrink-0 items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {!selectedShape
               ? 'Tạo phòng từ vùng chọn'
@@ -35,7 +35,7 @@ export default function RoomEditorModal({
           </button>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid flex-1 gap-3 overflow-y-auto pr-1 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Kiểu gán phòng</label>
             <select
@@ -120,7 +120,7 @@ export default function RoomEditorModal({
           </div>
         </div>
 
-        <div className="mt-4 flex w-full justify-end gap-2">
+        <div className="mt-4 flex w-full shrink-0 justify-end gap-2">
           <button
             type="button"
             onClick={onSave}

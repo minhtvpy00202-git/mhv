@@ -59,6 +59,11 @@ public class ConsumableReceiptLot {
     private Supplier supplier;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_location_id")
+    @JsonIgnoreProperties({"assets", "roomShapes"})
+    private Location warehouseLocation;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "received_by_user_id")
     @JsonIgnoreProperties({"techSupportTypes"})
     private AppUser receivedBy;

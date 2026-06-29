@@ -84,6 +84,8 @@ function MaintenanceReport() {
   const [showModal, setShowModal] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [manualQaCode, setManualQaCode] = useState('')
+  const [manualLookupLoading, setManualLookupLoading] = useState(false)
   const [latestTicket, setLatestTicket] = useState(null)
   const [formErrors, setFormErrors] = useState({})
   const [scannerError, setScannerError] = useState('')
@@ -181,22 +183,8 @@ function MaintenanceReport() {
           const qaCode = extractQaCode(decodedText)
           if (!qaCode) return
           await stopScanner()
-          try {
-            const response = await axiosClient.get(`/api/assets/${qaCode}`)
-            setAssetQaCode(qaCode)
-            setAssetName(response.data?.name || '')
-            setAssetLocationName(response.data?.locationName || '')
-            setAssetHomeLocationName(response.data?.homeLocationName || '')
-            setAssetSpecs(parseSpecsToEntries(response.data?.specs))
-            setFormErrors({})
-            setShowScannerModal(false)
-            setShowModal(true)
-          } catch {
-            setAssetQaCode('')
-            setAssetName('')
-            setAssetLocationName('')
-            setAssetHomeLocationName('')
-            setAssetSpecs([])
+          const opened = await openTicketFormByQaCode(qaCode)
+          if (!opened) {
             toast.error('Mã tài sản không tồn tại')
             startScanner()
           }
@@ -214,6 +202,31 @@ function MaintenanceReport() {
       setScannerError(blockedMessage)
       toast.error(blockedMessage)
       await stopScanner()
+    }
+  }
+
+  const openTicketFormByQaCode = async (qaCode) => {
+    try {
+      const normalizedQaCode = String(qaCode || '').trim()
+      if (!normalizedQaCode) return false
+      const response = await axiosClient.get(`/api/assets/${normalizedQaCode}`)
+      setAssetQaCode(normalizedQaCode)
+      setAssetName(response.data?.name || '')
+      setAssetLocationName(response.data?.locationName || '')
+      setAssetHomeLocationName(response.data?.homeLocationName || '')
+      setAssetSpecs(parseSpecsToEntries(response.data?.specs))
+      setFormErrors({})
+      setManualQaCode(normalizedQaCode)
+      setShowScannerModal(false)
+      setShowModal(true)
+      return true
+    } catch {
+      setAssetQaCode('')
+      setAssetName('')
+      setAssetLocationName('')
+      setAssetHomeLocationName('')
+      setAssetSpecs([])
+      return false
     }
   }
 
@@ -361,6 +374,22 @@ function MaintenanceReport() {
     cameraInputRef.current?.click()
   }
 
+  const handleManualLookup = async () => {
+    const normalizedQaCode = extractQaCode(manualQaCode)
+    if (!normalizedQaCode) {
+      toast.error('Vui lòng nhập mã QA của thiết bị.')
+      return
+    }
+    setManualLookupLoading(true)
+    keepScannerAliveRef.current = false
+    await stopScanner()
+    const opened = await openTicketFormByQaCode(normalizedQaCode)
+    if (!opened) {
+      toast.error('Mã tài sản không tồn tại')
+    }
+    setManualLookupLoading(false)
+  }
+
   return (
     <div className="space-y-4">
       <style>{`
@@ -413,6 +442,32 @@ function MaintenanceReport() {
               </button>
             </div>
             <span className="mt-6 text-xs font-semibold text-slate-750 dark:text-slate-200 tracking-wide">Nhấn để quét mã QR</span>
+          </div>
+
+          <div className="mt-4 rounded-[28px] border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/60">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Hoặc nhập tay mã QA</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Dùng khi mã QR bị mờ, hỏng hoặc camera trên thiết bị không hoạt động.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={manualQaCode}
+                onChange={(event) => setManualQaCode(event.target.value)}
+                placeholder="Ví dụ: QA000123"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  void handleManualLookup()
+                }}
+                disabled={manualLookupLoading}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                {manualLookupLoading ? 'Đang kiểm tra...' : 'Tra cứu mã'}
+              </button>
+            </div>
           </div>
 
           {/* Secondary Actions */}

@@ -22,6 +22,8 @@ public class ConsumableReceiptLotResponse {
     private LocalDate expirationDate;
     private Integer supplierId;
     private String supplierName;
+    private Integer warehouseLocationId;
+    private String warehouseLocationName;
     private LocalDateTime receivedAt;
     private Integer receivedByUserId;
     private String receivedByUsername;

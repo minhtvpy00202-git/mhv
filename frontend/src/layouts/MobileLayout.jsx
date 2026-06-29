@@ -181,7 +181,7 @@ function MobileLayout() {
               )}
             </button>
             {showNotificationDropdown && (
-              <div className="absolute right-0 z-[120] mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-orange-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+              <div className="fixed left-1/2 top-[4.75rem] z-[120] w-[calc(100vw-1rem)] max-w-[27rem] -translate-x-1/2 rounded-2xl border border-orange-100 bg-white text-slate-700 shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 <div className="flex items-center justify-between border-b border-orange-100 px-3 py-2 dark:border-slate-800">
                   <p className="text-sm font-semibold">Việc cần chú ý</p>
                   <button
@@ -198,7 +198,7 @@ function MobileLayout() {
                     Đánh dấu tất cả
                   </button>
                 </div>
-                <div className="max-h-80 overflow-auto">
+                <div className="max-h-[min(24rem,calc(100dvh-6rem))] overflow-auto">
                   {!hasNotifications && (
                     <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo mới.</p>
                   )}

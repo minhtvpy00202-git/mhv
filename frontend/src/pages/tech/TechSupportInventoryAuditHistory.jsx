@@ -33,9 +33,16 @@ const MODAL_TITLES = {
   missing: 'Danh sách thiết bị thất lạc',
 }
 
+const MOBILE_HISTORY_PANELS = [
+  { id: 'all', label: 'Tổng phiên' },
+  { id: 'completed', label: 'Hoàn tất' },
+  { id: 'missing', label: 'Thất lạc' },
+]
+
 function TechSupportInventoryAuditHistory() {
   const [auditHistory, setAuditHistory] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mobilePanel, setMobilePanel] = useState('all')
   const [modalState, setModalState] = useState({
     open: false,
     title: '',
@@ -66,9 +73,19 @@ function TechSupportInventoryAuditHistory() {
       [auditHistory],
   )
 
+  const completedAudits = useMemo(
+    () => auditHistory.filter((audit) => audit.status === 'COMPLETED'),
+    [auditHistory],
+  )
+
   const totalMissingCount = useMemo(
       () => auditHistory.reduce((sum, audit) => sum + Number(audit.missingCount || 0), 0),
       [auditHistory],
+  )
+
+  const missingAudits = useMemo(
+    () => auditHistory.filter((audit) => Number(audit.missingCount || 0) > 0),
+    [auditHistory],
   )
 
   const openItemsModal = async (auditId, type) => {
@@ -121,12 +138,12 @@ function TechSupportInventoryAuditHistory() {
 
   return (
       <div className="space-y-4">
-        <section className="rounded-3xl bg-gradient-to-br from-indigo-700 via-blue-700 to-cyan-600 p-5 text-white shadow-sm">
+        <section className="rounded-3xl bg-gradient-to-br from-indigo-700 via-blue-700 to-cyan-600 p-4 text-white shadow-sm md:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-white/80">Lịch sử thực hiện của kỹ thuật viên</p>
-              <h2 className="mt-1 text-2xl font-bold">Lịch sử kiểm kê</h2>
-              <p className="mt-2 text-sm text-white/90">
+              <h2 className="mt-1 text-xl font-bold md:text-2xl">Lịch sử kiểm kê</h2>
+              <p className="mt-2 hidden text-sm text-white/90 md:block">
                 Theo dõi các phiên kiểm kê bạn đã tham gia, số lượng đã quét và kết quả thất lạc của từng đợt.
               </p>
             </div>
@@ -136,12 +153,127 @@ function TechSupportInventoryAuditHistory() {
                 className="inline-flex items-center justify-center gap-2 self-start rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
             >
               <RefreshCcw size={16} />
-              Tải lại lịch sử
+              <span className="hidden sm:inline">Tải lại lịch sử</span>
+              <span className="sm:hidden">Tải lại</span>
             </button>
           </div>
         </section>
 
-        <section className="grid gap-3 md:grid-cols-3">
+        <section className="md:hidden">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {MOBILE_HISTORY_PANELS.map((panel) => {
+              const value = panel.id === 'all'
+                ? auditHistory.length
+                : panel.id === 'completed'
+                  ? completedCount
+                  : totalMissingCount
+              const active = mobilePanel === panel.id
+              return (
+                <button
+                  key={panel.id}
+                  type="button"
+                  onClick={() => setMobilePanel(panel.id)}
+                  className={`min-w-[108px] shrink-0 rounded-2xl border px-3 py-3 text-left shadow-sm transition ${
+                    active
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  <p className={`text-xs font-semibold ${active ? 'text-white/80' : 'text-slate-500'}`}>{panel.label}</p>
+                  <p className="mt-1 text-xl font-bold">{value}</p>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-3 rounded-3xl bg-white p-3 shadow-sm">
+            {loading && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Đang tải lịch sử kiểm kê...
+              </div>
+            )}
+
+            {!loading && mobilePanel === 'all' && auditHistory.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Bạn chưa tham gia phiên kiểm kê nào.
+              </div>
+            )}
+
+            {!loading && mobilePanel === 'completed' && completedAudits.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Chưa có phiên kiểm kê nào hoàn tất.
+              </div>
+            )}
+
+            {!loading && mobilePanel === 'missing' && missingAudits.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Chưa có thiết bị thất lạc trong các phiên bạn tham gia.
+              </div>
+            )}
+
+            {!loading && (
+              <div className="space-y-3">
+                {(mobilePanel === 'all' ? auditHistory : mobilePanel === 'completed' ? completedAudits : missingAudits).map((audit) => {
+                  const statusMeta = getAuditStatusMeta(audit)
+                  const expectedCount = Number(audit.expectedCount ?? 0)
+                  return (
+                    <div key={audit.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">Phiên #{audit.id}</p>
+                          <p className="mt-1 text-sm text-slate-600">{audit.locationName || 'Không rõ phòng kiểm kê'}</p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusMeta.className}`}>
+                          {statusMeta.label}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-slate-500">Bắt đầu</p>
+                          <p className="mt-1 font-medium text-slate-700">{formatVietnamDateTime(audit.startedAt, '-')}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-slate-500">Hoàn thành</p>
+                          <p className="mt-1 font-medium text-slate-700">{formatVietnamDateTime(audit.completedAt, '-')}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-slate-500">Đã quét</p>
+                          <p className="mt-1 font-semibold text-slate-800">{audit.scannedCount ?? 0} / {expectedCount}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-3 py-2">
+                          <p className="text-xs text-slate-500">Thất lạc</p>
+                          <p className="mt-1 font-semibold text-red-700">{audit.missingCount ?? 0}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openItemsModal(audit.id, 'scanned')}
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+                        >
+                          Xem đã quét
+                        </button>
+                        {Number(audit.missingCount || 0) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => openItemsModal(audit.id, 'missing')}
+                            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700"
+                          >
+                            Xem thất lạc
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="hidden gap-3 md:grid md:grid-cols-3">
           <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Tổng phiên đã tham gia</p>
             <p className="mt-2 text-2xl font-bold text-slate-800">{auditHistory.length}</p>
@@ -159,7 +291,7 @@ function TechSupportInventoryAuditHistory() {
           </div>
         </section>
 
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
+        <section className="hidden rounded-2xl bg-white p-4 shadow-sm md:block">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Danh sách phiên kiểm kê</h3>

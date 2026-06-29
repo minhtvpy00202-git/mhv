@@ -18,6 +18,7 @@ function matchesIssueRequest(item, keyword) {
     item.assetName,
     item.assetQaCode,
     item.locationName,
+    item.sourceWarehouseLocationName,
     item.reason,
     item.requestedByFullName,
     item.requestedByUsername,
@@ -201,7 +202,10 @@ export default function ConsumableRequestsTab({
                       <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-400 dark:text-slate-500">{item.reason}</div>
                     </td>
                     <td className="truncate px-2 py-1.5 text-slate-600 dark:text-slate-300" title={item.locationName}>
-                      {item.locationName}
+                      <div className="truncate">{item.locationName}</div>
+                      <div className="truncate text-[10px] text-slate-400 dark:text-slate-500">
+                        Kho xuất: {item.sourceWarehouseLocationName || 'Chưa chọn'}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-100">
                       {item.quantityRequested}{item.unit ? ` ${item.unit}` : ''}

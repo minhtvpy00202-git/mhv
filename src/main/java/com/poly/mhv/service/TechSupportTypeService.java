@@ -4,6 +4,7 @@ import com.poly.mhv.dto.techsupporttype.TechSupportTypeCreateRequest;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeOptionResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeResponse;
 import com.poly.mhv.dto.techsupporttype.TechSupportTypeUpdateRequest;
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.TechSupportType;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
@@ -21,15 +22,21 @@ public class TechSupportTypeService {
     private final TechSupportTypeRepository techSupportTypeRepository;
     private final CategoryRepository categoryRepository;
     private final AppUserRepository appUserRepository;
+    private final NotificationService notificationService;
+    private final CurrentUserProvider currentUserProvider;
 
     public TechSupportTypeService(
             TechSupportTypeRepository techSupportTypeRepository,
             CategoryRepository categoryRepository,
-            AppUserRepository appUserRepository
+            AppUserRepository appUserRepository,
+            NotificationService notificationService,
+            CurrentUserProvider currentUserProvider
     ) {
         this.techSupportTypeRepository = techSupportTypeRepository;
         this.categoryRepository = categoryRepository;
         this.appUserRepository = appUserRepository;
+        this.notificationService = notificationService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +73,22 @@ public class TechSupportTypeService {
                 .id(nextId)
                 .name(normalizedName)
                 .build();
-        return mapToResponse(techSupportTypeRepository.save(techSupportType));
+        TechSupportType saved = techSupportTypeRepository.save(techSupportType);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "TECH_SUPPORT_TYPE_CREATE",
+                "Tạo nhóm kỹ thuật",
+                actorDisplayName + " đã tạo nhóm kỹ thuật " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        "Nhóm kỹ thuật", saved.getName(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -77,7 +99,22 @@ public class TechSupportTypeService {
             throw new CustomException("Tên loại kỹ thuật viên đã tồn tại.");
         }
         techSupportType.setName(normalizedName);
-        return mapToResponse(techSupportTypeRepository.save(techSupportType));
+        TechSupportType saved = techSupportTypeRepository.save(techSupportType);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "TECH_SUPPORT_TYPE_UPDATE",
+                "Cập nhật nhóm kỹ thuật",
+                actorDisplayName + " đã cập nhật nhóm kỹ thuật " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        "Nhóm kỹ thuật", saved.getName(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
+        return mapToResponse(saved);
     }
 
     @Transactional
@@ -91,7 +128,21 @@ public class TechSupportTypeService {
         if (linkedUsers > 0) {
             throw new CustomException("Không thể xóa loại kỹ thuật viên đang được gán cho " + linkedUsers + " tài khoản.");
         }
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         techSupportTypeRepository.delete(techSupportType);
+        notificationService.createNotification(
+                "TECH_SUPPORT_TYPE_DELETE",
+                "Xóa nhóm kỹ thuật",
+                actorDisplayName + " đã xóa nhóm kỹ thuật " + techSupportType.getName() + ".",
+                actor.getUsername(),
+                null,
+                techSupportType.getName(),
+                Map.of(
+                        "Nhóm kỹ thuật", techSupportType.getName(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
     }
 
     private TechSupportType getManageableTypeOrThrow(Integer id) {
@@ -129,5 +180,15 @@ public class TechSupportTypeService {
                 .categoryCount(categoryCountsByTechTypeId.getOrDefault(techSupportType.getId(), 0L))
                 .techSupportUserCount(userCountsByTechTypeId.getOrDefault(techSupportType.getId(), 0L))
                 .build();
+    }
+
+    private String getActorDisplayName(AppUser actor) {
+        if (actor == null) {
+            return "Hệ thống";
+        }
+        if (StringUtils.hasText(actor.getFullName())) {
+            return actor.getFullName().trim();
+        }
+        return actor.getUsername();
     }
 }

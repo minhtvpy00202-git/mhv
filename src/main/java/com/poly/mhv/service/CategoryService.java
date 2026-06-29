@@ -9,6 +9,7 @@ import com.poly.mhv.dto.category.CategoryResponse;
 import com.poly.mhv.dto.category.CategorySummaryRow;
 import com.poly.mhv.dto.category.CategorySummaryResponse;
 import com.poly.mhv.dto.category.CategoryUpdateRequest;
+import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.TechSupportType;
 import com.poly.mhv.exception.CustomException;
@@ -19,6 +20,7 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,8 @@ public class CategoryService {
     private final TechSupportTypeRepository techSupportTypeRepository;
     private final AssetRepository assetRepository;
     private final ObjectMapper objectMapper;
+    private final NotificationService notificationService;
+    private final CurrentUserProvider currentUserProvider;
     private volatile List<CategoryOptionResponse> cachedCategoryOptions;
     private volatile long cachedCategoryOptionsExpiresAt;
 
@@ -43,18 +47,25 @@ public class CategoryService {
             CategoryRepository categoryRepository,
             TechSupportTypeRepository techSupportTypeRepository,
             AssetRepository assetRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            NotificationService notificationService,
+            CurrentUserProvider currentUserProvider
     ) {
         this.categoryRepository = categoryRepository;
         this.techSupportTypeRepository = techSupportTypeRepository;
         this.assetRepository = assetRepository;
         this.objectMapper = objectMapper;
+        this.notificationService = notificationService;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional(readOnly = true)
-    public List<CategorySummaryResponse> getAllCategories(String keyword, Integer techTypeId) {
+    public List<CategorySummaryResponse> getAllCategories(String keyword, Integer techTypeId, String categoryKind) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId).stream()
+        String normalizedCategoryKind = StringUtils.hasText(categoryKind)
+                ? normalizeCategoryKind(categoryKind)
+                : null;
+        return categoryRepository.searchForAdmin(normalizedKeyword, techTypeId, normalizedCategoryKind).stream()
                 .map(this::mapToSummaryResponse)
                 .toList();
     }
@@ -80,11 +91,11 @@ public class CategoryService {
     @Transactional
     public CategoryResponse createCategory(CategoryCreateRequest request) {
         String normalizedName = normalizeName(request.getName());
+        String categoryKind = normalizeCategoryKind(request.getCategoryKind());
         if (categoryRepository.existsByNameIgnoreCase(normalizedName)) {
-            throw new CustomException("Tên loại thiết bị đã tồn tại.");
+            throw new CustomException("Tên " + getCategoryLabel(categoryKind) + " đã tồn tại.");
         }
         String generatedCodePrefix = generateCodePrefix(normalizedName);
-        String categoryKind = normalizeCategoryKind(request.getCategoryKind());
 
         Category category = Category.builder()
                 .name(normalizedName)
@@ -93,7 +104,23 @@ public class CategoryService {
                 .techSupportType(resolveTechSupportType(request.getTechTypeId(), categoryKind))
                 .specTemplates(normalizeSpecTemplates(request.getSpecTemplates()))
                 .build();
-        CategoryResponse response = mapToResponse(categoryRepository.save(category));
+        Category saved = categoryRepository.save(category);
+        CategoryResponse response = mapToResponse(saved);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CATEGORY_CREATE",
+                "Tạo " + getCategoryTitle(categoryKind),
+                actorDisplayName + " đã tạo " + getCategoryLabel(categoryKind) + " " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        getCategoryTitle(categoryKind), saved.getName(),
+                        "Mã tiền tố", saved.getCodePrefix(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateCategoryOptionsCache();
         return response;
     }
@@ -102,17 +129,33 @@ public class CategoryService {
     public CategoryResponse updateCategory(Integer id, CategoryUpdateRequest request) {
         Category category = getCategoryOrThrow(id);
         String normalizedName = normalizeName(request.getName());
-        if (categoryRepository.existsByNameIgnoreCaseAndIdNot(normalizedName, id)) {
-            throw new CustomException("Tên loại thiết bị đã tồn tại.");
-        }
         String categoryKind = normalizeCategoryKind(request.getCategoryKind());
+        if (categoryRepository.existsByNameIgnoreCaseAndIdNot(normalizedName, id)) {
+            throw new CustomException("Tên " + getCategoryLabel(categoryKind) + " đã tồn tại.");
+        }
         validateCategoryKindChange(category, categoryKind);
 
         category.setName(normalizedName);
         category.setCategoryKind(categoryKind);
         category.setTechSupportType(resolveTechSupportType(request.getTechTypeId(), categoryKind));
         category.setSpecTemplates(normalizeSpecTemplates(request.getSpecTemplates()));
-        CategoryResponse response = mapToResponse(categoryRepository.save(category));
+        Category saved = categoryRepository.save(category);
+        CategoryResponse response = mapToResponse(saved);
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
+        notificationService.createNotification(
+                "CATEGORY_UPDATE",
+                "Cập nhật " + getCategoryTitle(categoryKind),
+                actorDisplayName + " đã cập nhật " + getCategoryLabel(categoryKind) + " " + saved.getName() + ".",
+                actor.getUsername(),
+                null,
+                saved.getName(),
+                Map.of(
+                        getCategoryTitle(categoryKind), saved.getName(),
+                        "Mã tiền tố", saved.getCodePrefix(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateCategoryOptionsCache();
         return response;
     }
@@ -122,9 +165,25 @@ public class CategoryService {
         Category category = getCategoryOrThrow(id);
         long linkedAssets = assetRepository.countByCategoryId(id);
         if (linkedAssets > 0) {
-            throw new CustomException("Không thể xóa loại thiết bị đang được gán cho " + linkedAssets + " thiết bị.");
+            throw new CustomException("Không thể xóa " + getCategoryLabel(category.getCategoryKind()) + " đang được gán cho " + linkedAssets + " tài sản hoặc vật tư.");
         }
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         categoryRepository.delete(category);
+        String categoryKind = normalizeCategoryKind(category.getCategoryKind());
+        notificationService.createNotification(
+                "CATEGORY_DELETE",
+                "Xóa " + getCategoryTitle(categoryKind),
+                actorDisplayName + " đã xóa " + getCategoryLabel(categoryKind) + " " + category.getName() + ".",
+                actor.getUsername(),
+                null,
+                category.getName(),
+                Map.of(
+                        getCategoryTitle(categoryKind), category.getName(),
+                        "Mã tiền tố", category.getCodePrefix(),
+                        "Người thực hiện", actorDisplayName
+                )
+        );
         invalidateCategoryOptionsCache();
     }
 
@@ -148,7 +207,7 @@ public class CategoryService {
             return null;
         }
         if (techTypeId == null || techTypeId <= 0) {
-            throw new CustomException("Nhóm kỹ thuật phụ trách là bắt buộc cho loại đơn chiếc.");
+            throw new CustomException("Nhóm kỹ thuật phụ trách là bắt buộc cho loại thiết bị.");
         }
         return getTechSupportTypeOrThrow(techTypeId);
     }
@@ -156,7 +215,7 @@ public class CategoryService {
     private String normalizeName(String name) {
         String normalizedName = name == null ? null : name.trim();
         if (!StringUtils.hasText(normalizedName)) {
-            throw new CustomException("Tên loại thiết bị là bắt buộc.");
+            throw new CustomException("Tên loại danh mục là bắt buộc.");
         }
         return normalizedName;
     }
@@ -179,14 +238,14 @@ public class CategoryService {
         }
         long linkedAssets = assetRepository.countByCategoryId(category.getId());
         if (linkedAssets > 0) {
-            throw new CustomException("Không thể đổi loại category khi đã có tài sản sử dụng category này.");
+            throw new CustomException("Không thể đổi loại danh mục khi đã có tài sản hoặc vật tư sử dụng danh mục này.");
         }
     }
 
     private String generateCodePrefix(String categoryName) {
         List<String> meaningfulWords = extractMeaningfulWords(categoryName);
         if (meaningfulWords.isEmpty()) {
-            throw new CustomException("Không thể sinh code prefix cho loại thiết bị này.");
+            throw new CustomException("Không thể sinh mã tiền tố cho loại danh mục này.");
         }
 
         Set<String> candidates = new LinkedHashSet<>();
@@ -199,13 +258,13 @@ public class CategoryService {
             }
         }
 
-        throw new CustomException("Không thể sinh code prefix duy nhất cho loại thiết bị này.");
+        throw new CustomException("Không thể sinh mã tiền tố duy nhất cho loại danh mục này.");
     }
 
     private List<String> extractMeaningfulWords(String categoryName) {
         String normalizedCategoryName = normalizeKeyword(categoryName);
         if (normalizedCategoryName == null) {
-            throw new CustomException("Tên loại thiết bị không hợp lệ.");
+            throw new CustomException("Tên loại danh mục không hợp lệ.");
         }
         List<String> words = new ArrayList<>(List.of(
                 normalizedCategoryName
@@ -311,5 +370,27 @@ public class CategoryService {
         } catch (JsonProcessingException ex) {
             return List.of();
         }
+    }
+
+    private String getActorDisplayName(AppUser actor) {
+        if (actor == null) {
+            return "Hệ thống";
+        }
+        if (StringUtils.hasText(actor.getFullName())) {
+            return actor.getFullName().trim();
+        }
+        return actor.getUsername();
+    }
+
+    private String getCategoryLabel(String categoryKind) {
+        return CATEGORY_KIND_CONSUMABLE.equals(normalizeCategoryKind(categoryKind))
+                ? "loại vật tư"
+                : "loại thiết bị";
+    }
+
+    private String getCategoryTitle(String categoryKind) {
+        return CATEGORY_KIND_CONSUMABLE.equals(normalizeCategoryKind(categoryKind))
+                ? "Loại vật tư"
+                : "Loại thiết bị";
     }
 }

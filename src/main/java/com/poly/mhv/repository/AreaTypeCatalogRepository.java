@@ -20,4 +20,6 @@ public interface AreaTypeCatalogRepository extends JpaRepository<AreaTypeCatalog
     Optional<AreaTypeCatalog> findByTypeKeyIgnoreCase(String typeKey);
 
     Optional<AreaTypeCatalog> findByLabelIgnoreCase(String label);
+
+    List<AreaTypeCatalog> findByIsStorageWarehouseTrueOrderBySortOrderAscLabelAsc();
 }

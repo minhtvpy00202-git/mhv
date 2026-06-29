@@ -18,6 +18,10 @@ public class ConsumableIssueRequest {
     @Positive(message = "Phòng nhận không hợp lệ.")
     private Integer issuedToLocationId;
 
+    @NotNull(message = "Kho xuất là bắt buộc.")
+    @Positive(message = "Kho xuất không hợp lệ.")
+    private Integer sourceWarehouseLocationId;
+
     @NotNull(message = "Số lượng cấp phát là bắt buộc.")
     @Positive(message = "Số lượng cấp phát phải lớn hơn 0.")
     private Integer quantity;

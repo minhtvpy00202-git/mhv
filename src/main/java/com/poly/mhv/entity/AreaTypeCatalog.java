@@ -41,6 +41,10 @@ public class AreaTypeCatalog {
     @Column(name = "description", length = 255)
     private String description;
 
+    @Column(name = "is_storage_warehouse")
+    @Builder.Default
+    private Boolean isStorageWarehouse = false;
+
     @Column(name = "built_in", nullable = false)
     @Builder.Default
     private Boolean builtIn = false;

@@ -46,9 +46,10 @@ public class CategoryController {
     })
     public ResponseEntity<List<CategorySummaryResponse>> getAllCategories(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Integer techTypeId
+            @RequestParam(required = false) Integer techTypeId,
+            @RequestParam(required = false) String categoryKind
     ) {
-        return ResponseEntity.ok(categoryService.getAllCategories(keyword, techTypeId));
+        return ResponseEntity.ok(categoryService.getAllCategories(keyword, techTypeId, categoryKind));
     }
 
     @GetMapping("/options")

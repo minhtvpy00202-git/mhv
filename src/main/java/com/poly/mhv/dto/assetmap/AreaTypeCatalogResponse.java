@@ -16,6 +16,7 @@ public class AreaTypeCatalogResponse {
     private String areaGroupKey;
     private String areaGroupLabel;
     private String description;
+    private Boolean isStorageWarehouse;
     private Boolean builtIn;
     private Integer sortOrder;
     private Long usageCount;

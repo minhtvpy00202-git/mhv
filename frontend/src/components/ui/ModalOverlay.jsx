@@ -33,7 +33,7 @@ export default function ModalOverlay({
 
   return createPortal(
     <div
-      className={`fixed inset-0 flex items-center justify-center p-4 ${className}`}
+      className={`fixed inset-0 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6 ${className}`}
       style={{ zIndex }}
     >
       {children}

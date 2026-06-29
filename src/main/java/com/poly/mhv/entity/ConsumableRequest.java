@@ -39,6 +39,11 @@ public class ConsumableRequest {
     private Location location;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_warehouse_location_id")
+    @JsonIgnoreProperties({"assets", "roomShapes"})
+    private Location sourceWarehouseLocation;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "requested_by_user_id", nullable = false)
     @JsonIgnoreProperties({"techSupportTypes"})
     private AppUser requestedBy;

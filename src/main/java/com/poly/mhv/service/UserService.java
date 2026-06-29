@@ -18,8 +18,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,17 +30,20 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
     private final TechSupportTypeRepository techSupportTypeRepository;
+    private final CurrentUserProvider currentUserProvider;
 
     public UserService(
             AppUserRepository appUserRepository,
             PasswordEncoder passwordEncoder,
             NotificationService notificationService,
-            TechSupportTypeRepository techSupportTypeRepository
+            TechSupportTypeRepository techSupportTypeRepository,
+            CurrentUserProvider currentUserProvider
     ) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.notificationService = notificationService;
         this.techSupportTypeRepository = techSupportTypeRepository;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @Transactional(readOnly = true)
@@ -176,20 +177,21 @@ public class UserService {
                 .techSupportTypes(new ArrayList<>(techSupportTypes))
                 .build();
         AppUser saved = appUserRepository.save(appUser);
-        String actor = getCurrentUsername();
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "USER_CREATE",
                 "Tạo tài khoản",
-                actor + " đã tạo tài khoản " + saved.getUsername() + ".",
-                actor,
+                actorDisplayName + " đã tạo tài khoản " + saved.getUsername() + ".",
+                actor.getUsername(),
                 null,
-                saved.getFullName(),
+                saved.getUsername(),
                 Map.of(
                         "Username", saved.getUsername(),
                         "Họ tên", saved.getFullName(),
                         "Vai trò", saved.getRole(),
                         "Trạng thái", saved.getStatus(),
-                        "Người thực hiện", actor
+                        "Người thực hiện", actorDisplayName
                 )
         );
         return mapToResponse(saved);
@@ -234,20 +236,21 @@ public class UserService {
             appUser.setPassword(passwordEncoder.encode(request.getPassword()));
         }
         AppUser saved = appUserRepository.save(appUser);
-        String actor = getCurrentUsername();
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "USER_UPDATE",
                 "Cập nhật tài khoản",
-                actor + " đã cập nhật tài khoản " + saved.getUsername() + ".",
-                actor,
+                actorDisplayName + " đã cập nhật tài khoản " + saved.getUsername() + ".",
+                actor.getUsername(),
                 null,
-                saved.getFullName(),
+                saved.getUsername(),
                 Map.of(
                         "Username", saved.getUsername(),
                         "Họ tên", saved.getFullName(),
                         "Vai trò", saved.getRole(),
                         "Trạng thái", saved.getStatus(),
-                        "Người thực hiện", actor
+                        "Người thực hiện", actorDisplayName
                 )
         );
         return mapToResponse(saved);
@@ -263,19 +266,20 @@ public class UserService {
         if ("admin".equalsIgnoreCase(appUser.getUsername())) {
             throw new CustomException("Không thể xóa tài khoản admin mặc định.");
         }
-        String actor = getCurrentUsername();
+        AppUser actor = currentUserProvider.getCurrentUser();
+        String actorDisplayName = getActorDisplayName(actor);
         appUserRepository.delete(appUser);
         notificationService.createNotification(
                 "USER_DELETE",
                 "Xóa tài khoản",
-                actor + " đã xóa tài khoản " + appUser.getUsername() + ".",
-                actor,
+                actorDisplayName + " đã xóa tài khoản " + appUser.getUsername() + ".",
+                actor.getUsername(),
                 null,
-                appUser.getFullName() == null ? appUser.getUsername() : appUser.getFullName(),
+                appUser.getUsername(),
                 Map.of(
                         "Username", appUser.getUsername(),
                         "Họ tên", appUser.getFullName() == null ? "" : appUser.getFullName(),
-                        "Người thực hiện", actor
+                        "Người thực hiện", actorDisplayName
                 )
         );
     }
@@ -441,11 +445,13 @@ public class UserService {
         return List.of();
     }
 
-    private String getCurrentUsername() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return "system";
+    private String getActorDisplayName(AppUser actor) {
+        if (actor == null) {
+            return "Hệ thống";
         }
-        return authentication.getName();
+        if (StringUtils.hasText(actor.getFullName())) {
+            return actor.getFullName().trim();
+        }
+        return actor.getUsername();
     }
 }

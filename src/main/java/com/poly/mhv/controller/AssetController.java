@@ -16,6 +16,10 @@ import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.asset.ConsumableStockReceiptRequest;
+import com.poly.mhv.dto.asset.ConsumableWarehouseOverviewResponse;
+import com.poly.mhv.dto.asset.ConsumableWarehouseStockResponse;
+import com.poly.mhv.dto.asset.ConsumableWarehouseTransferRequest;
+import com.poly.mhv.dto.asset.ConsumableWarehouseTransferResponse;
 import com.poly.mhv.dto.asset.ExpiredConsumableLotResponse;
 import com.poly.mhv.dto.common.PagedResponse;
 import com.poly.mhv.service.CategoryService;
@@ -199,6 +203,16 @@ public class AssetController {
         return ResponseEntity.status(HttpStatus.CREATED).body(assetService.receiveConsumableStock(qaCode, request));
     }
 
+    @PostMapping("/{qaCode}/warehouse-transfers")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Chuyển kho nội bộ vật tư", description = "Chuyển vật tư tiêu hao giữa hai kho nội bộ, giữ truy vết theo lô và kho.")
+    public ResponseEntity<ConsumableWarehouseTransferResponse> transferConsumableBetweenWarehouses(
+            @PathVariable String qaCode,
+            @Valid @RequestBody ConsumableWarehouseTransferRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(assetService.transferConsumableBetweenWarehouses(qaCode, request));
+    }
+
     @GetMapping("/{qaCode}/issues")
     @Operation(summary = "Lấy lịch sử cấp phát vật tư", description = "Trả về các lần cấp phát của vật tư tiêu hao theo mã QA.")
     public ResponseEntity<List<ConsumableIssueResponse>> getConsumableIssueHistory(@PathVariable String qaCode) {
@@ -235,6 +249,33 @@ public class AssetController {
     @Operation(summary = "Lấy danh sách lô vật tư đã hết hạn", description = "Trả về các lô vật tư tiêu hao còn tồn kho nhưng đã hết hạn sử dụng và cần tiêu huỷ.")
     public ResponseEntity<List<ExpiredConsumableLotResponse>> getExpiredConsumableLots() {
         return ResponseEntity.ok(assetService.getExpiredConsumableLots());
+    }
+
+    @GetMapping("/consumables/warehouses-overview")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Tổng hợp vật tư theo kho", description = "Trả về tồn kho theo từng kho cùng lịch sử chuyển kho nội bộ.")
+    public ResponseEntity<ConsumableWarehouseOverviewResponse> getConsumableWarehouseOverview(
+            @RequestParam(required = false) Integer warehouseLocationId
+    ) {
+        return ResponseEntity.ok(assetService.getConsumableWarehouseOverview(warehouseLocationId));
+    }
+
+    @GetMapping("/consumables/warehouse-alerts")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Cảnh báo sắp hết theo kho", description = "Trả về danh sách vật tư tại từng kho đang sắp hết hoặc đã hết.")
+    public ResponseEntity<List<ConsumableWarehouseStockResponse>> getConsumableWarehouseAlerts(
+            @RequestParam(required = false) Integer warehouseLocationId
+    ) {
+        return ResponseEntity.ok(assetService.getConsumableWarehouseAlerts(warehouseLocationId));
+    }
+
+    @GetMapping("/consumables/warehouse-transfers")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
+    @Operation(summary = "Lấy lịch sử chuyển kho nội bộ", description = "Trả về lịch sử chuyển vật tư giữa các kho.")
+    public ResponseEntity<List<ConsumableWarehouseTransferResponse>> getConsumableWarehouseTransfers(
+            @RequestParam(required = false) String qaCode
+    ) {
+        return ResponseEntity.ok(assetService.getConsumableWarehouseTransfers(qaCode));
     }
 
     @PostMapping("/locations/{locationId}/consumable-requests")

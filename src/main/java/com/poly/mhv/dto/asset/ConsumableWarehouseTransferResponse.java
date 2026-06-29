@@ -11,20 +11,20 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ConsumableIssueResponse {
+public class ConsumableWarehouseTransferResponse {
     private Long id;
     private String assetQaCode;
     private String assetName;
-    private Integer issuedToLocationId;
-    private String issuedToLocationName;
     private Integer sourceWarehouseLocationId;
     private String sourceWarehouseLocationName;
-    private Integer quantity;
+    private Integer targetWarehouseLocationId;
+    private String targetWarehouseLocationName;
+    private Integer quantityTransferred;
     private String unit;
     private BigDecimal unitPrice;
+    private LocalDateTime transferredAt;
+    private Integer transferredByUserId;
+    private String transferredByUsername;
+    private String transferredByFullName;
     private String note;
-    private Integer issuedByUserId;
-    private String issuedByUsername;
-    private String issuedByFullName;
-    private LocalDateTime issuedAt;
 }
