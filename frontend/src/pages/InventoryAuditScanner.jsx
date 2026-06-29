@@ -38,9 +38,6 @@ function InventoryAuditScanner() {
   const isScanningRef = useRef(false)
   const isSubmittingRef = useRef(false)
   const selectedAuditIdRef = useRef('')
-  const scannerElementId = typeof window !== 'undefined' && window.innerWidth >= 768
-    ? DESKTOP_SCANNER_ELEMENT_ID
-    : MOBILE_SCANNER_ELEMENT_ID
   const [activeAudits, setActiveAudits] = useState([])
   const [selectedAuditId, setSelectedAuditId] = useState('')
   const [selectedAuditDetail, setSelectedAuditDetail] = useState(null)
@@ -52,9 +49,17 @@ function InventoryAuditScanner() {
   const [completing, setCompleting] = useState(false)
   const [recentScansPage, setRecentScansPage] = useState(1)
   const [mobilePanel, setMobilePanel] = useState('sessions')
+  const [isDesktopViewport, setIsDesktopViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+  )
+  const [cameraState, setCameraState] = useState({
+    status: 'idle',
+    message: 'Chọn một phiên đang mở để bắt đầu quét QR.',
+  })
 
   // --- STATE QUẢN LÝ TAB CHI TIẾT ---
   const [activeTab, setActiveTab] = useState('scanned')
+  const scannerElementId = isDesktopViewport ? DESKTOP_SCANNER_ELEMENT_ID : MOBILE_SCANNER_ELEMENT_ID
 
   const loadActiveAudits = async () => {
     setLoadingAudits(true)
@@ -92,10 +97,16 @@ function InventoryAuditScanner() {
 
   useEffect(() => {
     loadActiveAudits()
-    startScanner()
     return () => {
       stopScanner()
     }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const handleResize = () => setIsDesktopViewport(window.innerWidth >= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -155,12 +166,58 @@ function InventoryAuditScanner() {
     setRecentScansPage((prev) => Math.min(prev, totalRecentScanPages))
   }, [totalRecentScanPages])
 
+  const shouldShowScanner = Boolean(selectedAuditId) && mobilePanel === 'sessions'
+
+  useEffect(() => {
+    if (!shouldShowScanner) {
+      stopScanner()
+      if (!selectedAuditId) {
+        setCameraState({
+          status: 'idle',
+          message: 'Chọn một phiên đang mở để bắt đầu quét QR.',
+        })
+      }
+      return undefined
+    }
+
+    let cancelled = false
+    const start = async () => {
+      await stopScanner()
+      if (cancelled) return
+      await startScanner()
+    }
+    const timerId = window.setTimeout(start, 0)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+      stopScanner()
+    }
+  }, [shouldShowScanner, scannerElementId])
+
   const resetSelectedAuditState = () => {
     setManualQaCode('')
     setSelectedAuditDetail(null)
     setRecentScans([])
     setScannedCount(0)
     setActiveTab('scanned')
+  }
+
+  const completeSelectedAudit = async () => {
+    if (!selectedAuditId) return
+    setCompleting(true)
+    try {
+      await axiosClient.post(`/api/inventory-audits/${selectedAuditId}/complete`)
+      toast.success('Hoàn thành kiểm kê thành công. Admin có thể xem biên bản để xử lý tiếp.')
+      resetSelectedAuditState()
+      await loadActiveAudits()
+      setMobilePanel('sessions')
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể hoàn thành kiểm kê.'
+      toast.error(message)
+    } finally {
+      setCompleting(false)
+    }
   }
 
   const handleScanSubmit = async (qaCodeInput) => {
@@ -235,6 +292,49 @@ function InventoryAuditScanner() {
 
   const startScanner = async () => {
     if (isScanningRef.current) return
+    const scannerElement = document.getElementById(scannerElementId)
+    if (!scannerElement) {
+      setCameraState({
+        status: 'idle',
+        message: 'Khung camera chưa sẵn sàng. Mở lại phần phiên đang mở để thử lại.',
+      })
+      return
+    }
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setCameraState({
+        status: 'error',
+        message: 'Camera chỉ hoạt động trên HTTPS hoặc localhost.',
+      })
+      toast.error('Camera chỉ hoạt động trên HTTPS hoặc localhost.')
+      return
+    }
+
+    setCameraState({
+      status: 'requesting',
+      message: 'Đang xin quyền truy cập camera...',
+    })
+
+    let stream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      })
+      stream.getTracks().forEach((track) => track.stop())
+    } catch (error) {
+      const permissionMessage = error?.name === 'NotAllowedError'
+        ? 'Bạn chưa cấp quyền camera. Hãy cho phép camera trong trình duyệt rồi mở lại phần quét QR.'
+        : error?.name === 'NotFoundError'
+          ? 'Không tìm thấy camera trên thiết bị này.'
+          : 'Không thể truy cập camera. Hãy kiểm tra quyền hoặc thử lại.'
+      setCameraState({
+        status: 'blocked',
+        message: permissionMessage,
+      })
+      toast.error(permissionMessage)
+      return
+    }
+
     const scanner = new Html5Qrcode(scannerElementId)
     scannerRef.current = scanner
     try {
@@ -249,8 +349,17 @@ function InventoryAuditScanner() {
           () => {},
       )
       isScanningRef.current = true
-    } catch {
-      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.')
+      setCameraState({
+        status: 'active',
+        message: 'Camera đang sẵn sàng. Đưa mã QR vào giữa khung để quét.',
+      })
+    } catch (error) {
+      const startMessage = error?.message || 'Không thể mở camera. Vui lòng cấp quyền truy cập camera.'
+      setCameraState({
+        status: 'error',
+        message: startMessage,
+      })
+      toast.error(startMessage)
     }
   }
 
@@ -420,6 +529,16 @@ function InventoryAuditScanner() {
                       className="min-h-[240px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 [&_video]:!h-full [&_video]:!w-full [&_video]:!object-cover"
                     />
 
+                    <div className={`rounded-2xl px-3 py-2 text-sm ${
+                      cameraState.status === 'active'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : cameraState.status === 'requesting'
+                          ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border border-slate-200 bg-white text-slate-600'
+                    }`}>
+                      {cameraState.message}
+                    </div>
+
                     <div className="space-y-2">
                       <input
                         value={manualQaCode}
@@ -435,6 +554,15 @@ function InventoryAuditScanner() {
                       >
                         <ScanLine size={16} />
                         Ghi nhận mã QA
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!selectedAuditId || completing}
+                        onClick={completeSelectedAudit}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-fptOrange px-3 py-2.5 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <ClipboardCheck size={16} />
+                        {completing ? 'Đang hoàn tất...' : 'Hoàn thành kiểm kê'}
                       </button>
                     </div>
                   </div>
@@ -552,30 +680,456 @@ function InventoryAuditScanner() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      disabled={!selectedAuditId || completing}
-                      onClick={async () => {
-                        if (!selectedAuditId) return
-                        setCompleting(true)
-                        try {
-                          await axiosClient.post(`/api/inventory-audits/${selectedAuditId}/complete`)
-                          toast.success('Hoàn thành kiểm kê thành công. Admin có thể xem biên bản để xử lý tiếp.')
-                          resetSelectedAuditState()
-                          await loadActiveAudits()
-                          setMobilePanel('sessions')
-                        } catch (error) {
-                          const message = error?.response?.data?.message || 'Không thể hoàn thành kiểm kê.'
-                          toast.error(message)
-                        } finally {
-                          setCompleting(false)
-                        }
-                      }}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-fptOrange px-3 py-3 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <ClipboardCheck size={16} />
-                      {completing ? 'Đang hoàn tất...' : 'Hoàn thành kiểm kê'}
-                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="hidden md:block">
+          <div className="flex gap-3">
+            {MOBILE_AUDIT_PANELS.map((panel) => {
+              const value = panel.id === 'sessions'
+                ? activeAudits.length
+                : panel.id === 'scanned'
+                  ? scannedCount
+                  : `${progressPercent}%`
+              const active = mobilePanel === panel.id
+              return (
+                <button
+                  key={`desktop-${panel.id}`}
+                  type="button"
+                  onClick={() => setMobilePanel(panel.id)}
+                  className={`min-w-[180px] rounded-2xl border px-4 py-4 text-left shadow-sm transition ${
+                    active
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
+                  }`}
+                >
+                  <p className={`text-sm font-semibold ${active ? 'text-white/80' : 'text-slate-500'}`}>{panel.label}</p>
+                  <p className="mt-2 text-3xl font-bold">{value}</p>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 rounded-3xl bg-white p-5 shadow-sm">
+            {mobilePanel === 'sessions' && (
+              <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-semibold text-slate-800">Phiên đang mở</h3>
+                    {selectedAudit && (
+                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                        #{selectedAudit.id}
+                      </span>
+                    )}
+                  </div>
+
+                  {loadingAudits && (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                      Đang tải danh sách phiên kiểm kê...
+                    </div>
+                  )}
+
+                  {!loadingAudits && activeAudits.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                      Hiện chưa có phiên kiểm kê nào đang mở.
+                    </div>
+                  )}
+
+                  {!loadingAudits && activeAudits.length > 0 && (
+                    <div className="space-y-2">
+                      {activeAudits.map((audit) => {
+                        const isActive = String(audit.id) === String(selectedAuditId)
+                        return (
+                          <button
+                            key={`desktop-audit-${audit.id}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedAuditId(String(audit.id))
+                              resetSelectedAuditState()
+                            }}
+                            className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
+                              isActive
+                                ? 'border-blue-600 bg-blue-50'
+                                : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-base font-semibold text-slate-800">Phiên #{audit.id}</p>
+                                <p className="mt-1 text-sm text-slate-600">{audit.locationName || 'Không rõ phòng kiểm kê'}</p>
+                              </div>
+                              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                                isActive ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'
+                              }`}>
+                                {String(audit.status || 'OPEN').replace('_', ' ')}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {selectedSummary && (
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-semibold text-slate-800">
+                            Phiên #{selectedSummary.id} - {selectedSummary.locationName}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">Chọn đúng phiên rồi quét QR ngay trong khung bên dưới.</p>
+                        </div>
+                        <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                          {selectedSummary.status || 'OPEN'}
+                        </span>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        <div className="rounded-xl bg-white px-4 py-3">
+                          <p className="text-xs text-slate-500">Cần quét</p>
+                          <p className="mt-1 text-xl font-semibold text-slate-800">{expectedCount}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-4 py-3">
+                          <p className="text-xs text-slate-500">Đã quét</p>
+                          <p className="mt-1 text-xl font-semibold text-emerald-700">{scannedCount}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-4 py-3">
+                          <p className="text-xs text-slate-500">Thất lạc</p>
+                          <p className="mt-1 text-xl font-semibold text-red-700">{selectedSummary.missingCount || 0}</p>
+                        </div>
+                        <div className="rounded-xl bg-white px-4 py-3">
+                          <p className="text-xs text-slate-500">Đang sửa chữa</p>
+                          <p className="mt-1 text-xl font-semibold text-violet-700">{selectedSummary.repairingCount || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedAuditId ? (
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="text-lg font-semibold text-slate-800">Quét QR</h4>
+                          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                            {scanStatusLabel}
+                          </span>
+                        </div>
+                        <div
+                          id={DESKTOP_SCANNER_ELEMENT_ID}
+                          className="min-h-[320px] w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 [&_video]:!h-full [&_video]:!w-full [&_video]:!object-cover"
+                        />
+                        <div className={`rounded-2xl px-3 py-2 text-sm ${
+                          cameraState.status === 'active'
+                            ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : cameraState.status === 'requesting'
+                              ? 'border border-amber-200 bg-amber-50 text-amber-700'
+                              : 'border border-slate-200 bg-white text-slate-600'
+                        }`}>
+                          {cameraState.message}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="rounded-2xl bg-white p-3 text-sm text-slate-600">
+                          <p className="font-semibold text-slate-800">Trạng thái phiên</p>
+                          <p className="mt-2">Phòng: {selectedAudit?.locationName || 'Chưa chọn'}</p>
+                          <p className="mt-1">Thiết bị cần quét: {expectedCount}</p>
+                          <p className="mt-1">Thiết bị đã quét: {scannedCount} / {expectedCount || 0}</p>
+                        </div>
+                        <input
+                          value={manualQaCode}
+                          onChange={(event) => setManualQaCode(event.target.value)}
+                          placeholder="Nhập mã QA thủ công"
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none ring-blue-500 focus:ring-2"
+                        />
+                        <button
+                          type="button"
+                          disabled={!selectedAuditId || !manualQaCode.trim()}
+                          onClick={() => handleScanSubmit(manualQaCode)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <ScanLine size={16} />
+                          Ghi nhận mã QA
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!selectedAuditId || completing}
+                          onClick={completeSelectedAudit}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-fptOrange px-3 py-2.5 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <ClipboardCheck size={16} />
+                          {completing ? 'Đang hoàn tất...' : 'Hoàn thành kiểm kê'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                      Chọn một phiên đang mở để bắt đầu quét QR và hoàn thành kiểm kê.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mobilePanel === 'scanned' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-slate-800">Danh sách thiết bị đã quét</h3>
+                  <span className="text-sm font-medium text-slate-500">{recentScans.length} thiết bị</span>
+                </div>
+                {!loadingDetail && recentScans.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    {selectedAuditId ? 'Chưa có thiết bị nào được quét trong phiên này.' : 'Chọn một phiên để xem danh sách đã quét.'}
+                  </div>
+                )}
+                {recentScans.length > 0 && (
+                  <>
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead className="bg-slate-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng hiện tại</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Người quét</th>
+                            <th className="px-3 py-2 text-left font-semibold text-slate-600">Ngày giờ quét</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {paginatedRecentScans.map((item, index) => (
+                            <tr key={`desktop-scan-${item.assetQaCode}-${item.scannedAt || index}`}>
+                              <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || '-'}</td>
+                              <td className="px-3 py-2 text-slate-600">{item.assetName || '-'}</td>
+                              <td className="px-3 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                              <td className="px-3 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                              <td className="px-3 py-2 text-slate-600">{item.scannedByUsername || '-'}</td>
+                              <td className="px-3 py-2 text-slate-600">{formatVietnamDateTime(item.scannedAt, '-')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setRecentScansPage((prev) => Math.max(1, prev - 1))}
+                        disabled={recentScansPage === 1}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Trước
+                      </button>
+                      <span className="font-medium text-slate-600">
+                        {recentScansPage}/{totalRecentScanPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRecentScansPage((prev) => Math.min(totalRecentScanPages, prev + 1))}
+                        disabled={recentScansPage === totalRecentScanPages}
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Tiếp
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {mobilePanel === 'progress' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-slate-800">Tiến độ phiên</h3>
+                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    {progressPercent}%
+                  </span>
+                </div>
+                {!selectedAuditId && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    Chọn một phiên đang mở để theo dõi tiến độ.
+                  </div>
+                )}
+                {selectedAuditId && (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs text-slate-500">Phòng</p>
+                        <p className="mt-1 font-semibold text-slate-800">{selectedAudit?.locationName || 'Chưa chọn'}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs text-slate-500">Cần quét</p>
+                        <p className="mt-1 font-semibold text-slate-800">{expectedCount}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs text-slate-500">Đã quét</p>
+                        <p className="mt-1 font-semibold text-emerald-700">{scannedCount}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-xs text-slate-500">Thất lạc</p>
+                        <p className="mt-1 font-semibold text-red-700">{selectedSummary?.missingCount || 0}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="mb-4 h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progressPercent}%` }} />
+                      </div>
+
+                      <div className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-0.5 scrollbar-hide">
+                        {TABS.map((tab) => (
+                          <button
+                            key={`desktop-progress-${tab.id}`}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                              activeTab === tab.id
+                                ? 'border-blue-600 text-blue-700'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                            }`}
+                          >
+                            {tab.label}
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                              activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {tab.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                        <table className="w-full min-w-max divide-y divide-slate-200 text-sm">
+                          <thead className="bg-slate-50">
+                            {activeTab === 'repairing' && (
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Vị trí hiện tại</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Trạng thái</th>
+                              </tr>
+                            )}
+                            {activeTab === 'scanned' && (
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Người quét</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian</th>
+                              </tr>
+                            )}
+                            {activeTab === 'lent' && (
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Đang ở phòng</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                              </tr>
+                            )}
+                            {activeTab === 'borrowed' && (
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Phòng gốc</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Hiện đang ở</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Người mượn</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Thời gian mượn</th>
+                              </tr>
+                            )}
+                            {activeTab === 'missing' && (
+                              <tr>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600 w-12">STT</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Mã thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Tên thiết bị</th>
+                                <th className="px-3 py-2 text-left font-semibold text-slate-600">Xử lý</th>
+                              </tr>
+                            )}
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {loadingDetail && (
+                              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
+                            )}
+                            {!loadingDetail && activeTab === 'repairing' && selectedAuditDetail?.repairingItems?.map((item, index) => (
+                              <tr key={`desktop-rep-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.displayStatus || item.technicalStatus || '-'}</td>
+                              </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'repairing' && (!selectedAuditDetail?.repairingItems?.length) && (
+                              <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang sửa chữa.</td></tr>
+                            )}
+                            {!loadingDetail && activeTab === 'scanned' && selectedAuditDetail?.scannedItems?.map((item, index) => (
+                              <tr key={`desktop-scan-detail-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.scannedByUsername || '-'}</td>
+                                <td className="px-3 py-2 text-slate-400">{formatVietnamDateTime(item.scannedAt, '-')}</td>
+                              </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'scanned' && (!selectedAuditDetail?.scannedItems?.length) && (
+                              <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={5}>Chưa quét thiết bị nào.</td></tr>
+                            )}
+                            {!loadingDetail && activeTab === 'lent' && selectedAuditDetail?.lentItems?.map((item, index) => (
+                              <tr key={`desktop-lent-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.toLocationName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                              </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'lent' && (!selectedAuditDetail?.lentItems?.length) && (
+                              <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={6}>Không có thiết bị nào đang cho mượn.</td></tr>
+                            )}
+                            {!loadingDetail && activeTab === 'borrowed' && selectedAuditDetail?.borrowedItems?.map((item, index) => (
+                              <tr key={`desktop-borrow-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.homeLocationName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.currentLocationName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.borrowerName || '-'}</td>
+                                <td className="px-3 py-2 text-slate-600">{formatVietnamDateTime(item.borrowedAt, 'Chưa xác định')}</td>
+                              </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'borrowed' && (!selectedAuditDetail?.borrowedItems?.length) && (
+                              <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={7}>Không có thiết bị nào đang mượn.</td></tr>
+                            )}
+                            {!loadingDetail && activeTab === 'missing' && selectedAuditDetail?.missingItems?.map((item, index) => (
+                              <tr key={`desktop-miss-${item.assetQaCode || index}`} className="hover:bg-slate-50/80">
+                                <td className="px-3 py-2 text-slate-500">{index + 1}</td>
+                                <td className="px-3 py-2 font-medium text-slate-800">{item.assetQaCode || item.assetCode}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.assetName}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                                    item.resolutionStatus === 'PENDING' ? 'bg-amber-50 text-amber-700' : item.resolutionStatus === 'FOUND' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {item.resolutionStatus === 'PENDING' ? 'Chưa xử lý' : item.resolutionStatus === 'FOUND' ? 'Tìm thấy' : 'Mất hẳn'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                            {!loadingDetail && activeTab === 'missing' && (!selectedAuditDetail?.missingItems?.length) && (
+                              <tr><td className="px-3 py-6 text-center text-slate-400" colSpan={4}>Không có thiết bị thất lạc.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -584,7 +1138,7 @@ function InventoryAuditScanner() {
         </section>
 
         {/* THỐNG KÊ TỔNG QUAN */}
-        <section className="hidden gap-3 md:grid md:grid-cols-3">
+        <section className="hidden">
           <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Phiên đang mở</p>
             <p className="mt-2 text-2xl font-bold text-slate-800">{activeAudits.length}</p>
@@ -603,7 +1157,7 @@ function InventoryAuditScanner() {
         </section>
 
         {/* ROW 1: CHỌN PHIÊN KIỂM KÊ (Trải dài hết màn hình) */}
-        <section className="hidden rounded-2xl bg-white p-4 shadow-sm md:block">
+        <section className="hidden">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Chọn phiên kiểm kê</h3>
@@ -824,7 +1378,7 @@ function InventoryAuditScanner() {
         </section>
 
         {/* ROW 2: QUÉT MÃ & THIẾT BỊ ĐÃ QUÉT (Luôn nằm song song ngang nhau trên màn hình lớn) */}
-        <section className="hidden items-start gap-4 md:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+        <section className="hidden">
 
           {/* CỘT TRÁI: KHU VỰC QUÉT MÃ */}
           <div className="rounded-2xl bg-white p-4 shadow-sm">
