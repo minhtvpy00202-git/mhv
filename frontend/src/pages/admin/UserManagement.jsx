@@ -608,9 +608,9 @@ function UserManagement() {
       </div>
 
       {showFormModal && (
-        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 p-4 md:items-center">
-          <div className="w-full max-w-3xl rounded-2xl bg-white p-4 shadow-xl md:p-5">
-            <div className="mb-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-30 flex items-end justify-center overflow-y-auto bg-black/50 p-3 sm:p-4 md:items-center">
+          <div className="my-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl sm:max-h-[calc(100vh-2rem)]">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4 md:px-5">
               <h3 className="text-lg font-semibold text-slate-800">{isEditing ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'}</h3>
               <button
                 type="button"
@@ -621,134 +621,137 @@ function UserManagement() {
               </button>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Username *</label>
-                <input
-                  value={form.username}
-                  onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
-                  disabled={isEditing}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                  placeholder={isEditing ? 'Username không được phép thay đổi' : 'Nhập username'}
-                />
-                {isEditing && <p className="mt-1 text-xs text-slate-500">Username đã bị khóa ở chế độ chỉnh sửa.</p>}
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  {isEditing ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu *'}
-                </label>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Nhập mật khẩu"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
-                <input
-                  value={form.fullName}
-                  onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Nhập họ và tên"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Nhập email"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh *</label>
-                <input
-                  type="date"
-                  value={form.birthday || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại *</label>
-                <input
-                  value={form.phone}
-                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                  placeholder="Nhập số điện thoại"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Vai trò</label>
-                <select
-                  value={form.role}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    if (value === 'TechSupport') {
-                      setForm((prev) => ({ ...prev, role: 'TechSupport', techTypeIds: prev.techTypeIds || [] }))
-                    } else {
-                      setForm((prev) => ({ ...prev, role: value, techTypeIds: [] }))
-                    }
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {toRoleLabel(role)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {isTechSupportRole && (
+            <div className="overflow-y-auto px-4 py-4 md:px-5">
+              <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Chuyên môn kỹ thuật *</label>
-                  <div className="space-y-2 rounded-lg border border-slate-300 px-3 py-2">
-                    {techRoleOptions.map((item) => {
-                      const checked = form.techTypeIds.includes(item.techTypeId)
-                      return (
-                        <label key={item.techTypeId} className="flex items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              setForm((prev) => ({
-                                ...prev,
-                                techTypeIds: e.target.checked
-                                  ? [...prev.techTypeIds, item.techTypeId]
-                                  : prev.techTypeIds.filter((id) => id !== item.techTypeId),
-                              }))
-                            }}
-                            className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">Có thể chọn nhiều chuyên môn cho một kỹ thuật viên.</p>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Username *</label>
+                  <input
+                    value={form.username}
+                    onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
+                    disabled={isEditing}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                    placeholder={isEditing ? 'Username không được phép thay đổi' : 'Nhập username'}
+                  />
+                  {isEditing && <p className="mt-1 text-xs text-slate-500">Username đã bị khóa ở chế độ chỉnh sửa.</p>}
                 </div>
-              )}
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-                >
-                  {statusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    {isEditing ? 'Mật khẩu mới (để trống nếu giữ nguyên)' : 'Mật khẩu *'}
+                  </label>
+                  <input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    placeholder="Nhập mật khẩu"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
+                  <input
+                    value={form.fullName}
+                    onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    placeholder="Nhập họ và tên"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    placeholder="Nhập email"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Ngày sinh *</label>
+                  <input
+                    type="date"
+                    value={form.birthday || ''}
+                    onChange={(e) => setForm((prev) => ({ ...prev, birthday: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Số điện thoại *</label>
+                  <input
+                    value={form.phone}
+                    onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    placeholder="Nhập số điện thoại"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Vai trò</label>
+                  <select
+                    value={form.role}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value === 'TechSupport') {
+                        setForm((prev) => ({ ...prev, role: 'TechSupport', techTypeIds: prev.techTypeIds || [] }))
+                      } else {
+                        setForm((prev) => ({ ...prev, role: value, techTypeIds: [] }))
+                      }
+                    }}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  >
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {toRoleLabel(role)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isTechSupportRole && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Chuyên môn kỹ thuật *</label>
+                    <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border border-slate-300 px-3 py-2">
+                      {techRoleOptions.map((item) => {
+                        const checked = form.techTypeIds.includes(item.techTypeId)
+                        return (
+                          <label key={item.techTypeId} className="flex items-center gap-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setForm((prev) => ({
+                                  ...prev,
+                                  techTypeIds: e.target.checked
+                                    ? [...prev.techTypeIds, item.techTypeId]
+                                    : prev.techTypeIds.filter((id) => id !== item.techTypeId),
+                                }))
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
+                            />
+                            <span>{item.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Có thể chọn nhiều chuyên môn cho một kỹ thuật viên.</p>
+                  </div>
+                )}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Trạng thái</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  >
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-4">
+            <div className="border-t border-slate-200 px-4 py-4 md:px-5">
+              <div className="grid gap-2 sm:grid-cols-4">
               <button
                 type="button"
                 onClick={handleCreate}
@@ -780,6 +783,7 @@ function UserManagement() {
               >
                 Hủy
               </button>
+              </div>
             </div>
           </div>
         </div>
