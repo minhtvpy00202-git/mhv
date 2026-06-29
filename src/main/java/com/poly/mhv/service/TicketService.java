@@ -22,7 +22,6 @@ import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +38,12 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class TicketService {
 
+    private static final List<String> EXTENSION_REVIEW_EVENT_TYPES = List.of("EXTENSION_APPROVED", "EXTENSION_REJECTED");
+    private static final List<String> EXTENSION_FLOW_EVENT_TYPES = List.of(
+            "EXTENSION_REQUESTED",
+            "EXTENSION_APPROVED",
+            "EXTENSION_REJECTED"
+    );
     private static final Sort DEFAULT_TICKET_SORT = Sort.by(Sort.Direction.DESC, "createdAt")
             .and(Sort.by(Sort.Direction.DESC, "id"));
 
@@ -595,8 +600,17 @@ public class TicketService {
     }
 
     private boolean canAccessTicket(AppUser actor, Ticket ticket) {
-        if (!"TechSupport".equals(actor.getRole())) {
+        if (actor == null || ticket == null) {
+            return false;
+        }
+        if ("Admin".equals(actor.getRole())) {
             return true;
+        }
+        if ("NhanVien".equals(actor.getRole())) {
+            return ticket.getReporter() != null && actor.getId().equals(ticket.getReporter().getId());
+        }
+        if (!"TechSupport".equals(actor.getRole())) {
+            return false;
         }
         Integer ticketTechTypeId = getAssetTechTypeId(ticket.getAsset());
         if (ticketTechTypeId <= 0) {
@@ -687,19 +701,8 @@ public class TicketService {
             throw new CustomException("Chỉ có thể yêu cầu gia hạn khi ticket đang xử lý (IN_PROGRESS).");
         }
 
-        // Check if there is already a pending extension request
-        List<TicketEvent> events = ticketEventRepository.findByTicketIdOrderByOccurredAtDescIdDesc(ticketId,
-                PageRequest.of(0, 100));
-        boolean hasPending = false;
-        for (TicketEvent event : events) {
-            if ("EXTENSION_REQUESTED".equals(event.getEventType())) {
-                hasPending = true;
-            } else if ("EXTENSION_APPROVED".equals(event.getEventType())
-                    || "EXTENSION_REJECTED".equals(event.getEventType())) {
-                break;
-            }
-        }
-        if (hasPending) {
+        TicketEvent latestExtensionEvent = findLatestExtensionEvent(ticketId);
+        if (latestExtensionEvent != null && "EXTENSION_REQUESTED".equals(latestExtensionEvent.getEventType())) {
             throw new CustomException("Đã có một yêu cầu gia hạn đang chờ admin duyệt.");
         }
 
@@ -745,26 +748,15 @@ public class TicketService {
             throw new CustomException("Chỉ Admin mới có quyền duyệt yêu cầu gia hạn.");
         }
 
-        // Find the pending extension request event
-        List<TicketEvent> events = ticketEventRepository.findByTicketIdOrderByOccurredAtDescIdDesc(ticketId,
-                PageRequest.of(0, 100));
-        TicketEvent pendingRequestEvent = null;
-        for (TicketEvent event : events) {
-            if ("EXTENSION_REQUESTED".equals(event.getEventType())) {
-                pendingRequestEvent = event;
-                break;
-            } else if ("EXTENSION_APPROVED".equals(event.getEventType())
-                    || "EXTENSION_REJECTED".equals(event.getEventType())) {
-                break;
-            }
-        }
-
+        TicketEvent pendingRequestEvent = findLatestExtensionEvent(ticketId);
         if (pendingRequestEvent == null) {
             throw new CustomException("Không tìm thấy yêu cầu gia hạn nào đang chờ duyệt cho ticket này.");
         }
+        if (!"EXTENSION_REQUESTED".equals(pendingRequestEvent.getEventType())) {
+            throw new CustomException("Không còn yêu cầu gia hạn nào đang chờ duyệt cho ticket này.");
+        }
 
         Integer requestedMinutes = 0;
-        String requestedReason = "";
         try {
             String detailText = pendingRequestEvent.getDetailJson();
             if (StringUtils.hasText(detailText)) {
@@ -772,8 +764,6 @@ public class TicketService {
                 for (String line : lines) {
                     if (line.startsWith("requestedMinutes: ")) {
                         requestedMinutes = Integer.parseInt(line.substring(18).trim());
-                    } else if (line.startsWith("reason: ")) {
-                        requestedReason = line.substring(8).trim();
                     }
                 }
             }
@@ -916,20 +906,7 @@ public class TicketService {
         for (TicketEvent reqEvent : reqEvents) {
             Ticket ticket = reqEvent.getTicket();
 
-            // Find if there is a subsequent approval or rejection for this ticket
-            List<TicketEvent> allEvents = ticketEventRepository
-                    .findByTicketIdOrderByOccurredAtDescIdDesc(ticket.getId(), PageRequest.of(0, 100));
-
-            TicketEvent reviewEvent = null;
-            for (TicketEvent ev : allEvents) {
-                if (ev.getOccurredAt().isAfter(reqEvent.getOccurredAt())) {
-                    if ("EXTENSION_APPROVED".equals(ev.getEventType())
-                            || "EXTENSION_REJECTED".equals(ev.getEventType())) {
-                        reviewEvent = ev;
-                        break;
-                    }
-                }
-            }
+            TicketEvent reviewEvent = findFirstReviewAfterRequest(ticket.getId(), reqEvent.getOccurredAt());
 
             String status = "PENDING";
             String rejectReason = null;
@@ -1121,6 +1098,24 @@ public class TicketService {
             return msg.substring(msg.indexOf("Lý do: ") + 7).trim();
         }
         return "Không có lý do cụ thể.";
+    }
+
+    private TicketEvent findLatestExtensionEvent(Integer ticketId) {
+        return ticketEventRepository.findFirstByTicketIdAndEventTypeInOrderByOccurredAtDescIdDesc(
+                ticketId,
+                EXTENSION_FLOW_EVENT_TYPES
+        ).orElse(null);
+    }
+
+    private TicketEvent findFirstReviewAfterRequest(Integer ticketId, LocalDateTime requestedAt) {
+        if (ticketId == null || requestedAt == null) {
+            return null;
+        }
+        return ticketEventRepository.findFirstByTicketIdAndEventTypeInAndOccurredAtAfterOrderByOccurredAtAscIdAsc(
+                ticketId,
+                EXTENSION_REVIEW_EVENT_TYPES,
+                requestedAt
+        ).orElse(null);
     }
 
     private record TicketFilter(String status, Integer assigneeId, String assetQaCode, Integer reporterId) {

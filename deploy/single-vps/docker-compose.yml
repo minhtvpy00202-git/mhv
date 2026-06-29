@@ -56,14 +56,34 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+    expose:
+      - "80"
+    networks:
+      - mhv-internal
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: mhv-proxy
+    restart: unless-stopped
+    depends_on:
+      - web
     ports:
       - "80:80"
+      - "443:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - mhv-internal
 
 volumes:
   postgres_data:
   uploads_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   mhv-internal:

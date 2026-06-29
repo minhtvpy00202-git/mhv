@@ -70,6 +70,7 @@ Sua cac bien quan trong:
 
 - `POSTGRES_PASSWORD`
 - `JWT_SECRET`
+- `PUBLIC_DOMAIN`
 - `APP_CORS_ALLOWED_ORIGINS`
 
 ## 5. Chay stack
@@ -84,20 +85,34 @@ Sau khi chay:
 - frontend duoc phuc vu boi `web`
 - backend chay trong `app`
 - postgres chay trong `postgres`
+- HTTPS reverse proxy chay trong `proxy (Caddy)`
 - media luu local trong volume `uploads_data`
 
 ## 6. DNS va truy cap
 
 Neu domain tro dung vao VPS, ban co the truy cap bang:
 
-- `http://your-domain.com`
+- `https://your-domain.com`
 
-Hien tai `nginx.conf` nghe port `80`.
+`Caddy` se tu dong:
 
-Neu muon HTTPS, co 2 cach:
+- xin chung chi Let's Encrypt
+- renew tu dong
+- redirect `http` sang `https`
 
-- dat Nginx/Caddy tren host de cap TLS
-- hoac them reverse proxy TLS rieng trong docker
+Dieu kien de HTTPS cap duoc:
+
+- `PUBLIC_DOMAIN` phai dung
+- DNS cua domain phai tro vao IP VPS
+- firewall/Droplet phai mo cong `80` va `443`
+
+Vi du voi DuckDNS:
+
+```env
+PUBLIC_DOMAIN=qltsmhv.duckdns.org
+APP_CORS_ALLOWED_ORIGINS=https://qltsmhv.duckdns.org
+VITE_API_BASE_URL=
+```
 
 ## 7. Backup can lam
 
@@ -149,7 +164,7 @@ Bo file nay chi anh huong toi stack tren Droplet:
 
 Nghia la:
 
-- `http://your-duckdns-domain` se doc/ghi vao DB tren VPS
+- `https://your-duckdns-domain` se doc/ghi vao DB tren VPS
 - App Platform van doc/ghi vao Database Cluster neu ban giu nguyen `SPRING_DATASOURCE_*` trong App Platform
 
 ## 11. Chay local nhung dung DB tren VPS

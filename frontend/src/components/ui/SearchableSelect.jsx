@@ -47,6 +47,7 @@ export default function SearchableSelect({
 }) {
   const containerRef = useRef(null)
   const normalizedValue = value == null ? '' : String(value)
+  const emptyValueString = String(emptyOptionValue)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
@@ -90,6 +91,7 @@ export default function SearchableSelect({
     () => preparedOptions.find((option) => option.valueString === normalizedValue) || null,
     [normalizedValue, preparedOptions],
   )
+  const isEmptyOptionSelected = selectedOption?.valueString === emptyValueString
 
   const filteredOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -99,9 +101,9 @@ export default function SearchableSelect({
 
   useEffect(() => {
     if (!open) {
-      setQuery(selectedOption?.label || '')
+      setQuery(isEmptyOptionSelected ? '' : (selectedOption?.label || ''))
     }
-  }, [open, selectedOption])
+  }, [isEmptyOptionSelected, open, selectedOption])
 
   useEffect(() => {
     if (!open) return
@@ -127,8 +129,15 @@ export default function SearchableSelect({
 
   const commitSelection = (option) => {
     onChange?.(option.value, option.original)
-    setQuery(option.label)
+    setQuery(option.valueString === emptyValueString ? '' : option.label)
     setOpen(false)
+  }
+
+  const openDropdown = () => {
+    if (disabled) return
+    // Khi mở dropdown, luôn bỏ text hiện tại khỏi ô tìm kiếm để hiển thị toàn bộ danh sách.
+    setQuery('')
+    setOpen(true)
   }
 
   const handleKeyDown = (event) => {
@@ -136,7 +145,7 @@ export default function SearchableSelect({
 
     if (!open && (event.key === 'ArrowDown' || event.key === 'Enter')) {
       event.preventDefault()
-      setOpen(true)
+      openDropdown()
       return
     }
 
@@ -179,8 +188,7 @@ export default function SearchableSelect({
           type="text"
           value={query}
           onFocus={() => {
-            if (disabled) return
-            setOpen(true)
+            openDropdown()
           }}
           onChange={(event) => {
             setQuery(event.target.value)
@@ -202,7 +210,11 @@ export default function SearchableSelect({
           type="button"
           onClick={() => {
             if (disabled) return
-            setOpen((previous) => !previous)
+            if (open) {
+              setOpen(false)
+              return
+            }
+            openDropdown()
           }}
           className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 transition hover:text-slate-600 disabled:cursor-not-allowed dark:hover:text-slate-200"
           disabled={disabled}
@@ -237,9 +249,10 @@ export default function SearchableSelect({
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  {renderOption(option.original || option, {
+                  {renderOption(option, {
                     isSelected,
                     isHighlighted,
+                    original: option.original,
                   })}
                 </div>
                 {isSelected ? <Check size={16} className="mt-0.5 shrink-0 text-fptOrange" /> : null}

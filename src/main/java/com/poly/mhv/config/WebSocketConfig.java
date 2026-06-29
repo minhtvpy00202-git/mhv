@@ -2,6 +2,9 @@ package com.poly.mhv.config;
 
 import com.poly.mhv.security.jwt.JwtUtils;
 import com.poly.mhv.security.services.UserDetailsImpl;
+import java.security.Principal;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
@@ -24,6 +27,8 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private static final Pattern USER_TOPIC_PATTERN = Pattern.compile("^/topic/users/(\\d+)(?:/.*)?$");
 
     private final JwtUtils jwtUtils;
     private final UserDetailsService userDetailsService;
@@ -54,27 +59,60 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    String token = extractToken(accessor);
-                    if (token == null || token.isBlank()) {
-                        throw new IllegalArgumentException("Thiếu JWT token trong CONNECT headers.");
-                    }
+                if (accessor != null) {
+                    if (StompCommand.CONNECT.equals(accessor.getCommand())) {
+                        String token = extractToken(accessor);
+                        if (token == null || token.isBlank()) {
+                            throw new IllegalArgumentException("Thiếu JWT token trong CONNECT headers.");
+                        }
 
-                    String username = jwtUtils.getUserNameFromJwtToken(token);
-                    UserDetails userDetails = buildUserDetailsFromToken(token, username);
-                    if (!jwtUtils.validateJwtToken(token)) {
-                        throw new IllegalArgumentException("JWT token không hợp lệ.");
-                    }
+                        String username = jwtUtils.getUserNameFromJwtToken(token);
+                        UserDetails userDetails = buildUserDetailsFromToken(token, username);
+                        if (!jwtUtils.validateJwtToken(token)) {
+                            throw new IllegalArgumentException("JWT token không hợp lệ.");
+                        }
 
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
-                    accessor.setUser(authentication);
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+                        accessor.setUser(authentication);
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+                        enforcePrivateTopicSubscription(accessor);
+                    }
                 }
                 return message;
+            }
+
+            private void enforcePrivateTopicSubscription(StompHeaderAccessor accessor) {
+                String destination = accessor.getDestination();
+                if (destination == null || destination.isBlank()) {
+                    return;
+                }
+                Matcher matcher = USER_TOPIC_PATTERN.matcher(destination);
+                if (!matcher.matches()) {
+                    return;
+                }
+                Integer authenticatedUserId = extractAuthenticatedUserId(accessor.getUser());
+                if (authenticatedUserId == null) {
+                    throw new IllegalArgumentException("Không xác định được người dùng để subscribe realtime.");
+                }
+                Integer requestedUserId = Integer.valueOf(matcher.group(1));
+                if (!requestedUserId.equals(authenticatedUserId)) {
+                    throw new IllegalArgumentException("Không được phép subscribe vào kênh realtime của người dùng khác.");
+                }
+            }
+
+            private Integer extractAuthenticatedUserId(Principal principal) {
+                if (principal instanceof UsernamePasswordAuthenticationToken authenticationToken) {
+                    Object principalObject = authenticationToken.getPrincipal();
+                    if (principalObject instanceof UserDetailsImpl userDetails) {
+                        return userDetails.getId();
+                    }
+                }
+                return null;
             }
 
             private UserDetails buildUserDetailsFromToken(String token, String username) {

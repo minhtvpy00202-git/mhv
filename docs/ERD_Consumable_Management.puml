@@ -15,9 +15,9 @@ title ERD - Luong Quan Ly Vat Tu Tieu Hao
 entity "categories" as categories {
   * id : integer <<PK>>
   --
-  * name : varchar(50)
-  * code_prefix : varchar(10)
-  * category_kind : varchar(20)
+  * name : varchar_50
+  * code_prefix : varchar_10
+  * category_kind : varchar_20
   spec_templates : text
   tech_type_id : integer <<FK>>
 }
@@ -25,47 +25,47 @@ entity "categories" as categories {
 entity "suppliers" as suppliers {
   * id : integer <<PK>>
   --
-  * name : varchar(150)
-  address : varchar(255)
-  phone_number : varchar(20)
+  * name : varchar_150
+  address : varchar_255
+  phone_number : varchar_20
 }
 
 entity "locations" as locations {
   * id : integer <<PK>>
   --
-  * room_name : varchar(100)
-  area_type_key : varchar(100)
-  area_type_label : varchar(150)
+  * room_name : varchar_100
+  area_type_key : varchar_100
+  area_type_label : varchar_150
   floor_id : integer <<FK>>
 }
 
 entity "users" as users {
   * id : integer <<PK>>
   --
-  * username : varchar(50)
-  * role : varchar(20)
-  full_name : varchar(100)
-  email : varchar(150)
-  phone : varchar(20)
-  * status : varchar(20)
+  * username : varchar_50
+  * role : varchar_20
+  full_name : varchar_100
+  email : varchar_150
+  phone : varchar_20
+  * status : varchar_20
 }
 
 entity "assets" as assets {
-  * qa_code : varchar(20) <<PK>>
+  * qa_code : varchar_20 <<PK>>
   --
-  * name : varchar(100)
+  * name : varchar_100
   * category_id : integer <<FK>>
   * location_id : integer <<FK>>
   * home_location_id : integer <<FK>>
   supplier_id : integer <<FK>>
-  * status : varchar(20)
-  technical_status : varchar(30)
-  usage_status : varchar(30)
-  tracking_mode : varchar(20)
+  * status : varchar_20
+  technical_status : varchar_30
+  usage_status : varchar_30
+  tracking_mode : varchar_20
   quantity_on_hand : integer
   minimum_stock : integer
-  unit : varchar(50)
-  purchase_price : decimal(19,2)
+  unit : varchar_50
+  purchase_price : decimal_19_2
   purchase_date : date
   expiration_date : date
 }
@@ -73,11 +73,11 @@ entity "assets" as assets {
 entity "consumable_receipt_lots" as receipt_lots {
   * id : bigint <<PK>>
   --
-  * asset_qa_code : varchar(20) <<FK>>
-  lot_code : varchar(100)
+  * asset_qa_code : varchar_20 <<FK>>
+  lot_code : varchar_100
   * quantity_received : integer
   * quantity_remaining : integer
-  * unit_price : decimal(19,2)
+  * unit_price : decimal_19_2
   * received_date : date
   expiration_date : date
   supplier_id : integer <<FK>>
@@ -89,11 +89,11 @@ entity "consumable_receipt_lots" as receipt_lots {
 entity "consumable_issues" as issues {
   * id : bigint <<PK>>
   --
-  * asset_qa_code : varchar(20) <<FK>>
+  * asset_qa_code : varchar_20 <<FK>>
   * issued_to_location_id : integer <<FK>>
   * issued_by_user_id : integer <<FK>>
   * quantity : integer
-  unit_price : decimal(19,2)
+  unit_price : decimal_19_2
   note : text
   * issued_at : timestamp
 }
@@ -101,11 +101,11 @@ entity "consumable_issues" as issues {
 entity "consumable_location_stocks" as location_stocks {
   * id : bigint <<PK>>
   --
-  * asset_qa_code : varchar(20) <<FK>>
+  * asset_qa_code : varchar_20 <<FK>>
   * location_id : integer <<FK>>
   * quantity_issued : integer
   * quantity_remaining : integer
-  unit_price : decimal(19,2)
+  unit_price : decimal_19_2
   last_issued_at : timestamp
   last_updated_by_user_id : integer <<FK>>
   last_updated_at : timestamp
@@ -115,13 +115,13 @@ entity "consumable_location_stocks" as location_stocks {
 entity "consumable_requests" as requests {
   * id : bigint <<PK>>
   --
-  * asset_qa_code : varchar(20) <<FK>>
+  * asset_qa_code : varchar_20 <<FK>>
   * location_id : integer <<FK>>
   * requested_by_user_id : integer <<FK>>
   resolved_by_user_id : integer <<FK>>
   * quantity_requested : integer
   * reason : text
-  * status : varchar(30)
+  * status : varchar_30
   decision_note : text
   * created_at : timestamp
   resolved_at : timestamp
@@ -130,13 +130,13 @@ entity "consumable_requests" as requests {
 entity "consumable_disposal_requests" as disposal_requests {
   * id : bigint <<PK>>
   --
-  * asset_qa_code : varchar(20) <<FK>>
+  * asset_qa_code : varchar_20 <<FK>>
   * receipt_lot_id : bigint <<FK>>
   * requested_by_user_id : integer <<FK>>
   resolved_by_user_id : integer <<FK>>
   * quantity_requested : integer
   * reason : text
-  * status : varchar(30)
+  * status : varchar_30
   decision_note : text
   * created_at : timestamp
   resolved_at : timestamp
@@ -151,13 +151,13 @@ entity "consumable_disposal_request_items" as disposal_items {
 }
 
 categories ||--o{ assets : "category_id"
-suppliers o|--o{ assets : "supplier_id"
+suppliers |o--o{ assets : "supplier_id"
 locations ||--o{ assets : "location_id"
 locations ||--o{ assets : "home_location_id"
 
 assets ||--o{ receipt_lots : "asset_qa_code"
-suppliers o|--o{ receipt_lots : "supplier_id"
-users o|--o{ receipt_lots : "received_by_user_id"
+suppliers |o--o{ receipt_lots : "supplier_id"
+users |o--o{ receipt_lots : "received_by_user_id"
 
 assets ||--o{ issues : "asset_qa_code"
 locations ||--o{ issues : "issued_to_location_id"
@@ -165,17 +165,17 @@ users ||--o{ issues : "issued_by_user_id"
 
 assets ||--o{ location_stocks : "asset_qa_code"
 locations ||--o{ location_stocks : "location_id"
-users o|--o{ location_stocks : "last_updated_by_user_id"
+users |o--o{ location_stocks : "last_updated_by_user_id"
 
 assets ||--o{ requests : "asset_qa_code"
 locations ||--o{ requests : "location_id"
 users ||--o{ requests : "requested_by_user_id"
-users o|--o{ requests : "resolved_by_user_id"
+users |o--o{ requests : "resolved_by_user_id"
 
 assets ||--o{ disposal_requests : "asset_qa_code"
 receipt_lots ||--o{ disposal_requests : "receipt_lot_id"
 users ||--o{ disposal_requests : "requested_by_user_id"
-users o|--o{ disposal_requests : "resolved_by_user_id"
+users |o--o{ disposal_requests : "resolved_by_user_id"
 
 disposal_requests ||--o{ disposal_items : "disposal_request_id"
 receipt_lots ||--o{ disposal_items : "receipt_lot_id"

@@ -57,18 +57,15 @@ export default function AssetPlacementPanel({
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tầng</label>
-              <select
+              <SearchableSelect
                 value={searchFilters.floorId}
-                onChange={(event) => onSearchFilterChange({ floorId: event.target.value, locationId: '' })}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              >
-                <option value="">Tất cả tầng</option>
-                {floors.map((floor) => (
-                  <option key={floor.id} value={floor.id}>
-                    {floor.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(nextValue) => onSearchFilterChange({ floorId: String(nextValue || ''), locationId: '' })}
+                options={floors}
+                getOptionValue={(floor) => floor.id}
+                getOptionLabel={(floor) => floor.name}
+                placeholder="Gõ để tìm tầng"
+                emptyOptionLabel="Tất cả tầng"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Phòng</label>
