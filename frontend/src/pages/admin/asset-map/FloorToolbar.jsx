@@ -51,6 +51,15 @@ export default function FloorToolbar({
   const hasSelectedRoom = Boolean(selectedRoom)
   const roomActionDisabledTooltip = 'Vui lòng chọn phòng cần thao tác'
 
+  const renderHoverTooltip = (content, visibleOnWide = false) => (
+    <div className={`pointer-events-none absolute right-full top-1/2 z-[140] mr-2 hidden w-max max-w-[220px] -translate-y-1/2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white shadow-2xl group-hover:block group-focus-within:block ${
+      visibleOnWide ? '' : '2xl:hidden'
+    }`}
+    >
+      <span className="block whitespace-normal text-left leading-5">{content}</span>
+    </div>
+  )
+
   const renderMenuAction = ({
     icon,
     label,
@@ -62,11 +71,12 @@ export default function FloorToolbar({
     trailing = null,
   }) => (
     <div key={label} className="group relative">
+      {renderHoverTooltip(disabled && tooltip ? `${label}. ${tooltip}` : label, disabled && Boolean(tooltip))}
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className={`inline-flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition ${
+        className={`inline-flex w-full items-center justify-center gap-3 rounded-xl border px-2.5 py-2.5 text-left text-sm font-semibold transition 2xl:justify-between 2xl:px-3 ${
           danger
             ? 'border-rose-200 text-rose-700 hover:bg-rose-50'
             : active
@@ -74,25 +84,20 @@ export default function FloorToolbar({
               : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
         } disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:border-slate-800 dark:disabled:bg-slate-950 dark:disabled:text-slate-600`}
       >
-        <span className="inline-flex items-center gap-2.5">
+        <span className="inline-flex items-center justify-center gap-2.5 2xl:justify-start">
           <span className="inline-flex h-5 w-5 items-center justify-center">
             {icon}
           </span>
-          <span>{label}</span>
+          <span className="hidden 2xl:inline">{label}</span>
         </span>
-        {trailing}
+        <span className="hidden 2xl:inline-flex">{trailing}</span>
       </button>
-      {disabled && tooltip && (
-        <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block group-focus-within:block">
-          {tooltip}
-        </div>
-      )}
     </div>
   )
 
   const renderSection = (title, description, actions) => (
     <section className="space-y-2">
-      <div>
+      <div className="hidden 2xl:block">
         <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{title}</h4>
         {description && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{description}</p>}
       </div>
@@ -103,9 +108,9 @@ export default function FloorToolbar({
   )
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-        <div className="mb-4">
+    <div className="relative z-30 space-y-4 overflow-visible">
+      <div className="relative overflow-visible rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
+        <div className="mb-4 hidden 2xl:block">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Công cụ</h3>
          
         </div>
@@ -175,7 +180,11 @@ export default function FloorToolbar({
                 tooltip: roomActionDisabledTooltip,
               })}
               <div className="group relative">
-                <div className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                {renderHoverTooltip(
+                  hasSelectedRoom ? 'Đổi màu' : `Đổi màu. ${roomActionDisabledTooltip}`,
+                  !hasSelectedRoom,
+                )}
+                <div className={`flex w-full items-center justify-center gap-3 rounded-xl border px-2.5 py-2.5 text-sm font-semibold transition 2xl:justify-between 2xl:px-3 ${
                   hasSelectedRoom
                     ? drawTool === 'paint'
                       ? 'border-fptOrange bg-orange-50 text-fptOrange shadow-sm'
@@ -186,12 +195,12 @@ export default function FloorToolbar({
                     type="button"
                     onClick={onPaintSelected}
                     disabled={!hasSelectedRoom}
-                    className="inline-flex min-w-0 flex-1 items-center gap-2.5 text-left disabled:cursor-not-allowed"
+                    className="inline-flex min-w-0 flex-1 items-center justify-center gap-2.5 text-left disabled:cursor-not-allowed 2xl:justify-start"
                   >
                     <span className="inline-flex h-5 w-5 items-center justify-center">
                       <Palette size={18} />
                     </span>
-                    <span>Đổi màu</span>
+                    <span className="hidden 2xl:inline">Đổi màu</span>
                   </button>
                   <label className={`relative inline-flex h-8 w-10 shrink-0 rounded-md border shadow-sm ${
                     hasSelectedRoom
@@ -212,11 +221,6 @@ export default function FloorToolbar({
                     />
                   </label>
                 </div>
-                {!hasSelectedRoom && (
-                  <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block">
-                    {roomActionDisabledTooltip}
-                  </div>
-                )}
               </div>
               {renderMenuAction({
                 icon: <X size={18} />,
@@ -265,12 +269,13 @@ export default function FloorToolbar({
                 disabled: floorInteractionMode === 'add' ? selectedCellsSize === 0 : false,
               })}
               {showDrawTools && !isImageFloor && (
-                <label className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                  <span className="inline-flex items-center gap-2.5">
+                <label className="group relative flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-2.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 2xl:justify-between 2xl:px-3">
+                  {renderHoverTooltip('Màu vùng')}
+                  <span className="inline-flex items-center justify-center gap-2.5 2xl:justify-start">
                     <span className="inline-flex h-5 w-5 items-center justify-center">
                       <Palette size={18} />
                     </span>
-                    <span>Màu vùng</span>
+                    <span className="hidden 2xl:inline">Màu vùng</span>
                   </span>
                   <input
                     type="color"
