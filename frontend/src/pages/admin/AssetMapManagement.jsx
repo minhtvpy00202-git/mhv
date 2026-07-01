@@ -1,7 +1,6 @@
 import {
   IconChevronDown as ChevronDown,
   IconInfoCircle as InfoCircle,
-  IconPlus as Plus,
   IconRefresh as Refresh,
   IconSearch as Search,
   IconUpload as Upload,
@@ -680,6 +679,7 @@ function AssetMapManagement() {
   const [markerTooltip, setMarkerTooltip] = useState(null)
   const [roomPreview, setRoomPreview] = useState(null)
   const [historyMeta, setHistoryMeta] = useState({ canUndo: false, canRedo: false })
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -2319,6 +2319,14 @@ function AssetMapManagement() {
 
   const handleImageCanvasClick = useCallback((event, floor) => {
     if (!isImageFloorMode(floor) || Number(floor.id) !== Number(activeFloorId)) return
+    if (floorInteractionMode === 'view') {
+      if (event.target !== event.currentTarget) return
+      clearSelectedRooms()
+      setRoomContextMenu(null)
+      setCanvasContextMenu(null)
+      setRoomPreview(null)
+      return
+    }
     if (!(floorInteractionMode === 'add' || floorInteractionMode === 'edit')) return
     if (drawTool !== IMAGE_POLYGON_TOOL) return
 
@@ -2337,7 +2345,7 @@ function AssetMapManagement() {
         hoverPoint: point,
       }
     })
-  }, [activeFloorId, drawTool, floorInteractionMode, getImagePointerPosition])
+  }, [activeFloorId, clearSelectedRooms, drawTool, floorInteractionMode, getImagePointerPosition])
 
   const finishImagePolygon = useCallback(() => {
     if (!hasImageSelection || drawTool !== IMAGE_POLYGON_TOOL) {
@@ -2441,6 +2449,15 @@ function AssetMapManagement() {
     }
 
     if (!showGridLines) {
+      return
+    }
+
+    if (floorInteractionMode === 'view' && !shape) {
+      event.preventDefault()
+      clearSelectedRooms()
+      setRoomContextMenu(null)
+      setCanvasContextMenu(null)
+      setRoomPreview(null)
       return
     }
 
@@ -3382,6 +3399,27 @@ function AssetMapManagement() {
     handleExitInteractionMode(floorInteractionMode === 'edit')
   }, [clearSelectedRooms, floorInteractionMode, handleExitInteractionMode])
 
+  useEffect(() => {
+    if (floorInteractionMode !== 'view' || selectedShapeIds.length === 0) {
+      return undefined
+    }
+
+    const handleGlobalPointerDown = (event) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      if (target.closest('[data-asset-map-keep-selection="true"]')) return
+      if (target.closest('button, a, input, select, textarea, label, [role="button"]')) return
+
+      clearSelectedRooms()
+    }
+
+    window.addEventListener('pointerdown', handleGlobalPointerDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', handleGlobalPointerDown, true)
+    }
+  }, [clearSelectedRooms, floorInteractionMode, selectedShapeIds.length])
+
   const handleQuickSelectionColorChange = useCallback((nextColor) => {
     if (floorInteractionMode === 'view') {
       void handlePaintColorChange(nextColor, selectedShape)
@@ -3404,37 +3442,6 @@ function AssetMapManagement() {
     if (!selectedShape) return
     void handleOpenRoomAssets(selectedShape, activeFloorId)
   }, [activeFloorId, handleOpenRoomAssets, selectedShape])
-
-  const renderDrawToolButton = ({
-    icon,
-    label,
-    active = false,
-    onClick,
-    disabled = false,
-    danger = false,
-  }) => (
-    <div className="group relative">
-      <button
-        type="button"
-        title={label}
-        aria-label={label}
-        onClick={onClick}
-        disabled={disabled}
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border transition ${
-          danger
-            ? 'border-red-200 text-red-600 hover:bg-red-50'
-            : active
-              ? 'border-fptOrange bg-orange-50 text-fptOrange shadow-sm'
-              : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-        } disabled:cursor-not-allowed disabled:opacity-50`}
-      >
-        {icon}
-      </button>
-      <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block group-focus-within:block">
-        {label}
-      </div>
-    </div>
-  )
 
   if (loading) {
     return (
@@ -3487,14 +3494,6 @@ function AssetMapManagement() {
             </button>
             <button
               type="button"
-              onClick={handleOpenCreateFloorModal}
-              className="inline-flex items-center gap-2 rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark"
-            >
-              <Plus size={16} />
-              Thêm tầng
-            </button>
-            <button
-              type="button"
               onClick={handleUndo}
               disabled={!historyMeta.canUndo}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -3521,7 +3520,12 @@ function AssetMapManagement() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+      <div className={`grid gap-4 ${
+        isToolbarCollapsed
+          ? 'xl:grid-cols-[280px_minmax(0,1fr)_0px]'
+          : 'xl:grid-cols-[280px_minmax(0,1fr)_320px]'
+      }`}
+      >
         <aside className="space-y-4">
           <div className="sticky top-4 space-y-4">
             <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
@@ -3600,50 +3604,14 @@ function AssetMapManagement() {
               </div>
             </div>
 
-            {activeFloor && (
-              <FloorToolbar
-                floor={activeFloor}
-                isImageFloor={isImageFloorMode(activeFloor)}
-                isActive
-                hasDirtyChanges={dirtyFloorIds.has(activeFloor.id)}
-                surfaceMode={surfaceMode}
-                floorInteractionMode={viewState.floorInteractionMode}
-                drawTool={viewState.drawTool}
-                selectedShape={selectedShape}
-                selectedShapes={selectionState.selectedShapes}
-                selectedCellsSize={selectionState.selectedCells.size}
-                isDraggingSelection={selectionState.isDraggingSelection}
-                hasImageSelection={hasImageSelection}
-                imageSelectionPointCount={(selectionState.imageSelection.points || []).length}
-                savingLayout={serverState.savingLayout}
-                currentPaintColor={currentPaintColor}
-                canvasResizeEnabled={draftState.canvasResizeState.enabled}
-                renderDrawToolButton={renderDrawToolButton}
-                MouseToolIcon={MouseToolIcon}
-                HandToolIcon={HandToolIcon}
-                PaintToolIcon={PaintToolIcon}
-                imageRectangleTool={IMAGE_RECTANGLE_TOOL}
-                imagePolygonTool={IMAGE_POLYGON_TOOL}
-                onAddRoom={() => handleBeginAddRoomMode(activeFloor.id)}
-                onEditFloor={() => handleOpenEditFloorModal(activeFloor)}
-                onDeleteFloor={() => handleDeleteFloor(activeFloor)}
-                onSetDrawTool={setActiveDrawTool}
-                onClearSelection={() => {
-                  if (viewState.floorInteractionMode === 'view') {
-                    clearSelectedRooms()
-                    return
-                  }
-                  handleClearSelection()
-                }}
-                onDeleteActiveRegion={() => { void handleDeleteActiveRegion() }}
-                onFinishImagePolygon={finishImagePolygon}
-                onOpenRoomDraft={() => openRoomDraftModal(selectedShape)}
-                onExitInteractionMode={() => handleExitInteractionMode(viewState.floorInteractionMode === 'edit')}
-                onPaintColorChange={(nextColor) => { void handlePaintColorChange(nextColor) }}
-                onEndCanvasResize={() => setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))}
-              />
-            )}
-
+            <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Phòng đang chọn
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {selectedRoomSummary ? selectedRoomSummary.name : 'Chưa chọn phòng'}
+              </p>
+            </div>
           </div>
         </aside>
 
@@ -3662,13 +3630,28 @@ function AssetMapManagement() {
             >
               <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{activeFloor.name}</h3>
                     {dirtyFloorIds.has(activeFloor.id) && (
                       <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
                         Chưa lưu
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setShowAssetSearchModal(true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Search size={16} />
+                      Tìm tài sản
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsToolbarCollapsed((previous) => !previous)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      {isToolbarCollapsed ? 'Mở công cụ' : 'Đóng công cụ'}
+                    </button>
                   </div>
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {isImageFloorMode(activeFloor)
@@ -3765,46 +3748,78 @@ function AssetMapManagement() {
           )}
         </div>
 
-        <AssetPlacementPanel
-          categories={serverState.categories}
-          floors={serverState.floors}
-          selectedRoom={selectedRoomSummary}
-          selectedRoomCount={selectedShapes.length}
-          isImageFloor={activeFloor ? isImageFloorMode(activeFloor) : false}
-          floorInteractionMode={floorInteractionMode}
-          drawTool={drawTool}
-          currentPaintColor={currentPaintColor}
-          filteredLocationOptions={filteredLocationOptions}
-          searchFilters={searchFilters}
-          searchResults={serverState.searchResults}
-          searching={viewState.searching}
-          showSearchModal={showAssetSearchModal}
-          onSearchFilterChange={handleSearchFilterChange}
-          onOpenSearchModal={() => setShowAssetSearchModal(true)}
-          onCloseSearchModal={() => setShowAssetSearchModal(false)}
-          onOpenScanner={() => {
-            setShowAssetSearchModal(false)
-            setScannerOpen(true)
-          }}
-          onSearch={() => { void handleSearch() }}
-          onResetSearch={handleResetSearch}
-          onJumpToAssetFloor={handleJumpToAssetFloor}
-          onEditSelectedRoom={handleQuickSelectionEditInfo}
-          onEditSelectedLayout={handleQuickSelectionEditLayout}
-          onOpenSelectedAssets={handleQuickSelectionOpenAssets}
-          onMoveSelected={() => setActiveDrawTool('move')}
-          onPaintSelected={() => setActiveDrawTool('paint')}
-          onDeleteSelected={() => { void handleDeleteActiveRegion() }}
-          onClearSelection={() => {
-            if (floorInteractionMode === 'view') {
-              clearSelectedRooms()
-              return
-            }
-            handleClearSelection()
-          }}
-          onSelectedColorChange={handleQuickSelectionColorChange}
-        />
+        <aside className="overflow-hidden">
+          <div className="sticky top-4 overflow-hidden">
+            {activeFloor && (
+              <div className={`w-[320px] transition-all duration-300 ease-out ${
+                isToolbarCollapsed
+                  ? 'translate-x-full opacity-0 pointer-events-none'
+                  : 'translate-x-0 opacity-100'
+              }`}
+              >
+                <FloorToolbar
+                  isImageFloor={isImageFloorMode(activeFloor)}
+                  isActive
+                  floorInteractionMode={viewState.floorInteractionMode}
+                  drawTool={viewState.drawTool}
+                  selectedRoom={selectedRoomSummary}
+                  selectedCellsSize={selectionState.selectedCells.size}
+                  hasImageSelection={hasImageSelection}
+                  savingLayout={serverState.savingLayout}
+                  currentPaintColor={currentPaintColor}
+                  MouseToolIcon={MouseToolIcon}
+                  HandToolIcon={HandToolIcon}
+                  PaintToolIcon={PaintToolIcon}
+                  imageRectangleTool={IMAGE_RECTANGLE_TOOL}
+                  imagePolygonTool={IMAGE_POLYGON_TOOL}
+                  onCreateFloor={handleOpenCreateFloorModal}
+                  onAddRoom={() => handleBeginAddRoomMode(activeFloor.id)}
+                  onEditFloor={() => handleOpenEditFloorModal(activeFloor)}
+                  onDeleteFloor={() => handleDeleteFloor(activeFloor)}
+                  onSetDrawTool={setActiveDrawTool}
+                  onClearSelection={() => {
+                    if (viewState.floorInteractionMode === 'view') {
+                      clearSelectedRooms()
+                      return
+                    }
+                    handleClearSelection()
+                  }}
+                  onDeleteActiveRegion={() => { void handleDeleteActiveRegion() }}
+                  onFinishImagePolygon={finishImagePolygon}
+                  onOpenRoomDraft={() => openRoomDraftModal(selectedShape)}
+                  onExitInteractionMode={() => handleExitInteractionMode(viewState.floorInteractionMode === 'edit')}
+                  onPaintColorChange={(nextColor) => { void handlePaintColorChange(nextColor) }}
+                  onEditSelectedRoom={handleQuickSelectionEditInfo}
+                  onEditSelectedLayout={handleQuickSelectionEditLayout}
+                  onOpenSelectedAssets={handleQuickSelectionOpenAssets}
+                  onMoveSelected={() => setActiveDrawTool('move')}
+                  onPaintSelected={() => setActiveDrawTool('paint')}
+                  onSelectedColorChange={handleQuickSelectionColorChange}
+                />
+              </div>
+            )}
+          </div>
+        </aside>
       </div>
+
+      <AssetPlacementPanel
+        categories={serverState.categories}
+        floors={serverState.floors}
+        filteredLocationOptions={filteredLocationOptions}
+        searchFilters={searchFilters}
+        searchResults={serverState.searchResults}
+        searching={viewState.searching}
+        showSearchModal={showAssetSearchModal}
+        onSearchFilterChange={handleSearchFilterChange}
+        onCloseSearchModal={() => setShowAssetSearchModal(false)}
+        onOpenScanner={() => {
+          setShowAssetSearchModal(false)
+          setScannerOpen(true)
+        }}
+        onSearch={() => { void handleSearch() }}
+        onResetSearch={handleResetSearch}
+        onJumpToAssetFloor={handleJumpToAssetFloor}
+      />
 
       {markerTooltip && (
         <div

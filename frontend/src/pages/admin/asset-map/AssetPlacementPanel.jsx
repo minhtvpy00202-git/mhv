@@ -1,12 +1,6 @@
 import {
-  IconArrowsMove as Move,
   IconCamera as Camera,
-  IconEdit as Edit,
-  IconListDetails as ListDetails,
-  IconPalette as Palette,
   IconSearch as Search,
-  IconTrash as Trash,
-  IconX as X,
 } from '@tabler/icons-react'
 import ModalOverlay from '../../../components/ui/ModalOverlay'
 import SearchableSelect from '../../../components/ui/SearchableSelect'
@@ -14,200 +8,20 @@ import SearchableSelect from '../../../components/ui/SearchableSelect'
 export default function AssetPlacementPanel({
   categories,
   floors,
-  selectedRoom,
-  selectedRoomCount,
-  isImageFloor,
-  floorInteractionMode,
-  drawTool,
-  currentPaintColor,
   filteredLocationOptions,
   searchFilters,
   searchResults,
   searching,
   showSearchModal,
   onSearchFilterChange,
-  onOpenSearchModal,
   onCloseSearchModal,
   onOpenScanner,
   onSearch,
   onResetSearch,
   onJumpToAssetFloor,
-  onEditSelectedRoom,
-  onEditSelectedLayout,
-  onOpenSelectedAssets,
-  onMoveSelected,
-  onPaintSelected,
-  onDeleteSelected,
-  onClearSelection,
-  onSelectedColorChange,
 }) {
   return (
-    <aside className="space-y-4">
-      <div className="sticky top-4 space-y-4">
-        <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Khu vực đang chọn</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {selectedRoom
-                  ? 'Thao tác nhanh với khu vực đang được chọn trên canvas.'
-                  : selectedRoomCount > 1
-                    ? `Đang chọn ${selectedRoomCount} khu vực.`
-                    : 'Chọn một khu vực trên canvas để xem thông tin và thao tác.'}
-              </p>
-            </div>
-            {selectedRoom && (
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${selectedRoom.syncMeta.tone}`}>
-                {selectedRoom.syncMeta.label}
-              </span>
-            )}
-          </div>
-
-          {!selectedRoom && selectedRoomCount <= 1 && (
-            <div className="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Chưa có khu vực nào được chọn.
-            </div>
-          )}
-
-          {selectedRoomCount > 1 && !selectedRoom && (
-            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-200">
-              Bạn đang chọn nhiều khu vực. Hãy dùng canvas hoặc bỏ bớt lựa chọn để chỉnh sửa chi tiết từng khu vực.
-            </div>
-          )}
-
-          {selectedRoom && (
-            <>
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{selectedRoom.name}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{selectedRoom.assetCount} tài sản đang gắn</p>
-                  </div>
-                  <span
-                    className="mt-1 h-5 w-5 rounded-full border border-white shadow"
-                    style={{ backgroundColor: selectedRoom.colorHex }}
-                  />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-slate-900">
-                    <p className="text-slate-500 dark:text-slate-400">Loại khu vực</p>
-                    <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{selectedRoom.areaType.label}</p>
-                  </div>
-                  <div className="rounded-lg bg-white px-3 py-2 dark:bg-slate-900">
-                    <p className="text-slate-500 dark:text-slate-400">Trạng thái</p>
-                    <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">{selectedRoom.syncMeta.label}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={onEditSelectedRoom}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Edit size={16} />
-                  Sửa thông tin
-                </button>
-                <button
-                  type="button"
-                  onClick={onEditSelectedLayout}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Edit size={16} />
-                  Chỉnh phạm vi
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenSelectedAssets}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <ListDetails size={16} />
-                  Xem tài sản
-                </button>
-                {!isImageFloor && (
-                  <button
-                    type="button"
-                    onClick={onMoveSelected}
-                    className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                      drawTool === 'move'
-                        ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-200'
-                        : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Move size={16} />
-                    Di chuyển
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={onPaintSelected}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
-                    drawTool === 'paint'
-                      ? 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/20 dark:text-orange-200'
-                      : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Palette size={16} />
-                  Tô màu
-                </button>
-                <button
-                  type="button"
-                  onClick={onDeleteSelected}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 px-3 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-                >
-                  <Trash size={16} />
-                  Xóa vùng
-                </button>
-                <button
-                  type="button"
-                  onClick={onClearSelection}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <X size={16} />
-                  Bỏ chọn
-                </button>
-              </div>
-
-              {floorInteractionMode === 'view' && (
-                <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200">
-                  <span>Màu khu vực</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{String(currentPaintColor || selectedRoom.colorHex).toUpperCase()}</span>
-                    <input
-                      type="color"
-                      value={currentPaintColor || selectedRoom.colorHex}
-                      onChange={(event) => onSelectedColorChange(event.target.value)}
-                      className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
-                    />
-                  </div>
-                </label>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Tài sản trên sơ đồ</h3>
-            <span className="text-sm text-slate-500 dark:text-slate-400">{searchResults.length} tài sản</span>
-          </div>
-          <div className="mt-4 space-y-3">
-            <button
-              type="button"
-              onClick={onOpenSearchModal}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-fptOrange px-4 py-3 text-sm font-semibold text-white transition hover:bg-fptOrangeDark"
-            >
-              <Search size={16} />
-              Tìm tài sản
-            </button>
-            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              Bấm `Tìm tài sản` để mở bộ lọc, quét QR và xem danh sách kết quả.
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <>
       {showSearchModal && (
         <ModalOverlay zIndex={120}>
           <div className="w-full max-w-3xl rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-900">
@@ -353,6 +167,6 @@ export default function AssetPlacementPanel({
           </div>
         </ModalOverlay>
       )}
-    </aside>
+    </>
   )
 }

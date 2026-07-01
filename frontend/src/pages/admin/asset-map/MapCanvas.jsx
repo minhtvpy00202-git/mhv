@@ -453,6 +453,17 @@ export default function MapCanvas({
     setZoomWithAnchor(zoom + delta, anchor)
   }, [setZoomWithAnchor, zoom])
 
+  const handleViewportSelectionDismiss = useCallback((event) => {
+    if (floorInteractionMode !== 'view' || selectedShapes.length === 0) return
+    if (event.button !== 0) return
+
+    const target = event.target
+    if (!(target instanceof Element)) return
+    if (target.closest('[data-asset-map-keep-selection="true"]')) return
+
+    onQuickSelectionCancel()
+  }, [floorInteractionMode, onQuickSelectionCancel, selectedShapes.length])
+
   const handleSuppressContextMenu = useCallback((event) => {
     event.preventDefault()
   }, [])
@@ -517,6 +528,7 @@ export default function MapCanvas({
         >
           <button
             type="button"
+            data-asset-map-keep-selection="true"
             onMouseEnter={(event) => onMarkerTooltipShow(event, asset)}
             onMouseLeave={() => onMarkerTooltipHide(asset)}
             onFocus={(event) => onMarkerTooltipShow(event, asset)}
@@ -737,6 +749,7 @@ export default function MapCanvas({
           return (
             <g key={`room-image-${shape.id}`}>
               <polygon
+                data-asset-map-keep-selection="true"
                 points={pointsToSvgValue(points)}
                 fill={fill}
                 stroke={stroke}
@@ -862,6 +875,7 @@ export default function MapCanvas({
           <button
             type="button"
             aria-label="Kéo thay đổi chiều rộng canvas"
+            data-asset-map-keep-selection="true"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'right')}
             onMouseEnter={() => setResizeHoverHandle('right')}
             onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'right' ? null : previous))}
@@ -870,6 +884,7 @@ export default function MapCanvas({
           <button
             type="button"
             aria-label="Kéo thay đổi chiều cao canvas"
+            data-asset-map-keep-selection="true"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'bottom')}
             onMouseEnter={() => setResizeHoverHandle('bottom')}
             onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'bottom' ? null : previous))}
@@ -878,6 +893,7 @@ export default function MapCanvas({
           <button
             type="button"
             aria-label="Kéo thay đổi kích thước canvas"
+            data-asset-map-keep-selection="true"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'corner')}
             onMouseEnter={() => setResizeHoverHandle('corner')}
             onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'corner' ? null : previous))}
@@ -904,6 +920,7 @@ export default function MapCanvas({
               const shape = Number(rawShape?.id) === editableShapeId ? null : rawShape
               const isSelected = selectedCells.has(cellKey)
               const isEditableShapeCell = Number(rawShape?.id) === Number(editableShapeId)
+              const showCellGrid = showCanvasGrid && !shape && !isEditableShapeCell
               return (
                 <button
                   key={`${floor.id}-${cellKey}`}
@@ -918,7 +935,7 @@ export default function MapCanvas({
                   style={{
                     width: cellSize,
                     height: cellSize,
-                    borderColor: showCanvasGrid ? undefined : 'transparent',
+                    borderColor: showCellGrid ? undefined : 'transparent',
                     backgroundColor: isSelected
                       ? colorWithAlpha(
                         isEditableShapeCell
@@ -926,9 +943,7 @@ export default function MapCanvas({
                           : (roomDraft.colorHex || defaultColor),
                         0.28,
                       )
-                      : shape && visibleShapeIdSet.has(Number(shape.id))
-                        ? colorWithAlpha(shape.colorHex, 0.18)
-                        : undefined,
+                      : undefined,
                     cursor: drawTool === 'move'
                       ? (isSelected ? 'grab' : 'not-allowed')
                       : drawTool === 'paint'
@@ -949,10 +964,11 @@ export default function MapCanvas({
 
         const bounds = getShapeBounds(shape)
         const isSelected = selectedShapeIdSet.has(Number(shape.id))
+        const baseRoomColor = shape.colorHex || defaultColor
         const roomBackgroundColor = isSelected
-          ? colorWithAlpha(shape.colorHex, 0.34)
-          : colorWithAlpha(shape.colorHex || defaultColor, 0.9)
-        const roomTextColor = isSelected ? '#0f172a' : getReadableTextColor(shape.colorHex)
+          ? baseRoomColor
+          : baseRoomColor
+        const roomTextColor = getReadableTextColor(baseRoomColor)
         const roomCenter = getShapeCenter(shape)
         const roomCells = (shape.cells || []).map(parseGridCell)
         const roomLabelPlacement = getGridRoomLabelPlacement(roomCells, cellSize, bounds, roomCenter)
@@ -968,6 +984,7 @@ export default function MapCanvas({
               <button
                 key={`room-cell-${shape.id}-${cell.row}:${cell.col}`}
                 type="button"
+                  data-asset-map-keep-selection="true"
                 onMouseDown={(event) => onRoomPointerDown(event, floor, shape)}
                 onClick={(event) => onRoomClick(event, floor, shape)}
                 onContextMenu={handleSuppressContextMenu}
@@ -986,7 +1003,7 @@ export default function MapCanvas({
                   width: cellSize,
                   height: cellSize,
                   backgroundColor: roomBackgroundColor,
-                  border: `1px solid ${showCanvasGrid ? 'rgba(226,232,240,0.9)' : 'transparent'}`,
+                  border: `1px solid ${roomBackgroundColor}`,
                   cursor: roomCursor,
                 }}
               />
@@ -999,15 +1016,19 @@ export default function MapCanvas({
                 transform: 'translate(-50%, -50%)',
                 width: roomLabelPlacement.width,
                 minHeight: roomLabelPlacement.minHeight,
-                color: '#0f172a',
+                color: roomTextColor,
+                textShadow: roomTextColor.toLowerCase() === '#ffffff'
+                  ? '0 1px 2px rgba(15, 23, 42, 0.75)'
+                  : '0 1px 2px rgba(255, 255, 255, 0.55)',
               }}
             >
               <span
-                className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/78 px-2 py-1 text-center text-xs font-semibold leading-tight text-slate-900 shadow-sm backdrop-blur-sm"
+                className="inline-flex max-w-full items-center justify-center overflow-hidden px-1 py-0.5 text-center text-xs font-semibold leading-tight"
                 style={{
                   maxWidth: roomLabelPlacement.width,
                   minHeight: roomLabelPlacement.minHeight,
                   fontSize: roomLabelPlacement.width < 72 ? 11 : 12,
+                  color: roomTextColor,
                 }}
               >
                 <span className="max-w-full truncate">{shape.roomName}</span>
@@ -1065,30 +1086,33 @@ export default function MapCanvas({
           <button
             type="button"
             onClick={onToggleCanvasGrid}
+            title={showCanvasGrid ? 'Ẩn lưới' : 'Hiện lưới'}
             className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
               showCanvasGrid
                 ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-200'
                 : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
             }`}
           >
-            Grid
+            Lưới
           </button>
           <button
             type="button"
             onClick={onToggleSnap}
+            title={snapEnabled ? 'Tắt bám lưới khi vẽ hoặc chỉnh vùng' : 'Bật bám lưới khi vẽ hoặc chỉnh vùng'}
             className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
               snapEnabled
                 ? 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/20 dark:text-orange-200'
                 : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
             }`}
           >
-            Snap
+            Bám lưới
           </button>
         </div>
       </div>
 
       <div
         ref={viewportRef}
+        onMouseDownCapture={handleViewportSelectionDismiss}
         onWheel={handleViewportWheel}
         onMouseDown={handleViewportMouseDown}
         onContextMenu={handleSuppressContextMenu}
