@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import GlobalNotification from './components/GlobalNotification'
+import ModalOverlay from './components/ui/ModalOverlay'
 import { useAuth } from './context/AuthContext'
 import { useBranding } from './context/BrandingContext'
 import AdminLayout from './layouts/AdminLayout'
@@ -93,6 +94,8 @@ function withSuspense(element) {
 
 function App() {
   const { branding } = useBranding()
+  const { sessionExpiredNoticeOpen, acknowledgeSessionExpired } = useAuth()
+  const navigate = useNavigate()
 
   useEffect(() => {
     document.title = `${branding.companyName} ${branding.appName}`.trim()
@@ -101,6 +104,30 @@ function App() {
   return (
     <>
       <GlobalNotification />
+      {sessionExpiredNoticeOpen && (
+        <ModalOverlay zIndex={130}>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <div className="space-y-3">
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Phiên đăng nhập đã hết hạn</h3>
+              <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
+                Bạn đã hết thời gian đăng nhập hoặc phiên làm việc không còn hợp lệ. Vui lòng đăng nhập lại để tiếp tục sử dụng hệ thống.
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  acknowledgeSessionExpired()
+                  navigate('/login', { replace: true })
+                }}
+                className="rounded-xl bg-fptOrange px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-fptOrangeDark"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
@@ -169,8 +196,8 @@ function App() {
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
           <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
           <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
-          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
-          <Route path="/admin/assets/consumables/warehouses" element={withSuspense(<AssetManagement key="assets-consumables-warehouses" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
+          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" />)} />
+          <Route path="/admin/assets/consumables/warehouses" element={withSuspense(<AssetManagement key="assets-consumables-warehouses" initialSection="consumables" initialConsumableWorkspace="WAREHOUSES" />)} />
           <Route path="/admin/assets/consumables/requests" element={withSuspense(<AssetManagement key="assets-consumables-requests" initialSection="consumables" initialConsumableWorkspace="REQUESTS" />)} />
           <Route path="/admin/assets/consumables/disposal" element={withSuspense(<AssetManagement key="assets-consumables-disposal" initialSection="consumables" initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />

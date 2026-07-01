@@ -22,6 +22,7 @@ import {
 } from 'recharts'
 import axiosClient from '../../api/axiosClient'
 import SearchableSelect from '../../components/ui/SearchableSelect'
+import { formatConsumableQuantityText } from './consumables/consumableDisplayUtils'
 
 const chartColors = ['#2563eb', '#16a34a', '#f97316', '#dc2626', '#7c3aed', '#0891b2', '#ca8a04']
 const chartCursor = { fill: 'rgba(148, 163, 184, 0.12)' }
@@ -192,10 +193,10 @@ function LowStockTable({ rows }) {
               <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.categoryName || 'Chưa cập nhật'}</td>
               <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{item.locationName || 'Chưa cập nhật'}</td>
               <td className="px-3 py-3 text-right font-semibold tabular-nums text-red-700 dark:text-red-300">
-                {formatNumber(item.quantityOnHand)} {item.unit || ''}
+                {formatConsumableQuantityText(item)}
               </td>
               <td className="px-3 py-3 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                {formatNumber(item.minimumStock)} {item.unit || ''}
+                {formatConsumableQuantityText(item, { quantityField: 'minimumStock', formattedField: 'formattedMinimumStock' })}
               </td>
             </tr>
           ))}

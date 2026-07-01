@@ -89,6 +89,15 @@ public class Asset {
     @Column(length = 50)
     private String unit;
 
+    @Column(name = "retail_unit", length = 50)
+    private String retailUnit;
+
+    @Column(name = "wholesale_unit", length = 50)
+    private String wholesaleUnit;
+
+    @Column(name = "wholesale_to_retail_factor")
+    private Integer wholesaleToRetailFactor;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id")
     @JsonIgnoreProperties({"assets"})

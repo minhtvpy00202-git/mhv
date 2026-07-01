@@ -24,6 +24,9 @@ public class ConsumableLocationStockResponse {
     private Integer quantityRemaining;
     private Integer quantityConsumed;
     private String unit;
+    private String formattedQuantityIssued;
+    private String formattedQuantityRemaining;
+    private String formattedQuantityConsumed;
     private Boolean expiryTrackingEnabled;
     private LocalDate expirationDate;
     private BigDecimal unitPrice;

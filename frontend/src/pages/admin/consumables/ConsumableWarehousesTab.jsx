@@ -1,7 +1,13 @@
 import { useMemo, useState } from 'react'
 import { IconAlertTriangle as AlertTriangle, IconArrowsTransferUp as Transfer, IconRefresh as RefreshCw, IconSearch as Search } from '@tabler/icons-react'
 import SearchableSelect from '../../../components/ui/SearchableSelect'
-import { formatCurrency, formatDate, formatDateTime, getStatusBadgeClass } from './consumableDisplayUtils'
+import {
+  formatConsumableQuantityText,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  getStatusBadgeClass,
+} from './consumableDisplayUtils'
 
 function getWarehouseStockTone(stock) {
   if (stock?.outOfStock) return 'red'
@@ -166,10 +172,12 @@ export default function ConsumableWarehousesTab({
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-800 dark:text-slate-100">
                         <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${getStatusBadgeClass(tone)}`}>
-                          {stock.quantityRemaining || 0} {stock.unit || ''}
+                          {formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{stock.minimumStock || 0}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {formatConsumableQuantityText(stock, { quantityField: 'minimumStock', formattedField: 'formattedMinimumStock' })}
+                      </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{formatDate(stock.nearestExpirationDate)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{formatCurrency(stock.inventoryValue)}</td>
                     </tr>
@@ -203,7 +211,7 @@ export default function ConsumableWarehousesTab({
                   <p className="font-medium text-slate-800 dark:text-slate-100">{item.assetName}</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{item.warehouseLocationName} • {item.assetQaCode}</p>
                   <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                    Còn {item.quantityRemaining || 0} {item.unit || ''} / ngưỡng {item.minimumStock || 0}
+                    Còn {formatConsumableQuantityText(item, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} / ngưỡng {formatConsumableQuantityText(item, { quantityField: 'minimumStock', formattedField: 'formattedMinimumStock' })}
                   </p>
                 </div>
               ))}
@@ -224,7 +232,9 @@ export default function ConsumableWarehousesTab({
                 <div key={item.id} className="border-b border-slate-100 px-4 py-3 last:border-b-0 dark:border-slate-800">
                   <p className="font-medium text-slate-800 dark:text-slate-100">{item.assetName}</p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{item.assetQaCode} • {item.sourceWarehouseLocationName} -> {item.targetWarehouseLocationName}</p>
-                  <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{item.quantityTransferred} {item.unit || ''}</p>
+                  <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                    {formatConsumableQuantityText(item, { quantityField: 'quantityTransferred', formattedField: 'formattedQuantityTransferred' })}
+                  </p>
                   <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{item.transferredByFullName || item.transferredByUsername} • {formatDateTime(item.transferredAt)}</p>
                 </div>
               ))}

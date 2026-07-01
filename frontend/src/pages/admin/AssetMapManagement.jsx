@@ -1,9 +1,9 @@
 import {
   IconChevronDown as ChevronDown,
-  IconChevronUp as ChevronUp,
   IconInfoCircle as InfoCircle,
   IconPlus as Plus,
   IconRefresh as Refresh,
+  IconSearch as Search,
   IconUpload as Upload,
 } from '@tabler/icons-react'
 import { Html5Qrcode } from 'html5-qrcode'
@@ -476,6 +476,17 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, value))
 }
 
+function snapCanvasPoint(point, floor, enabled) {
+  if (!enabled) return point
+  const width = floor?.imageWidth || 0
+  const height = floor?.imageHeight || 0
+  const step = 12
+  return {
+    x: clampNumber(Math.round(point.x / step) * step, 0, width || point.x),
+    y: clampNumber(Math.round(point.y / step) * step, 0, height || point.y),
+  }
+}
+
 function buildImageBoundsFromPoints(points) {
   if (!Array.isArray(points) || points.length === 0) return null
   const normalized = points
@@ -610,6 +621,8 @@ function AssetMapManagement() {
   const [showCanvasModal, setShowCanvasModal] = useState(false)
   const [canvasModalMode, setCanvasModalMode] = useState('color')
   const [canvasForm, setCanvasForm] = useState(createDefaultCanvasForm)
+  const [showCanvasGrid, setShowCanvasGrid] = useState(true)
+  const [snapEnabled, setSnapEnabled] = useState(true)
   const [canvasResizeState, setCanvasResizeState] = useState({
     enabled: false,
     floorId: null,
@@ -652,8 +665,6 @@ function AssetMapManagement() {
     locationId: '',
   })
   const [scannerOpen, setScannerOpen] = useState(false)
-  const [notesCollapsed, setNotesCollapsed] = useState(true)
-  const [roomsCollapsed, setRoomsCollapsed] = useState(true)
   const [showLeavePrompt, setShowLeavePrompt] = useState(false)
   const [leaveActionBusy, setLeaveActionBusy] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState({
@@ -668,6 +679,9 @@ function AssetMapManagement() {
   const [roomContextMenu, setRoomContextMenu] = useState(null)
   const [canvasContextMenu, setCanvasContextMenu] = useState(null)
   const [showRoomAssetsModal, setShowRoomAssetsModal] = useState(false)
+  const [showAssetSearchModal, setShowAssetSearchModal] = useState(false)
+  const [floorSearchInput, setFloorSearchInput] = useState('')
+  const [debouncedFloorSearch, setDebouncedFloorSearch] = useState('')
   const [roomAssetsLoading, setRoomAssetsLoading] = useState(false)
   const [roomAssets, setRoomAssets] = useState([])
   const [markerTooltip, setMarkerTooltip] = useState(null)
@@ -681,6 +695,19 @@ function AssetMapManagement() {
     () => floors.find((floor) => Number(floor.id) === Number(activeFloorId)) || null,
     [floors, activeFloorId],
   )
+
+  useDebouncedEffect(() => {
+    setDebouncedFloorSearch(String(floorSearchInput || '').trim().toLowerCase())
+  }, [floorSearchInput], 300)
+
+  const filteredFloors = useMemo(() => {
+    if (!debouncedFloorSearch) return floors
+    return floors.filter((floor) => {
+      const floorName = String(floor?.name || '').toLowerCase()
+      const floorMode = isImageFloorMode(floor) ? 'image' : 'grid'
+      return floorName.includes(debouncedFloorSearch) || floorMode.includes(debouncedFloorSearch)
+    })
+  }, [debouncedFloorSearch, floors])
 
   const cellShapeMaps = useMemo(() => {
     const next = {}
@@ -1004,12 +1031,36 @@ function AssetMapManagement() {
     }
   }, [canvasResizeState.enabled, floorInteractionMode, showRoomModal])
 
+  const selectedRoomSummary = useMemo(() => {
+    if (!selectedShape) return null
+    return {
+      id: selectedShape.id,
+      name: selectedShape.roomName || 'Khu vực chưa đặt tên',
+      assetCount: roomAssetCountMap.get(selectedShape?.locationId) || 0,
+      areaType: resolveAreaTypeMeta(selectedShape, areaTypeCatalogEntries),
+      syncMeta: getRoomSyncMeta(selectedShape, locations),
+      colorHex: selectedShape.colorHex || DEFAULT_COLOR,
+    }
+  }, [areaTypeCatalogEntries, locations, roomAssetCountMap, selectedShape])
+
+  const activeFloorRoomItems = useMemo(
+    () => (activeFloor?.roomShapes || []).map((shape) => ({
+      id: shape.id,
+      label: buildShapeOptionLabel(shape, locations),
+      selected: selectedShapeIdSet.has(Number(shape.id)),
+      colorHex: shape.colorHex || DEFAULT_COLOR,
+      assetCount: roomAssetCountMap.get(shape?.locationId) || 0,
+      areaTypeLabel: resolveAreaTypeMeta(shape, areaTypeCatalogEntries).label,
+      shape,
+    })),
+    [activeFloor, areaTypeCatalogEntries, locations, roomAssetCountMap, selectedShapeIdSet],
+  )
+
   const showFloatingSelectionToolbar = useMemo(() => {
     if (!activeFloor || !currentSelectionBounds || showRoomModal) return false
     if (floorInteractionMode === 'view' && (drawTool === 'move' || roomDragState.active)) return false
-    if (floorInteractionMode === 'add' || floorInteractionMode === 'edit') return true
-    return floorInteractionMode === 'view' && Boolean(selectedShape)
-  }, [activeFloor, currentSelectionBounds, drawTool, floorInteractionMode, roomDragState.active, selectedShape, showRoomModal])
+    return floorInteractionMode === 'add' || floorInteractionMode === 'edit'
+  }, [activeFloor, currentSelectionBounds, drawTool, floorInteractionMode, roomDragState.active, showRoomModal])
 
   const viewState = useMemo(() => ({
     loading,
@@ -1017,8 +1068,6 @@ function AssetMapManagement() {
     floorInteractionMode,
     drawTool,
     selectionEnabled,
-    notesCollapsed,
-    roomsCollapsed,
     searching,
     scannerOpen,
     showLeavePrompt,
@@ -1031,8 +1080,6 @@ function AssetMapManagement() {
     leaveActionBusy,
     loading,
     markerTooltip,
-    notesCollapsed,
-    roomsCollapsed,
     scannerOpen,
     searching,
     selectionEnabled,
@@ -1936,7 +1983,7 @@ function AssetMapManagement() {
       const rowsChanged = nextRows !== canvasResizeState.startRows
       const colsChanged = nextCols !== canvasResizeState.startCols
 
-      setCanvasResizeState((previous) => ({ ...previous, handle: null }))
+      setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null }))
 
       if (!rowsChanged && !colsChanged) return
 
@@ -2223,11 +2270,12 @@ function AssetMapManagement() {
     const height = floor?.imageHeight || svgRect.height || 1
     const scaleX = width / Math.max(svgRect.width, 1)
     const scaleY = height / Math.max(svgRect.height, 1)
-    return {
+    const rawPoint = {
       x: clampNumber((clientX - svgRect.left) * scaleX, 0, width),
       y: clampNumber((clientY - svgRect.top) * scaleY, 0, height),
     }
-  }, [])
+    return snapCanvasPoint(rawPoint, floor, snapEnabled)
+  }, [snapEnabled])
 
   const getImagePointerPosition = useCallback((event, floor) => {
     return getImagePointerPositionFromClient(event.clientX, event.clientY, floor, event.currentTarget)
@@ -2324,11 +2372,8 @@ function AssetMapManagement() {
       setImageSelection(createDefaultImageSelection())
       return
     }
-    const geometry = commitImageGeometry(points)
-    window.setTimeout(() => {
-      openRoomDraftModal(null, geometry)
-    }, 0)
-  }, [activeFloorId, commitImageGeometry, drawTool, floorInteractionMode, getImagePointerPosition, imageSelection.drawing, imageSelection.startPoint, openRoomDraftModal])
+    commitImageGeometry(points)
+  }, [activeFloorId, commitImageGeometry, drawTool, floorInteractionMode, getImagePointerPosition, imageSelection.drawing, imageSelection.startPoint])
 
   const handleImageCanvasClick = useCallback((event, floor) => {
     if (!isImageFloorMode(floor) || Number(floor.id) !== Number(activeFloorId)) return
@@ -2357,9 +2402,8 @@ function AssetMapManagement() {
       toast.error('Hãy chọn ít nhất 3 điểm để tạo vùng polygon.')
       return
     }
-    const geometry = commitImageGeometry(imageSelectionGeometry.points)
-    openRoomDraftModal(null, geometry)
-  }, [commitImageGeometry, drawTool, hasImageSelection, imageSelectionGeometry.points, openRoomDraftModal])
+    commitImageGeometry(imageSelectionGeometry.points)
+  }, [commitImageGeometry, drawTool, hasImageSelection, imageSelectionGeometry.points])
 
   useEffect(() => {
     if (!imageVertexDragState.active || !activeFloor || !isImageFloorMode(activeFloor)) return undefined
@@ -2496,7 +2540,12 @@ function AssetMapManagement() {
     if (floorInteractionMode === 'add') {
       clearSelectedRooms()
     }
-    const baseSelection = event.shiftKey || event.metaKey || event.ctrlKey
+    const shouldAccumulateSelection = floorInteractionMode === 'add'
+      || floorInteractionMode === 'edit'
+      || event.shiftKey
+      || event.metaKey
+      || event.ctrlKey
+    const baseSelection = shouldAccumulateSelection
       ? new Set(selectedCells)
       : new Set()
 
@@ -2542,16 +2591,8 @@ function AssetMapManagement() {
       return
     }
 
-    const shouldAutoOpenRoomModal = dragSelection.active
-      && floorInteractionMode === 'add'
-      && selectionEnabled
-      && selectedCells.size > 0
-      && !showRoomModal
     setDragSelection((previous) => ({ ...previous, active: false }))
     setIsDraggingSelection(false)
-    if (shouldAutoOpenRoomModal) {
-      openRoomDraftModal()
-    }
   }
 
   const openCreateFloorModal = () => {
@@ -2650,12 +2691,13 @@ function AssetMapManagement() {
   }
 
   const handleCanvasResizeStart = (event, floor, handle) => {
-    if (!canvasResizeState.enabled || Number(canvasResizeState.floorId) !== Number(floor.id)) return
+    if (Number(floor.id) !== Number(activeFloorId) || floorInteractionMode !== 'view') return
     event.preventDefault()
     event.stopPropagation()
     const requiredSize = getRequiredCanvasSize(floor.roomShapes)
     setCanvasResizeState((previous) => ({
       ...previous,
+      enabled: true,
       floorId: floor.id,
       handle,
       startX: event.clientX,
@@ -3452,7 +3494,6 @@ function AssetMapManagement() {
   const renderDrawToolButton = ({
     icon,
     label,
-    description = '',
     active = false,
     onClick,
     disabled = false,
@@ -3461,11 +3502,11 @@ function AssetMapManagement() {
     <div className="group relative">
       <button
         type="button"
-        title={description ? `${label}: ${description}` : label}
+        title={label}
         aria-label={label}
         onClick={onClick}
         disabled={disabled}
-        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border transition ${
           danger
             ? 'border-red-200 text-red-600 hover:bg-red-50'
             : active
@@ -3475,12 +3516,9 @@ function AssetMapManagement() {
       >
         {icon}
       </button>
-      {description && (
-        <div className="pointer-events-none absolute left-1/2 top-12 z-20 hidden w-52 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl group-hover:block group-focus-within:block dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
-        </div>
-      )}
+      <div className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block group-focus-within:block">
+        {label}
+      </div>
     </div>
   )
 
@@ -3569,261 +3607,296 @@ function AssetMapManagement() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <aside className="space-y-4">
+          <div className="sticky top-4 space-y-4">
+            <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Danh sách tầng</h3>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {floors.length} tầng
+                </span>
+              </div>
+              <div className="mt-4">
+                <label className="relative block">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-400">
+                    <Search size={16} />
+                  </span>
+                  <input
+                    type="text"
+                    value={floorSearchInput}
+                    onChange={(event) => setFloorSearchInput(event.target.value)}
+                    placeholder="Tìm tầng..."
+                    className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none ring-fptOrange transition focus:ring-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </label>
+              </div>
+              <div
+                className={`mt-4 space-y-2 pr-1 ${
+                  filteredFloors.length > 3 ? 'max-h-[304px] overflow-y-auto overscroll-contain' : ''
+                }`}
+              >
+                {floors.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    Chưa có tầng nào. Hãy thêm tầng đầu tiên để bắt đầu vẽ sơ đồ.
+                  </div>
+                )}
+                {floors.length > 0 && filteredFloors.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    Không tìm thấy tầng phù hợp.
+                  </div>
+                )}
+                {filteredFloors.map((floor) => {
+                  const isActive = Number(floor.id) === Number(activeFloorId)
+                  const isImageFloor = isImageFloorMode(floor)
+                  return (
+                    <button
+                      key={`floor-picker-${floor.id}`}
+                      type="button"
+                      onClick={() => handleSelectFloor(floor.id)}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                        isActive
+                          ? 'border-fptOrange bg-orange-50 shadow-sm dark:border-fptOrange dark:bg-orange-500/10'
+                          : 'border-slate-200 bg-slate-50 hover:border-orange-300 hover:bg-white dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-orange-500/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-slate-100">{floor.name}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {isImageFloor
+                              ? `Ảnh nền · ${(floor.roomShapes || []).length} khu vực`
+                              : `Grid ${floor.gridRows} x ${floor.gridCols} · ${(floor.roomShapes || []).length} khu vực`}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          isImageFloor
+                            ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-200'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200'
+                        }`}
+                        >
+                          {isImageFloor ? 'IMAGE' : 'GRID'}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {activeFloor && (
+              <FloorToolbar
+                floor={activeFloor}
+                isImageFloor={isImageFloorMode(activeFloor)}
+                isActive
+                hasDirtyChanges={dirtyFloorIds.has(activeFloor.id)}
+                surfaceMode={surfaceMode}
+                floorInteractionMode={viewState.floorInteractionMode}
+                drawTool={viewState.drawTool}
+                selectedShape={selectedShape}
+                selectedShapes={selectionState.selectedShapes}
+                selectedCellsSize={selectionState.selectedCells.size}
+                isDraggingSelection={selectionState.isDraggingSelection}
+                hasImageSelection={hasImageSelection}
+                imageSelectionPointCount={(selectionState.imageSelection.points || []).length}
+                savingLayout={serverState.savingLayout}
+                currentPaintColor={currentPaintColor}
+                canvasResizeEnabled={draftState.canvasResizeState.enabled}
+                renderDrawToolButton={renderDrawToolButton}
+                MouseToolIcon={MouseToolIcon}
+                HandToolIcon={HandToolIcon}
+                PaintToolIcon={PaintToolIcon}
+                imageRectangleTool={IMAGE_RECTANGLE_TOOL}
+                imagePolygonTool={IMAGE_POLYGON_TOOL}
+                legendItems={legendItems}
+                activeLegendFilters={legendFilters}
+                visibleRoomCount={visibleShapeIdSet.size}
+                onAddRoom={() => handleBeginAddRoomMode(activeFloor.id)}
+                onEditFloor={() => handleOpenEditFloorModal(activeFloor)}
+                onDeleteFloor={() => handleDeleteFloor(activeFloor)}
+                onToggleLegendFilter={handleToggleLegendFilter}
+                onResetLegendFilters={handleResetLegendFilters}
+                onSetDrawTool={setActiveDrawTool}
+                onClearSelection={() => {
+                  if (viewState.floorInteractionMode === 'view') {
+                    clearSelectedRooms()
+                    return
+                  }
+                  handleClearSelection()
+                }}
+                onDeleteActiveRegion={() => { void handleDeleteActiveRegion() }}
+                onFinishImagePolygon={finishImagePolygon}
+                onOpenRoomDraft={() => openRoomDraftModal(selectedShape)}
+                onExitInteractionMode={() => handleExitInteractionMode(viewState.floorInteractionMode === 'edit')}
+                onPaintColorChange={(nextColor) => { void handlePaintColorChange(nextColor) }}
+                onEndCanvasResize={() => setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))}
+              />
+            )}
+
+          </div>
+        </aside>
+
         <div className="space-y-4">
-          {floors.length === 0 && (
+          {!activeFloor && (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900">
-              <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Chưa có tầng nào</p>
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Hãy thêm tầng đầu tiên để bắt đầu vẽ sơ đồ toà nhà.</p>
+              <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Chưa có tầng đang hoạt động</p>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Hãy chọn một tầng ở cột trái hoặc tạo tầng mới để bắt đầu.</p>
             </div>
           )}
 
-          {/* eslint-disable-next-line react-hooks/refs */}
-          {floors.map((floor) => {
-            const isActive = Number(floor.id) === Number(activeFloorId)
-            const isImageFloor = isImageFloorMode(floor)
-            const cellShapeMap = cellShapeMaps[floor.id] || new Map()
-            const hasDirtyChanges = dirtyFloorIds.has(floor.id)
-            const isFloorEditing = isActive && floorInteractionMode === 'edit'
-            return (
-              <div
-                key={floor.id}
-                id={`asset-map-floor-${floor.id}`}
-                onClick={() => handleSelectFloor(floor.id)}
-                className={`rounded-2xl bg-white p-4 shadow-sm transition dark:bg-slate-900 ${
-                  isActive ? 'ring-2 ring-fptOrange/30' : ''
-                }`}
-              >
-                <FloorToolbar
-                  floor={floor}
-                  isImageFloor={isImageFloor}
-                  isActive={isActive}
-                  hasDirtyChanges={hasDirtyChanges}
-                  surfaceMode={surfaceMode}
-                  floorInteractionMode={viewState.floorInteractionMode}
-                  drawTool={viewState.drawTool}
-                  selectedShape={selectedShape}
-                  selectedShapes={selectionState.selectedShapes}
-                  selectedCellsSize={selectionState.selectedCells.size}
-                  isDraggingSelection={selectionState.isDraggingSelection}
-                  hasImageSelection={hasImageSelection}
-                  imageSelectionPointCount={(selectionState.imageSelection.points || []).length}
-                  savingLayout={serverState.savingLayout}
-                  currentPaintColor={currentPaintColor}
-                  canvasResizeEnabled={draftState.canvasResizeState.enabled}
-                  renderDrawToolButton={renderDrawToolButton}
-                  MouseToolIcon={MouseToolIcon}
-                  HandToolIcon={HandToolIcon}
-                  PaintToolIcon={PaintToolIcon}
-                  imageRectangleTool={IMAGE_RECTANGLE_TOOL}
-                  imagePolygonTool={IMAGE_POLYGON_TOOL}
-                  legendItems={legendItems}
-                  activeLegendFilters={legendFilters}
-                  visibleRoomCount={isActive ? visibleShapeIdSet.size : (floor.roomShapes || []).length}
-                  onAddRoom={() => handleBeginAddRoomMode(floor.id)}
-                  onEditFloor={() => handleOpenEditFloorModal(floor)}
-                  onDeleteFloor={() => handleDeleteFloor(floor)}
-                  onToggleLegendFilter={handleToggleLegendFilter}
-                  onResetLegendFilters={handleResetLegendFilters}
-                  onSetDrawTool={setActiveDrawTool}
-                  onClearSelection={() => {
-                    if (viewState.floorInteractionMode === 'view') {
-                      clearSelectedRooms()
-                      return
-                    }
-                    handleClearSelection()
-                  }}
-                  onDeleteActiveRegion={() => { void handleDeleteActiveRegion() }}
-                  onFinishImagePolygon={finishImagePolygon}
-                  onOpenRoomDraft={() => openRoomDraftModal(selectedShape)}
-                  onExitInteractionMode={() => handleExitInteractionMode(viewState.floorInteractionMode === 'edit')}
-                  onPaintColorChange={(nextColor) => { void handlePaintColorChange(nextColor) }}
-                  onEndCanvasResize={() => setCanvasResizeState((previous) => ({ ...previous, enabled: false, handle: null, floorId: null }))}
-                />
-
-                <MapCanvas
-                  floor={floor}
-                  isActive={isActive}
-                  isImageFloor={isImageFloor}
-                  isFloorEditing={isFloorEditing}
-                  selectedShapeId={selectionState.selectedShapeId}
-                  selectedShapeIdSet={selectedShapeIdSet}
-                  selectedShapes={selectionState.selectedShapes}
-                  selectedCells={selectionState.selectedCells}
-                  editableShapeId={editableShapeId}
-                  drawTool={viewState.drawTool}
-                  floorInteractionMode={viewState.floorInteractionMode}
-                  roomDragState={selectionState.roomDragState}
-                  cellShapeMap={cellShapeMap}
-                  searchResultMap={searchResultMap}
-                  showGridLines={showGridLines}
-                  canvasResizeState={draftState.canvasResizeState}
-                  roomDraft={draftState.roomDraft}
-                  imageSelection={selectionState.imageSelection}
-                  imageSelectionGeometry={selectionState.imageSelectionGeometry}
-                  imageVertexDragState={selectionState.imageVertexDragState}
-                  imageSvgRef={imageSvgRef}
-                  cellSize={CELL_SIZE}
-                  defaultColor={DEFAULT_COLOR}
-                  getShapePoints={getShapePoints}
-                  buildImageBoundsFromPoints={buildImageBoundsFromPoints}
-                  getShapeCenter={getShapeCenter}
-                  getShapeBounds={getShapeBounds}
-                  getReadableTextColor={getReadableTextColor}
-                  colorWithAlpha={colorWithAlpha}
-                  pointsToSvgValue={pointsToSvgValue}
-                  getMarkerOffsets={getMarkerOffsets}
-                  visibleShapeIdSet={isActive ? visibleShapeIdSet : new Set((floor.roomShapes || []).map((shape) => Number(shape.id)))}
-                  selectionBounds={isActive ? currentSelectionBounds : null}
-                  showFloatingSelectionToolbar={isActive && showFloatingSelectionToolbar}
-                  quickSelectionColor={currentPaintColor}
-                  onQuickSelectionSave={handleQuickSelectionSave}
-                  onQuickSelectionCancel={handleQuickSelectionCancel}
-                  onQuickSelectionDelete={() => { void handleDeleteActiveRegion() }}
-                  onQuickSelectionBind={() => openRoomDraftModal(selectedShape)}
-                  onQuickSelectionEditInfo={handleQuickSelectionEditInfo}
-                  onQuickSelectionEditLayout={handleQuickSelectionEditLayout}
-                  onQuickSelectionMove={() => setActiveDrawTool('move')}
-                  onQuickSelectionOpenAssets={handleQuickSelectionOpenAssets}
-                  onQuickSelectionPaintMode={() => setActiveDrawTool('paint')}
-                  HandToolIcon={HandToolIcon}
-                  PaintToolIcon={PaintToolIcon}
-                  onQuickSelectionColorChange={handleQuickSelectionColorChange}
-                  onImagePointerDown={handleImagePointerDown}
-                  onImagePointerMove={handleImagePointerMove}
-                  onImagePointerUp={handleImagePointerUp}
-                  onImageCanvasClick={handleImageCanvasClick}
-                  onImageVertexPointerDown={handleImageVertexPointerDown}
-                  onCanvasResizeStart={handleCanvasResizeStart}
-                  onCellPointerDown={handleCellPointerDown}
-                  onCellPointerEnter={handleCellPointerEnter}
-                  onCellPointerUp={handleCellPointerUp}
-                  onRoomPointerDown={handleRoomPointerDown}
-                  onRoomClick={handleRoomClick}
-                  onRoomPreviewShow={handleRoomPreviewShow}
-                  onRoomPreviewHide={handleRoomPreviewHide}
-                  onMarkerTooltipShow={handleMarkerTooltipShow}
-                  onMarkerTooltipHide={handleMarkerTooltipHide}
-                />
-
-                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Ghi chú sử dụng</p>
-                      <button
-                        type="button"
-                        onClick={() => setNotesCollapsed((previous) => !previous)}
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-orange-300 hover:text-orange-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
-                      >
-                        {notesCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                        {notesCollapsed ? 'Xem thêm' : 'Thu gọn'}
-                      </button>
-                    </div>
-                    {notesCollapsed ? (
-                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900">
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">
-                          Trích nhanh
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                          Nhấp vào một khu vực để chọn, nhấp chuột phải để mở thao tác nhanh.
-                          {isImageFloor
-                            ? ' Với tầng IMAGE, bạn có thể vẽ phòng bằng rectangle hoặc polygon trực tiếp trên ảnh nền.'
-                            : ' Khi thêm hoặc vẽ lại phòng, hãy kéo chọn vùng trên lưới rồi lưu thông tin phòng.'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="mt-3 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                          <p className="font-semibold text-slate-700 dark:text-slate-100">1. Xem sơ đồ</p>
-                          <p className="mt-1">
-                            Ở trạng thái bình thường, sơ đồ chỉ hiện các khu vực đã vẽ. Nhấp chuột trái vào một khu vực để chọn,
-                            nhấp chuột phải để mở menu thao tác nhanh.
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                          <p className="font-semibold text-slate-700 dark:text-slate-100">2. Thêm hoặc vẽ lại khu vực</p>
-                          <p className="mt-1">
-                            {isImageFloor
-                              ? 'Với tầng IMAGE, hệ thống hiển thị trực tiếp ảnh nền. Bạn tự vẽ phòng bằng rectangle hoặc polygon, rồi có thể sửa thông tin hoặc xóa vùng khỏi sơ đồ.'
-                              : 'Khi vào chế độ thêm phòng hoặc vẽ lại phòng, lưới ô vuông sẽ hiện ra. Hãy dùng công cụ con trỏ để kéo chọn vùng, sau đó nhập thông tin khu vực trong modal và lưu lại.'}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                          <p className="font-semibold text-slate-700 dark:text-slate-100">3. Tìm tài sản trên sơ đồ</p>
-                          <p className="mt-1">
-                            Dùng ô tìm kiếm hoặc bộ lọc bên phải để tìm tài sản theo QA code, tên, loại hoặc phòng. Kết quả phù hợp sẽ
-                            hiện marker đỏ trên đúng khu vực đã được vẽ.
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-                          <p className="font-semibold text-slate-700 dark:text-slate-100">4. Chỉnh sửa nhanh</p>
-                          <p className="mt-1">
-                            Từ menu chuột phải của khu vực, bạn có thể vẽ lại phạm vi, sửa thông tin, xem danh sách tài sản hoặc di
-                            chuyển khu vực sang vị trí khác trên tầng. Giữ Ctrl/Cmd/Shift rồi nhấp thêm các phòng khác nếu muốn
-                            chọn nhiều phòng và di chuyển nguyên cả cụm.
-                          </p>
-                        </div>
-                      </div>
+          {activeFloor && (
+            <div
+              id={`asset-map-floor-${activeFloor.id}`}
+              className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900"
+            >
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{activeFloor.name}</h3>
+                    {dirtyFloorIds.has(activeFloor.id) && (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                        Chưa lưu
+                      </span>
                     )}
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Phòng trên tầng</p>
-                      <button
-                        type="button"
-                        onClick={() => setRoomsCollapsed((previous) => !previous)}
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-orange-300 hover:text-orange-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
-                      >
-                        {roomsCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                        {roomsCollapsed ? 'Mở' : 'Thu gọn'}
-                      </button>
-                    </div>
-                    {roomsCollapsed ? (
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        {(floor.roomShapes || []).length > 0
-                          ? `${(floor.roomShapes || []).length} khu vực trên tầng này.`
-                          : 'Chưa có phòng nào trên tầng này.'}
-                      </p>
-                    ) : (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(floor.roomShapes || []).length === 0 && (
-                          <span className="text-sm text-slate-400">Chưa có phòng nào trên tầng này.</span>
-                        )}
-                        {(floor.roomShapes || []).map((shape) => (
-                          <button
-                            key={`chip-${shape.id}`}
-                            type="button"
-                            onClick={(event) => handleSelectRoomChip(floor.id, shape, event)}
-                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                              selectedShapeIdSet.has(Number(shape.id))
-                                ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200'
-                                : 'text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
-                            }`}
-                          >
-                            {buildShapeOptionLabel(shape, locations)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    {isImageFloorMode(activeFloor)
+                      ? `Ảnh nền ${activeFloor.imageWidth || '?'} x ${activeFloor.imageHeight || '?'} · ${(activeFloor.roomShapes || []).length} khu vực`
+                      : `Grid ${activeFloor.gridRows} x ${activeFloor.gridCols} · ${(activeFloor.roomShapes || []).length} khu vực`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    surfaceMode.key === 'assign'
+                      ? 'bg-orange-100 text-orange-700'
+                      : surfaceMode.key === 'layout'
+                        ? 'bg-sky-100 text-sky-700'
+                        : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                  }`}
+                  >
+                    {surfaceMode.label}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    Hiển thị {visibleShapeIdSet.size}/{(activeFloor.roomShapes || []).length} khu vực
+                  </span>
                 </div>
               </div>
-            )
-          })}
+
+              <MapCanvas
+                floor={activeFloor}
+                isActive
+                isImageFloor={isImageFloorMode(activeFloor)}
+                isFloorEditing={floorInteractionMode === 'edit'}
+                selectedShapeId={selectionState.selectedShapeId}
+                selectedShapeIdSet={selectedShapeIdSet}
+                selectedShapes={selectionState.selectedShapes}
+                selectedCells={selectionState.selectedCells}
+                editableShapeId={editableShapeId}
+                drawTool={viewState.drawTool}
+                floorInteractionMode={viewState.floorInteractionMode}
+                roomDragState={selectionState.roomDragState}
+                cellShapeMap={cellShapeMaps[activeFloor.id] || new Map()}
+                searchResultMap={searchResultMap}
+                showGridLines={showGridLines}
+                canvasResizeState={draftState.canvasResizeState}
+                roomDraft={draftState.roomDraft}
+                imageSelection={selectionState.imageSelection}
+                imageSelectionGeometry={selectionState.imageSelectionGeometry}
+                imageVertexDragState={selectionState.imageVertexDragState}
+                imageSvgRef={imageSvgRef}
+                cellSize={CELL_SIZE}
+                defaultColor={DEFAULT_COLOR}
+                getShapePoints={getShapePoints}
+                buildImageBoundsFromPoints={buildImageBoundsFromPoints}
+                getShapeCenter={getShapeCenter}
+                getShapeBounds={getShapeBounds}
+                getReadableTextColor={getReadableTextColor}
+                colorWithAlpha={colorWithAlpha}
+                pointsToSvgValue={pointsToSvgValue}
+                getMarkerOffsets={getMarkerOffsets}
+                visibleShapeIdSet={visibleShapeIdSet}
+                selectionBounds={currentSelectionBounds}
+                showFloatingSelectionToolbar={showFloatingSelectionToolbar}
+                quickSelectionColor={currentPaintColor}
+                onQuickSelectionSave={handleQuickSelectionSave}
+                onQuickSelectionCancel={handleQuickSelectionCancel}
+                onQuickSelectionDelete={() => { void handleDeleteActiveRegion() }}
+                onQuickSelectionBind={() => openRoomDraftModal(selectedShape)}
+                onQuickSelectionEditInfo={handleQuickSelectionEditInfo}
+                onQuickSelectionEditLayout={handleQuickSelectionEditLayout}
+                onQuickSelectionMove={() => setActiveDrawTool('move')}
+                onQuickSelectionOpenAssets={handleQuickSelectionOpenAssets}
+                onQuickSelectionPaintMode={() => setActiveDrawTool('paint')}
+                HandToolIcon={HandToolIcon}
+                PaintToolIcon={PaintToolIcon}
+                onQuickSelectionColorChange={handleQuickSelectionColorChange}
+                onImagePointerDown={handleImagePointerDown}
+                onImagePointerMove={handleImagePointerMove}
+                onImagePointerUp={handleImagePointerUp}
+                onImageCanvasClick={handleImageCanvasClick}
+                onImageVertexPointerDown={handleImageVertexPointerDown}
+                onCanvasResizeStart={handleCanvasResizeStart}
+                onCellPointerDown={handleCellPointerDown}
+                onCellPointerEnter={handleCellPointerEnter}
+                onCellPointerUp={handleCellPointerUp}
+                onRoomPointerDown={handleRoomPointerDown}
+                onRoomClick={handleRoomClick}
+                onRoomPreviewShow={handleRoomPreviewShow}
+                onRoomPreviewHide={handleRoomPreviewHide}
+                onMarkerTooltipShow={handleMarkerTooltipShow}
+                onMarkerTooltipHide={handleMarkerTooltipHide}
+                showCanvasGrid={showCanvasGrid}
+                snapEnabled={snapEnabled}
+                onToggleCanvasGrid={() => setShowCanvasGrid((previous) => !previous)}
+                onToggleSnap={() => setSnapEnabled((previous) => !previous)}
+              />
+            </div>
+          )}
         </div>
 
         <AssetPlacementPanel
           categories={serverState.categories}
           floors={serverState.floors}
+          activeFloor={activeFloor}
+          roomItems={activeFloorRoomItems}
+          selectedRoom={selectedRoomSummary}
+          selectedRoomCount={selectedShapes.length}
+          isImageFloor={activeFloor ? isImageFloorMode(activeFloor) : false}
+          floorInteractionMode={floorInteractionMode}
+          drawTool={drawTool}
+          currentPaintColor={currentPaintColor}
           filteredLocationOptions={filteredLocationOptions}
           searchFilters={searchFilters}
           searchResults={serverState.searchResults}
           searching={viewState.searching}
+          showSearchModal={showAssetSearchModal}
           onSearchFilterChange={handleSearchFilterChange}
-          onOpenScanner={() => setScannerOpen(true)}
+          onOpenSearchModal={() => setShowAssetSearchModal(true)}
+          onCloseSearchModal={() => setShowAssetSearchModal(false)}
+          onOpenScanner={() => {
+            setShowAssetSearchModal(false)
+            setScannerOpen(true)
+          }}
           onSearch={() => { void handleSearch() }}
           onResetSearch={handleResetSearch}
           onJumpToAssetFloor={handleJumpToAssetFloor}
+          onSelectRoom={(shape, event) => handleSelectRoomChip(activeFloor?.id, shape, event)}
+          onEditSelectedRoom={handleQuickSelectionEditInfo}
+          onEditSelectedLayout={handleQuickSelectionEditLayout}
+          onOpenSelectedAssets={handleQuickSelectionOpenAssets}
+          onMoveSelected={() => setActiveDrawTool('move')}
+          onPaintSelected={() => setActiveDrawTool('paint')}
+          onDeleteSelected={() => { void handleDeleteActiveRegion() }}
+          onClearSelection={() => {
+            if (floorInteractionMode === 'view') {
+              clearSelectedRooms()
+              return
+            }
+            handleClearSelection()
+          }}
+          onSelectedColorChange={handleQuickSelectionColorChange}
         />
       </div>
 

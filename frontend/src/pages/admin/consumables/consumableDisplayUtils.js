@@ -29,6 +29,47 @@ export function getStatusBadgeClass(tone) {
   return 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
 }
 
+function getFirstText(...values) {
+  return values.map((value) => String(value || '').trim()).find(Boolean) || ''
+}
+
+export function getConsumableRetailUnit(item, fallback = 'đơn vị') {
+  return getFirstText(item?.retailUnit, item?.unit, fallback)
+}
+
+export function formatConsumableQuantityText(item, options = {}) {
+  const {
+    quantityField = 'quantityOnHand',
+    formattedField = 'formattedQuantityOnHand',
+    fallback = null,
+  } = options
+
+  const formattedValue = getFirstText(item?.[formattedField])
+  if (formattedValue) return formattedValue
+
+  const quantity = Number(item?.[quantityField] ?? 0)
+  if (Number.isNaN(quantity) || quantity < 0) {
+    return fallback ?? `0 ${getConsumableRetailUnit(item)}`
+  }
+
+  const retailUnit = getConsumableRetailUnit(item)
+  const wholesaleUnit = getFirstText(item?.wholesaleUnit, retailUnit)
+  const factor = Number(item?.wholesaleToRetailFactor ?? 1)
+  if (!Number.isInteger(factor) || factor <= 1) {
+    return `${quantity} ${retailUnit}`
+  }
+
+  const wholesaleQuantity = Math.floor(quantity / factor)
+  const retailQuantity = quantity % factor
+  if (wholesaleQuantity > 0 && retailQuantity > 0) {
+    return `${wholesaleQuantity} ${wholesaleUnit} + ${retailQuantity} ${retailUnit}`
+  }
+  if (wholesaleQuantity > 0) {
+    return `${wholesaleQuantity} ${wholesaleUnit}`
+  }
+  return `${retailQuantity} ${retailUnit}`
+}
+
 function parseDateOnly(value) {
   const raw = String(value || '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null

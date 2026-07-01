@@ -20,6 +20,7 @@ public class ConsumableRequestResponse {
     private String sourceWarehouseLocationName;
     private Integer quantityRequested;
     private String unit;
+    private String formattedQuantityRequested;
     private String reason;
     private String status;
     private String decisionNote;

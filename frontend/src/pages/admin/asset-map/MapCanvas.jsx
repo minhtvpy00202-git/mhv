@@ -82,6 +82,10 @@ export default function MapCanvas({
   onRoomPreviewHide,
   onMarkerTooltipShow,
   onMarkerTooltipHide,
+  showCanvasGrid,
+  snapEnabled,
+  onToggleCanvasGrid,
+  onToggleSnap,
 }) {
   const viewportRef = useRef(null)
   const floatingToolbarRef = useRef(null)
@@ -107,6 +111,7 @@ export default function MapCanvas({
     height: 220,
   })
   const [floatingToolbarDismissed, setFloatingToolbarDismissed] = useState(false)
+  const [resizeHoverHandle, setResizeHoverHandle] = useState(null)
 
   const sceneWidth = isImageFloor ? (floor.imageWidth || 960) : (floor.gridCols * cellSize)
   const sceneHeight = isImageFloor ? (floor.imageHeight || 540) : (floor.gridRows * cellSize)
@@ -607,6 +612,15 @@ export default function MapCanvas({
         backgroundColor: '#FFFFFF',
       }}
     >
+      {showCanvasGrid && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[1]"
+          style={{
+            backgroundImage: 'linear-gradient(to right, rgba(15,23,42,0.12) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.12) 1px, transparent 1px)',
+            backgroundSize: '24px 24px',
+          }}
+        />
+      )}
       {floor.backgroundImageUrl ? (
         <img
           src={resolveBackendMediaUrl(floor.backgroundImageUrl)}
@@ -755,26 +769,45 @@ export default function MapCanvas({
         onContextMenu={handleSuppressContextMenu}
       />
 
-      {isActive && canvasResizeState.enabled && floorInteractionMode === 'view' && (
+      {showCanvasGrid && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-xl"
+          style={{
+            backgroundImage: `linear-gradient(to right, rgba(148,163,184,0.28) 1px, transparent 1px), linear-gradient(to bottom, rgba(148,163,184,0.28) 1px, transparent 1px)`,
+            backgroundSize: `${cellSize}px ${cellSize}px`,
+          }}
+        />
+      )}
+
+      {isActive && floorInteractionMode === 'view' && (
         <>
           <button
             type="button"
             aria-label="Kéo thay đổi chiều rộng canvas"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'right')}
-            className="absolute right-[-7px] top-4 bottom-4 z-20 w-4 cursor-ew-resize rounded-full bg-sky-500/70 shadow hover:bg-sky-500"
+            onMouseEnter={() => setResizeHoverHandle('right')}
+            onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'right' ? null : previous))}
+            className="absolute right-[-6px] top-1 bottom-1 z-20 w-3 cursor-ew-resize bg-transparent"
           />
           <button
             type="button"
             aria-label="Kéo thay đổi chiều cao canvas"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'bottom')}
-            className="absolute bottom-[-7px] left-4 right-4 z-20 h-4 cursor-ns-resize rounded-full bg-sky-500/70 shadow hover:bg-sky-500"
+            onMouseEnter={() => setResizeHoverHandle('bottom')}
+            onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'bottom' ? null : previous))}
+            className="absolute bottom-[-6px] left-1 right-1 z-20 h-3 cursor-ns-resize bg-transparent"
           />
           <button
             type="button"
             aria-label="Kéo thay đổi kích thước canvas"
             onMouseDown={(event) => onCanvasResizeStart(event, floor, 'corner')}
-            className="absolute bottom-[-9px] right-[-9px] z-30 h-5 w-5 cursor-nwse-resize rounded-full border-2 border-white bg-sky-600 shadow-lg hover:bg-sky-500"
+            onMouseEnter={() => setResizeHoverHandle('corner')}
+            onMouseLeave={() => setResizeHoverHandle((previous) => (previous === 'corner' ? null : previous))}
+            className="absolute bottom-[-8px] right-[-8px] z-30 h-4 w-4 cursor-nwse-resize bg-transparent"
           />
+          <div className={`pointer-events-none absolute right-0 top-0 bottom-0 w-1 rounded-r-xl bg-sky-500/60 transition ${resizeHoverHandle === 'right' ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`pointer-events-none absolute bottom-0 left-0 right-0 h-1 rounded-b-xl bg-sky-500/60 transition ${resizeHoverHandle === 'bottom' ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`pointer-events-none absolute bottom-0 right-0 h-3 w-3 rounded-tl-md bg-sky-600/80 transition ${resizeHoverHandle === 'corner' ? 'opacity-100' : 'opacity-0'}`} />
         </>
       )}
 
@@ -801,12 +834,13 @@ export default function MapCanvas({
                   onMouseEnter={() => onCellPointerEnter(floor, cellKey, shape)}
                   onMouseUp={onCellPointerUp}
                   onDragStart={(event) => event.preventDefault()}
-                  className={`relative border border-slate-300 transition dark:border-slate-700 ${
+                  className={`relative border transition ${
                     drawTool === 'select' && !shape ? 'hover:bg-orange-50 dark:hover:bg-orange-500/10' : ''
                   } ${isSelected ? 'ring-2 ring-inset ring-fptOrange' : ''}`}
                   style={{
                     width: cellSize,
                     height: cellSize,
+                    borderColor: showCanvasGrid ? undefined : 'transparent',
                     backgroundColor: isSelected
                       ? colorWithAlpha(
                         isEditableShapeCell
@@ -887,10 +921,7 @@ export default function MapCanvas({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs text-slate-500 dark:text-slate-400">
-          Zoom {Math.round(zoom * 100)}% · {visibleRooms.length}/{(floor.roomShapes || []).length} khu vực · `Ctrl/Cmd + wheel` để zoom, giữ `Alt` rồi kéo chuột hoặc nhấn giữ con lăn để di chuyển sơ đồ
-        </div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -914,7 +945,7 @@ export default function MapCanvas({
             className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <Refresh size={14} />
-            Reset View
+            Reset
           </button>
           <button
             type="button"
@@ -923,6 +954,33 @@ export default function MapCanvas({
           >
             <Move size={14} />
             Vừa khung
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={onToggleCanvasGrid}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              showCanvasGrid
+                ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-200'
+                : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+            }`}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            onClick={onToggleSnap}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              snapEnabled
+                ? 'border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-900/60 dark:bg-orange-950/20 dark:text-orange-200'
+                : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
+            }`}
+          >
+            Snap
           </button>
         </div>
       </div>

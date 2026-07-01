@@ -2,6 +2,7 @@ package com.poly.mhv.dto.asset;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,6 +20,9 @@ public class ConsumableStockReceiptRequest {
     @NotNull(message = "Số lượng nhập là bắt buộc.")
     @Positive(message = "Số lượng nhập phải lớn hơn 0.")
     private Integer quantity;
+
+    @Pattern(regexp = "^(RETAIL|WHOLESALE)$", message = "Đơn vị nhập không hợp lệ.")
+    private String quantityUnit;
 
     @NotNull(message = "Đơn giá nhập là bắt buộc.")
     @DecimalMin(value = "0.01", message = "Đơn giá nhập phải lớn hơn 0.")

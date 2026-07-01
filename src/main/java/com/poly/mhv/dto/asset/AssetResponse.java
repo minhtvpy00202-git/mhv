@@ -34,6 +34,11 @@ public class AssetResponse {
     private Integer quantityOnHand;
     private Integer minimumStock;
     private String unit;
+    private String retailUnit;
+    private String wholesaleUnit;
+    private Integer wholesaleToRetailFactor;
+    private String formattedQuantityOnHand;
+    private String formattedMinimumStock;
     private Integer supplierId;
     private String supplierName;
     private String supplierAddress;

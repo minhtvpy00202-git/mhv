@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { resetAuthExpiredNoticeFlag } from '../api/axiosClient'
 
 const AuthContext = createContext(null)
 
@@ -24,6 +25,7 @@ const getStoredUser = () => ({
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
   const [user, setUser] = useState(getStoredUser())
+  const [sessionExpiredNoticeOpen, setSessionExpiredNoticeOpen] = useState(false)
 
   const login = ({ token: nextToken, id, role, username, fullName, techTypeIds }) => {
     const normalizedRole = normalizeRole(role)
@@ -45,9 +47,10 @@ export function AuthProvider({ children }) {
     localStorage.setItem('auth_username', username)
     localStorage.setItem('auth_full_name', fullName || '')
     localStorage.setItem('auth_tech_type_ids', JSON.stringify(normalizedTechTypeIds))
+    resetAuthExpiredNoticeFlag()
   }
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setToken(null)
     setUser({ userId: null, role: null, username: null, fullName: null, techTypeIds: [] })
     localStorage.removeItem('auth_token')
@@ -56,7 +59,22 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('auth_username')
     localStorage.removeItem('auth_full_name')
     localStorage.removeItem('auth_tech_type_ids')
-  }
+    resetAuthExpiredNoticeFlag()
+  }, [])
+
+  const acknowledgeSessionExpired = useCallback(() => {
+    setSessionExpiredNoticeOpen(false)
+    resetAuthExpiredNoticeFlag()
+  }, [])
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      logout()
+      setSessionExpiredNoticeOpen(true)
+    }
+    window.addEventListener('mhv-auth-session-expired', handleSessionExpired)
+    return () => window.removeEventListener('mhv-auth-session-expired', handleSessionExpired)
+  }, [logout])
 
   const value = useMemo(
     () => ({
@@ -65,8 +83,10 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token),
       login,
       logout,
+      sessionExpiredNoticeOpen,
+      acknowledgeSessionExpired,
     }),
-    [token, user],
+    [acknowledgeSessionExpired, login, logout, sessionExpiredNoticeOpen, token, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

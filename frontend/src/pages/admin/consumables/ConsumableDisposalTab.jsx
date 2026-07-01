@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react'
 import ActionIconButton from '../../../components/ui/ActionIconButton'
 import {
+  formatConsumableQuantityText,
   formatDate,
   formatDateTime,
   getConsumableDisposalStatusMeta,
@@ -185,7 +186,7 @@ export default function ConsumableDisposalTab({
                       {lot.lotCode || `Lô #${lot.lotId}`}
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-800 dark:text-slate-100">
-                      {lot.quantityRemaining}{lot.unit ? ` ${lot.unit}` : ''}
+                      {formatConsumableQuantityText(lot, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-slate-600 dark:text-slate-300">
                       {formatDate(lot.expirationDate)}
@@ -278,7 +279,7 @@ export default function ConsumableDisposalTab({
                           <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-400 dark:text-slate-500">{item.reason}</div>
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                          {item.quantityRequested}{item.unit ? ` ${item.unit}` : ''}
+                          {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
                         </td>
                         <td className="px-2 py-1.5 text-slate-700 dark:text-slate-200">
                           <div className="font-medium">{item.itemCount || item.items?.length || 1} lô</div>

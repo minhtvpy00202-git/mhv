@@ -21,6 +21,8 @@ public class ConsumableWarehouseStockResponse {
     private Integer quantityRemaining;
     private Integer minimumStock;
     private String unit;
+    private String formattedQuantityRemaining;
+    private String formattedMinimumStock;
     private BigDecimal averageUnitPrice;
     private BigDecimal inventoryValue;
     private Boolean lowStock;

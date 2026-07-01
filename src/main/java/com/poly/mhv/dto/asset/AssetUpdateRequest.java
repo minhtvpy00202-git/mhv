@@ -75,6 +75,18 @@ public class AssetUpdateRequest {
     @PositiveOrZero(message = "Ngưỡng cảnh báo tồn không được âm.")
     private Integer minimumStock;
 
+    @Pattern(regexp = "^(RETAIL|WHOLESALE)$", message = "Đơn vị ngưỡng cảnh báo tồn không hợp lệ.")
+    private String minimumStockUnit;
+
     @Size(max = 50, message = "Đơn vị tính không được vượt quá 50 ký tự.")
     private String unit;
+
+    @Size(max = 50, message = "Đơn vị lẻ không được vượt quá 50 ký tự.")
+    private String retailUnit;
+
+    @Size(max = 50, message = "Đơn vị sỉ không được vượt quá 50 ký tự.")
+    private String wholesaleUnit;
+
+    @Positive(message = "Hệ số quy đổi phải lớn hơn 0.")
+    private Integer wholesaleToRetailFactor;
 }

@@ -5,7 +5,7 @@ import {
   IconX as X,
 } from '@tabler/icons-react'
 import ActionIconButton from '../../../components/ui/ActionIconButton'
-import { formatDateTime } from './consumableDisplayUtils'
+import { formatConsumableQuantityText, formatDateTime } from './consumableDisplayUtils'
 
 const REQUEST_PANELS = {
   ISSUE: 'ISSUE',
@@ -208,7 +208,7 @@ export default function ConsumableRequestsTab({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-100">
-                      {item.quantityRequested}{item.unit ? ` ${item.unit}` : ''}
+                      {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
                     </td>
                     <td className="px-2 py-1.5 text-slate-700 dark:text-slate-200">
                       <div className="truncate font-medium">{item.requestedByFullName || item.requestedByUsername}</div>
@@ -292,7 +292,7 @@ export default function ConsumableRequestsTab({
                       <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-400 dark:text-slate-500">{item.reason}</div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-slate-700 dark:text-slate-200">
-                      {item.quantityRequested}{item.unit ? ` ${item.unit}` : ''}
+                      {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
                     </td>
                     <td className="px-2 py-1.5 text-slate-700 dark:text-slate-200">
                       <div className="font-medium">{item.itemCount || item.items?.length || 1} lô</div>

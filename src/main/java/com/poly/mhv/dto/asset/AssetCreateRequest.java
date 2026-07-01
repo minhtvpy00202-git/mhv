@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -64,9 +65,24 @@ public class AssetCreateRequest {
     @PositiveOrZero(message = "Số lượng tồn không được âm.")
     private Integer quantityOnHand;
 
+    @Pattern(regexp = "^(RETAIL|WHOLESALE)$", message = "Đơn vị số lượng khởi tạo không hợp lệ.")
+    private String quantityOnHandUnit;
+
     @PositiveOrZero(message = "Ngưỡng cảnh báo tồn không được âm.")
     private Integer minimumStock;
 
+    @Pattern(regexp = "^(RETAIL|WHOLESALE)$", message = "Đơn vị ngưỡng cảnh báo tồn không hợp lệ.")
+    private String minimumStockUnit;
+
     @Size(max = 50, message = "Đơn vị tính không được vượt quá 50 ký tự.")
     private String unit;
+
+    @Size(max = 50, message = "Đơn vị lẻ không được vượt quá 50 ký tự.")
+    private String retailUnit;
+
+    @Size(max = 50, message = "Đơn vị sỉ không được vượt quá 50 ký tự.")
+    private String wholesaleUnit;
+
+    @Positive(message = "Hệ số quy đổi phải lớn hơn 0.")
+    private Integer wholesaleToRetailFactor;
 }

@@ -52,6 +52,9 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 a.quantityOnHand,
                 a.minimumStock,
                 a.unit,
+                a.retailUnit,
+                a.wholesaleUnit,
+                a.wholesaleToRetailFactor,
                 s.id,
                 s.name
             )

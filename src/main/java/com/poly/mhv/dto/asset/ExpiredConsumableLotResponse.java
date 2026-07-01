@@ -18,6 +18,7 @@ public class ExpiredConsumableLotResponse {
     private String unit;
     private String lotCode;
     private Integer quantityRemaining;
+    private String formattedQuantityRemaining;
     private BigDecimal unitPrice;
     private LocalDate receivedDate;
     private LocalDate expirationDate;

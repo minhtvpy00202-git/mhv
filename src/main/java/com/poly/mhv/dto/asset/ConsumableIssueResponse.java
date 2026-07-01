@@ -21,6 +21,7 @@ public class ConsumableIssueResponse {
     private String sourceWarehouseLocationName;
     private Integer quantity;
     private String unit;
+    private String formattedQuantity;
     private BigDecimal unitPrice;
     private String note;
     private Integer issuedByUserId;

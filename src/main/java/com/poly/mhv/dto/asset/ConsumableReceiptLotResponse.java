@@ -17,6 +17,8 @@ public class ConsumableReceiptLotResponse {
     private String lotCode;
     private Integer quantityReceived;
     private Integer quantityRemaining;
+    private String formattedQuantityReceived;
+    private String formattedQuantityRemaining;
     private BigDecimal unitPrice;
     private LocalDate receivedDate;
     private LocalDate expirationDate;

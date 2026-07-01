@@ -2,6 +2,7 @@ import axios from 'axios'
 import { getApiBaseUrl, normalizeRequestPath } from './apiPath'
 
 const API_BASE_URL = getApiBaseUrl()
+let authExpiredNoticeEmitted = false
 
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
@@ -46,6 +47,15 @@ axiosClient.interceptors.response.use(
     let normalizedMessage = 'Đã xảy ra lỗi trong quá trình xử lý.'
     if (response) {
       const { status, data } = response
+      const hasStoredToken = Boolean(localStorage.getItem('auth_token'))
+      const hasAuthHeader = Boolean(error?.config?.headers?.Authorization)
+      if (status === 401 && (hasStoredToken || hasAuthHeader)) {
+        if (!authExpiredNoticeEmitted) {
+          authExpiredNoticeEmitted = true
+          window.dispatchEvent(new CustomEvent('mhv-auth-session-expired'))
+        }
+        return new Promise(() => {})
+      }
       if (typeof data === 'string') {
         normalizedMessage = getErrorMessageFromText(data, normalizedMessage)
       } else if (data instanceof Blob) {
@@ -74,5 +84,9 @@ axiosClient.interceptors.response.use(
     return Promise.reject(error)
   },
 )
+
+export function resetAuthExpiredNoticeFlag() {
+  authExpiredNoticeEmitted = false
+}
 
 export default axiosClient

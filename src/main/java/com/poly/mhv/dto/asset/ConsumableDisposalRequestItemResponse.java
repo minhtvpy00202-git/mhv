@@ -17,6 +17,8 @@ public class ConsumableDisposalRequestItemResponse {
     private String lotCode;
     private Integer quantityRequested;
     private Integer quantityRemainingAtRequest;
+    private String formattedQuantityRequested;
+    private String formattedQuantityRemainingAtRequest;
     private LocalDate receivedDate;
     private LocalDate expirationDate;
     private BigDecimal unitPrice;

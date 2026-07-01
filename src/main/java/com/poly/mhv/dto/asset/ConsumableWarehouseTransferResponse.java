@@ -21,6 +21,7 @@ public class ConsumableWarehouseTransferResponse {
     private String targetWarehouseLocationName;
     private Integer quantityTransferred;
     private String unit;
+    private String formattedQuantityTransferred;
     private BigDecimal unitPrice;
     private LocalDateTime transferredAt;
     private Integer transferredByUserId;

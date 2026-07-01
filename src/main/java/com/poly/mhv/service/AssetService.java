@@ -88,6 +88,8 @@ public class AssetService {
     private static final String TRACKING_MODE_CONSUMABLE = "CONSUMABLE";
     private static final String CATEGORY_KIND_ITEMIZED = "ITEMIZED";
     private static final String CATEGORY_KIND_CONSUMABLE = "CONSUMABLE";
+    private static final String QUANTITY_UNIT_RETAIL = "RETAIL";
+    private static final String QUANTITY_UNIT_WHOLESALE = "WHOLESALE";
 
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
@@ -159,6 +161,27 @@ public class AssetService {
 
         boolean consumable = isConsumableMode(trackingMode);
         boolean expiryTrackingEnabled = consumable && isExpiryTrackingEnabled(request.getExpiryTrackingEnabled());
+        String retailUnit = consumable ? normalizeRetailUnit(request.getRetailUnit(), request.getUnit()) : null;
+        String wholesaleUnit = consumable ? normalizeWholesaleUnit(request.getWholesaleUnit()) : null;
+        Integer wholesaleToRetailFactor = consumable ? normalizeWholesaleToRetailFactor(request.getWholesaleToRetailFactor()) : null;
+        Asset conversionAsset = consumable
+                ? Asset.builder()
+                .retailUnit(retailUnit)
+                .wholesaleUnit(wholesaleUnit)
+                .wholesaleToRetailFactor(wholesaleToRetailFactor)
+                .build()
+                : null;
+        String initialQuantityUnit = consumable ? normalizeQuantityUnit(request.getQuantityOnHandUnit()) : QUANTITY_UNIT_RETAIL;
+        String minimumStockUnit = consumable ? normalizeQuantityUnit(request.getMinimumStockUnit()) : QUANTITY_UNIT_RETAIL;
+        Integer initialQuantityOnHand = consumable
+                ? convertToRetailQuantityAllowZero(conversionAsset, safeInteger(request.getQuantityOnHand()), initialQuantityUnit)
+                : null;
+        Integer normalizedMinimumStock = consumable
+                ? convertToRetailQuantityAllowZero(conversionAsset, safeInteger(request.getMinimumStock()), minimumStockUnit)
+                : null;
+        BigDecimal normalizedInitialPurchasePrice = consumable && request.getPurchasePrice() != null
+                ? normalizeRetailUnitPrice(conversionAsset, request.getPurchasePrice(), initialQuantityUnit)
+                : request.getPurchasePrice();
         String initialTechnicalStatus = consumable ? null : normalizeRequestedTechnicalStatus(request.getTechnicalStatus(), request.getStatus());
         String initialUsageStatus = consumable
                 ? null
@@ -175,14 +198,14 @@ public class AssetService {
                 .name(request.getName())
                 .category(category)
                 .status(consumable
-                        ? computeConsumableStatus(request.getQuantityOnHand(), request.getMinimumStock())
+                        ? computeConsumableStatus(initialQuantityOnHand, normalizedMinimumStock)
                         : AssetStatusSupport.deriveLegacyStatus(initialTechnicalStatus, initialUsageStatus, false))
                 .technicalStatus(initialTechnicalStatus)
                 .usageStatus(initialUsageStatus)
                 .location(currentLocation)
                 .homeLocation(homeLocation)
                 .specs(normalizeSpecs(request.getSpecs()))
-                .purchasePrice(request.getPurchasePrice())
+                .purchasePrice(normalizedInitialPurchasePrice)
                 .purchaseDate(request.getPurchaseDate())
                 .warrantyExpirationDate(consumable ? null : request.getWarrantyExpirationDate())
                 .expiryTrackingEnabled(consumable ? expiryTrackingEnabled : null)
@@ -191,9 +214,12 @@ public class AssetService {
                         request.getExpirationDate(),
                         request.getPurchaseDate()
                 ) : null)
-                .quantityOnHand(consumable ? safeInteger(request.getQuantityOnHand()) : null)
-                .minimumStock(consumable ? safeInteger(request.getMinimumStock()) : null)
-                .unit(consumable ? normalizeUnit(request.getUnit()) : null)
+                .quantityOnHand(initialQuantityOnHand)
+                .minimumStock(normalizedMinimumStock)
+                .unit(consumable ? retailUnit : null)
+                .retailUnit(retailUnit)
+                .wholesaleUnit(wholesaleUnit)
+                .wholesaleToRetailFactor(wholesaleToRetailFactor)
                 .supplier(supplier)
                 .build();
         AppUser actor = getCurrentUser();
@@ -406,6 +432,23 @@ public class AssetService {
             asset.setSupplier(getSupplierOrThrow(request.getSupplierId()));
         }
         if (isConsumableMode(trackingMode)) {
+            String resolvedRetailUnit = normalizeRetailUnit(
+                    firstNonBlank(request.getRetailUnit(), asset.getRetailUnit()),
+                    firstNonBlank(request.getUnit(), asset.getUnit())
+            );
+            String resolvedWholesaleUnit = normalizeWholesaleUnit(
+                    firstNonBlank(request.getWholesaleUnit(), asset.getWholesaleUnit())
+            );
+            Integer resolvedWholesaleToRetailFactor = normalizeWholesaleToRetailFactor(
+                    request.getWholesaleToRetailFactor() != null
+                            ? request.getWholesaleToRetailFactor()
+                            : asset.getWholesaleToRetailFactor()
+            );
+            Asset conversionAsset = Asset.builder()
+                    .retailUnit(resolvedRetailUnit)
+                    .wholesaleUnit(resolvedWholesaleUnit)
+                    .wholesaleToRetailFactor(resolvedWholesaleToRetailFactor)
+                    .build();
             if (request.getLocationId() != null) {
                 Location storageLocation = getConsumableWarehouseLocationOrThrow(
                         request.getLocationId(),
@@ -421,10 +464,19 @@ public class AssetService {
                 asset.setQuantityOnHand(request.getQuantityOnHand());
             }
             if (request.getMinimumStock() != null) {
-                asset.setMinimumStock(request.getMinimumStock());
+                asset.setMinimumStock(convertToRetailQuantityAllowZero(
+                        conversionAsset,
+                        request.getMinimumStock(),
+                        normalizeQuantityUnit(request.getMinimumStockUnit())
+                ));
             }
             if (request.getUnit() != null) {
-                asset.setUnit(normalizeUnit(request.getUnit()));
+                asset.setUnit(normalizeRetailUnit(null, request.getUnit()));
+            }
+            if (request.getRetailUnit() != null || request.getWholesaleUnit() != null || request.getWholesaleToRetailFactor() != null || request.getUnit() != null) {
+                asset.setRetailUnit(resolvedRetailUnit);
+                asset.setWholesaleUnit(resolvedWholesaleUnit);
+                asset.setWholesaleToRetailFactor(resolvedWholesaleToRetailFactor);
             }
             if (request.getExpiryTrackingEnabled() != null) {
                 boolean expiryTrackingEnabled = isExpiryTrackingEnabled(request.getExpiryTrackingEnabled());
@@ -543,7 +595,7 @@ public class AssetService {
         notificationService.createNotification(
                 "CONSUMABLE_ISSUED",
                 "Cấp phát vật tư",
-                actorDisplayName + " đã cấp phát " + request.getQuantity() + " " + safeUnit(updated)
+                actorDisplayName + " đã cấp phát " + formatConsumableQuantity(updated, request.getQuantity())
                         + " " + updated.getName() + " từ kho " + sourceWarehouseLocation.getRoomName()
                         + " cho phòng " + issuedToLocation.getRoomName() + ".",
                 actor.getUsername(),
@@ -551,11 +603,11 @@ public class AssetService {
                 updated.getName(),
                 Map.of(
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
-                        "Số lượng cấp phát", request.getQuantity(),
+                        "Số lượng cấp phát", formatConsumableQuantity(updated, request.getQuantity()),
                         "Đơn vị tính", safeUnit(updated),
                         "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng nhận", issuedToLocation.getRoomName(),
-                        "Tồn còn lại", safeInteger(updated.getQuantityOnHand()),
+                        "Tồn còn lại", formatConsumableQuantity(updated, updated.getQuantityOnHand()),
                         "Người thực hiện", actorDisplayName
                 ),
                 consumableNotificationTargets(null, null)
@@ -575,7 +627,9 @@ public class AssetService {
             throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ nhập hàng theo lô.");
         }
 
-        int receiptQuantity = safePositiveInteger(request.getQuantity(), "Số lượng nhập phải lớn hơn 0.");
+        int receiptQuantityInput = safePositiveInteger(request.getQuantity(), "Số lượng nhập phải lớn hơn 0.");
+        String receiptQuantityUnit = normalizeQuantityUnit(request.getQuantityUnit());
+        int receiptQuantity = convertToRetailQuantity(asset, receiptQuantityInput, receiptQuantityUnit);
         if (request.getUnitPrice() == null || request.getUnitPrice().signum() <= 0) {
             throw new CustomException("Đơn giá nhập phải lớn hơn 0.");
         }
@@ -587,7 +641,7 @@ public class AssetService {
         BigDecimal averageUnitPrice = calculateAverageUnitPrice(
                 asset.getPurchasePrice(),
                 safeInteger(asset.getQuantityOnHand()),
-                request.getUnitPrice(),
+                normalizeRetailUnitPrice(asset, request.getUnitPrice(), receiptQuantityUnit),
                 receiptQuantity
         );
         AppUser actor = getCurrentUser();
@@ -599,7 +653,7 @@ public class AssetService {
                 supplier,
                 warehouseLocation,
                 receiptQuantity,
-                request.getUnitPrice(),
+                normalizeRetailUnitPrice(asset, request.getUnitPrice(), receiptQuantityUnit),
                 request.getReceivedDate(),
                 normalizeReceiptExpirationDate(asset, request),
                 request.getLotCode(),
@@ -616,19 +670,19 @@ public class AssetService {
         notificationService.createNotification(
                 "CONSUMABLE_RECEIVED",
                 "Nhập hàng vật tư",
-                actorDisplayName + " đã nhập thêm " + receiptQuantity + " " + safeUnit(updated)
+                actorDisplayName + " đã nhập thêm " + formatConsumableQuantity(updated, receiptQuantity)
                         + " " + updated.getName() + " về kho " + warehouseLocation.getRoomName() + ".",
                 actor.getUsername(),
                 updated.getQaCode(),
                 updated.getName(),
                 Map.of(
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
-                        "Số lượng nhập", receiptQuantity,
+                        "Số lượng nhập", formatConsumableQuantity(updated, receiptQuantity),
                         "Đơn giá lô nhập", request.getUnitPrice(),
                         "Đơn giá trung bình", averageUnitPrice,
                         "Nhà cung cấp", supplier.getName(),
                         "Kho nhập", warehouseLocation.getRoomName(),
-                        "Tồn sau nhập", safeInteger(updated.getQuantityOnHand()) + " " + safeUnit(updated),
+                        "Tồn sau nhập", formatConsumableQuantity(updated, updated.getQuantityOnHand()),
                         "Người thực hiện", actorDisplayName
                 ),
                 consumableNotificationTargets(null, null)
@@ -707,7 +761,7 @@ public class AssetService {
         notificationService.createNotification(
                 "CONSUMABLE_WAREHOUSE_TRANSFER",
                 "Chuyển kho nội bộ vật tư",
-                actorDisplayName + " đã chuyển " + quantityTransferred + " " + safeUnit(asset)
+                actorDisplayName + " đã chuyển " + formatConsumableQuantity(asset, quantityTransferred)
                         + " " + asset.getName() + " từ kho " + sourceWarehouse.getRoomName()
                         + " sang kho " + targetWarehouse.getRoomName() + ".",
                 actor.getUsername(),
@@ -717,7 +771,7 @@ public class AssetService {
                         "Vật tư", asset.getQaCode() + " - " + asset.getName(),
                         "Kho nguồn", sourceWarehouse.getRoomName(),
                         "Kho đích", targetWarehouse.getRoomName(),
-                        "Số lượng chuyển", quantityTransferred,
+                        "Số lượng chuyển", formatConsumableQuantity(asset, quantityTransferred),
                         "Đơn vị tính", safeUnit(asset),
                         "Người thực hiện", actorDisplayName
                 ),
@@ -915,7 +969,7 @@ public class AssetService {
                 Map.of(
                         "Vật tư", asset.getQaCode() + " - " + asset.getName(),
                         "Số lô cần tiêu huỷ", String.valueOf(requestItems.size()),
-                        "Tổng số lượng tiêu huỷ", totalQuantityRequested + " " + safeUnit(asset),
+                        "Tổng số lượng tiêu huỷ", formatConsumableQuantity(asset, totalQuantityRequested),
                         "Người đề nghị", getActorDisplayName(requester),
                         "Lý do", reason
                 ),
@@ -998,7 +1052,7 @@ public class AssetService {
                         "Phiếu tiêu huỷ", "#" + savedRequest.getId(),
                         "Vật tư", updatedAsset.getQaCode() + " - " + updatedAsset.getName(),
                         "Số lô tiêu huỷ", String.valueOf(requestItems.size()),
-                        "Tổng số lượng tiêu huỷ", totalQuantityToDispose + " " + safeUnit(updatedAsset),
+                        "Tổng số lượng tiêu huỷ", formatConsumableQuantity(updatedAsset, totalQuantityToDispose),
                         "Người duyệt", getActorDisplayName(actor),
                         "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
                 ),
@@ -1102,7 +1156,7 @@ public class AssetService {
                         "Vật tư", asset.getQaCode() + " - " + asset.getName(),
                         "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng yêu cầu", location.getRoomName(),
-                        "Số lượng yêu cầu", request.getQuantityRequested(),
+                        "Số lượng yêu cầu", formatConsumableQuantity(asset, request.getQuantityRequested()),
                         "Lý do", request.getReason().trim(),
                         "Người yêu cầu", getActorDisplayName(requester)
                 ),
@@ -1175,7 +1229,7 @@ public class AssetService {
         notificationService.createNotification(
                 "CONSUMABLE_REQUEST_APPROVED",
                 "Phiếu yêu cầu cấp phát đã được duyệt",
-                actorDisplayName + " đã duyệt cấp phát " + consumableRequest.getQuantityRequested() + " " + safeUnit(updated)
+                actorDisplayName + " đã duyệt cấp phát " + formatConsumableQuantity(updated, consumableRequest.getQuantityRequested())
                         + " " + updated.getName() + " từ kho " + sourceWarehouseLocation.getRoomName()
                         + " cho phòng " + consumableRequest.getLocation().getRoomName() + ".",
                 actor.getUsername(),
@@ -1186,7 +1240,7 @@ public class AssetService {
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
                         "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng nhận", consumableRequest.getLocation().getRoomName(),
-                        "Số lượng cấp phát", consumableRequest.getQuantityRequested(),
+                        "Số lượng cấp phát", formatConsumableQuantity(updated, consumableRequest.getQuantityRequested()),
                         "Người duyệt", actorDisplayName,
                         "Ghi chú xử lý", decisionNote == null ? "" : decisionNote
                 ),
@@ -1346,7 +1400,12 @@ public class AssetService {
                 .expirationDate(isConsumableMode(normalizedTrackingMode) ? asset.getExpirationDate() : null)
                 .quantityOnHand(asset.getQuantityOnHand())
                 .minimumStock(asset.getMinimumStock())
-                .unit(asset.getUnit())
+                .unit(getRetailUnit(asset))
+                .retailUnit(isConsumableMode(normalizedTrackingMode) ? getRetailUnit(asset) : null)
+                .wholesaleUnit(isConsumableMode(normalizedTrackingMode) ? getWholesaleUnit(asset) : null)
+                .wholesaleToRetailFactor(isConsumableMode(normalizedTrackingMode) ? getWholesaleToRetailFactor(asset) : null)
+                .formattedQuantityOnHand(isConsumableMode(normalizedTrackingMode) ? formatConsumableQuantity(asset, asset.getQuantityOnHand()) : null)
+                .formattedMinimumStock(isConsumableMode(normalizedTrackingMode) ? formatConsumableQuantity(asset, asset.getMinimumStock()) : null)
                 .supplierId(asset.getSupplier() != null ? asset.getSupplier().getId() : null)
                 .supplierName(asset.getSupplier() != null ? asset.getSupplier().getName() : null)
                 .supplierAddress(asset.getSupplier() != null ? asset.getSupplier().getAddress() : null)
@@ -1429,6 +1488,25 @@ public class AssetService {
                 .quantityOnHand(item.getQuantityOnHand())
                 .minimumStock(item.getMinimumStock())
                 .unit(item.getUnit())
+                .retailUnit(isConsumableMode(normalizedTrackingMode) ? firstNonBlank(item.getRetailUnit(), item.getUnit()) : null)
+                .wholesaleUnit(isConsumableMode(normalizedTrackingMode) ? firstNonBlank(item.getWholesaleUnit(), item.getRetailUnit(), item.getUnit()) : null)
+                .wholesaleToRetailFactor(isConsumableMode(normalizedTrackingMode) ? safeWholesaleFactor(item.getWholesaleToRetailFactor()) : null)
+                .formattedQuantityOnHand(isConsumableMode(normalizedTrackingMode)
+                        ? formatConsumableQuantity(
+                                item.getQuantityOnHand(),
+                                firstNonBlank(item.getRetailUnit(), item.getUnit()),
+                                firstNonBlank(item.getWholesaleUnit(), item.getRetailUnit(), item.getUnit()),
+                                safeWholesaleFactor(item.getWholesaleToRetailFactor())
+                        )
+                        : null)
+                .formattedMinimumStock(isConsumableMode(normalizedTrackingMode)
+                        ? formatConsumableQuantity(
+                                item.getMinimumStock(),
+                                firstNonBlank(item.getRetailUnit(), item.getUnit()),
+                                firstNonBlank(item.getWholesaleUnit(), item.getRetailUnit(), item.getUnit()),
+                                safeWholesaleFactor(item.getWholesaleToRetailFactor())
+                        )
+                        : null)
                 .supplierId(item.getSupplierId())
                 .supplierName(item.getSupplierName())
                 .build();
@@ -1605,7 +1683,15 @@ public class AssetService {
             throw new CustomException("Ngưỡng cảnh báo tồn không được âm.");
         }
         if (!StringUtils.hasText(request.getUnit())) {
-            throw new CustomException("unit là bắt buộc cho vật tư tiêu hao.");
+            if (!StringUtils.hasText(request.getRetailUnit())) {
+                throw new CustomException("retailUnit là bắt buộc cho vật tư tiêu hao.");
+            }
+        }
+        if (!StringUtils.hasText(request.getWholesaleUnit())) {
+            throw new CustomException("wholesaleUnit là bắt buộc cho vật tư tiêu hao.");
+        }
+        if (request.getWholesaleToRetailFactor() == null || request.getWholesaleToRetailFactor() <= 0) {
+            throw new CustomException("wholesaleToRetailFactor phải lớn hơn 0.");
         }
         if (safeInteger(request.getQuantityOnHand()) > 0) {
             if (request.getPurchasePrice() == null || request.getPurchasePrice().signum() <= 0) {
@@ -1635,7 +1721,11 @@ public class AssetService {
         if (asset.getMinimumStock() < 0) {
             throw new CustomException("Ngưỡng cảnh báo tồn không được âm.");
         }
-        asset.setUnit(normalizeUnit(asset.getUnit()));
+        String retailUnit = normalizeRetailUnit(asset.getRetailUnit(), asset.getUnit());
+        asset.setRetailUnit(retailUnit);
+        asset.setUnit(retailUnit);
+        asset.setWholesaleUnit(normalizeWholesaleUnit(asset.getWholesaleUnit()));
+        asset.setWholesaleToRetailFactor(normalizeWholesaleToRetailFactor(asset.getWholesaleToRetailFactor()));
     }
 
     private String normalizeTrackingMode(String trackingMode) {
@@ -1911,8 +2001,130 @@ public class AssetService {
         return normalized;
     }
 
+    private String normalizeRetailUnit(String retailUnit, String legacyUnit) {
+        return normalizeUnit(StringUtils.hasText(retailUnit) ? retailUnit : legacyUnit);
+    }
+
+    private String normalizeWholesaleUnit(String wholesaleUnit) {
+        return normalizeUnit(wholesaleUnit);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private Integer normalizeWholesaleToRetailFactor(Integer factor) {
+        if (factor == null || factor <= 0) {
+            throw new CustomException("Hệ số quy đổi phải lớn hơn 0.");
+        }
+        return factor;
+    }
+
+    private String normalizeQuantityUnit(String quantityUnit) {
+        if (!StringUtils.hasText(quantityUnit)) {
+            return QUANTITY_UNIT_RETAIL;
+        }
+        String normalized = quantityUnit.trim().toUpperCase(Locale.ROOT);
+        if (!QUANTITY_UNIT_RETAIL.equals(normalized) && !QUANTITY_UNIT_WHOLESALE.equals(normalized)) {
+            throw new CustomException("Đơn vị số lượng không hợp lệ.");
+        }
+        return normalized;
+    }
+
+    private int convertToRetailQuantity(Asset asset, int quantity, String quantityUnit) {
+        if (quantity <= 0) {
+            throw new CustomException("Số lượng phải lớn hơn 0.");
+        }
+        return convertToRetailQuantityAllowZero(asset, quantity, quantityUnit);
+    }
+
+    private int convertToRetailQuantityAllowZero(Asset asset, int quantity, String quantityUnit) {
+        if (quantity < 0) {
+            throw new CustomException("Số lượng không được âm.");
+        }
+        if (!QUANTITY_UNIT_WHOLESALE.equals(quantityUnit)) {
+            return quantity;
+        }
+        long converted = (long) quantity * getWholesaleToRetailFactor(asset);
+        if (converted > Integer.MAX_VALUE) {
+            throw new CustomException("Số lượng quy đổi vượt quá giới hạn cho phép.");
+        }
+        return (int) converted;
+    }
+
+    private BigDecimal normalizeRetailUnitPrice(Asset asset, BigDecimal unitPrice, String quantityUnit) {
+        if (unitPrice == null || unitPrice.signum() <= 0) {
+            throw new CustomException("Đơn giá nhập phải lớn hơn 0.");
+        }
+        if (!QUANTITY_UNIT_WHOLESALE.equals(quantityUnit)) {
+            return unitPrice.setScale(2, RoundingMode.HALF_UP);
+        }
+        return unitPrice.divide(BigDecimal.valueOf(getWholesaleToRetailFactor(asset)), 2, RoundingMode.HALF_UP);
+    }
+
     private String safeUnit(Asset asset) {
-        return StringUtils.hasText(asset.getUnit()) ? asset.getUnit() : "đơn vị";
+        return StringUtils.hasText(getRetailUnit(asset)) ? getRetailUnit(asset) : "đơn vị";
+    }
+
+    private String getRetailUnit(Asset asset) {
+        if (asset == null) {
+            return null;
+        }
+        return StringUtils.hasText(asset.getRetailUnit()) ? asset.getRetailUnit() : asset.getUnit();
+    }
+
+    private String getWholesaleUnit(Asset asset) {
+        if (asset == null) {
+            return null;
+        }
+        return StringUtils.hasText(asset.getWholesaleUnit()) ? asset.getWholesaleUnit() : getRetailUnit(asset);
+    }
+
+    private int getWholesaleToRetailFactor(Asset asset) {
+        if (asset == null || asset.getWholesaleToRetailFactor() == null || asset.getWholesaleToRetailFactor() <= 0) {
+            return 1;
+        }
+        return asset.getWholesaleToRetailFactor();
+    }
+
+    private int safeWholesaleFactor(Integer factor) {
+        return factor == null || factor <= 0 ? 1 : factor;
+    }
+
+    private String formatConsumableQuantity(Asset asset, Integer quantity) {
+        return formatConsumableQuantity(
+                quantity,
+                getRetailUnit(asset),
+                getWholesaleUnit(asset),
+                getWholesaleToRetailFactor(asset)
+        );
+    }
+
+    private String formatConsumableQuantity(Integer quantity, String retailUnit, String wholesaleUnit, Integer factor) {
+        int safeQuantity = safeInteger(quantity);
+        String normalizedRetailUnit = StringUtils.hasText(retailUnit) ? retailUnit.trim() : "đơn vị";
+        int safeFactor = factor == null || factor <= 0 ? 1 : factor;
+        String normalizedWholesaleUnit = StringUtils.hasText(wholesaleUnit) ? wholesaleUnit.trim() : normalizedRetailUnit;
+        if (safeFactor <= 1) {
+            return safeQuantity + " " + normalizedRetailUnit;
+        }
+        int wholesaleQuantity = safeQuantity / safeFactor;
+        int retailQuantity = safeQuantity % safeFactor;
+        if (wholesaleQuantity > 0 && retailQuantity > 0) {
+            return wholesaleQuantity + " " + normalizedWholesaleUnit + " + " + retailQuantity + " " + normalizedRetailUnit;
+        }
+        if (wholesaleQuantity > 0) {
+            return wholesaleQuantity + " " + normalizedWholesaleUnit;
+        }
+        return retailQuantity + " " + normalizedRetailUnit;
     }
 
     private BigDecimal updatedUnitPrice(Asset asset) {
@@ -2112,11 +2324,14 @@ public class AssetService {
         AppUser receivedBy = lot.getReceivedBy();
         Supplier supplier = lot.getSupplier();
         Location warehouseLocation = lot.getWarehouseLocation();
+        Asset asset = lot.getAsset();
         return ConsumableReceiptLotResponse.builder()
                 .id(lot.getId())
                 .lotCode(lot.getLotCode())
                 .quantityReceived(lot.getQuantityReceived())
                 .quantityRemaining(lot.getQuantityRemaining())
+                .formattedQuantityReceived(formatConsumableQuantity(asset, lot.getQuantityReceived()))
+                .formattedQuantityRemaining(formatConsumableQuantity(asset, lot.getQuantityRemaining()))
                 .unitPrice(lot.getUnitPrice())
                 .receivedDate(lot.getReceivedDate())
                 .expirationDate(lot.getExpirationDate())
@@ -2163,23 +2378,28 @@ public class AssetService {
     private ConsumableLocationStockResponse mapToConsumableLocationStockResponse(ConsumableLocationStock stock) {
         int quantityIssued = safeInteger(stock.getQuantityIssued());
         int quantityRemaining = safeInteger(stock.getQuantityRemaining());
+        int quantityConsumed = Math.max(0, quantityIssued - quantityRemaining);
         BigDecimal unitPrice = stock.getUnitPrice();
         BigDecimal remainingValue = unitPrice == null ? null : unitPrice.multiply(BigDecimal.valueOf(quantityRemaining));
         AppUser lastUpdatedBy = stock.getLastUpdatedBy();
+        Asset asset = stock.getAsset();
         return ConsumableLocationStockResponse.builder()
                 .id(stock.getId())
-                .assetQaCode(stock.getAsset().getQaCode())
-                .assetName(stock.getAsset().getName())
-                .categoryId(stock.getAsset().getCategory() != null ? stock.getAsset().getCategory().getId() : null)
-                .categoryName(getCategoryDisplayName(stock.getAsset().getCategory()))
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .categoryId(asset.getCategory() != null ? asset.getCategory().getId() : null)
+                .categoryName(getCategoryDisplayName(asset.getCategory()))
                 .locationId(stock.getLocation().getId())
                 .locationName(stock.getLocation().getRoomName())
                 .quantityIssued(quantityIssued)
                 .quantityRemaining(quantityRemaining)
-                .quantityConsumed(Math.max(0, quantityIssued - quantityRemaining))
-                .unit(stock.getAsset().getUnit())
-                .expiryTrackingEnabled(isExpiryTrackingEnabled(stock.getAsset().getExpiryTrackingEnabled()))
-                .expirationDate(stock.getAsset().getExpirationDate())
+                .quantityConsumed(quantityConsumed)
+                .unit(getRetailUnit(asset))
+                .formattedQuantityIssued(formatConsumableQuantity(asset, quantityIssued))
+                .formattedQuantityRemaining(formatConsumableQuantity(asset, quantityRemaining))
+                .formattedQuantityConsumed(formatConsumableQuantity(asset, quantityConsumed))
+                .expiryTrackingEnabled(isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled()))
+                .expirationDate(asset.getExpirationDate())
                 .unitPrice(unitPrice)
                 .remainingValue(remainingValue)
                 .lastIssuedAt(stock.getLastIssuedAt())
@@ -2229,16 +2449,18 @@ public class AssetService {
 
     private ConsumableWarehouseTransferResponse mapToConsumableWarehouseTransferResponse(ConsumableWarehouseTransfer transfer) {
         AppUser transferredBy = transfer.getTransferredBy();
+        Asset asset = transfer.getAsset();
         return ConsumableWarehouseTransferResponse.builder()
                 .id(transfer.getId())
-                .assetQaCode(transfer.getAsset().getQaCode())
-                .assetName(transfer.getAsset().getName())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
                 .sourceWarehouseLocationId(transfer.getSourceWarehouseLocation().getId())
                 .sourceWarehouseLocationName(transfer.getSourceWarehouseLocation().getRoomName())
                 .targetWarehouseLocationId(transfer.getTargetWarehouseLocation().getId())
                 .targetWarehouseLocationName(transfer.getTargetWarehouseLocation().getRoomName())
                 .quantityTransferred(transfer.getQuantityTransferred())
-                .unit(transfer.getAsset().getUnit())
+                .unit(getRetailUnit(asset))
+                .formattedQuantityTransferred(formatConsumableQuantity(asset, transfer.getQuantityTransferred()))
                 .unitPrice(transfer.getUnitPrice())
                 .transferredAt(transfer.getTransferredAt())
                 .transferredByUserId(transferredBy != null ? transferredBy.getId() : null)
@@ -2288,15 +2510,15 @@ public class AssetService {
                 notificationService.createNotification(
                         "CONSUMABLE_LOW_STOCK",
                         "Vật tư cần nhập thêm",
-                        asset.getName() + " hiện còn " + qty + " " + safeUnit(asset)
+                        asset.getName() + " hiện còn " + formatConsumableQuantity(asset, qty)
                                 + " tại kho " + warehouse.getRoomName() + ".",
                         actor != null ? actor.getUsername() : "system",
                         asset.getQaCode(),
                         asset.getName(),
                         Map.of(
                                 "Vật tư", asset.getQaCode() + " - " + asset.getName(),
-                                "Tồn hiện tại", qty,
-                                "Ngưỡng cảnh báo", minStock,
+                                "Tồn hiện tại", formatConsumableQuantity(asset, qty),
+                                "Ngưỡng cảnh báo", formatConsumableQuantity(asset, minStock),
                                 "Đơn vị tính", safeUnit(asset),
                                 "Kho", warehouse.getRoomName()
                         ),
@@ -2322,16 +2544,18 @@ public class AssetService {
 
     private ConsumableIssueResponse mapToConsumableIssueResponse(ConsumableIssue issue) {
         Location sourceWarehouseLocation = issue.getSourceWarehouseLocation();
+        Asset asset = issue.getAsset();
         return ConsumableIssueResponse.builder()
                 .id(issue.getId())
-                .assetQaCode(issue.getAsset().getQaCode())
-                .assetName(issue.getAsset().getName())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
                 .issuedToLocationId(issue.getIssuedToLocation().getId())
                 .issuedToLocationName(issue.getIssuedToLocation().getRoomName())
                 .sourceWarehouseLocationId(sourceWarehouseLocation != null ? sourceWarehouseLocation.getId() : null)
                 .sourceWarehouseLocationName(sourceWarehouseLocation != null ? sourceWarehouseLocation.getRoomName() : null)
                 .quantity(issue.getQuantity())
-                .unit(issue.getAsset().getUnit())
+                .unit(getRetailUnit(asset))
+                .formattedQuantity(formatConsumableQuantity(asset, issue.getQuantity()))
                 .unitPrice(issue.getUnitPrice())
                 .note(issue.getNote())
                 .issuedByUserId(issue.getIssuedBy().getId())
@@ -2345,16 +2569,18 @@ public class AssetService {
         AppUser requestedBy = request.getRequestedBy();
         AppUser resolvedBy = request.getResolvedBy();
         Location sourceWarehouseLocation = request.getSourceWarehouseLocation();
+        Asset asset = request.getAsset();
         return ConsumableRequestResponse.builder()
                 .id(request.getId())
-                .assetQaCode(request.getAsset().getQaCode())
-                .assetName(request.getAsset().getName())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
                 .locationId(request.getLocation().getId())
                 .locationName(request.getLocation().getRoomName())
                 .sourceWarehouseLocationId(sourceWarehouseLocation != null ? sourceWarehouseLocation.getId() : null)
                 .sourceWarehouseLocationName(sourceWarehouseLocation != null ? sourceWarehouseLocation.getRoomName() : null)
                 .quantityRequested(request.getQuantityRequested())
-                .unit(request.getAsset().getUnit())
+                .unit(getRetailUnit(asset))
+                .formattedQuantityRequested(formatConsumableQuantity(asset, request.getQuantityRequested()))
                 .reason(request.getReason())
                 .status(request.getStatus())
                 .decisionNote(request.getDecisionNote())
@@ -2375,14 +2601,16 @@ public class AssetService {
         ConsumableReceiptLot receiptLot = request.getReceiptLot();
         Supplier supplier = receiptLot != null ? receiptLot.getSupplier() : null;
         List<ConsumableDisposalRequestItem> requestItems = getEffectiveDisposalRequestItems(request);
+        Asset asset = request.getAsset();
         return ConsumableDisposalRequestResponse.builder()
                 .id(request.getId())
-                .assetQaCode(request.getAsset().getQaCode())
-                .assetName(request.getAsset().getName())
-                .unit(request.getAsset().getUnit())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .unit(getRetailUnit(asset))
                 .receiptLotId(receiptLot != null ? receiptLot.getId() : null)
                 .lotCode(receiptLot != null ? receiptLot.getLotCode() : null)
                 .quantityRequested(request.getQuantityRequested())
+                .formattedQuantityRequested(formatConsumableQuantity(asset, request.getQuantityRequested()))
                 .receivedDate(receiptLot != null ? receiptLot.getReceivedDate() : null)
                 .expirationDate(receiptLot != null ? receiptLot.getExpirationDate() : null)
                 .supplierName(supplier != null ? supplier.getName() : null)
@@ -2405,12 +2633,15 @@ public class AssetService {
     private ConsumableDisposalRequestItemResponse mapToConsumableDisposalRequestItemResponse(ConsumableDisposalRequestItem item) {
         ConsumableReceiptLot receiptLot = item.getReceiptLot();
         Supplier supplier = receiptLot != null ? receiptLot.getSupplier() : null;
+        Asset asset = receiptLot != null ? receiptLot.getAsset() : null;
         return ConsumableDisposalRequestItemResponse.builder()
                 .id(item.getId())
                 .receiptLotId(receiptLot != null ? receiptLot.getId() : null)
                 .lotCode(getLotDisplayName(receiptLot))
                 .quantityRequested(item.getQuantityRequested())
                 .quantityRemainingAtRequest(receiptLot != null ? receiptLot.getQuantityRemaining() : null)
+                .formattedQuantityRequested(formatConsumableQuantity(asset, item.getQuantityRequested()))
+                .formattedQuantityRemainingAtRequest(formatConsumableQuantity(asset, receiptLot != null ? receiptLot.getQuantityRemaining() : null))
                 .receivedDate(receiptLot != null ? receiptLot.getReceivedDate() : null)
                 .expirationDate(receiptLot != null ? receiptLot.getExpirationDate() : null)
                 .unitPrice(receiptLot != null ? receiptLot.getUnitPrice() : null)
@@ -2420,13 +2651,15 @@ public class AssetService {
 
     private ExpiredConsumableLotResponse mapToExpiredConsumableLotResponse(ConsumableReceiptLot lot, LocalDate today) {
         Supplier supplier = lot.getSupplier();
+        Asset asset = lot.getAsset();
         return ExpiredConsumableLotResponse.builder()
                 .lotId(lot.getId())
-                .assetQaCode(lot.getAsset().getQaCode())
-                .assetName(lot.getAsset().getName())
-                .unit(lot.getAsset().getUnit())
+                .assetQaCode(asset.getQaCode())
+                .assetName(asset.getName())
+                .unit(getRetailUnit(asset))
                 .lotCode(lot.getLotCode())
                 .quantityRemaining(safeInteger(lot.getQuantityRemaining()))
+                .formattedQuantityRemaining(formatConsumableQuantity(asset, lot.getQuantityRemaining()))
                 .unitPrice(lot.getUnitPrice())
                 .receivedDate(lot.getReceivedDate())
                 .expirationDate(lot.getExpirationDate())
@@ -2671,7 +2904,9 @@ public class AssetService {
                     .categoryName(asset != null ? getCategoryDisplayName(asset.getCategory()) : null)
                     .quantityRemaining(quantityRemaining)
                     .minimumStock(minimumStock)
-                    .unit(asset != null ? asset.getUnit() : null)
+                    .unit(asset != null ? getRetailUnit(asset) : null)
+                    .formattedQuantityRemaining(asset != null ? formatConsumableQuantity(asset, quantityRemaining) : null)
+                    .formattedMinimumStock(asset != null ? formatConsumableQuantity(asset, minimumStock) : null)
                     .averageUnitPrice(averageUnitPrice)
                     .inventoryValue(inventoryValue)
                     .lowStock(lowStock)

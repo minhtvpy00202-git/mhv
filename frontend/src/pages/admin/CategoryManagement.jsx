@@ -108,7 +108,12 @@ function buildCategoryPageConfig(lockedCategoryKind) {
       noChangesMessage: 'Loại vật tư chưa có thay đổi để lưu.',
       emptyState: 'Chưa có loại vật tư phù hợp.',
       specPreviewSubject: 'Loại vật tư',
-      specTemplateEmptyText: 'Chưa có mẫu thông số. Bạn có thể thêm các thuộc tính như đơn vị tính, quy cách, định lượng...',
+      specTemplateColumnLabel: 'Thông số',
+      specTemplateFieldLabel: 'Thông số',
+      specTemplatePreviewTitle: 'Thông số',
+      specTemplatePreviewButtonLabel: 'Xem thông số',
+      specTemplateAddLabel: 'Thêm thông số',
+      specTemplateEmptyText: 'Chưa có thông số. Bạn có thể thêm các thuộc tính như đơn vị tính, quy cách, định lượng...',
       specTemplatePlaceholder: 'Ví dụ: Quy cách',
       showCategoryKindField: false,
       showCategoryKindColumn: false,
@@ -143,6 +148,11 @@ function buildCategoryPageConfig(lockedCategoryKind) {
       noChangesMessage: 'Loại thiết bị chưa có thay đổi để lưu.',
       emptyState: 'Chưa có loại thiết bị phù hợp.',
       specPreviewSubject: 'Loại thiết bị',
+      specTemplateColumnLabel: 'Mẫu thông số kỹ thuật',
+      specTemplateFieldLabel: 'Mẫu thông số kỹ thuật',
+      specTemplatePreviewTitle: 'Mẫu thông số kỹ thuật',
+      specTemplatePreviewButtonLabel: 'Xem mẫu thông số',
+      specTemplateAddLabel: 'Thêm mẫu',
       specTemplateEmptyText: 'Chưa có mẫu thông số. Bạn có thể thêm các thuộc tính như RAM, CPU, GPU...',
       specTemplatePlaceholder: 'Ví dụ: RAM',
       showCategoryKindField: false,
@@ -177,6 +187,11 @@ function buildCategoryPageConfig(lockedCategoryKind) {
     noChangesMessage: 'Loại danh mục chưa có thay đổi để lưu.',
     emptyState: 'Chưa có loại danh mục phù hợp.',
     specPreviewSubject: 'Loại danh mục',
+    specTemplateColumnLabel: 'Mẫu thông số kỹ thuật',
+    specTemplateFieldLabel: 'Mẫu thông số kỹ thuật',
+    specTemplatePreviewTitle: 'Mẫu thông số kỹ thuật',
+    specTemplatePreviewButtonLabel: 'Xem mẫu thông số',
+    specTemplateAddLabel: 'Thêm mẫu',
     specTemplateEmptyText: 'Chưa có mẫu thông số. Bạn có thể thêm các thuộc tính kỹ thuật cần dùng cho danh mục này.',
     specTemplatePlaceholder: 'Ví dụ: Thuộc tính',
     showCategoryKindField: true,
@@ -297,7 +312,7 @@ function CategoryManagement({ lockedCategoryKind = '' }) {
     columns.push(
       {
         key: 'specTemplateCount',
-        label: <button type="button" onClick={() => handleSort('specTemplateCount')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('specTemplateCount', 'Mẫu thông số kỹ thuật')}</button>,
+        label: <button type="button" onClick={() => handleSort('specTemplateCount')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('specTemplateCount', pageConfig.specTemplateColumnLabel)}</button>,
         headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600',
         cellClassName: 'px-3 py-2',
         render: (category) => (
@@ -305,7 +320,7 @@ function CategoryManagement({ lockedCategoryKind = '' }) {
             <div className="flex items-center gap-2">
               <ActionIconButton
                 icon={Detail}
-                label="Xem mẫu thông số"
+                label={pageConfig.specTemplatePreviewButtonLabel}
                 variant="violet"
                 className="h-7 w-7"
                 onClick={() => {
@@ -832,13 +847,13 @@ function CategoryManagement({ lockedCategoryKind = '' }) {
                   )}
                   <div className="shrink-0">
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <label className="block text-sm font-medium text-slate-700">Mẫu thông số kỹ thuật</label>
+                      <label className="block text-sm font-medium text-slate-700">{pageConfig.specTemplateFieldLabel}</label>
                       <button
                           type="button"
                           onClick={addSpecTemplate}
                           className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                       >
-                        Thêm mẫu
+                        {pageConfig.specTemplateAddLabel}
                       </button>
                     </div>
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -889,7 +904,7 @@ function CategoryManagement({ lockedCategoryKind = '' }) {
                 <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
                     <h4 className="text-base font-semibold text-slate-800">
-                      Mẫu thông số kỹ thuật
+                      {pageConfig.specTemplatePreviewTitle}
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">{pageConfig.specPreviewSubject}: {selectedCategoryForSpecs.name}</p>
                   </div>

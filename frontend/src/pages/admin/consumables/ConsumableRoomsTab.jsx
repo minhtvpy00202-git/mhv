@@ -11,6 +11,7 @@ import {
 } from '@tabler/icons-react'
 import ActionIconButton from '../../../components/ui/ActionIconButton'
 import {
+  formatConsumableQuantityText,
   formatCurrency,
   formatDate,
   formatDateTime,
@@ -511,10 +512,6 @@ export default function ConsumableRoomsTab({
                 ))}
                 {!roomOverviewLoading && filteredStocks.map((stock) => {
                   const expiryState = getConsumableExpiryState(stock)
-                  const remaining = Number(stock.quantityRemaining ?? 0)
-                  const issued = Number(stock.quantityIssued ?? 0)
-                  const consumed = Math.max(0, Number(stock.quantityConsumed ?? issued - remaining))
-                  const unit = stock.unit || ''
                   return (
                     <tr key={`${stock.assetQaCode}-${stock.locationId}`} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
                       <td className="truncate px-2 py-1.5 font-semibold text-slate-600 dark:text-slate-300" title={stock.assetQaCode}>{stock.assetQaCode}</td>
@@ -530,13 +527,13 @@ export default function ConsumableRoomsTab({
                         {stock.categoryName || '–'}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-800 dark:text-slate-100">
-                        {remaining}{unit ? ` ${unit}` : ''}
+                        {formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
                       </td>
                       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        {issued}
+                        {formatConsumableQuantityText(stock, { quantityField: 'quantityIssued', formattedField: 'formattedQuantityIssued' })}
                       </td>
                       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        {consumed}
+                        {formatConsumableQuantityText(stock, { quantityField: 'quantityConsumed', formattedField: 'formattedQuantityConsumed' })}
                       </td>
                       <td className="px-1.5 py-1.5 text-center">
                         {stock.expiryTrackingEnabled ? (
@@ -618,7 +615,9 @@ export default function ConsumableRoomsTab({
                         {item.issuedToLocationName || '–'}
                       </td>
                     )}
-                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700 dark:text-slate-200">{item.quantity} {item.unit || ''}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700 dark:text-slate-200">
+                      {formatConsumableQuantityText(item, { quantityField: 'quantity', formattedField: 'formattedQuantity' })}
+                    </td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-slate-700 dark:text-slate-200">{formatCurrency(item.unitPrice)}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-slate-600 dark:text-slate-300">{formatDateTime(item.issuedAt)}</td>
                     <td className="max-w-[180px] truncate px-3 py-1.5 text-slate-600 dark:text-slate-300">{item.issuedByFullName || item.issuedByUsername || '–'}</td>
@@ -667,7 +666,9 @@ export default function ConsumableRoomsTab({
                         {item.locationName || '–'}
                       </td>
                     )}
-                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700 dark:text-slate-200">{item.quantityRequested} {item.unit || ''}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700 dark:text-slate-200">
+                      {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                    </td>
                     <td className="whitespace-nowrap px-3 py-1.5">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getConsumableRequestStatusMeta(item.status).className}`}>
                         {getConsumableRequestStatusMeta(item.status).label}

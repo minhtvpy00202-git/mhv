@@ -46,6 +46,7 @@ import { validateAssetForm, validateSupplierForm } from '../../utils/validation'
 import ConsumableRoomsTab from './consumables/ConsumableRoomsTab'
 import ConsumableDisposalTab from './consumables/ConsumableDisposalTab'
 import ConsumableRequestsTab from './consumables/ConsumableRequestsTab'
+import { formatConsumableQuantityText, getConsumableRetailUnit } from './consumables/consumableDisplayUtils'
 import useLocationOverview, { ALL_ROOMS_ID } from './consumables/useLocationOverview'
 
 const consumableStatusOptions = ['Còn hàng', 'Cần nhập']
@@ -78,7 +79,7 @@ const defaultSortState = {
   direction: 'asc',
 }
 const CONSUMABLE_WORKSPACE_STORAGE_KEY = 'mhv-admin-consumable-workspace'
-const CONSUMABLE_WORKSPACES = new Set(['OVERVIEW', 'ROOMS', 'DISPOSAL', 'REQUESTS'])
+const CONSUMABLE_WORKSPACES = new Set(['OVERVIEW', 'WAREHOUSES', 'ROOMS', 'DISPOSAL', 'REQUESTS'])
 
 function normalizeConsumableWorkspace(workspace, isAdminUser) {
   const normalized = String(workspace || '').trim().toUpperCase()
@@ -87,12 +88,15 @@ function normalizeConsumableWorkspace(workspace, isAdminUser) {
   return normalized
 }
 
-function readStoredConsumableWorkspace(isAdminUser, fallbackWorkspace = 'OVERVIEW') {
+function readStoredConsumableWorkspace(isAdminUser, fallbackWorkspace = null) {
+  if (fallbackWorkspace) {
+    return normalizeConsumableWorkspace(fallbackWorkspace, isAdminUser)
+  }
   try {
     const stored = window.localStorage.getItem(CONSUMABLE_WORKSPACE_STORAGE_KEY)
-    return normalizeConsumableWorkspace(stored || fallbackWorkspace, isAdminUser)
+    return normalizeConsumableWorkspace(stored || 'OVERVIEW', isAdminUser)
   } catch {
-    return normalizeConsumableWorkspace(fallbackWorkspace, isAdminUser)
+    return normalizeConsumableWorkspace('OVERVIEW', isAdminUser)
   }
 }
 
@@ -212,6 +216,32 @@ function isConsumableMode(value) {
   return String(value || 'ITEMIZED').trim().toUpperCase() === 'CONSUMABLE'
 }
 
+function getSpecLabelByTrackingMode(value) {
+  return isConsumableMode(value) ? 'Thông số' : 'Đặc tính kỹ thuật'
+}
+
+function getSpecTemplateLabelByTrackingMode(value) {
+  return isConsumableMode(value) ? 'Thông số' : 'Thông số kỹ thuật'
+}
+
+function getSpecAddButtonLabelByTrackingMode(value) {
+  return isConsumableMode(value) ? 'Thêm thông số tùy chỉnh' : 'Thêm thông số kỹ thuật tùy chỉnh'
+}
+
+function getSpecNamePlaceholderByTrackingMode(value) {
+  return isConsumableMode(value) ? 'Tên thông số' : 'Tên thuộc tính'
+}
+
+function getSpecValuePlaceholderByTrackingMode(value) {
+  return isConsumableMode(value) ? 'Giá trị thông số' : 'Giá trị thuộc tính'
+}
+
+function getEmptySpecEntriesMessageByTrackingMode(value) {
+  return isConsumableMode(value)
+    ? 'Chọn loại vật tư để hệ thống gợi ý các thông số phù hợp.'
+    : 'Chọn loại thiết bị để hệ thống gợi ý các đặc tính kỹ thuật phù hợp.'
+}
+
 function normalizeCategoryKind(value) {
   return String(value || 'ITEMIZED').trim().toUpperCase() === 'CONSUMABLE' ? 'CONSUMABLE' : 'ITEMIZED'
 }
@@ -239,6 +269,14 @@ function getConsumableInventoryState(asset) {
     return { queryStatus: 'Cần nhập', label: 'Cần nhập', tone: quantityOnHand <= 0 ? 'red' : 'amber' }
   }
   return { queryStatus: 'Còn hàng', label: 'Đủ dùng', tone: 'emerald' }
+}
+
+function getConsumableWholesaleUnit(asset) {
+  return String(asset?.wholesaleUnit || asset?.retailUnit || asset?.unit || 'đơn vị').trim()
+}
+
+function getConsumableQuantityInputUnit(asset, quantityUnit = 'RETAIL') {
+  return quantityUnit === 'WHOLESALE' ? getConsumableWholesaleUnit(asset) : getConsumableRetailUnit(asset)
 }
 
 function getStatusBadgeClass(tone) {
@@ -451,7 +489,7 @@ function AssetManagement({
   restrictToConsumable = false,
   initialSection = 'fixed',
   showTabSwitcher = false,
-  initialConsumableWorkspace = 'OVERVIEW',
+  initialConsumableWorkspace = null,
 }) {
   const initialTrackingMode = getInitialTrackingMode(initialSection, restrictToConsumable)
   const specEntryIdRef = useRef(0)
@@ -492,6 +530,7 @@ function AssetManagement({
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
   const [receiveForm, setReceiveForm] = useState({
     quantity: '',
+    quantityUnit: 'WHOLESALE',
     unitPrice: '',
     supplierId: '',
     warehouseLocationId: '',
@@ -572,6 +611,7 @@ function AssetManagement({
   const [consumableWorkspace, setConsumableWorkspace] = useState(() => (
     readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
   ))
+  const [selectedWarehouseLocationId, setSelectedWarehouseLocationId] = useState('')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [showConsumableAdvancedFilters, setShowConsumableAdvancedFilters] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -610,8 +650,12 @@ function AssetManagement({
     expiryTrackingEnabled: false,
     expirationDate: '',
     quantityOnHand: '',
+    quantityOnHandUnit: 'RETAIL',
     minimumStock: '',
-    unit: '',
+    minimumStockUnit: 'RETAIL',
+    retailUnit: '',
+    wholesaleUnit: '',
+    wholesaleToRetailFactor: '',
     specEntries: [],
   })
   const [formErrors, setFormErrors] = useState({})
@@ -737,6 +781,10 @@ function AssetManagement({
     [locations],
   )
   const defaultConsumableWarehouseLocation = warehouseLocations[0] || null
+  const selectedWarehouseLocation = useMemo(
+    () => warehouseLocations.find((location) => String(location.id) === String(selectedWarehouseLocationId)) || null,
+    [selectedWarehouseLocationId, warehouseLocations],
+  )
 
   useEffect(() => {
     if (!openActionMenuQaCode) return
@@ -760,6 +808,9 @@ function AssetManagement({
   const selectedSpecsEntries = useMemo(() => parseSpecsToEntries(selectedSpecsAsset?.specs), [selectedSpecsAsset])
   const isEditing = formMode === 'update' && Boolean(selectedQaCode)
   const isConsumableForm = isConsumableMode(form.trackingMode)
+  const formSpecLabel = getSpecLabelByTrackingMode(form.trackingMode)
+  const formSpecTemplateLabel = getSpecTemplateLabelByTrackingMode(form.trackingMode)
+  const formSpecAddButtonLabel = getSpecAddButtonLabelByTrackingMode(form.trackingMode)
   const {
     selectedRoomId,
     roomOverview,
@@ -1141,6 +1192,50 @@ function AssetManagement({
   }, [consumableWorkspace, ensureRoomLoaded, isConsumableTab])
 
   useEffect(() => {
+    if (!isConsumableTab || consumableWorkspace !== 'WAREHOUSES') return
+    if (warehouseLocations.length === 0) {
+      setSelectedWarehouseLocationId('')
+      return
+    }
+    setSelectedWarehouseLocationId((previous) => {
+      if (previous && warehouseLocations.some((location) => String(location.id) === String(previous))) {
+        return previous
+      }
+      return String(warehouseLocations[0].id)
+    })
+  }, [consumableWorkspace, isConsumableTab, warehouseLocations])
+
+  useEffect(() => {
+    if (!isConsumableTab || consumableWorkspace !== 'WAREHOUSES' || !selectedWarehouseLocationId) return
+    if (
+      String(filters.locationId || '') === String(selectedWarehouseLocationId)
+      && String(consumableFilterDraft.locationId || '') === String(selectedWarehouseLocationId)
+    ) {
+      return
+    }
+    const nextFilters = {
+      ...filters,
+      trackingMode: 'CONSUMABLE',
+      locationId: String(selectedWarehouseLocationId),
+    }
+    const nextDraft = {
+      ...consumableFilterDraft,
+      trackingMode: 'CONSUMABLE',
+      locationId: String(selectedWarehouseLocationId),
+    }
+    setFilters(nextFilters)
+    setConsumableFilterDraft(nextDraft)
+    void loadAssets(0, nextFilters, sortState)
+  }, [
+    consumableFilterDraft,
+    consumableWorkspace,
+    filters,
+    isConsumableTab,
+    selectedWarehouseLocationId,
+    sortState,
+  ])
+
+  useEffect(() => {
     if (!isConsumableMode(initialTrackingMode)) return
     setConsumableWorkspace((previous) => {
       const nextWorkspace = readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
@@ -1185,8 +1280,12 @@ function AssetManagement({
       expiryTrackingEnabled: false,
       expirationDate: '',
       quantityOnHand: '',
+      quantityOnHandUnit: 'RETAIL',
       minimumStock: '',
-      unit: '',
+      minimumStockUnit: 'RETAIL',
+      retailUnit: '',
+      wholesaleUnit: '',
+      wholesaleToRetailFactor: '',
       specEntries: [],
     })
   }
@@ -1288,6 +1387,7 @@ function AssetManagement({
     setSelectedReceiveAsset(null)
     setReceiveForm({
       quantity: '',
+      quantityUnit: 'WHOLESALE',
       unitPrice: '',
       supplierId: '',
       warehouseLocationId: '',
@@ -1424,7 +1524,9 @@ function AssetManagement({
   }
 
   const handleCreateAsset = async () => {
-    const nextErrors = validateAssetForm(form)
+    const nextErrors = validateAssetForm(form, {
+      specEntryLabel: isConsumableMode(form.trackingMode) ? 'thông số' : 'đặc tính kỹ thuật',
+    })
     setFormErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       toast.error(Object.values(nextErrors)[0])
@@ -1440,7 +1542,7 @@ function AssetManagement({
         status: isConsumableMode(form.trackingMode) ? 'Còn hàng' : itemizedStatusOptions[0].value,
         technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
         usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
-        specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
+        specs: stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
         warrantyExpirationDate: isConsumableMode(form.trackingMode) ? null : (form.warrantyExpirationDate || null),
@@ -1448,8 +1550,13 @@ function AssetManagement({
         expirationDate: isConsumableMode(form.trackingMode) && form.expiryTrackingEnabled ? (form.expirationDate || null) : null,
         supplierId: form.supplierId ? Number(form.supplierId) : null,
         quantityOnHand: isConsumableMode(form.trackingMode) ? Number(form.quantityOnHand) : null,
+        quantityOnHandUnit: isConsumableMode(form.trackingMode) ? form.quantityOnHandUnit : null,
         minimumStock: isConsumableMode(form.trackingMode) ? Number(form.minimumStock) : null,
-        unit: isConsumableMode(form.trackingMode) ? form.unit.trim() : null,
+        minimumStockUnit: isConsumableMode(form.trackingMode) ? form.minimumStockUnit : null,
+        unit: isConsumableMode(form.trackingMode) ? form.retailUnit.trim() : null,
+        retailUnit: isConsumableMode(form.trackingMode) ? form.retailUnit.trim() : null,
+        wholesaleUnit: isConsumableMode(form.trackingMode) ? form.wholesaleUnit.trim() : null,
+        wholesaleToRetailFactor: isConsumableMode(form.trackingMode) ? Number(form.wholesaleToRetailFactor) : null,
       })
       if (response.data?.qrCodeBase64) {
         setQrImage(`data:image/png;base64,${response.data.qrCodeBase64}`)
@@ -1475,7 +1582,9 @@ function AssetManagement({
 
   const handleUpdateAsset = async () => {
     if (!selectedQaCode) return
-    const nextErrors = validateAssetForm(form)
+    const nextErrors = validateAssetForm(form, {
+      specEntryLabel: isConsumableMode(form.trackingMode) ? 'thông số' : 'đặc tính kỹ thuật',
+    })
     setFormErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       toast.error(Object.values(nextErrors)[0])
@@ -1490,7 +1599,7 @@ function AssetManagement({
         locationId: Number(form.locationId),
         technicalStatus: isConsumableMode(form.trackingMode) ? null : form.technicalStatus,
         usageStatus: isConsumableMode(form.trackingMode) ? null : form.usageStatus,
-        specs: isConsumableMode(form.trackingMode) ? '{}' : stringifySpecs(form.specEntries),
+        specs: stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
         warrantyExpirationDate: isConsumableMode(form.trackingMode) ? null : (form.warrantyExpirationDate || null),
@@ -1498,8 +1607,13 @@ function AssetManagement({
         expirationDate: isConsumableMode(form.trackingMode) && form.expiryTrackingEnabled ? (form.expirationDate || null) : null,
         supplierId: form.supplierId ? Number(form.supplierId) : null,
         quantityOnHand: isConsumableMode(form.trackingMode) ? Number(form.quantityOnHand) : null,
+        quantityOnHandUnit: isConsumableMode(form.trackingMode) ? form.quantityOnHandUnit : null,
         minimumStock: isConsumableMode(form.trackingMode) ? Number(form.minimumStock) : null,
-        unit: isConsumableMode(form.trackingMode) ? form.unit.trim() : null,
+        minimumStockUnit: isConsumableMode(form.trackingMode) ? form.minimumStockUnit : null,
+        unit: isConsumableMode(form.trackingMode) ? form.retailUnit.trim() : null,
+        retailUnit: isConsumableMode(form.trackingMode) ? form.retailUnit.trim() : null,
+        wholesaleUnit: isConsumableMode(form.trackingMode) ? form.wholesaleUnit.trim() : null,
+        wholesaleToRetailFactor: isConsumableMode(form.trackingMode) ? Number(form.wholesaleToRetailFactor) : null,
       })
       toast.success(`${isConsumableMode(form.trackingMode) ? 'Cập nhật vật tư' : 'Cập nhật thiết bị'} thành công.`)
       if (response.data?.qaCode) {
@@ -1589,14 +1703,18 @@ function AssetManagement({
         expiryTrackingEnabled: Boolean(detail.expiryTrackingEnabled ?? asset.expiryTrackingEnabled),
         expirationDate: detail.expirationDate || asset.expirationDate || '',
         quantityOnHand: detail.quantityOnHand ?? '',
+        quantityOnHandUnit: 'RETAIL',
         minimumStock: detail.minimumStock ?? '',
-        unit: detail.unit || '',
+        minimumStockUnit: 'RETAIL',
+        retailUnit: detail.retailUnit || detail.unit || '',
+        wholesaleUnit: detail.wholesaleUnit || detail.retailUnit || detail.unit || '',
+        wholesaleToRetailFactor: detail.wholesaleToRetailFactor ?? 1,
         specEntries: withSpecEntryKeys(parseSpecsToEntries(detail.specs, categoryTemplates)),
       })
       setFormMode('update')
       setShowFormModal(true)
     } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể tải template đặc tính kỹ thuật của loại thiết bị.'
+      const message = error?.response?.data?.message || `Không thể tải ${getSpecTemplateLabelByTrackingMode(asset?.trackingMode).toLowerCase()} của loại đã chọn.`
       toast.error(message)
     }
   }
@@ -1607,11 +1725,11 @@ function AssetManagement({
       setForm((prev) => ({
         ...prev,
         categoryId,
-        specEntries: withSpecEntryKeys(mergeSpecEntries(categoryTemplates, [])),
+        specEntries: withSpecEntryKeys(mergeSpecEntries(categoryTemplates, prev.specEntries)),
       }))
       setFormErrors((prev) => ({ ...prev, categoryId: '', specEntries: '' }))
     } catch (error) {
-      const message = error?.response?.data?.message || 'Không thể tải template đặc tính kỹ thuật của loại thiết bị.'
+      const message = error?.response?.data?.message || `Không thể tải ${getSpecTemplateLabelByTrackingMode(form.trackingMode).toLowerCase()} của loại đã chọn.`
       toast.error(message)
     }
   }
@@ -1638,6 +1756,19 @@ function AssetManagement({
       specEntries: prev.specEntries.filter((_, entryIndex) => entryIndex !== index),
     }))
     setFormErrors((prev) => ({ ...prev, specEntries: '' }))
+  }
+
+  const handleOpenSpecsModal = async (asset) => {
+    try {
+      const detail = await fetchAssetDetail(asset.qaCode)
+      setSelectedSpecsAsset(detail)
+      setShowSpecsModal(true)
+      setOpenActionMenuQaCode(null)
+    } catch (error) {
+      const itemLabel = isConsumableMode(asset?.trackingMode) ? 'thông số của vật tư' : 'đặc tính kỹ thuật của thiết bị'
+      const message = error?.response?.data?.message || `Không thể tải ${itemLabel}.`
+      toast.error(message)
+    }
   }
 
   const handleCreateSupplierInline = async () => {
@@ -1740,6 +1871,7 @@ function AssetManagement({
       setSelectedReceiveAsset(detail)
       setReceiveForm({
         quantity: '',
+        quantityUnit: Number(detail?.wholesaleToRetailFactor ?? 1) > 1 ? 'WHOLESALE' : 'RETAIL',
         unitPrice: detail?.purchasePrice ? String(detail.purchasePrice) : '',
         supplierId: detail?.supplierId ? String(detail.supplierId) : '',
         warehouseLocationId: String(detail?.homeLocationId || defaultConsumableWarehouseLocation?.id || ''),
@@ -1814,8 +1946,9 @@ function AssetManagement({
     if (!selectedReceiveAsset?.qaCode) return
     const quantity = Number(receiveForm.quantity)
     const unitPrice = Number(receiveForm.unitPrice)
+    const quantityUnitLabel = getConsumableQuantityInputUnit(selectedReceiveAsset, receiveForm.quantityUnit)
     if (!Number.isInteger(quantity) || quantity <= 0) {
-      toast.error('Số lượng nhập phải là số nguyên lớn hơn 0.')
+      toast.error(`Số lượng nhập theo ${quantityUnitLabel} phải là số nguyên lớn hơn 0.`)
       return
     }
     if (Number.isNaN(unitPrice) || unitPrice <= 0) {
@@ -1846,6 +1979,7 @@ function AssetManagement({
     try {
       const response = await axiosClient.post(`/api/assets/${selectedReceiveAsset.qaCode}/receipts`, {
         quantity,
+        quantityUnit: receiveForm.quantityUnit,
         unitPrice,
         supplierId: Number(receiveForm.supplierId),
         warehouseLocationId: Number(receiveForm.warehouseLocationId),
@@ -2648,7 +2782,18 @@ function AssetManagement({
                     : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                 }`}
               >
-                Tổng quan kho
+                Danh sách vật tư
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchConsumableWorkspace('WAREHOUSES')}
+                className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
+                  consumableWorkspace === 'WAREHOUSES'
+                    ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                Kho vật tư
               </button>
               <button
                 type="button"
@@ -2700,7 +2845,7 @@ function AssetManagement({
                 </button>
               )}
             </div>
-            {consumableWorkspace !== 'OVERVIEW' && consumableWorkspace !== 'ROOMS' && (
+            {consumableWorkspace !== 'OVERVIEW' && consumableWorkspace !== 'ROOMS' && consumableWorkspace !== 'WAREHOUSES' && (
               <p className="mt-2 pb-1 text-sm text-slate-500 dark:text-slate-400">
                 {consumableWorkspace === 'DISPOSAL'
                     ? 'Tạo phiếu tiêu huỷ theo lô, gộp nhiều lô cùng vật tư và tra cứu lịch sử xử lý.'
@@ -2709,9 +2854,34 @@ function AssetManagement({
             )}
           </div>
 
-          {consumableWorkspace === 'OVERVIEW' ? (
+          {consumableWorkspace === 'OVERVIEW' || consumableWorkspace === 'WAREHOUSES' ? (
             <>
               <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  {consumableWorkspace === 'WAREHOUSES' && (
+                    <div className="grid gap-3 border-b border-slate-100 pb-3 dark:border-slate-800 lg:grid-cols-[minmax(260px,360px)_1fr]">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Kho đang xem</label>
+                        <SearchableSelect
+                          value={selectedWarehouseLocationId}
+                          onChange={(nextValue) => setSelectedWarehouseLocationId(String(nextValue || ''))}
+                          options={warehouseLocations}
+                          getOptionValue={(location) => location.id}
+                          getOptionLabel={(location) => location.roomName}
+                          placeholder="Chọn kho vật tư"
+                          emptyOptionLabel="Chưa có kho vật tư"
+                          inputClassName="dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+                      <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
+                        <p className="font-semibold">Tồn kho theo kho lưu trữ</p>
+                        <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                          {selectedWarehouseLocation
+                            ? `Đang hiển thị vật tư nằm trong kho ${selectedWarehouseLocation.roomName}.`
+                            : 'Chọn một kho để xem tồn, nhập hàng và thao tác vật tư theo từng kho.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                     <div className="relative min-w-0 flex-1">
                       <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2724,14 +2894,16 @@ function AssetManagement({
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowConsumableAdvancedFilters((v) => !v)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${showConsumableAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-                      >
-                        <ChevronDown size={14} className={`transition-transform ${showConsumableAdvancedFilters ? 'rotate-180' : ''}`} />
-                        Bộ lọc nâng cao
-                      </button>
+                      {consumableWorkspace !== 'WAREHOUSES' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowConsumableAdvancedFilters((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${showConsumableAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                        >
+                          <ChevronDown size={14} className={`transition-transform ${showConsumableAdvancedFilters ? 'rotate-180' : ''}`} />
+                          Bộ lọc nâng cao
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleSearch}
@@ -2763,7 +2935,7 @@ function AssetManagement({
                     </p>
                   )}
 
-                  {showConsumableAdvancedFilters && (
+                  {showConsumableAdvancedFilters && consumableWorkspace !== 'WAREHOUSES' && (
                     <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-3">
                       <div>
                         <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Loại vật tư</label>
@@ -2814,7 +2986,11 @@ function AssetManagement({
 
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Danh sách vật tư tiêu hao</h2>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                    {consumableWorkspace === 'WAREHOUSES'
+                      ? `Tồn kho ${selectedWarehouseLocation?.roomName || ''}`.trim()
+                      : 'Danh sách vật tư tiêu hao'}
+                  </h2>
                   <p className="text-xs font-medium text-slate-400 dark:text-slate-500">Tổng: {pageInfo.totalItems}</p>
                 </div>
 
@@ -2822,12 +2998,13 @@ function AssetManagement({
                   <table className="w-full table-fixed divide-y divide-slate-200 text-xs dark:divide-slate-800">
                       <colgroup>
                         <col className="w-[10%]" />
-                        <col className="w-[18%]" />
+                        <col className="w-[17%]" />
                         <col className="w-[12%]" />
                         <col className="w-[10%]" />
+                        <col className="w-[11%]" />
                         <col className="w-[12%]" />
-                        <col className="w-[11%]" />
-                        <col className="w-[11%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[10%]" />
                         <col className="w-[132px]" />
                       </colgroup>
                       <thead className="bg-slate-50 dark:bg-slate-900">
@@ -2845,6 +3022,7 @@ function AssetManagement({
                           <th className="px-3 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-400">
                             <button type="button" onClick={() => handleSort('quantityOnHand')} className="block w-full truncate text-left hover:text-fptOrange">{getSortLabel('quantityOnHand', 'Tồn / Ngưỡng')}</button>
                           </th>
+                          <th className="px-3 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-400">Thông số</th>
                           <th className="px-3 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-400">HSD gần nhất</th>
                           <th className="px-3 py-2.5 text-right font-semibold text-slate-600 dark:text-slate-400">Giá trị tồn</th>
                           <th className="px-2 py-2.5 text-right font-semibold text-slate-600 dark:text-slate-400">Thao tác</th>
@@ -2853,7 +3031,7 @@ function AssetManagement({
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                         {loading && Array.from({ length: 6 }).map((_, index) => (
                           <tr key={`skeleton-consumable-${index}`} className="animate-pulse">
-                            {Array.from({ length: 8 }).map((__, cellIndex) => (
+                            {Array.from({ length: 9 }).map((__, cellIndex) => (
                               <td key={`cell-consumable-${cellIndex}`} className="px-3 py-2.5">
                                 <div className="h-3.5 w-20 rounded bg-slate-200 dark:bg-slate-700" />
                               </td>
@@ -2864,8 +3042,11 @@ function AssetManagement({
                           const expiryGroups = consumableExpiryGroupsByQaCode[asset.qaCode] || buildConsumableExpiryGroups(asset)
                           const nearestGroup = expiryGroups[0]
                           const nearestExpiryState = getConsumableExpiryState({ ...asset, expirationDate: nearestGroup?.expirationDate })
+                          const specsCount = parseSpecsToEntries(assetDetailsByQaCode[asset.qaCode]?.specs).length
                           const qty = Number(asset.quantityOnHand ?? 0)
                           const min = Number(asset.minimumStock ?? 0)
+                          const formattedQty = formatConsumableQuantityText(asset)
+                          const formattedMin = formatConsumableQuantityText(asset, { quantityField: 'minimumStock', formattedField: 'formattedMinimumStock' })
                           // qty=0 luôn cảnh báo; qty>0 nhưng dưới ngưỡng → amber; ok → emerald
                           const stockTone = qty <= 0 ? 'red' : (min > 0 && qty <= min ? 'amber' : 'emerald')
                           const storageLocation = asset.homeLocationName || '–'
@@ -2882,11 +3063,21 @@ function AssetManagement({
                               <td className="truncate px-3 py-2 text-slate-600 dark:text-slate-300" title={storageLocation}>{storageLocation}</td>
                               <td className="truncate px-3 py-2" title={stockTone === 'red' ? 'Hết hàng' : stockTone === 'amber' ? 'Cần nhập' : 'Đủ dùng'}>
                                 <span className={`font-semibold tabular-nums ${stockTone === 'red' ? 'text-red-600 dark:text-red-400' : stockTone === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                                  {qty} {asset.unit || ''}
+                                  {formattedQty}
                                 </span>
                                 {min > 0 && (
-                                  <span className="text-slate-400 dark:text-slate-500"> / {min}</span>
+                                  <span className="text-slate-400 dark:text-slate-500"> / {formattedMin}</span>
                                 )}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSpecsModal(asset)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+                                >
+                                  <Detail size={13} />
+                                  <span>{specsCount > 0 ? `${specsCount} mục` : 'Xem'}</span>
+                                </button>
                               </td>
                               <td className="px-3 py-2 text-center">
                                 {asset.expiryTrackingEnabled ? (
@@ -2955,7 +3146,7 @@ function AssetManagement({
                         })}
                         {!loading && assets.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                            <td colSpan={9} className="px-3 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                               Chưa có vật tư tiêu hao phù hợp.
                             </td>
                           </tr>
@@ -3365,19 +3556,9 @@ function AssetManagement({
                                     style={{ position: 'fixed', top: actionMenuPos.top, bottom: actionMenuPos.bottom, right: actionMenuPos.right, zIndex: 9999 }}
                                     className="w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
                                   >
-                                    <button type="button" onClick={async () => {
-                                      try {
-                                        const detail = await fetchAssetDetail(asset.qaCode)
-                                        setSelectedSpecsAsset(detail)
-                                        setShowSpecsModal(true)
-                                        setOpenActionMenuQaCode(null)
-                                      } catch (error) {
-                                        const message = error?.response?.data?.message || 'Không thể tải đặc tính kỹ thuật của thiết bị.'
-                                        toast.error(message)
-                                      }
-                                    }}
+                                    <button type="button" onClick={() => handleOpenSpecsModal(asset)}
                                       className="flex w-full items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-orange-50 hover:text-fptOrange dark:text-slate-200 dark:hover:bg-orange-500/10">
-                                      <Detail size={14} /> Thuộc tính
+                                      <Detail size={14} /> {getSpecLabelByTrackingMode(asset?.trackingMode)}
                                     </button>
                                     <button type="button" onClick={async () => {
                                       try {
@@ -3483,7 +3664,7 @@ function AssetManagement({
             <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
               <div>
                 <h4 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {isEditing ? `Chỉnh sửa ${isConsumableForm ? 'vật phẩm' : 'thiết bị'}` : `Thêm mới ${isConsumableForm ? 'vật phẩm tiêu hao' : 'thiết bị'}`}
+                  {isEditing ? `Chỉnh sửa ${isConsumableForm ? 'vật tư' : 'thiết bị'}` : `Thêm mới ${isConsumableForm ? 'vật tư tiêu hao' : 'thiết bị'}`}
                 </h4>
                 {isEditing && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Mã: {selectedQaCode}</p>}
               </div>
@@ -3510,7 +3691,7 @@ function AssetManagement({
                 </div>
               )}
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Tên vật phẩm' : 'Tên thiết bị'}</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Tên vật tư' : 'Tên thiết bị'}</label>
                 <input
                   value={form.name}
                   onChange={(e) => {
@@ -3523,7 +3704,7 @@ function AssetManagement({
                 {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Loại vật phẩm' : 'Loại thiết bị'}</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Loại vật tư' : 'Loại thiết bị'}</label>
                 <SearchableSelect
                   value={form.categoryId}
                   onChange={(nextValue) => handleCategoryChange(String(nextValue || ''))}
@@ -3608,50 +3789,116 @@ function AssetManagement({
               )}
               {isConsumableForm && (
                 <>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng nhập kho ban đầu</label>
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Đơn vị lẻ</label>
+                    <input
+                      value={form.retailUnit}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, retailUnit: e.target.value }))
+                        setFormErrors((prev) => ({ ...prev, retailUnit: '' }))
+                      }}
+                      className={getFieldClass(Boolean(formErrors.retailUnit))}
+                      placeholder="Ví dụ: cây, tờ, viên"
+                    />
+                    {formErrors.retailUnit && <p className="mt-1 text-xs text-red-600">{formErrors.retailUnit}</p>}
+                      </div>
+                      <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Đơn vị sỉ</label>
+                    <input
+                      value={form.wholesaleUnit}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, wholesaleUnit: e.target.value }))
+                        setFormErrors((prev) => ({ ...prev, wholesaleUnit: '' }))
+                      }}
+                      className={getFieldClass(Boolean(formErrors.wholesaleUnit))}
+                      placeholder="Ví dụ: hộp, ram, vỉ"
+                    />
+                    {formErrors.wholesaleUnit && <p className="mt-1 text-xs text-red-600">{formErrors.wholesaleUnit}</p>}
+                      </div>
+                      <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">1 sỉ = n lẻ</label>
                     <input
                       type="number"
-                      min="0"
-                      value={form.quantityOnHand}
+                      min="1"
+                      value={form.wholesaleToRetailFactor}
                       onChange={(e) => {
-                        setForm((prev) => ({ ...prev, quantityOnHand: e.target.value }))
-                        setFormErrors((prev) => ({ ...prev, quantityOnHand: '' }))
+                        setForm((prev) => ({ ...prev, wholesaleToRetailFactor: e.target.value }))
+                        setFormErrors((prev) => ({ ...prev, wholesaleToRetailFactor: '' }))
                       }}
-                      disabled={isEditing}
-                      className={`${getFieldClass(Boolean(formErrors.quantityOnHand))} ${isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
-                      placeholder="Ví dụ: 500"
+                      className={getFieldClass(Boolean(formErrors.wholesaleToRetailFactor))}
+                      placeholder="Ví dụ: 20"
                     />
+                    {formErrors.wholesaleToRetailFactor && <p className="mt-1 text-xs text-red-600">{formErrors.wholesaleToRetailFactor}</p>}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng nhập kho ban đầu</label>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.quantityOnHand}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, quantityOnHand: e.target.value }))
+                          setFormErrors((prev) => ({ ...prev, quantityOnHand: '' }))
+                        }}
+                        disabled={isEditing}
+                        className={`${getFieldClass(Boolean(formErrors.quantityOnHand))} ${isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
+                        placeholder={`Ví dụ: 10 ${getConsumableQuantityInputUnit(form, form.quantityOnHandUnit)}`}
+                      />
+                      <select
+                        value={form.quantityOnHandUnit}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, quantityOnHandUnit: e.target.value }))
+                          setFormErrors((prev) => ({ ...prev, quantityOnHandUnit: '' }))
+                        }}
+                        disabled={isEditing}
+                        className={`${getFieldClass(Boolean(formErrors.quantityOnHandUnit))} ${isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
+                      >
+                        <option value="RETAIL">{getConsumableRetailUnit(form)}</option>
+                        <option value="WHOLESALE">{getConsumableWholesaleUnit(form)}</option>
+                      </select>
+                    </div>
                     {formErrors.quantityOnHand && <p className="mt-1 text-xs text-red-600">{formErrors.quantityOnHand}</p>}
+                    {formErrors.quantityOnHandUnit && <p className="mt-1 text-xs text-red-600">{formErrors.quantityOnHandUnit}</p>}
+                    <p className="mt-1 text-xs text-slate-500">Bạn có thể nhập tồn ban đầu theo đơn vị sỉ hoặc lẻ; hệ thống sẽ tự quy đổi về đơn vị lẻ và hiển thị theo kiểu sỉ + lẻ.</p>
                     {isEditing && <p className="mt-1 text-xs text-slate-500">Tồn kho tổng được quản lý theo từng lô nhập, vui lòng dùng `Nhập hàng` để tăng tồn.</p>}
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Ngưỡng cảnh báo tồn</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={form.minimumStock}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, minimumStock: e.target.value }))
-                        setFormErrors((prev) => ({ ...prev, minimumStock: '' }))
-                      }}
-                      className={getFieldClass(Boolean(formErrors.minimumStock))}
-                      placeholder="Ví dụ: 50"
-                    />
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                      <input
+                        type="number"
+                        min="0"
+                        value={form.minimumStock}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, minimumStock: e.target.value }))
+                          setFormErrors((prev) => ({ ...prev, minimumStock: '' }))
+                        }}
+                        className={getFieldClass(Boolean(formErrors.minimumStock))}
+                        placeholder={`Ví dụ: 20 ${getConsumableQuantityInputUnit(form, form.minimumStockUnit)}`}
+                      />
+                      <select
+                        value={form.minimumStockUnit}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, minimumStockUnit: e.target.value }))
+                          setFormErrors((prev) => ({ ...prev, minimumStockUnit: '' }))
+                        }}
+                        className={getFieldClass(Boolean(formErrors.minimumStockUnit))}
+                      >
+                        <option value="RETAIL">{getConsumableRetailUnit(form)}</option>
+                        <option value="WHOLESALE">{getConsumableWholesaleUnit(form)}</option>
+                      </select>
+                    </div>
                     {formErrors.minimumStock && <p className="mt-1 text-xs text-red-600">{formErrors.minimumStock}</p>}
+                    {formErrors.minimumStockUnit && <p className="mt-1 text-xs text-red-600">{formErrors.minimumStockUnit}</p>}
+                    <p className="mt-1 text-xs text-slate-500">Ngưỡng cảnh báo tồn cũng có thể nhập theo sỉ hoặc lẻ; hệ thống sẽ tự quy đổi về đơn vị lẻ để so sánh tồn kho thực tế.</p>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Đơn vị tính</label>
-                    <input
-                      value={form.unit}
-                      onChange={(e) => {
-                        setForm((prev) => ({ ...prev, unit: e.target.value }))
-                        setFormErrors((prev) => ({ ...prev, unit: '' }))
-                      }}
-                      className={getFieldClass(Boolean(formErrors.unit))}
-                      placeholder="Ví dụ: cây, hộp, ram"
-                    />
-                    {formErrors.unit && <p className="mt-1 text-xs text-red-600">{formErrors.unit}</p>}
+                  <div className="md:col-span-2 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-500">
+                    Hệ thống sẽ lưu tồn thực tế theo đơn vị lẻ và tự hiển thị kiểu tổng hợp, ví dụ `1 hộp + 18 cây`.
                   </div>
                   <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -3743,7 +3990,7 @@ function AssetManagement({
                   inputClassName={getFieldClass(Boolean(formErrors.supplierId))}
                 />
                 {formErrors.supplierId && <p className="mt-1 text-xs text-red-600">{formErrors.supplierId}</p>}
-                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">Trường này là tùy chọn với vật phẩm tiêu hao.</p>}
+                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">Trường này là tùy chọn với vật tư tiêu hao.</p>}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Đơn giá' : 'Giá mua'}</label>
@@ -3757,10 +4004,10 @@ function AssetManagement({
                   }}
                   disabled={isConsumableForm && isEditing}
                   className={`${getFieldClass(Boolean(formErrors.purchasePrice))} ${isConsumableForm && isEditing ? 'cursor-not-allowed bg-slate-100 text-slate-500' : ''}`}
-                  placeholder={isConsumableForm ? 'Nhập đơn giá 1 đơn vị, ví dụ 12.000' : 'Nhập giá mua, ví dụ 4.590.000'}
+                  placeholder={isConsumableForm ? `Nhập đơn giá 1 ${getConsumableQuantityInputUnit(form, form.quantityOnHandUnit)}, ví dụ 12.000` : 'Nhập giá mua, ví dụ 4.590.000'}
                 />
                 {formErrors.purchasePrice && <p className="mt-1 text-xs text-red-600">{formErrors.purchasePrice}</p>}
-                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">{isEditing ? 'Đơn giá trung bình hiện tại được tổng hợp từ các lô nhập và không sửa trực tiếp tại đây.' : 'Đây là đơn giá của 1 đơn vị sản phẩm.'}</p>}
+                {isConsumableForm && <p className="mt-1 text-xs text-slate-500">{isEditing ? 'Đơn giá trung bình hiện tại được tổng hợp từ các lô nhập và không sửa trực tiếp tại đây.' : `Đây là đơn giá của 1 ${getConsumableQuantityInputUnit(form, form.quantityOnHandUnit)} ở bước tạo ban đầu.`}</p>}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">{isConsumableForm ? 'Ngày nhập kho ban đầu' : 'Ngày mua'}</label>
@@ -3792,16 +4039,15 @@ function AssetManagement({
                 </div>
               )}
 
-              {!isConsumableForm && (
-                <div className="md:col-span-2">
+              <div className="md:col-span-2">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <label className="block text-sm font-medium text-slate-700">Đặc tính kỹ thuật</label>
+                  <label className="block text-sm font-medium text-slate-700">{formSpecLabel}</label>
                   <button
                     type="button"
                     onClick={addCustomSpecEntry}
                     className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    Thêm thông số kỹ thuật tuỳ chỉnh
+                    {formSpecAddButtonLabel}
                   </button>
                 </div>
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -3811,7 +4057,7 @@ function AssetManagement({
                         <input
                           value={entry.name}
                           onChange={(e) => updateSpecEntry(index, 'name', e.target.value)}
-                          placeholder="Tên thuộc tính"
+                          placeholder={getSpecNamePlaceholderByTrackingMode(form.trackingMode)}
                           className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                         />
                       ) : (
@@ -3824,27 +4070,26 @@ function AssetManagement({
                       <input
                         value={entry.value}
                         onChange={(e) => updateSpecEntry(index, 'value', e.target.value)}
-                        placeholder="Giá trị thuộc tính"
+                        placeholder={getSpecValuePlaceholderByTrackingMode(form.trackingMode)}
                         className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                       />
                       <button
                         type="button"
                         onClick={() => removeSpecEntry(index)}
                         className="inline-flex items-center justify-center rounded-lg border border-red-300 px-3 py-2 text-red-700 hover:bg-red-50"
-                        title="Xóa đặc tính kỹ thuật"
-                        aria-label="Xóa đặc tính kỹ thuật"
+                        title={`Xóa ${formSpecTemplateLabel.toLowerCase()}`}
+                        aria-label={`Xóa ${formSpecTemplateLabel.toLowerCase()}`}
                       >
                         <Trash2 size={16} />
                       </button>
                     </div>
                   ))}
                   {form.specEntries.length === 0 && (
-                    <p className="text-sm text-slate-500">Chọn loại thiết bị để hệ thống gợi ý các đặc tính kỹ thuật phù hợp.</p>
+                    <p className="text-sm text-slate-500">{getEmptySpecEntriesMessageByTrackingMode(form.trackingMode)}</p>
                   )}
                 </div>
                 {formErrors.specEntries && <p className="mt-1 text-xs text-red-600">{formErrors.specEntries}</p>}
-                </div>
-              )}
+              </div>
             </div>
 
             </div>
@@ -3889,7 +4134,7 @@ function AssetManagement({
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Cấp phát vật phẩm - {selectedIssueAsset.name}</h4>
                 <p className="text-sm text-slate-500">
-                  Tồn hiện tại: {(selectedIssueAsset.quantityOnHand ?? 0)} {selectedIssueAsset.unit || ''}
+                  Tồn hiện tại: {formatConsumableQuantityText(selectedIssueAsset)}
                 </p>
               </div>
               <button
@@ -3924,7 +4169,7 @@ function AssetManagement({
                     options={issueWarehouseOptions}
                     getOptionValue={(location) => location.id}
                     getOptionLabel={(location) => location.roomName}
-                    getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedIssueAsset.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                    getOptionDescription={(location) => `${formatConsumableQuantityText(location, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
                     placeholder="Gõ để tìm kho xuất"
                     emptyOptionLabel="Chọn kho xuất"
                     inputClassName={getFieldClass(false)}
@@ -3938,7 +4183,7 @@ function AssetManagement({
                     value={issueForm.quantity}
                     onChange={(e) => setIssueForm((prev) => ({ ...prev, quantity: e.target.value }))}
                     className={getFieldClass(false)}
-                    placeholder={`Ví dụ: 10 ${selectedIssueAsset.unit || ''}`}
+                    placeholder={`Ví dụ: 10 ${getConsumableRetailUnit(selectedIssueAsset)}`}
                   />
                 </div>
                 <div>
@@ -3973,10 +4218,10 @@ function AssetManagement({
                         <div>
                           <p className="font-medium text-slate-700">{stock.locationName}</p>
                           <p className="text-slate-500">
-                            Đã cấp: {stock.quantityIssued} {stock.unit || ''}
+                            Đã cấp: {stock.formattedQuantityIssued || formatConsumableQuantityText(stock, { quantityField: 'quantityIssued', formattedField: 'formattedQuantityIssued' })}
                           </p>
                           <p className="text-slate-500">
-                            Còn lại: {stock.quantityRemaining} {stock.unit || ''} • Đã dùng: {stock.quantityConsumed} {stock.unit || ''}
+                            Còn lại: {stock.formattedQuantityRemaining || formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} • Đã dùng: {stock.formattedQuantityConsumed || formatConsumableQuantityText(stock, { quantityField: 'quantityConsumed', formattedField: 'formattedQuantityConsumed' })}
                           </p>
                           <p className="text-slate-500">
                             Đơn giá: {formatCurrency(stock.unitPrice)} • Giá trị còn lại: {formatCurrency(stock.remainingValue)}
@@ -4013,7 +4258,7 @@ function AssetManagement({
                   {issueHistory.map((item) => (
                     <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                       <p className="font-medium text-slate-700">
-                        {item.quantity} {item.unit || ''} {'->'} {item.issuedToLocationName}
+                        {item.formattedQuantity || formatConsumableQuantityText(item, { quantityField: 'quantity', formattedField: 'formattedQuantity' })} {'->'} {item.issuedToLocationName}
                       </p>
                       <p className="text-slate-500">Xuất từ kho: {item.sourceWarehouseLocationName || 'Chưa ghi nhận'}</p>
                       <p className="text-slate-500">
@@ -4042,7 +4287,7 @@ function AssetManagement({
               <div>
                 <h4 className="text-base font-semibold text-slate-800">Nhập hàng vật tư</h4>
                 <p className="text-sm text-slate-500">
-                  {selectedReceiveAsset.name} • Tồn kho hiện tại: {selectedReceiveAsset.quantityOnHand ?? 0} {selectedReceiveAsset.unit || ''}
+                  {selectedReceiveAsset.name} • Tồn kho hiện tại: {formatConsumableQuantityText(selectedReceiveAsset)}
                 </p>
               </div>
               <button
@@ -4069,8 +4314,19 @@ function AssetManagement({
                     value={receiveForm.quantity}
                     onChange={(e) => setReceiveForm((prev) => ({ ...prev, quantity: e.target.value }))}
                     className={getFieldClass(false)}
-                    placeholder={`Ví dụ: 100 ${selectedReceiveAsset.unit || ''}`}
+                    placeholder={`Ví dụ: 10 ${getConsumableQuantityInputUnit(selectedReceiveAsset, receiveForm.quantityUnit)}`}
                   />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nhập theo đơn vị</label>
+                  <select
+                    value={receiveForm.quantityUnit}
+                    onChange={(e) => setReceiveForm((prev) => ({ ...prev, quantityUnit: e.target.value }))}
+                    className={getFieldClass(false)}
+                  >
+                    <option value="WHOLESALE">{getConsumableWholesaleUnit(selectedReceiveAsset)}</option>
+                    <option value="RETAIL">{getConsumableRetailUnit(selectedReceiveAsset)}</option>
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Đơn giá lô nhập</label>
@@ -4082,6 +4338,7 @@ function AssetManagement({
                     className={getFieldClass(false)}
                     placeholder="Ví dụ: 12.000"
                   />
+                  <p className="mt-1 text-xs text-slate-500">Đơn giá nhập được hiểu theo đơn vị bạn chọn ở phía trên.</p>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Mã lô</label>
@@ -4165,7 +4422,7 @@ function AssetManagement({
                           {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).label}
                         </span>
                       </div>
-                      <p className="mt-1">Còn lại: {lot.quantityRemaining ?? 0} / {lot.quantityReceived ?? 0} {selectedReceiveAsset.unit || ''}</p>
+                      <p className="mt-1">Còn lại: {lot.formattedQuantityRemaining || formatConsumableQuantityText({ ...selectedReceiveAsset, ...lot }, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} / {lot.formattedQuantityReceived || formatConsumableQuantityText({ ...selectedReceiveAsset, ...lot }, { quantityField: 'quantityReceived', formattedField: 'formattedQuantityReceived' })}</p>
                       <p>Kho nhập: {lot.warehouseLocationName || 'Chưa gắn kho'}</p>
                       <p>Ngày nhập: {formatDate(lot.receivedDate)} | Hạn dùng: {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedReceiveAsset.expiryTrackingEnabled }).dateLabel}</p>
                     </div>
@@ -4240,7 +4497,7 @@ function AssetManagement({
                   options={consumableRequestWarehouseOptions}
                   getOptionValue={(location) => location.id}
                   getOptionLabel={(location) => location.roomName}
-                  getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedRequestAssetDetail?.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                  getOptionDescription={(location) => `${formatConsumableQuantityText({ ...selectedRequestAssetDetail, ...location }, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
                   placeholder="Gõ để tìm kho xuất"
                   emptyOptionLabel="Chọn kho xuất"
                   inputClassName={getFieldClass(false)}
@@ -4363,7 +4620,11 @@ function AssetManagement({
                         {disposalModalLotColumns.visibleColumns.lotCode && <td className="px-3 py-3 text-slate-700 dark:text-slate-200">{item.lotCode}</td>}
                         {disposalModalLotColumns.visibleColumns.receivedDate && <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.receivedDate)}</td>}
                         {disposalModalLotColumns.visibleColumns.expirationDate && <td className="px-3 py-3 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>}
-                        {disposalModalLotColumns.visibleColumns.quantityRemaining && <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-200">{item.quantityRemaining} {item.unit || ''}</td>}
+                        {disposalModalLotColumns.visibleColumns.quantityRemaining && (
+                          <td className="px-3 py-3 text-right text-slate-700 dark:text-slate-200">
+                            {item.formattedQuantityRemaining || formatConsumableQuantityText(item, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
+                          </td>
+                        )}
                         {disposalModalLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-3">
                           <input
                             type="number"
@@ -4440,7 +4701,7 @@ function AssetManagement({
 
             <div className="grid gap-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                <p>Số lượng yêu cầu: {selectedConsumableRequest.quantityRequested} {selectedConsumableRequest.unit || ''}</p>
+                <p>Số lượng yêu cầu: {selectedConsumableRequest.formattedQuantityRequested || formatConsumableQuantityText(selectedConsumableRequest, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}</p>
                 <p>Kho xuất đề nghị: {selectedConsumableRequest.sourceWarehouseLocationName || 'Chưa chọn'}</p>
                 <p>Người tạo phiếu: {selectedConsumableRequest.requestedByFullName || selectedConsumableRequest.requestedByUsername}</p>
                 <p>Lý do: {selectedConsumableRequest.reason}</p>
@@ -4454,7 +4715,7 @@ function AssetManagement({
                     options={consumableDecisionWarehouseOptions}
                     getOptionValue={(location) => location.id}
                     getOptionLabel={(location) => location.roomName}
-                    getOptionDescription={(location) => `${location.quantityRemaining || 0} ${selectedConsumableRequest.unit || ''} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
+                    getOptionDescription={(location) => `${formatConsumableQuantityText({ ...selectedConsumableRequest, ...location }, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} còn khả dụng${location.lotCount ? ` • ${location.lotCount} lô` : ''}`}
                     placeholder="Gõ để tìm kho xuất"
                     emptyOptionLabel="Chọn kho xuất"
                     inputClassName={getFieldClass(false)}
@@ -4518,7 +4779,7 @@ function AssetManagement({
 
             <div className="grid gap-3">
               <div className="rounded-xl border border-red-200 bg-red-50/70 p-3 text-sm text-slate-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-slate-200">
-                <p>Số lượng tiêu huỷ: {selectedDisposalRequest.quantityRequested} {selectedDisposalRequest.unit || ''}</p>
+                <p>Số lượng tiêu huỷ: {selectedDisposalRequest.formattedQuantityRequested || formatConsumableQuantityText(selectedDisposalRequest, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}</p>
                 <p>Người đề nghị: {selectedDisposalRequest.requestedByFullName || selectedDisposalRequest.requestedByUsername}</p>
                 <p>Lý do: {selectedDisposalRequest.reason}</p>
               </div>
@@ -4556,7 +4817,11 @@ function AssetManagement({
                         <tr key={item.id || item.receiptLotId} className="border-t border-slate-200 dark:border-slate-800">
                           {disposalDecisionLotColumns.visibleColumns.lotCode && <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{item.lotCode || `Lô #${item.receiptLotId}`}</td>}
                           {disposalDecisionLotColumns.visibleColumns.expirationDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(item.expirationDate)}</td>}
-                          {disposalDecisionLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{item.quantityRequested}</td>}
+                          {disposalDecisionLotColumns.visibleColumns.quantityRequested && (
+                            <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
+                              {item.formattedQuantityRequested || formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -4609,7 +4874,7 @@ function AssetManagement({
               <div>
                 <h4 className="text-base font-semibold text-slate-800 dark:text-slate-100">Chi tiết phiếu tiêu huỷ #{selectedDisposalHistoryRequest.id}</h4>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {selectedDisposalHistoryRequest.assetName} • {selectedDisposalHistoryRequest.quantityRequested} {selectedDisposalHistoryRequest.unit || ''} • {selectedDisposalHistoryRequest.itemCount || selectedDisposalHistoryRequest.items?.length || 1} lô
+                  {selectedDisposalHistoryRequest.assetName} • {selectedDisposalHistoryRequest.formattedQuantityRequested || formatConsumableQuantityText(selectedDisposalHistoryRequest, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })} • {selectedDisposalHistoryRequest.itemCount || selectedDisposalHistoryRequest.items?.length || 1} lô
                 </p>
               </div>
               <button
@@ -4668,7 +4933,11 @@ function AssetManagement({
                         {disposalHistoryLotColumns.visibleColumns.lotCode && <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{lotItem.lotCode || `Lô #${lotItem.receiptLotId}`}</td>}
                         {disposalHistoryLotColumns.visibleColumns.receivedDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.receivedDate)}</td>}
                         {disposalHistoryLotColumns.visibleColumns.expirationDate && <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{formatDate(lotItem.expirationDate)}</td>}
-                        {disposalHistoryLotColumns.visibleColumns.quantityRequested && <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">{lotItem.quantityRequested}</td>}
+                        {disposalHistoryLotColumns.visibleColumns.quantityRequested && (
+                          <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
+                            {lotItem.formattedQuantityRequested || formatConsumableQuantityText(lotItem, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -4700,9 +4969,9 @@ function AssetManagement({
 
             <div className="grid gap-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-                <p>Tổng đã cấp: {selectedStockRecord.quantityIssued} {selectedStockRecord.unit || ''}</p>
-                <p>Số lượng còn lại hiện tại: {selectedStockRecord.quantityRemaining} {selectedStockRecord.unit || ''}</p>
-                <p>Đã sử dụng: {selectedStockRecord.quantityConsumed} {selectedStockRecord.unit || ''}</p>
+                <p>Tổng đã cấp: {selectedStockRecord.formattedQuantityIssued || formatConsumableQuantityText(selectedStockRecord, { quantityField: 'quantityIssued', formattedField: 'formattedQuantityIssued' })}</p>
+                <p>Số lượng còn lại hiện tại: {selectedStockRecord.formattedQuantityRemaining || formatConsumableQuantityText(selectedStockRecord, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}</p>
+                <p>Đã sử dụng: {selectedStockRecord.formattedQuantityConsumed || formatConsumableQuantityText(selectedStockRecord, { quantityField: 'quantityConsumed', formattedField: 'formattedQuantityConsumed' })}</p>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Số lượng còn lại mới</label>
@@ -4712,7 +4981,7 @@ function AssetManagement({
                   value={stockAdjustForm.quantityRemaining}
                   onChange={(e) => setStockAdjustForm((prev) => ({ ...prev, quantityRemaining: e.target.value }))}
                   className={getFieldClass(false)}
-                  placeholder={`Ví dụ: 15 ${selectedStockRecord.unit || ''}`}
+                  placeholder={`Ví dụ: 15 ${getConsumableRetailUnit(selectedStockRecord)}`}
                 />
               </div>
               <div>
@@ -4947,7 +5216,7 @@ function AssetManagement({
         <ModalOverlay zIndex={100} className="bg-slate-900/50">
           <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-base font-semibold text-slate-800">Đặc tính kỹ thuật - {selectedSpecsAsset.name}</h4>
+              <h4 className="text-base font-semibold text-slate-800">{getSpecLabelByTrackingMode(selectedSpecsAsset.trackingMode)} - {selectedSpecsAsset.name}</h4>
               <button
                 type="button"
                 onClick={() => {
@@ -4968,7 +5237,9 @@ function AssetManagement({
               ))}
               {selectedSpecsEntries.length === 0 && (
                 <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  Thiết bị này chưa có đặc tính kỹ thuật.
+                  {isConsumableMode(selectedSpecsAsset.trackingMode)
+                    ? 'Vật tư này chưa có thông số.'
+                    : 'Thiết bị này chưa có đặc tính kỹ thuật.'}
                 </p>
               )}
             </div>
@@ -5005,9 +5276,11 @@ function AssetManagement({
               <p><span className="font-semibold">Giá mua:</span> {formatCurrency(selectedOriginAsset.purchasePrice)}</p>
               {isConsumableMode(selectedOriginAsset.trackingMode) && (
                 <>
-                  <p><span className="font-semibold">Số lượng tồn:</span> {selectedOriginAsset.quantityOnHand ?? 0}</p>
-                  <p><span className="font-semibold">Ngưỡng cảnh báo tồn:</span> {selectedOriginAsset.minimumStock ?? 0}</p>
-                  <p><span className="font-semibold">Đơn vị tính:</span> {selectedOriginAsset.unit || 'Chưa cập nhật'}</p>
+                  <p><span className="font-semibold">Số lượng tồn:</span> {selectedOriginAsset.formattedQuantityOnHand || formatConsumableQuantityText(selectedOriginAsset)}</p>
+                  <p><span className="font-semibold">Ngưỡng cảnh báo tồn:</span> {selectedOriginAsset.formattedMinimumStock || formatConsumableQuantityText(selectedOriginAsset, { quantityField: 'minimumStock', formattedField: 'formattedMinimumStock' })}</p>
+                  <p><span className="font-semibold">Đơn vị lẻ:</span> {getConsumableRetailUnit(selectedOriginAsset)}</p>
+                  <p><span className="font-semibold">Đơn vị sỉ:</span> {selectedOriginAsset.wholesaleUnit || getConsumableRetailUnit(selectedOriginAsset)}</p>
+                  <p><span className="font-semibold">Quy đổi:</span> 1 {selectedOriginAsset.wholesaleUnit || getConsumableRetailUnit(selectedOriginAsset)} = {selectedOriginAsset.wholesaleToRetailFactor || 1} {getConsumableRetailUnit(selectedOriginAsset)}</p>
                   <p><span className="font-semibold">Quản lý hạn sử dụng:</span> {selectedOriginAsset.expiryTrackingEnabled ? 'Có' : 'Không'}</p>
                   <p><span className="font-semibold">Hạn sử dụng:</span> {selectedOriginAsset.expiryTrackingEnabled ? formatDate(selectedOriginAsset.expirationDate) : 'Không áp dụng'}</p>
                 </>
@@ -5044,7 +5317,9 @@ function AssetManagement({
                           {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedOriginAsset.expiryTrackingEnabled }).label}
                         </span>
                       </div>
-                      <p className="mt-1">Số lượng: {lot.quantityRemaining ?? 0} / {lot.quantityReceived ?? 0} {selectedOriginAsset.unit || ''}</p>
+                      <p className="mt-1">
+                        Số lượng: {lot.formattedQuantityRemaining || formatConsumableQuantityText({ ...selectedOriginAsset, ...lot }, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })} / {lot.formattedQuantityReceived || formatConsumableQuantityText({ ...selectedOriginAsset, ...lot }, { quantityField: 'quantityReceived', formattedField: 'formattedQuantityReceived' })}
+                      </p>
                       <p>Ngày nhập: {formatDate(lot.receivedDate)} | Hạn dùng: {getConsumableExpiryState({ ...lot, expiryTrackingEnabled: selectedOriginAsset.expiryTrackingEnabled }).dateLabel}</p>
                       <p>Đơn giá lô: {formatCurrency(lot.unitPrice)} | NCC: {lot.supplierName || 'Chưa cập nhật'}</p>
                       {lot.note && <p className="mt-1 text-slate-500">{lot.note}</p>}

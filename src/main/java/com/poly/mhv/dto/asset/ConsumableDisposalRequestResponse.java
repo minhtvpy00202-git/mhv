@@ -20,6 +20,7 @@ public class ConsumableDisposalRequestResponse {
     private Long receiptLotId;
     private String lotCode;
     private Integer quantityRequested;
+    private String formattedQuantityRequested;
     private LocalDate receivedDate;
     private LocalDate expirationDate;
     private String supplierName;

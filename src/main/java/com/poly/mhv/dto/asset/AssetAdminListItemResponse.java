@@ -30,6 +30,9 @@ public class AssetAdminListItemResponse {
     private Integer quantityOnHand;
     private Integer minimumStock;
     private String unit;
+    private String retailUnit;
+    private String wholesaleUnit;
+    private Integer wholesaleToRetailFactor;
     private Integer supplierId;
     private String supplierName;
 }

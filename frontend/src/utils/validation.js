@@ -25,11 +25,12 @@ function isPastOrToday(dateValue) {
   return inputDate.getTime() <= today.getTime()
 }
 
-export function validateAssetForm(form) {
+export function validateAssetForm(form, options = {}) {
   const errors = {}
   const normalizedName = String(form?.name || '').trim()
   const trackingMode = String(form?.trackingMode || 'ITEMIZED').trim().toUpperCase()
   const isConsumable = trackingMode === 'CONSUMABLE'
+  const specEntryLabel = String(options?.specEntryLabel || (isConsumable ? 'thông số' : 'đặc tính kỹ thuật')).trim()
 
   if (normalizedName.length < 2 || normalizedName.length > 150) {
     errors.name = 'Tên thiết bị phải từ 2 đến 150 ký tự.'
@@ -41,14 +42,26 @@ export function validateAssetForm(form) {
     if (!isPositiveNumber(form?.locationId)) {
       errors.locationId = 'Chưa cấu hình được kho lưu trữ mặc định.'
     }
+    if (!['RETAIL', 'WHOLESALE'].includes(String(form?.quantityOnHandUnit || 'RETAIL').trim().toUpperCase())) {
+      errors.quantityOnHandUnit = 'Vui lòng chọn đơn vị nhập kho ban đầu hợp lệ.'
+    }
     if (!isNonNegativeNumber(form?.quantityOnHand)) {
       errors.quantityOnHand = 'Số lượng tồn không được âm.'
     }
     if (!isNonNegativeNumber(form?.minimumStock)) {
       errors.minimumStock = 'Ngưỡng cảnh báo tồn không được âm.'
     }
-    if (String(form?.unit || '').trim().length < 1 || String(form?.unit || '').trim().length > 50) {
-      errors.unit = 'Đơn vị tính là bắt buộc và tối đa 50 ký tự.'
+    if (!['RETAIL', 'WHOLESALE'].includes(String(form?.minimumStockUnit || 'RETAIL').trim().toUpperCase())) {
+      errors.minimumStockUnit = 'Vui lòng chọn đơn vị ngưỡng cảnh báo tồn hợp lệ.'
+    }
+    if (String(form?.retailUnit || '').trim().length < 1 || String(form?.retailUnit || '').trim().length > 50) {
+      errors.retailUnit = 'Đơn vị lẻ là bắt buộc và tối đa 50 ký tự.'
+    }
+    if (String(form?.wholesaleUnit || '').trim().length < 1 || String(form?.wholesaleUnit || '').trim().length > 50) {
+      errors.wholesaleUnit = 'Đơn vị sỉ là bắt buộc và tối đa 50 ký tự.'
+    }
+    if (!isPositiveNumber(form?.wholesaleToRetailFactor)) {
+      errors.wholesaleToRetailFactor = 'Hệ số quy đổi phải lớn hơn 0.'
     }
     if (Boolean(form?.expiryTrackingEnabled) && !form?.expirationDate) {
       errors.expirationDate = 'Vui lòng chọn hạn sử dụng cho vật tư này.'
@@ -97,22 +110,20 @@ export function validateAssetForm(form) {
     errors.warrantyExpirationDate = 'Hạn bảo hành phải sau hoặc bằng ngày mua.'
   }
 
-  if (!isConsumable) {
-    const specEntries = Array.isArray(form?.specEntries) ? form.specEntries : []
-    if (specEntries.length > 50) {
-      errors.specEntries = 'Không được nhập quá 50 đặc tính kỹ thuật.'
-    } else {
-      const hasInvalidSpec = specEntries.some((entry) => {
-        const name = String(entry?.name || '').trim()
-        const value = String(entry?.value || '').trim()
-        if (!name && !value) return false
-        if (!name || !value) return true
-        if (name.length > 100 || value.length > 200) return true
-        return false
-      })
-      if (hasInvalidSpec) {
-        errors.specEntries = 'Mỗi đặc tính phải có đủ tên và giá trị; tên tối đa 100 ký tự, giá trị tối đa 200 ký tự.'
-      }
+  const specEntries = Array.isArray(form?.specEntries) ? form.specEntries : []
+  if (specEntries.length > 50) {
+    errors.specEntries = `Không được nhập quá 50 ${specEntryLabel}.`
+  } else {
+    const hasInvalidSpec = specEntries.some((entry) => {
+      const name = String(entry?.name || '').trim()
+      const value = String(entry?.value || '').trim()
+      if (!name && !value) return false
+      if (!name || !value) return true
+      if (name.length > 100 || value.length > 200) return true
+      return false
+    })
+    if (hasInvalidSpec) {
+      errors.specEntries = `Mỗi ${specEntryLabel} phải có đủ tên và giá trị; tên tối đa 100 ký tự, giá trị tối đa 200 ký tự.`
     }
   }
 
