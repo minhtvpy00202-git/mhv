@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   IconArrowsMove as Move,
   IconDeviceFloppy as Save,
@@ -17,6 +17,92 @@ const MAX_ZOOM = 2.5
 
 function clampZoom(value) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+}
+
+function parseGridCell(cellKey) {
+  const [rowValue = '0', colValue = '0'] = String(cellKey || '0:0').split(':')
+  return {
+    row: Number.parseInt(rowValue, 10) || 0,
+    col: Number.parseInt(colValue, 10) || 0,
+  }
+}
+
+function getGridRoomLabelPlacement(cells, cellSize, bounds, fallbackCenter) {
+  if (!cells?.length) {
+    return {
+      top: fallbackCenter.top,
+      left: fallbackCenter.left,
+      width: Math.max(Math.min(bounds.width - 8, 180), 56),
+      minHeight: 28,
+    }
+  }
+
+  const rows = new Map()
+  cells.forEach((cell) => {
+    const cols = rows.get(cell.row) || []
+    cols.push(cell.col)
+    rows.set(cell.row, cols)
+  })
+
+  const boundsCenterRow = bounds.top + (bounds.height / 2)
+  let bestSegment = null
+
+  rows.forEach((cols, row) => {
+    const sortedCols = [...cols].sort((a, b) => a - b)
+    let start = sortedCols[0]
+    let previous = sortedCols[0]
+
+    const commitSegment = (segmentStart, segmentEnd) => {
+      if (segmentStart === undefined || segmentEnd === undefined) return
+      const length = segmentEnd - segmentStart + 1
+      const segmentCenterRow = (row * cellSize) + (cellSize / 2)
+      const candidate = {
+        row,
+        startCol: segmentStart,
+        endCol: segmentEnd,
+        length,
+        distanceToCenter: Math.abs(segmentCenterRow - boundsCenterRow),
+      }
+
+      if (
+        !bestSegment
+        || candidate.length > bestSegment.length
+        || (candidate.length === bestSegment.length && candidate.distanceToCenter < bestSegment.distanceToCenter)
+      ) {
+        bestSegment = candidate
+      }
+    }
+
+    for (let index = 1; index < sortedCols.length; index += 1) {
+      const current = sortedCols[index]
+      if (current === previous + 1) {
+        previous = current
+        continue
+      }
+      commitSegment(start, previous)
+      start = current
+      previous = current
+    }
+
+    commitSegment(start, previous)
+  })
+
+  if (!bestSegment) {
+    return {
+      top: fallbackCenter.top,
+      left: fallbackCenter.left,
+      width: Math.max(Math.min(bounds.width - 8, 180), 56),
+      minHeight: 28,
+    }
+  }
+
+  const segmentWidth = (bestSegment.length * cellSize) - 8
+  return {
+    top: (bestSegment.row * cellSize) + (cellSize / 2),
+    left: ((bestSegment.startCol + bestSegment.endCol + 1) / 2) * cellSize,
+    width: Math.max(Math.min(segmentWidth, 220), 40),
+    minHeight: Math.max(cellSize - 8, 24),
+  }
 }
 
 export default function MapCanvas({
@@ -566,14 +652,6 @@ export default function MapCanvas({
           <Save size={14} />
           Lưu
         </button>
-        <button
-          type="button"
-          onClick={onQuickSelectionBind}
-          className="inline-flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          <Save size={14} />
-          Gắn phòng
-        </button>
         <label className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
           <span>Màu khu vực</span>
           <input
@@ -872,46 +950,70 @@ export default function MapCanvas({
         const bounds = getShapeBounds(shape)
         const isSelected = selectedShapeIdSet.has(Number(shape.id))
         const roomBackgroundColor = isSelected
-          ? colorWithAlpha(shape.colorHex, 0.28)
-          : (shape.colorHex || defaultColor)
+          ? colorWithAlpha(shape.colorHex, 0.34)
+          : colorWithAlpha(shape.colorHex || defaultColor, 0.9)
         const roomTextColor = isSelected ? '#0f172a' : getReadableTextColor(shape.colorHex)
+        const roomCenter = getShapeCenter(shape)
+        const roomCells = (shape.cells || []).map(parseGridCell)
+        const roomLabelPlacement = getGridRoomLabelPlacement(roomCells, cellSize, bounds, roomCenter)
+        const roomCursor = drawTool === 'move' && floorInteractionMode === 'view'
+          ? (roomDragState.active && roomDragState.shapeIds.some((shapeId) => Number(shapeId) === Number(shape.id)) ? 'grabbing' : 'grab')
+          : drawTool === 'paint' && floorInteractionMode === 'view'
+            ? 'cell'
+            : 'pointer'
 
         return (
-          <button
-            key={`room-${shape.id}`}
-            type="button"
-            onMouseDown={(event) => onRoomPointerDown(event, floor, shape)}
-            onClick={(event) => onRoomClick(event, floor, shape)}
-            onContextMenu={handleSuppressContextMenu}
-            onMouseEnter={(event) => onRoomPreviewShow(event, shape)}
-            onMouseLeave={() => onRoomPreviewHide(shape)}
-            onFocus={(event) => onRoomPreviewShow(event, shape)}
-            onBlur={() => onRoomPreviewHide(shape)}
-            className={`absolute flex items-center justify-center rounded-xl border text-center shadow-sm transition ${
-              isSelected
-                ? 'border-orange-400 ring-2 ring-orange-200 dark:ring-orange-500/20'
-                : 'border-slate-300 hover:brightness-95 dark:border-slate-700'
-            }`}
-            style={{
-              top: bounds.top,
-              left: bounds.left,
-              width: bounds.width,
-              height: bounds.height,
-              backgroundColor: roomBackgroundColor,
-              color: roomTextColor,
-              cursor: drawTool === 'move' && floorInteractionMode === 'view'
-                ? (roomDragState.active && roomDragState.shapeIds.some((shapeId) => Number(shapeId) === Number(shape.id)) ? 'grabbing' : 'grab')
-                : drawTool === 'paint' && floorInteractionMode === 'view'
-                  ? 'cell'
-                  : 'pointer',
-            }}
-          >
-            <div className="pointer-events-none px-2">
-              <span className="line-clamp-2 text-xs font-semibold">
-                {shape.roomName}
+          <Fragment key={`room-${shape.id}`}>
+            {roomCells.map((cell) => (
+              <button
+                key={`room-cell-${shape.id}-${cell.row}:${cell.col}`}
+                type="button"
+                onMouseDown={(event) => onRoomPointerDown(event, floor, shape)}
+                onClick={(event) => onRoomClick(event, floor, shape)}
+                onContextMenu={handleSuppressContextMenu}
+                onMouseEnter={(event) => onRoomPreviewShow(event, shape)}
+                onMouseLeave={() => onRoomPreviewHide(shape)}
+                onFocus={(event) => onRoomPreviewShow(event, shape)}
+                onBlur={() => onRoomPreviewHide(shape)}
+                className={`absolute transition ${
+                  isSelected
+                    ? 'ring-2 ring-inset ring-orange-300'
+                    : ''
+                }`}
+                style={{
+                  top: cell.row * cellSize,
+                  left: cell.col * cellSize,
+                  width: cellSize,
+                  height: cellSize,
+                  backgroundColor: roomBackgroundColor,
+                  border: `1px solid ${showCanvasGrid ? 'rgba(226,232,240,0.9)' : 'transparent'}`,
+                  cursor: roomCursor,
+                }}
+              />
+            ))}
+            <div
+              className="pointer-events-none absolute z-10 flex items-center justify-center px-2 text-center"
+              style={{
+                top: roomLabelPlacement.top,
+                left: roomLabelPlacement.left,
+                transform: 'translate(-50%, -50%)',
+                width: roomLabelPlacement.width,
+                minHeight: roomLabelPlacement.minHeight,
+                color: '#0f172a',
+              }}
+            >
+              <span
+                className="inline-flex max-w-full items-center justify-center overflow-hidden rounded-lg bg-white/78 px-2 py-1 text-center text-xs font-semibold leading-tight text-slate-900 shadow-sm backdrop-blur-sm"
+                style={{
+                  maxWidth: roomLabelPlacement.width,
+                  minHeight: roomLabelPlacement.minHeight,
+                  fontSize: roomLabelPlacement.width < 72 ? 11 : 12,
+                }}
+              >
+                <span className="max-w-full truncate">{shape.roomName}</span>
               </span>
             </div>
-          </button>
+          </Fragment>
         )
       })}
 

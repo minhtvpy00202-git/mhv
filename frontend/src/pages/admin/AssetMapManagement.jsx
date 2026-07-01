@@ -280,14 +280,6 @@ function getMarkerOffsets(index) {
   return offsets[index % offsets.length]
 }
 
-function buildShapeOptionLabel(shape, locations) {
-  if (shape.locationId) {
-    const location = locations.find((item) => item.id === shape.locationId)
-    return location?.roomName || shape.roomName || 'Phòng đã gán'
-  }
-  return shape.roomName || 'Phòng mới chưa lưu'
-}
-
 function buildCellRectangle(startCell, endCell) {
   const start = parseCell(startCell)
   const end = parseCell(endCell)
@@ -606,6 +598,7 @@ function AssetMapManagement() {
     floorId: null,
     startCell: null,
     baseSelection: new Set(),
+    selectionMode: 'add',
   })
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const [savingLayout, setSavingLayout] = useState(false)
@@ -686,7 +679,6 @@ function AssetMapManagement() {
   const [roomAssets, setRoomAssets] = useState([])
   const [markerTooltip, setMarkerTooltip] = useState(null)
   const [roomPreview, setRoomPreview] = useState(null)
-  const [legendFilters, setLegendFilters] = useState([])
   const [historyMeta, setHistoryMeta] = useState({ canUndo: false, canRedo: false })
   const location = useLocation()
   const navigate = useNavigate()
@@ -920,52 +912,9 @@ function AssetMapManagement() {
     [areaTypeCatalogEntries, floors],
   )
 
-  const legendItems = useMemo(() => {
-    const typeItems = new Map()
-    ;(activeFloor?.roomShapes || []).forEach((shape) => {
-      const areaType = resolveAreaTypeMeta(shape, areaTypeCatalogEntries)
-      if (!typeItems.has(areaType.filterKey)) {
-        typeItems.set(areaType.filterKey, {
-          key: areaType.filterKey,
-          label: areaType.label,
-          tone: areaType.tone,
-        })
-      }
-    })
-    return [
-      ...Array.from(typeItems.values()).sort((left, right) => left.label.localeCompare(right.label, 'vi')),
-      { key: 'empty', label: 'Chưa gắn tài sản', tone: 'bg-amber-100 text-amber-700 border-amber-200' },
-      { key: 'assigned', label: 'Đã gán tài sản', tone: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-    ]
-  }, [activeFloor, areaTypeCatalogEntries])
-
-  const getLegendMatchKeys = useCallback((shape) => {
-    const keys = new Set()
-    const assetCount = roomAssetCountMap.get(shape?.locationId) || 0
-    const areaType = resolveAreaTypeMeta(shape, areaTypeCatalogEntries)
-    keys.add(areaType.filterKey)
-    if (assetCount > 0) {
-      keys.add('assigned')
-    } else {
-      keys.add('empty')
-    }
-    return keys
-  }, [areaTypeCatalogEntries, roomAssetCountMap])
-
   const visibleShapeIdSet = useMemo(() => {
-    if (!legendFilters.length || !activeFloor) {
-      return new Set((activeFloor?.roomShapes || []).map((shape) => Number(shape.id)))
-    }
-
-    return new Set(
-      (activeFloor.roomShapes || [])
-        .filter((shape) => {
-          const keys = getLegendMatchKeys(shape)
-          return legendFilters.some((filterKey) => keys.has(filterKey))
-        })
-        .map((shape) => Number(shape.id)),
-    )
-  }, [activeFloor, getLegendMatchKeys, legendFilters])
+    return new Set((activeFloor?.roomShapes || []).map((shape) => Number(shape.id)))
+  }, [activeFloor])
 
   const currentSelectionBounds = useMemo(() => {
     if (!activeFloor) return null
@@ -1042,19 +991,6 @@ function AssetMapManagement() {
       colorHex: selectedShape.colorHex || DEFAULT_COLOR,
     }
   }, [areaTypeCatalogEntries, locations, roomAssetCountMap, selectedShape])
-
-  const activeFloorRoomItems = useMemo(
-    () => (activeFloor?.roomShapes || []).map((shape) => ({
-      id: shape.id,
-      label: buildShapeOptionLabel(shape, locations),
-      selected: selectedShapeIdSet.has(Number(shape.id)),
-      colorHex: shape.colorHex || DEFAULT_COLOR,
-      assetCount: roomAssetCountMap.get(shape?.locationId) || 0,
-      areaTypeLabel: resolveAreaTypeMeta(shape, areaTypeCatalogEntries).label,
-      shape,
-    })),
-    [activeFloor, areaTypeCatalogEntries, locations, roomAssetCountMap, selectedShapeIdSet],
-  )
 
   const showFloatingSelectionToolbar = useMemo(() => {
     if (!activeFloor || !currentSelectionBounds || showRoomModal) return false
@@ -1521,6 +1457,7 @@ function AssetMapManagement() {
         floorId: null,
         startCell: null,
         baseSelection: new Set(),
+        selectionMode: 'add',
       })
       await loadRoomAssetIndex()
     } catch (error) {
@@ -2083,6 +2020,10 @@ function AssetMapManagement() {
 
     const nextSelection = new Set(dragSelection.baseSelection)
     buildCellRectangle(dragSelection.startCell, cellKey).forEach((cell) => {
+      if (dragSelection.selectionMode === 'remove') {
+        nextSelection.delete(cell)
+        return
+      }
       nextSelection.add(cell)
     })
     setSelectedCells(nextSelection)
@@ -2094,6 +2035,7 @@ function AssetMapManagement() {
       floorId: null,
       startCell: null,
       baseSelection: new Set(),
+      selectionMode: 'add',
     })
     setIsDraggingSelection(false)
   }, [])
@@ -2545,8 +2487,12 @@ function AssetMapManagement() {
       || event.shiftKey
       || event.metaKey
       || event.ctrlKey
-    const baseSelection = shouldAccumulateSelection
-      ? new Set(selectedCells)
+    const currentSelection = new Set(selectedCells)
+    const selectionMode = currentSelection.has(cellKey) && (floorInteractionMode === 'add' || floorInteractionMode === 'edit')
+      ? 'remove'
+      : 'add'
+    const baseSelection = shouldAccumulateSelection || selectionMode === 'remove'
+      ? new Set(currentSelection)
       : new Set()
 
     setDragSelection({
@@ -2554,10 +2500,15 @@ function AssetMapManagement() {
       floorId: floor.id,
       startCell: cellKey,
       baseSelection,
+      selectionMode,
     })
     setIsDraggingSelection(true)
     const nextSelection = new Set(baseSelection)
-    nextSelection.add(cellKey)
+    if (selectionMode === 'remove') {
+      nextSelection.delete(cellKey)
+    } else {
+      nextSelection.add(cellKey)
+    }
     setSelectedCells(nextSelection)
   }
 
@@ -3327,18 +3278,6 @@ function AssetMapManagement() {
     setRoomPreview((previous) => (previous?.shape?.id === shape?.id ? null : previous))
   }, [])
 
-  const handleToggleLegendFilter = useCallback((filterKey) => {
-    setLegendFilters((previous) =>
-      previous.includes(filterKey)
-        ? previous.filter((item) => item !== filterKey)
-        : [...previous, filterKey],
-    )
-  }, [])
-
-  const handleResetLegendFilters = useCallback(() => {
-    setLegendFilters([])
-  }, [])
-
   const handleSearchFilterChange = useCallback((patch) => {
     setSearchFilters((previous) => ({ ...previous, ...patch }))
   }, [])
@@ -3367,31 +3306,6 @@ function AssetMapManagement() {
   const handleJumpToAssetFloor = useCallback((floorId) => {
     handleSelectFloor(floorId, { scroll: true })
   }, [handleSelectFloor])
-
-  const handleSelectRoomChip = useCallback((floorId, shape, event) => {
-    if (!shape) return
-    const applySelection = () => {
-      setActiveFloorId(floorId)
-      if (event.metaKey || event.ctrlKey || event.shiftKey) {
-        const normalizedShapeId = Number(shape.id)
-        const nextIds = selectedShapeIdSet.has(normalizedShapeId)
-          ? selectedShapeIds.filter((value) => Number(value) !== normalizedShapeId)
-          : [...selectedShapeIds, normalizedShapeId]
-        setSelectedRooms(nextIds, nextIds.length > 0 ? normalizedShapeId : null)
-      } else {
-        setSelectedRooms([shape.id], shape.id)
-      }
-      setRoomContextMenu(null)
-      setCanvasContextMenu(null)
-    }
-
-    if (Number(floorId) === Number(activeFloorId)) {
-      applySelection()
-      return
-    }
-
-    requestGuardedAction(applySelection)
-  }, [activeFloorId, requestGuardedAction, selectedShapeIdSet, selectedShapeIds, setSelectedRooms])
 
   const handleOpenCreateFloorModal = useCallback(() => {
     captureHistoryBoundary()
@@ -3710,14 +3624,9 @@ function AssetMapManagement() {
                 PaintToolIcon={PaintToolIcon}
                 imageRectangleTool={IMAGE_RECTANGLE_TOOL}
                 imagePolygonTool={IMAGE_POLYGON_TOOL}
-                legendItems={legendItems}
-                activeLegendFilters={legendFilters}
-                visibleRoomCount={visibleShapeIdSet.size}
                 onAddRoom={() => handleBeginAddRoomMode(activeFloor.id)}
                 onEditFloor={() => handleOpenEditFloorModal(activeFloor)}
                 onDeleteFloor={() => handleDeleteFloor(activeFloor)}
-                onToggleLegendFilter={handleToggleLegendFilter}
-                onResetLegendFilters={handleResetLegendFilters}
                 onSetDrawTool={setActiveDrawTool}
                 onClearSelection={() => {
                   if (viewState.floorInteractionMode === 'view') {
@@ -3859,8 +3768,6 @@ function AssetMapManagement() {
         <AssetPlacementPanel
           categories={serverState.categories}
           floors={serverState.floors}
-          activeFloor={activeFloor}
-          roomItems={activeFloorRoomItems}
           selectedRoom={selectedRoomSummary}
           selectedRoomCount={selectedShapes.length}
           isImageFloor={activeFloor ? isImageFloorMode(activeFloor) : false}
@@ -3882,7 +3789,6 @@ function AssetMapManagement() {
           onSearch={() => { void handleSearch() }}
           onResetSearch={handleResetSearch}
           onJumpToAssetFloor={handleJumpToAssetFloor}
-          onSelectRoom={(shape, event) => handleSelectRoomChip(activeFloor?.id, shape, event)}
           onEditSelectedRoom={handleQuickSelectionEditInfo}
           onEditSelectedLayout={handleQuickSelectionEditLayout}
           onOpenSelectedAssets={handleQuickSelectionOpenAssets}

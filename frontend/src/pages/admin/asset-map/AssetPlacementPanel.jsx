@@ -14,8 +14,6 @@ import SearchableSelect from '../../../components/ui/SearchableSelect'
 export default function AssetPlacementPanel({
   categories,
   floors,
-  activeFloor,
-  roomItems,
   selectedRoom,
   selectedRoomCount,
   isImageFloor,
@@ -34,7 +32,6 @@ export default function AssetPlacementPanel({
   onSearch,
   onResetSearch,
   onJumpToAssetFloor,
-  onSelectRoom,
   onEditSelectedRoom,
   onEditSelectedLayout,
   onOpenSelectedAssets,
@@ -188,52 +185,6 @@ export default function AssetPlacementPanel({
               )}
             </>
           )}
-        </div>
-
-        <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Khu vực trên tầng</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                {activeFloor ? `${roomItems.length} khu vực trên ${activeFloor.name}.` : 'Chọn tầng để xem danh sách khu vực.'}
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 space-y-2">
-            {!activeFloor && (
-              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Chưa có tầng hoạt động.
-              </div>
-            )}
-            {activeFloor && roomItems.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Chưa có khu vực nào trên tầng này.
-              </div>
-            )}
-            {roomItems.map((room) => (
-              <button
-                key={`room-item-${room.id}`}
-                type="button"
-                onClick={(event) => onSelectRoom(room.shape, event)}
-                className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                  room.selected
-                    ? 'border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200'
-                    : 'border-slate-200 bg-slate-50 hover:border-orange-300 hover:bg-white dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{room.label}</p>
-                    <p className="mt-1 text-xs opacity-80">{room.areaTypeLabel} · {room.assetCount} tài sản</p>
-                  </div>
-                  <span
-                    className="mt-1 h-4 w-4 rounded-full border border-white shadow"
-                    style={{ backgroundColor: room.colorHex }}
-                  />
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">

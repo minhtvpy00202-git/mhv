@@ -1,6 +1,4 @@
-import { useMemo, useState } from 'react'
 import {
-  IconChevronDown as ChevronDown,
   IconArrowsMove as Move,
   IconEdit as Edit,
   IconDeviceFloppy as Save,
@@ -27,14 +25,9 @@ export default function FloorToolbar({
   PaintToolIcon,
   imageRectangleTool,
   imagePolygonTool,
-  legendItems,
-  activeLegendFilters,
-  visibleRoomCount,
   onAddRoom,
   onEditFloor,
   onDeleteFloor,
-  onToggleLegendFilter,
-  onResetLegendFilters,
   onSetDrawTool,
   onClearSelection,
   onDeleteActiveRegion,
@@ -48,21 +41,6 @@ export default function FloorToolbar({
   const canSubmitImageRoom = hasImageSelection || floorInteractionMode === 'edit'
   const canSubmitGridRoom = selectedCellsSize > 0
   const showDrawTools = floorInteractionMode === 'add' || floorInteractionMode === 'edit'
-  const [showAllLegendItems, setShowAllLegendItems] = useState(false)
-  const statusLegendItems = useMemo(
-    () => legendItems.filter((item) => item.key === 'empty' || item.key === 'assigned'),
-    [legendItems],
-  )
-  const areaLegendItems = useMemo(
-    () => legendItems.filter((item) => item.key !== 'empty' && item.key !== 'assigned'),
-    [legendItems],
-  )
-  const quickAreaLegendItems = useMemo(() => {
-    const selectedItems = areaLegendItems.filter((item) => activeLegendFilters.includes(item.key))
-    const unselectedItems = areaLegendItems.filter((item) => !activeLegendFilters.includes(item.key))
-    return [...selectedItems, ...unselectedItems].slice(0, 4)
-  }, [activeLegendFilters, areaLegendItems])
-  const hiddenAreaLegendCount = Math.max(areaLegendItems.length - quickAreaLegendItems.length, 0)
 
   return (
     <div className="space-y-4">
@@ -165,79 +143,6 @@ export default function FloorToolbar({
                 className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
               />
             </label>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
-            Lọc nhanh khu vực
-          </span>
-          <div className="flex items-center gap-2">
-            {hiddenAreaLegendCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowAllLegendItems((previous) => !previous)}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {showAllLegendItems ? 'Thu gọn' : `+${hiddenAreaLegendCount} loại`}
-                <ChevronDown size={14} className={`transition ${showAllLegendItems ? 'rotate-180' : ''}`} />
-              </button>
-            )}
-            {activeLegendFilters.length > 0 && (
-              <button
-                type="button"
-                onClick={onResetLegendFilters}
-                className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Xóa lọc
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[...quickAreaLegendItems, ...statusLegendItems].map((item) => {
-            const isActiveFilter = activeLegendFilters.includes(item.key)
-            return (
-              <button
-                key={item.key}
-                type="button"
-                title={item.label}
-                onClick={() => onToggleLegendFilter(item.key)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  isActiveFilter
-                    ? `${item.tone} ring-2 ring-current/15`
-                    : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                }`}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </div>
-        {showAllLegendItems && hiddenAreaLegendCount > 0 && (
-          <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-            <div className="flex flex-wrap gap-2">
-              {areaLegendItems.map((item) => {
-                const isActiveFilter = activeLegendFilters.includes(item.key)
-                return (
-                  <button
-                    key={`full-${item.key}`}
-                    type="button"
-                    title={item.label}
-                    onClick={() => onToggleLegendFilter(item.key)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                      isActiveFilter
-                        ? `${item.tone} ring-2 ring-current/15`
-                        : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
           </div>
         )}
       </div>
