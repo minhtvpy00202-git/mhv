@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import ThemeToggle from '../components/ThemeToggle'
+import UserTimeClock from '../components/UserTimeClock'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
@@ -107,6 +108,7 @@ function ConsumableManagerLayout() {
             <p className="font-semibold text-slate-800 dark:text-slate-100">{user?.fullName || user?.username || 'Consumable Manager'}</p>
           </div>
           <div className="flex items-center gap-2">
+            <UserTimeClock compact className="hidden xl:block" />
             <ThemeToggle compact />
             <div className="relative z-[120]">
               <button

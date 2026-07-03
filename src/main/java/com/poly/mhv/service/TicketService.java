@@ -21,6 +21,7 @@ import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.util.AssetStatusSupport;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,7 +91,7 @@ public class TicketService {
             throw new CustomException("Vật tư tiêu hao không hỗ trợ báo hỏng và tạo ticket.");
         }
         AppUser reporter = currentUserProvider.getCurrentUser();
-        LocalDateTime createdAt = LocalDateTime.now();
+        LocalDateTime createdAt = UtcDateTimes.now();
 
         String imageUrl = imageFile != null && !imageFile.isEmpty()
                 ? ticketImageStorageService.storeImage(imageFile)
@@ -209,7 +210,7 @@ public class TicketService {
         ticket.setAssignee(assignee);
         ticket.setStatus("IN_PROGRESS");
         ticket.setResolvedAt(null);
-        ticket.setAcceptedAt(LocalDateTime.now());
+        ticket.setAcceptedAt(UtcDateTimes.now());
         markAssetBroken(ticket.getAsset(), true);
         assetRepository.save(ticket.getAsset());
         Ticket saved = ticketRepository.save(ticket);
@@ -278,7 +279,7 @@ public class TicketService {
         }
 
         ticket.setStatus("RESOLVED");
-        ticket.setResolvedAt(LocalDateTime.now());
+        ticket.setResolvedAt(UtcDateTimes.now());
         Asset asset = ticket.getAsset();
         markAssetGood(asset);
         assetRepository.save(asset);
@@ -651,7 +652,7 @@ public class TicketService {
                 .ticketId(ticket.getId())
                 .assetQaCode(ticket.getAsset().getQaCode())
                 .status(ticket.getStatus())
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         if ("TICKET_CREATED".equals(type)) {
             for (AppUser receiver : receivers) {
@@ -794,7 +795,7 @@ public class TicketService {
         String adminName = StringUtils.hasText(actor.getFullName()) ? actor.getFullName() : actor.getUsername();
 
         if ("APPROVED".equals(decision)) {
-            LocalDateTime oldDueDate = ticket.getDueDate() != null ? ticket.getDueDate() : LocalDateTime.now();
+            LocalDateTime oldDueDate = ticket.getDueDate() != null ? ticket.getDueDate() : UtcDateTimes.now();
             LocalDateTime newDueDate = oldDueDate.plusMinutes(requestedMinutes);
             ticket.setDueDate(newDueDate);
 
@@ -819,7 +820,7 @@ public class TicketService {
                 }
             } else {
                 long totalMins = java.time.Duration
-                        .between(ticket.getCreatedAt() != null ? ticket.getCreatedAt() : LocalDateTime.now(),
+                        .between(ticket.getCreatedAt() != null ? ticket.getCreatedAt() : UtcDateTimes.now(),
                                 newDueDate)
                         .toMinutes();
                 ticket.setDescription(rawDesc + " [SLA_RANGE:" + totalMins + ":" + totalMins + "]");

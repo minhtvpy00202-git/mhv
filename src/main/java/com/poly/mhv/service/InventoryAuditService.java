@@ -27,6 +27,7 @@ import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.AssetStatusSupport;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -85,7 +86,7 @@ public class InventoryAuditService {
         if (audit == null || audit.getDueDate() == null) {
             return false;
         }
-        return "OPEN".equals(audit.getStatus()) && LocalDateTime.now().isAfter(audit.getDueDate());
+        return "OPEN".equals(audit.getStatus()) && UtcDateTimes.now().isAfter(audit.getDueDate());
     }
 
     @Transactional
@@ -104,7 +105,7 @@ public class InventoryAuditService {
 
         for (InventoryAudit activeAudit : openAudits) {
             // Nếu phiên OPEN đó vẫn chưa quá hạn -> Chặn không cho tạo phiên mới
-            if (!LocalDateTime.now().isAfter(activeAudit.getDueDate())) {
+            if (!UtcDateTimes.now().isAfter(activeAudit.getDueDate())) {
                 throw new CustomException("Phòng này đã có phiên kiểm kê đang mở và chưa quá hạn.");
             }
 
@@ -138,7 +139,7 @@ public class InventoryAuditService {
         Location location = locationRepository.findById(request.getLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng với id: " + request.getLocationId()));
         AppUser actor = getCurrentUser();
-        LocalDateTime startedAt = request.getStartedAt() != null ? request.getStartedAt() : LocalDateTime.now();
+        LocalDateTime startedAt = request.getStartedAt() != null ? request.getStartedAt() : UtcDateTimes.now();
         if (!request.getDueDate().isAfter(startedAt)) {
             throw new CustomException("Hạn kiểm kê phải sau thời gian bắt đầu.");
         }
@@ -262,7 +263,7 @@ public class InventoryAuditService {
         if (!"OPEN".equals(audit.getStatus())) {
             throw new CustomException("Phiên kiểm kê đã đóng.");
         }
-        if (LocalDateTime.now().isAfter(audit.getDueDate())) {
+        if (UtcDateTimes.now().isAfter(audit.getDueDate())) {
             throw new CustomException("Phiên kiểm kê này đã quá hạn hoàn tất, không thể quét thiết bị.");
         }
 
@@ -290,7 +291,7 @@ public class InventoryAuditService {
                 .audit(audit)
                 .assetQaCode(asset.getQaCode())
                 .assetName(asset.getName())
-                .scannedAt(LocalDateTime.now())
+                .scannedAt(UtcDateTimes.now())
                 .scannedByUsername(actor.getUsername())
                 .build();
         inventoryAuditItemRepository.save(item);
@@ -353,7 +354,7 @@ public class InventoryAuditService {
         audit.setExpectedCount(computedData.expectedAssets().size());
         audit.setScannedCount(scannedQaCodes.size());
         audit.setMissingCount(missingCount);
-        audit.setCompletedAt(LocalDateTime.now());
+        audit.setCompletedAt(UtcDateTimes.now());
         audit.setStatus("COMPLETED");
         inventoryAuditRepository.save(audit);
         helpdeskKpiService.invalidateCaches();
@@ -392,7 +393,7 @@ public class InventoryAuditService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị thất lạc trong phiên kiểm kê."));
         AppUser actor = getCurrentUser();
         missing.setResolutionStatus("FOUND");
-        missing.setResolvedAt(LocalDateTime.now());
+        missing.setResolvedAt(UtcDateTimes.now());
         missing.setResolvedByUsername(actor.getUsername());
         inventoryAuditMissingRepository.save(missing);
 
@@ -417,7 +418,7 @@ public class InventoryAuditService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị thất lạc trong phiên kiểm kê."));
         AppUser actor = getCurrentUser();
         missing.setResolutionStatus("LOST");
-        missing.setResolvedAt(LocalDateTime.now());
+        missing.setResolvedAt(UtcDateTimes.now());
         missing.setResolvedByUsername(actor.getUsername());
         inventoryAuditMissingRepository.save(missing);
 

@@ -58,6 +58,7 @@ import com.poly.mhv.repository.SupplierRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
+import com.poly.mhv.util.UtcDateTimes;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -566,7 +567,7 @@ public class AssetService {
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, request.getQuantity());
         BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, request.getQuantity());
         String issueNote = appendLotAllocationNote(request.getNote(), allocations);
@@ -717,7 +718,7 @@ public class AssetService {
         }
 
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouse, quantityTransferred);
         BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, quantityTransferred);
         String transferNote = buildWarehouseTransferNote(request.getNote(), sourceWarehouse, targetWarehouse, allocations);
@@ -947,7 +948,7 @@ public class AssetService {
                 .quantityRequested(totalQuantityRequested)
                 .reason(reason)
                 .status("PENDING")
-                .createdAt(LocalDateTime.now())
+                .createdAt(UtcDateTimes.now())
                 .build();
         List<ConsumableDisposalRequestItem> requestItems = new ArrayList<>();
         for (ValidatedDisposalItem item : validatedItems) {
@@ -1007,7 +1008,7 @@ public class AssetService {
         Asset asset = assetRepository.findDetailByQaCode(disposalRequest.getAsset().getQaCode())
                 .orElseThrow(() -> new CustomException("Không tìm thấy vật tư cần tiêu huỷ."));
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         String decisionNote = request != null && StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null;
         List<ConsumableDisposalRequestItem> requestItems = getEffectiveDisposalRequestItems(disposalRequest);
         int totalQuantityToDispose = requestItems.stream()
@@ -1076,7 +1077,7 @@ public class AssetService {
             throw new CustomException("Vui lòng nhập lý do từ chối yêu cầu tiêu huỷ.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         String decisionNote = request.getNote().trim();
         disposalRequest.setStatus("REJECTED");
         disposalRequest.setDecisionNote(decisionNote);
@@ -1142,7 +1143,7 @@ public class AssetService {
                 .quantityRequested(request.getQuantityRequested())
                 .reason(request.getReason().trim())
                 .status("PENDING")
-                .createdAt(LocalDateTime.now())
+                .createdAt(UtcDateTimes.now())
                 .build();
         ConsumableRequest savedRequest = consumableRequestRepository.save(consumableRequest);
         notificationService.createNotification(
@@ -1183,7 +1184,7 @@ public class AssetService {
         }
 
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         Location sourceWarehouseLocation = resolveConsumableRequestSourceWarehouse(consumableRequest, request);
         List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, consumableRequest.getQuantityRequested());
         BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, consumableRequest.getQuantityRequested());
@@ -1264,7 +1265,7 @@ public class AssetService {
             throw new CustomException("Vui lòng nhập lý do từ chối phiếu yêu cầu.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         String decisionNote = request.getNote().trim();
 
         consumableRequest.setStatus("REJECTED");
@@ -1319,7 +1320,7 @@ public class AssetService {
             throw new CustomException("Số lượng còn lại không được lớn hơn tổng số lượng đã cấp cho phòng này.");
         }
         AppUser actor = getCurrentUser();
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         stock.setQuantityRemaining(nextRemaining);
         stock.setLastUpdatedAt(now);
         stock.setLastUpdatedBy(actor);
@@ -2187,7 +2188,7 @@ public class AssetService {
                 .lotCode(normalizeLotCode(lotCode))
                 .note(StringUtils.hasText(note) ? note.trim() : null)
                 .receivedBy(actor)
-                .receivedAt(LocalDateTime.now())
+                .receivedAt(UtcDateTimes.now())
                 .build();
         consumableReceiptLotRepository.save(lot);
     }

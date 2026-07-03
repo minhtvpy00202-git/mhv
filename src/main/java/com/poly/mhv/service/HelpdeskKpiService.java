@@ -12,6 +12,7 @@ import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -429,7 +430,7 @@ public class HelpdeskKpiService {
     }
 
     private long countOverdueActiveTickets(List<Ticket> tickets) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         return tickets.stream()
                 .filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
                 .filter(ticket -> {

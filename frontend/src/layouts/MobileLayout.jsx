@@ -12,6 +12,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import ThemeToggle from '../components/ThemeToggle'
+import UserTimeClock from '../components/UserTimeClock'
 import { useBranding } from '../context/BrandingContext'
 import { useAuth } from '../context/AuthContext'
 import { formatVietnamDateTime } from '../utils/datetime'
@@ -157,6 +158,7 @@ function MobileLayout() {
         <div>
           <h1 className="text-sm font-medium text-white/90">Nhân viên</h1>
           <p className="text-base font-semibold">{user?.fullName || user?.username || `${branding.companyName} ${branding.appName}`}</p>
+          <UserTimeClock compact light className="mt-2" />
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle compact className="border-white/20 bg-white/10 px-2.5 text-white hover:bg-white/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:hover:bg-white/20" />

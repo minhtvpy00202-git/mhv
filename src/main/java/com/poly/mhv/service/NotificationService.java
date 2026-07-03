@@ -10,6 +10,7 @@ import com.poly.mhv.entity.Notification;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.NotificationRepository;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -70,7 +71,7 @@ public class NotificationService {
             Collection<NotificationTarget> targets
     ) {
         try {
-            LocalDateTime occurredAt = LocalDateTime.now();
+            LocalDateTime occurredAt = UtcDateTimes.now();
             String detailJson = formatDetail(detail == null ? Map.of() : detail);
             boolean shouldNotifyAdmin = false;
             for (NotificationTarget target : deduplicateTargets(targets)) {

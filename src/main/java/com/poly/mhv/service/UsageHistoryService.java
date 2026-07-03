@@ -17,6 +17,7 @@ import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.AssetStatusSupport;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -78,7 +79,7 @@ public class UsageHistoryService {
         if (fromLocation.getId().equals(toLocation.getId())) {
             throw new CustomException("Phòng đích không được trùng với phòng hiện tại của thiết bị.");
         }
-        LocalDateTime startTime = LocalDateTime.now();
+        LocalDateTime startTime = UtcDateTimes.now();
         usageHistoryRepository.insertOpenUsageHistory(
                 asset.getQaCode(),
                 user.getId(),
@@ -140,7 +141,7 @@ public class UsageHistoryService {
             throw new CustomException("Bạn không phải người đã mượn thiết bị này, nên không thể thực hiện trả.");
         }
 
-        usageHistory.setEndTime(LocalDateTime.now());
+        usageHistory.setEndTime(UtcDateTimes.now());
         asset.setUsageStatus(AssetStatusSupport.USAGE_STATUS_HOME);
         asset.setStatus(AssetStatusSupport.deriveLegacyStatus(
                 resolveTechnicalStatus(asset),

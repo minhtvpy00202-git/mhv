@@ -1,7 +1,7 @@
 package com.poly.mhv.service;
 
+import com.poly.mhv.util.UtcDateTimes;
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -41,7 +41,7 @@ public class AdminAlertSseService {
                 "eventType", eventType,
                 "title", title,
                 "message", message,
-                "timestamp", LocalDateTime.now().toString()
+                "timestamp", UtcDateTimes.now().toString()
         );
         notifyAlert("notification_alert", payload);
     }
@@ -53,7 +53,7 @@ public class AdminAlertSseService {
                 "eventType", "MAINTENANCE_REPORT",
                 "title", "Báo hỏng thiết bị",
                 "message", message,
-                "timestamp", LocalDateTime.now().toString()
+                "timestamp", UtcDateTimes.now().toString()
         );
         notifyAlert("maintenance_alert", payload);
     }

@@ -8,6 +8,7 @@ import com.poly.mhv.entity.TicketEvent;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -41,7 +42,7 @@ public class TicketEventService {
                 .actorName(actorName)
                 .message(StringUtils.hasText(message) ? message : eventType)
                 .detailJson(formatDetail(detail))
-                .occurredAt(LocalDateTime.now())
+                .occurredAt(UtcDateTimes.now())
                 .build();
         ticketEventRepository.save(event);
     }

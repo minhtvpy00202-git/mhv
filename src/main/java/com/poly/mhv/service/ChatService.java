@@ -10,9 +10,9 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.ChatMessageRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
@@ -29,7 +29,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class ChatService {
 
     private static final ZoneOffset CHAT_STORAGE_OFFSET = ZoneOffset.UTC;
-    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final ChatMessageRepository chatMessageRepository;
     private final TicketRepository ticketRepository;
@@ -66,7 +65,7 @@ public class ChatService {
                 .content(payload.content())
                 .mediaUrl(payload.mediaUrl())
                 .mediaType(payload.mediaType())
-                .createdAt(LocalDateTime.now(CHAT_STORAGE_OFFSET))
+                .createdAt(UtcDateTimes.now())
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
         String preview = payload.content();
@@ -136,17 +135,15 @@ public class ChatService {
                 .content(chatMessage.getContent())
                 .mediaUrl(chatMessage.getMediaUrl())
                 .mediaType(chatMessage.getMediaType())
-                .createdAt(toVietnamOffsetDateTime(chatMessage.getCreatedAt()))
+                .createdAt(toUtcOffsetDateTime(chatMessage.getCreatedAt()))
                 .build();
     }
 
-    private OffsetDateTime toVietnamOffsetDateTime(LocalDateTime createdAt) {
+    private OffsetDateTime toUtcOffsetDateTime(LocalDateTime createdAt) {
         if (createdAt == null) {
             return null;
         }
-        return createdAt.atOffset(CHAT_STORAGE_OFFSET)
-                .atZoneSameInstant(VIETNAM_ZONE)
-                .toOffsetDateTime();
+        return createdAt.atOffset(CHAT_STORAGE_OFFSET);
     }
 
     private ChatMediaStorageService.ProcessedChatPayload normalizePayload(ChatMessageSendRequest request) {

@@ -9,12 +9,12 @@ import com.poly.mhv.dto.assetmapimport.AssetMapImportApplyResponse;
 import com.poly.mhv.dto.assetmapimport.AssetMapImportDrawingResponse;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.MapFloorRepository;
+import com.poly.mhv.util.UtcDateTimes;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -158,7 +158,7 @@ public class AssetMapImportService {
         String previewUrl = "/uploads/asset-map-import-sessions/" + sessionId + "/" + sourceFilePath.getFileName();
         String drawingTitle = stripExtension(sourceFileName);
         if (!StringUtils.hasText(drawingTitle)) {
-            drawingTitle = "Anh ban ve " + LocalDateTime.now().format(FALLBACK_NAME_TIME);
+            drawingTitle = "Anh ban ve " + UtcDateTimes.now().format(FALLBACK_NAME_TIME);
         }
 
         ImportDrawing drawing = ImportDrawing.builder()
@@ -174,7 +174,7 @@ public class AssetMapImportService {
                 .sessionId(sessionId)
                 .sourceFileName(sourceFileName)
                 .sourceFileType(sourceFileType)
-                .createdAt(LocalDateTime.now().toString())
+                .createdAt(UtcDateTimes.now().toString())
                 .drawings(List.of(drawing))
                 .build();
     }
@@ -291,13 +291,13 @@ public class AssetMapImportService {
     }
 
     private String resolveDrawingTitle(ImportDrawing drawing) {
-        return firstNonBlank(drawing.getTitle(), "Bản vẽ " + LocalDateTime.now().format(FALLBACK_NAME_TIME));
+        return firstNonBlank(drawing.getTitle(), "Bản vẽ " + UtcDateTimes.now().format(FALLBACK_NAME_TIME));
     }
 
     private String ensureUniqueName(String requestedName, Set<String> reservedNames, String fallbackPrefix) {
         String baseName = StringUtils.hasText(requestedName) ? requestedName.trim() : fallbackPrefix;
         if (!StringUtils.hasText(baseName)) {
-            baseName = fallbackPrefix + " " + LocalDateTime.now().format(FALLBACK_NAME_TIME);
+            baseName = fallbackPrefix + " " + UtcDateTimes.now().format(FALLBACK_NAME_TIME);
         }
         String candidate = baseName;
         int suffix = 2;

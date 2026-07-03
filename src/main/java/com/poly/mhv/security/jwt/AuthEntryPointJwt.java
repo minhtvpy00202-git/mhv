@@ -1,5 +1,6 @@
 package com.poly.mhv.security.jwt;
 
+import com.poly.mhv.util.UtcDateTimes;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,6 +22,6 @@ public class AuthEntryPointJwt implements AuthenticationEntryPoint {
     ) throws IOException, ServletException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.getWriter().write("{\"status\":401,\"message\":\"Unauthorized\",\"timestamp\":\"" + java.time.LocalDateTime.now() + "\"}");
+        response.getWriter().write("{\"status\":401,\"message\":\"Unauthorized\",\"timestamp\":\"" + UtcDateTimes.now() + "\"}");
     }
 }

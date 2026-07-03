@@ -1,8 +1,8 @@
 package com.poly.mhv.exception;
 
 import com.poly.mhv.dto.common.ErrorResponse;
+import com.poly.mhv.util.UtcDateTimes;
 import jakarta.validation.ConstraintViolationException;
-import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,7 +23,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .message(ex.getMessage())
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
@@ -33,7 +33,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .message("Dữ liệu không hợp lệ hoặc vi phạm ràng buộc hệ thống.")
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
@@ -47,7 +47,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .message(message)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
@@ -61,7 +61,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.BAD_REQUEST.value())
                 .message(message)
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
@@ -71,7 +71,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.NOT_FOUND.value())
                 .message("Không tìm thấy tài nguyên.")
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
@@ -81,7 +81,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(413)
                 .message("File tai len vuot gioi han cho phep cua he thong. Vui long giam kich thuoc file hoac tang cau hinh multipart neu can.")
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(413).body(response);
     }
@@ -92,7 +92,7 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.builder()
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .message("Lỗi hệ thống nội bộ.")
-                .timestamp(LocalDateTime.now())
+                .timestamp(UtcDateTimes.now())
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }

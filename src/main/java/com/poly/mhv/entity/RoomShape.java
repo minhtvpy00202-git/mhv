@@ -1,6 +1,7 @@
 package com.poly.mhv.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.poly.mhv.util.UtcDateTimes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -66,13 +67,13 @@ public class RoomShape {
 
     @PrePersist
     void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
         createdAt = now;
         updatedAt = now;
     }
 
     @PreUpdate
     void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = UtcDateTimes.now();
     }
 }

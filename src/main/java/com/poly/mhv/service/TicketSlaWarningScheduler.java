@@ -4,8 +4,9 @@ import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.entity.Ticket;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.repository.TicketRepository;
-import java.time.LocalDateTime;
+import com.poly.mhv.util.UtcDateTimes;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,7 @@ public class TicketSlaWarningScheduler {
         activeTickets.addAll(ticketRepository.findByStatus("PENDING"));
         activeTickets.addAll(ticketRepository.findByStatus("IN_PROGRESS"));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = UtcDateTimes.now();
 
         for (Ticket ticket : activeTickets) {
             if (ticket.getDueDate() == null || ticket.getCreatedAt() == null) {
