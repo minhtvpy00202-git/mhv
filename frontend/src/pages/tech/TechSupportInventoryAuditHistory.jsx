@@ -160,7 +160,7 @@ function TechSupportInventoryAuditHistory() {
         </section>
 
         <section className="md:hidden">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="grid grid-cols-3 gap-2">
             {MOBILE_HISTORY_PANELS.map((panel) => {
               const value = panel.id === 'all'
                 ? auditHistory.length
@@ -173,14 +173,16 @@ function TechSupportInventoryAuditHistory() {
                   key={panel.id}
                   type="button"
                   onClick={() => setMobilePanel(panel.id)}
-                  className={`min-w-[108px] shrink-0 rounded-2xl border px-3 py-3 text-left shadow-sm transition ${
+                  className={`min-h-[5.75rem] rounded-2xl border px-3 py-3 text-center shadow-sm transition ${
                     active
                       ? 'border-blue-600 bg-blue-600 text-white'
                       : 'border-slate-200 bg-white text-slate-700'
                   }`}
                 >
-                  <p className={`text-xs font-semibold ${active ? 'text-white/80' : 'text-slate-500'}`}>{panel.label}</p>
-                  <p className="mt-1 text-xl font-bold">{value}</p>
+                  <div className="flex h-full flex-col items-center justify-center">
+                    <p className={`text-xs font-semibold ${active ? 'text-white/80' : 'text-slate-500'}`}>{panel.label}</p>
+                    <p className="mt-1 text-xl font-bold">{value}</p>
+                  </div>
                 </button>
               )
             })}

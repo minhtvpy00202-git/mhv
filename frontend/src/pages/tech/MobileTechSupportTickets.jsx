@@ -1,5 +1,6 @@
 import {
   IconAlertCircle as AlertCircle,
+  IconArrowUpRight as ArrowUpRight,
   IconCircleCheck as CheckCircle2,
   IconClockHour3 as Clock3,
   IconCopy as Copy,
@@ -7,15 +8,18 @@ import {
   IconPhone as Phone,
   IconPhoto as ImageIcon,
   IconSearch as Search,
+  IconX as X,
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import ModalOverlay from '../../components/ui/ModalOverlay'
 import { useAuth } from '../../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../../utils/contact'
 import { formatVietnamDateTime } from '../../utils/datetime'
 import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
+import { getTicketStatusMeta } from '../../utils/ticketStatus'
 
 const filterTabs = [
   { value: '', label: 'Tất cả' },
@@ -30,11 +34,268 @@ function toVietnamesePriority(priority) {
   return 'Trung bình'
 }
 
-function toVietnameseStatus(status) {
-  if (status === 'PENDING') return 'Mới báo hỏng'
-  if (status === 'IN_PROGRESS') return 'Đang xử lý'
-  if (status === 'RESOLVED') return 'Đã hoàn tất'
-  return status
+function EmptyState({ children }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-400">
+      {children}
+    </div>
+  )
+}
+
+function TicketActionIconButton({
+  icon: Icon,
+  label,
+  onClick,
+  tone = 'default',
+  disabled = false,
+}) {
+  const toneClassName = tone === 'accent'
+    ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+    : tone === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition disabled:opacity-60 ${toneClassName}`}
+    >
+      <Icon size={16} />
+    </button>
+  )
+}
+
+function TicketActionLink({
+  icon: Icon,
+  label,
+  href,
+  tone = 'default',
+}) {
+  const toneClassName = tone === 'accent'
+    ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+    : tone === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${toneClassName}`}
+    >
+      <Icon size={16} />
+    </a>
+  )
+}
+
+function TicketsTableModal({
+  open,
+  onClose,
+  loading,
+  keyword,
+  onKeywordChange,
+  activeFilter,
+  onFilterChange,
+  filteredTickets,
+  submittingId,
+  userId,
+  onTakeTicket,
+  onResolve,
+  onOpenPreview,
+  onOpenTicket,
+}) {
+  if (!open) return null
+
+  return (
+    <ModalOverlay className="bg-slate-950/70 backdrop-blur-sm" zIndex={120}>
+      <div className="w-full max-w-[min(100vw-1rem,72rem)] overflow-hidden rounded-[28px] bg-white shadow-2xl dark:bg-slate-950">
+        <div className="flex max-h-[min(88dvh,52rem)] flex-col">
+          <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:px-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Danh sách công việc hiện trường</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Tìm kiếm, lọc trạng thái và xử lý ticket trực tiếp trong bảng.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Đóng modal"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+                <Search size={16} className="text-slate-400" />
+                <input
+                  value={keyword}
+                  onChange={(event) => onKeywordChange(event.target.value)}
+                  placeholder="Tìm theo ticket, thiết bị, người báo..."
+                  className="w-full bg-transparent text-sm outline-none"
+                />
+              </label>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {filterTabs.map((tab) => (
+                  <button
+                    key={tab.value || 'all'}
+                    type="button"
+                    onClick={() => onFilterChange(tab.value)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      activeFilter === tab.value
+                        ? 'bg-blue-600 text-white'
+                        : 'border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="min-h-0 overflow-auto px-4 py-4 sm:px-5">
+            {loading && (
+              <EmptyState>Đang tải ticket hỗ trợ...</EmptyState>
+            )}
+            {!loading && filteredTickets.length === 0 && (
+              <EmptyState>Không có ticket phù hợp với bộ lọc hiện tại.</EmptyState>
+            )}
+            {!loading && filteredTickets.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-[56rem] w-full table-fixed text-left text-xs text-slate-600 dark:text-slate-300">
+                  <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur dark:bg-slate-900/95">
+                    <tr className="border-b border-slate-200 dark:border-slate-800">
+                      <th className="w-[21%] px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">Ticket</th>
+                      <th className="w-[20%] px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">Người báo</th>
+                      <th className="w-[18%] px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">Ưu tiên / SLA</th>
+                      <th className="w-[17%] px-3 py-3 font-semibold text-slate-700 dark:text-slate-200">Trạng thái</th>
+                      <th className="w-[24%] px-3 py-3 text-right font-semibold text-slate-700 dark:text-slate-200">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTickets.map((ticket) => {
+                      const isMine = Number(ticket.assigneeId) === Number(userId)
+                      const reporterPhone = normalizePhone(ticket.reporterPhone)
+                      const zaloUrl = getZaloUrl(ticket.reporterPhone)
+                      const statusMeta = getTicketStatusMeta(ticket.status)
+
+                      return (
+                        <tr key={ticket.id} className="border-b border-slate-100 align-top dark:border-slate-800">
+                          <td className="px-3 py-3">
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">Ticket #{ticket.id}</p>
+                            <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-400">
+                              {ticket.assetQaCode || '-'} - {ticket.assetName || 'Thiết bị'}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              {ticket.description || 'Không có mô tả'}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-slate-700 dark:text-slate-200">{ticket.reporterName || '-'}</p>
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              {ticket.reporterPhone || 'Chưa có số'}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-slate-700 dark:text-slate-200">
+                              Ưu tiên: {toVietnamesePriority(ticket.priority)}
+                            </p>
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              Hạn: {formatVietnamDateTime(ticket.dueDate, '-')}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <p className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusMeta.badgeClassName}`}>
+                              {statusMeta.label}
+                            </p>
+                            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                              {isMine ? 'Bạn đang xử lý' : 'Chưa nhận'}
+                            </p>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {ticket.imageUrl && (
+                                <TicketActionIconButton
+                                  icon={ImageIcon}
+                                  label={`Xem ảnh lỗi ticket #${ticket.id}`}
+                                  onClick={() => onOpenPreview(ticket.imageUrl)}
+                                />
+                              )}
+                              {reporterPhone && (
+                                <TicketActionLink
+                                  icon={Phone}
+                                  label={`Gọi ${reporterPhone}`}
+                                  href={`tel:${reporterPhone}`}
+                                  tone="success"
+                                />
+                              )}
+                              {zaloUrl && (
+                                <TicketActionLink
+                                  icon={MessageCircle}
+                                  label={`Nhắn Zalo cho ${ticket.reporterName || 'người báo'}`}
+                                  href={zaloUrl}
+                                  tone="accent"
+                                />
+                              )}
+                              {reporterPhone && (
+                                <TicketActionIconButton
+                                  icon={Copy}
+                                  label={`Copy số ${reporterPhone}`}
+                                  onClick={async () => {
+                                    try {
+                                      await copyText(reporterPhone)
+                                      toast.success(`Đã copy số ${reporterPhone}.`)
+                                    } catch {
+                                      toast.error('Không copy được số điện thoại.')
+                                    }
+                                  }}
+                                />
+                              )}
+                              {ticket.status === 'PENDING' && (
+                                <TicketActionIconButton
+                                  icon={CheckCircle2}
+                                  label={`Nhận xử lý ticket #${ticket.id}`}
+                                  tone="accent"
+                                  disabled={submittingId === ticket.id}
+                                  onClick={() => onTakeTicket(ticket.id)}
+                                />
+                              )}
+                              {ticket.status === 'IN_PROGRESS' && isMine && (
+                                <TicketActionIconButton
+                                  icon={CheckCircle2}
+                                  label={`Hoàn tất ticket #${ticket.id}`}
+                                  tone="success"
+                                  disabled={submittingId === ticket.id}
+                                  onClick={() => onResolve(ticket.id)}
+                                />
+                              )}
+                              <TicketActionIconButton
+                                icon={ArrowUpRight}
+                                label={`Mở ticket #${ticket.id}`}
+                                tone="accent"
+                                onClick={() => onOpenTicket(ticket.id)}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  )
 }
 
 function formatMinutes(minutes) {
@@ -80,6 +341,7 @@ function MobileTechSupportTickets() {
   const [submittingId, setSubmittingId] = useState(null)
   const [activeFilter, setActiveFilter] = useState('')
   const [keyword, setKeyword] = useState('')
+  const [showTicketsModal, setShowTicketsModal] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
 
   const loadTickets = async () => {
@@ -227,155 +489,57 @@ function MobileTechSupportTickets() {
       </div>
 
       <div className="rounded-xl bg-white p-3 shadow-sm">
-        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-          <Search size={16} className="text-slate-400" />
-          <input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="Tìm theo ticket, thiết bị, người báo..."
-            className="w-full text-sm outline-none"
-          />
-        </label>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.value || 'all'}
-              type="button"
-              onClick={() => setActiveFilter(tab.value)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                activeFilter === tab.value
-                  ? 'bg-blue-600 text-white'
-                  : 'border border-slate-200 bg-slate-50 text-slate-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">Danh sách ticket</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Mở modal bảng để tìm kiếm, lọc nhanh và thao tác trực tiếp trên ticket.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTicketsModal(true)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <ArrowUpRight size={16} />
+            Mở bảng
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-medium text-slate-500">Tổng ticket</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{tickets.length}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-medium text-slate-500">Đang lọc</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{filteredTickets.length}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-medium text-slate-500">Đang tải</p>
+            <p className="mt-1 text-xl font-bold text-slate-800">{loading ? '...' : 'Xong'}</p>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3 pb-2">
-        {loading && <p className="rounded-xl bg-white px-3 py-3 text-sm text-slate-500 shadow-sm">Đang tải ticket...</p>}
-        {!loading && filteredTickets.length === 0 && (
-          <p className="rounded-xl bg-white px-3 py-3 text-sm text-slate-500 shadow-sm">Không có ticket phù hợp với bộ lọc hiện tại.</p>
-        )}
-        {!loading && filteredTickets.map((ticket) => {
-          const isMine = Number(ticket.assigneeId) === Number(user?.userId)
-          const reporterPhone = normalizePhone(ticket.reporterPhone)
-          const zaloUrl = getZaloUrl(ticket.reporterPhone)
-          return (
-            <article key={ticket.id} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-800">Ticket #{ticket.id}</p>
-                  <p className="mt-1 truncate text-sm text-slate-600">{ticket.assetQaCode} - {ticket.assetName || 'Thiết bị'}</p>
-                </div>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
-                  ticket.status === 'RESOLVED'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : ticket.status === 'IN_PROGRESS'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-amber-100 text-amber-700'
-                }`}
-                >
-                  {toVietnameseStatus(ticket.status)}
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                <p><span className="font-semibold">Người báo:</span> {ticket.reporterName || '-'}</p>
-                <p><span className="font-semibold">Ưu tiên:</span> {toVietnamesePriority(ticket.priority)}</p>
-                <p className="col-span-2"><span className="font-semibold">Điện thoại:</span> {ticket.reporterPhone || 'Chưa có số'}</p>
-                <p className="col-span-2"><span className="font-semibold">Hạn xử lý:</span> {formatVietnamDateTime(ticket.dueDate)}</p>
-              </div>
-
-              <p className="mt-3 line-clamp-3 text-sm text-slate-700">{ticket.description}</p>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {ticket.imageUrl && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImageUrl(ticket.imageUrl)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"
-                  >
-                    <ImageIcon size={14} />
-                    Ảnh lỗi
-                  </button>
-                )}
-                {reporterPhone && (
-                  <a
-                    href={`tel:${reporterPhone}`}
-                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
-                  >
-                    <Phone size={14} />
-                    Gọi điện
-                  </a>
-                )}
-                {zaloUrl && (
-                  <a
-                    href={zaloUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700"
-                  >
-                    <MessageCircle size={14} />
-                    Nhắn Zalo
-                  </a>
-                )}
-                {reporterPhone && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await copyText(reporterPhone)
-                        toast.success(`Đã copy số ${reporterPhone}.`)
-                      } catch {
-                        toast.error('Không copy được số điện thoại.')
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700"
-                  >
-                    <Copy size={14} />
-                    Copy số ĐT
-                  </button>
-                )}
-                {ticket.status === 'PENDING' && (
-                  <button
-                    type="button"
-                    onClick={() => handleTakeTicket(ticket.id)}
-                    disabled={submittingId === ticket.id}
-                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                  >
-                    Nhận xử lý
-                  </button>
-                )}
-                {ticket.status === 'IN_PROGRESS' && isMine && (
-                  <button
-                    type="button"
-                    onClick={() => handleResolve(ticket.id)}
-                    disabled={submittingId === ticket.id}
-                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                  >
-                    <CheckCircle2 size={14} />
-                    Hoàn tất
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => navigate(`/tech-mobile/tickets/${ticket.id}`)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700"
-                >
-                  <MessageCircle size={14} />
-                  Mở ticket
-                </button>
-              </div>
-            </article>
-          )
-        })}
-      </div>
+      <TicketsTableModal
+        open={showTicketsModal}
+        onClose={() => setShowTicketsModal(false)}
+        loading={loading}
+        keyword={keyword}
+        onKeywordChange={setKeyword}
+        activeFilter={activeFilter}
+        onFilterChange={setActiveFilter}
+        filteredTickets={filteredTickets}
+        submittingId={submittingId}
+        userId={user?.userId}
+        onTakeTicket={handleTakeTicket}
+        onResolve={handleResolve}
+        onOpenPreview={setPreviewImageUrl}
+        onOpenTicket={(ticketId) => navigate(`/tech-mobile/tickets/${ticketId}`)}
+      />
 
       {previewImageUrl && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4">
+        <ModalOverlay className="bg-black/70 backdrop-blur-sm" zIndex={130}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-3 shadow-xl">
             <img
               src={resolveBackendMediaUrl(previewImageUrl)}
@@ -390,7 +554,7 @@ function MobileTechSupportTickets() {
               Đóng
             </button>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </section>
   )
