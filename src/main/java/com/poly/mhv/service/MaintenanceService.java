@@ -121,6 +121,7 @@ public class MaintenanceService {
         }
         return MaintenanceHistoryResponse.builder()
                 .id(ticket.getId())
+                .status(ticket.getStatus())
                 .assetQaCode(asset.getQaCode())
                 .assetName(asset.getName())
                 .homeLocationName(asset.getHomeLocation().getRoomName())

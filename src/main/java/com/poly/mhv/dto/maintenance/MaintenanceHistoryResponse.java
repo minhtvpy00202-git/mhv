@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class MaintenanceHistoryResponse {
     private Integer id;
+    private String status;
     private String assetQaCode;
     private String assetName;
     private String homeLocationName;
