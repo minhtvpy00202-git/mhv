@@ -45,6 +45,7 @@ export default function SearchableSelect({
   getOptionDescription = defaultGetOptionDescription,
   getOptionSearchText,
   renderOption = defaultRenderOption,
+  dropdownZIndex = 140,
 }) {
   const containerRef = useRef(null)
   const inputRef = useRef(null)
@@ -138,6 +139,7 @@ export default function SearchableSelect({
         top: shouldOpenUpward ? undefined : rect.bottom + 4,
         bottom: shouldOpenUpward ? viewportHeight - rect.top + 4 : undefined,
         maxHeight,
+        zIndex: dropdownZIndex,
       })
     }
 
@@ -160,7 +162,7 @@ export default function SearchableSelect({
       window.removeEventListener('scroll', updateDropdownPosition, true)
       document.removeEventListener('pointerdown', handlePointerDownOutside)
     }
-  }, [open])
+  }, [dropdownZIndex, open])
 
   const commitSelection = (option) => {
     onChange?.(option.value, option.original)
@@ -222,7 +224,7 @@ export default function SearchableSelect({
       id={listboxId}
       role="listbox"
       style={dropdownStyle}
-      className={`z-[140] overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 ${dropdownClassName}`}
+      className={`overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900 ${dropdownClassName}`}
     >
       {filteredOptions.map((option, index) => {
         const isSelected = option.valueString === normalizedValue

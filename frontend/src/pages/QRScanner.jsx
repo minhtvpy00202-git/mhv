@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import SearchableSelect from '../components/ui/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { parseSpecsToEntries } from '../utils/assetSpecs'
 
@@ -11,7 +12,6 @@ function QRScanner() {
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
-  const locationOptionsRef = useRef(null)
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
   const [scannedLocationId, setScannedLocationId] = useState(null)
@@ -22,34 +22,12 @@ function QRScanner() {
   const [showActionModal, setShowActionModal] = useState(false)
   const [toLocationId, setToLocationId] = useState('')
   const [locations, setLocations] = useState([])
-  const [locationQuery, setLocationQuery] = useState('')
-  const [showLocationOptions, setShowLocationOptions] = useState(false)
   const [loadingAction, setLoadingAction] = useState(false)
   const [manualQaCode, setManualQaCode] = useState('')
   const [manualLookupLoading, setManualLookupLoading] = useState(false)
   const { user } = useAuth()
 
   const userId = useMemo(() => user?.userId ?? null, [user])
-  const filteredLocations = useMemo(() => {
-    const keyword = locationQuery.trim().toLowerCase()
-    if (!keyword) return locations
-    return locations.filter((location) => location.roomName.toLowerCase().startsWith(keyword))
-  }, [locationQuery, locations])
-
-  useEffect(() => {
-    const handlePointerDownOutside = (event) => {
-      const target = event.target
-      if (showLocationOptions && locationOptionsRef.current && !locationOptionsRef.current.contains(target)) {
-        setShowLocationOptions(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDownOutside)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDownOutside)
-    }
-  }, [showLocationOptions])
-
   useEffect(() => {
     if (!showActionModal && keepScannerAliveRef.current) {
       void startScanner()
@@ -189,9 +167,7 @@ function QRScanner() {
     setScannedHomeLocationName('')
     setScannedSpecs([])
     setToLocationId('')
-    setLocationQuery('')
     setManualQaCode('')
-    setShowLocationOptions(false)
     startScanner()
   }
 
@@ -321,43 +297,18 @@ function QRScanner() {
             {canCheckout && (
               <div className="mt-3 space-y-2">
                 <label className="text-sm font-medium text-slate-700">Phòng đích</label>
-                <div ref={locationOptionsRef} className="relative">
-                  <input
-                    type="text"
-                    value={locationQuery}
-                    onFocus={() => setShowLocationOptions(true)}
-                    onChange={(e) => {
-                      setLocationQuery(e.target.value)
-                      setToLocationId('')
-                      setShowLocationOptions(true)
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none ring-fptOrange focus:ring-2"
-                    placeholder="Gõ để tìm phòng, ví dụ: 2"
-                  />
-                  {showLocationOptions && (
-                    <div className="absolute z-10 mt-1 max-h-52 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                      {filteredLocations.length > 0 ? (
-                        filteredLocations.map((location) => (
-                          <button
-                            key={location.id}
-                            type="button"
-                            onClick={() => {
-                              setToLocationId(String(location.id))
-                              setLocationQuery(location.roomName)
-                              setShowLocationOptions(false)
-                            }}
-                            className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                          >
-                            {location.roomName}
-                          </button>
-                        ))
-                      ) : (
-                        <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500">Phòng sẽ lọc theo tiền tố A-Z hoặc số bạn nhập.</p>
+                <SearchableSelect
+                  value={toLocationId}
+                  onChange={(nextValue) => setToLocationId(String(nextValue || ''))}
+                  options={locations}
+                  placeholder="Gõ để tìm phòng, ví dụ: Hành lang 1"
+                  emptyText="Không có phòng phù hợp."
+                  getOptionValue={(location) => location.id}
+                  getOptionLabel={(location) => location.roomName || `Phòng #${location.id}`}
+                  getOptionSearchText={(location) => `${location.roomName || ''} ${location.description || ''}`}
+                  dropdownZIndex={1100}
+                />
+                <p className="text-xs text-slate-500">Danh sách sẽ tự nổi lên và đổi hướng hiển thị để không che khuất vùng thao tác.</p>
               </div>
             )}
             </div>
