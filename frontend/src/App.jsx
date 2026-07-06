@@ -194,8 +194,9 @@ function App() {
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
           <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
           <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
-          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" />)} />
+          <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
           <Route path="/admin/assets/consumables/warehouses" element={withSuspense(<AssetManagement key="assets-consumables-warehouses" initialSection="consumables" initialConsumableWorkspace="WAREHOUSES" />)} />
+          <Route path="/admin/assets/consumables/rooms" element={withSuspense(<AssetManagement key="assets-consumables-rooms" initialSection="consumables" initialConsumableWorkspace="ROOMS" />)} />
           <Route path="/admin/assets/consumables/requests" element={withSuspense(<AssetManagement key="assets-consumables-requests" initialSection="consumables" initialConsumableWorkspace="REQUESTS" />)} />
           <Route path="/admin/assets/consumables/disposal" element={withSuspense(<AssetManagement key="assets-consumables-disposal" initialSection="consumables" initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
@@ -228,6 +229,9 @@ function App() {
           )}
         >
           <Route path="/supply/consumables" element={withSuspense(<AssetManagement restrictToConsumable />)} />
+          <Route path="/supply/consumables/warehouses" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="WAREHOUSES" />)} />
+          <Route path="/supply/consumables/rooms" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="ROOMS" />)} />
+          <Route path="/supply/consumables/disposal" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/supply/notifications/:id" element={withSuspense(<NotificationDetail />)} />
         </Route>
         <Route path="*" element={<RootRedirect />} />

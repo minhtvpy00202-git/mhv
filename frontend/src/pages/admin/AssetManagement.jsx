@@ -78,8 +78,34 @@ const defaultSortState = {
   key: 'qaCode',
   direction: 'asc',
 }
-const CONSUMABLE_WORKSPACE_STORAGE_KEY = 'mhv-admin-consumable-workspace'
 const CONSUMABLE_WORKSPACES = new Set(['OVERVIEW', 'WAREHOUSES', 'ROOMS', 'DISPOSAL', 'REQUESTS'])
+const CONSUMABLE_WORKSPACE_META = {
+  OVERVIEW: {
+    title: 'Danh sách vật tư',
+    description: 'Vật tư tiêu hao theo dạng danh sách tổng hợp để theo dõi tồn kho, nhập hàng và cấp phát.',
+    allowInventoryActions: true,
+  },
+  WAREHOUSES: {
+    title: 'Kho vật tư',
+    description: 'Theo dõi tồn kho theo từng kho lưu trữ, chọn kho để nhập hàng và rà soát số lượng hiện có.',
+    allowInventoryActions: true,
+  },
+  ROOMS: {
+    title: 'Theo dõi theo phòng',
+    description: 'Theo dõi lượng vật tư đã cấp phát cho từng phòng, đồng thời xử lý yêu cầu sử dụng và điều chỉnh tồn thực tế.',
+    allowInventoryActions: false,
+  },
+  DISPOSAL: {
+    title: 'Tiêu huỷ vật tư',
+    description: 'Tạo phiếu tiêu huỷ theo lô, rà soát hạn sử dụng và theo dõi lịch sử xử lý vật tư cần huỷ.',
+    allowInventoryActions: false,
+  },
+  REQUESTS: {
+    title: 'Phiếu chờ duyệt',
+    description: 'Duyệt hoặc từ chối các yêu cầu cấp phát, sử dụng và tiêu huỷ vật tư đang chờ xử lý.',
+    allowInventoryActions: false,
+  },
+}
 
 function normalizeConsumableWorkspace(workspace, isAdminUser) {
   const normalized = String(workspace || '').trim().toUpperCase()
@@ -88,25 +114,6 @@ function normalizeConsumableWorkspace(workspace, isAdminUser) {
   return normalized
 }
 
-function readStoredConsumableWorkspace(isAdminUser, fallbackWorkspace = null) {
-  if (fallbackWorkspace) {
-    return normalizeConsumableWorkspace(fallbackWorkspace, isAdminUser)
-  }
-  try {
-    const stored = window.localStorage.getItem(CONSUMABLE_WORKSPACE_STORAGE_KEY)
-    return normalizeConsumableWorkspace(stored || 'OVERVIEW', isAdminUser)
-  } catch {
-    return normalizeConsumableWorkspace('OVERVIEW', isAdminUser)
-  }
-}
-
-function persistConsumableWorkspace(workspace) {
-  try {
-    window.localStorage.setItem(CONSUMABLE_WORKSPACE_STORAGE_KEY, workspace)
-  } catch {
-    // ignore storage errors (private mode, quota, ...)
-  }
-}
 const itemizedAssetColumnOptions = [
   { key: 'qaCode', label: 'Mã QA' },
   { key: 'name', label: 'Tên thiết bị' },
@@ -609,7 +616,7 @@ function AssetManagement({
   const [openActionMenuQaCode, setOpenActionMenuQaCode] = useState(null)
   const [actionMenuPos, setActionMenuPos] = useState({ top: 0, bottom: 'auto', right: 0 })
   const [consumableWorkspace, setConsumableWorkspace] = useState(() => (
-    readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
+    normalizeConsumableWorkspace(initialConsumableWorkspace, user?.role === 'Admin')
   ))
   const [selectedWarehouseLocationId, setSelectedWarehouseLocationId] = useState('')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
@@ -1238,7 +1245,7 @@ function AssetManagement({
   useEffect(() => {
     if (!isConsumableMode(initialTrackingMode)) return
     setConsumableWorkspace((previous) => {
-      const nextWorkspace = readStoredConsumableWorkspace(user?.role === 'Admin', initialConsumableWorkspace)
+      const nextWorkspace = normalizeConsumableWorkspace(initialConsumableWorkspace, user?.role === 'Admin')
       return previous === nextWorkspace ? previous : nextWorkspace
     })
   }, [initialConsumableWorkspace, initialTrackingMode, user?.role])
@@ -1328,30 +1335,6 @@ function AssetManagement({
     if (nextTab === 'CONSUMABLE' && isAdmin) {
       await loadPendingConsumableRequests()
     }
-  }
-
-  const handleSwitchConsumableWorkspace = async (nextWorkspace) => {
-    setConsumableWorkspace(nextWorkspace)
-    persistConsumableWorkspace(nextWorkspace)
-    if (nextWorkspace === 'REQUESTS') {
-      if (isAdmin) {
-        await Promise.all([
-          loadPendingConsumableRequests(),
-          loadPendingDisposalRequests(),
-        ])
-      }
-      return
-    }
-    if (nextWorkspace === 'DISPOSAL') {
-      await Promise.all([
-        loadExpiredLots(),
-        loadDisposalRequests(),
-        isAdmin ? loadPendingDisposalRequests() : Promise.resolve(),
-      ])
-      return
-    }
-    if (nextWorkspace !== 'ROOMS') return
-    await ensureRoomLoaded()
   }
 
   const resetSupplierForm = () => {
@@ -2627,18 +2610,25 @@ function AssetManagement({
   const goToPrevPage = async () => loadAssets(Math.max(0, pageInfo.page - 1))
   const goToNextPage = async () => loadAssets(Math.min(totalPages - 1, pageInfo.page + 1))
   const goToLastPage = async () => loadAssets(Math.max(0, totalPages - 1))
+  const currentConsumableWorkspaceMeta = CONSUMABLE_WORKSPACE_META[consumableWorkspace] || CONSUMABLE_WORKSPACE_META.OVERVIEW
 
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{restrictToConsumable ? 'Quản lý cấp phát vật tư' : 'Quản lý tài sản'}</h2>
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+              {restrictToConsumable
+                ? 'Quản lý cấp phát vật tư'
+                : isConsumableTab
+                  ? currentConsumableWorkspaceMeta.title
+                  : 'Quản lý tài sản'}
+            </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {restrictToConsumable
                 ? 'Không gian làm việc cho vật tư tiêu hao, cấp phát và theo dõi theo phòng.'
                 : isConsumableTab
-                  ? 'Vật tư tiêu hao — theo dõi tồn kho, nhập hàng và cấp phát.'
+                  ? currentConsumableWorkspaceMeta.description
                   : 'Tài sản cố định — theo dõi thiết bị, vị trí và trạng thái sử dụng.'}
             </p>
           </div>
@@ -2672,7 +2662,7 @@ function AssetManagement({
                   Xuất Excel
                 </button>
               </>
-            ) : (
+            ) : currentConsumableWorkspaceMeta.allowInventoryActions ? (
               <>
                 <button
                   type="button"
@@ -2701,6 +2691,10 @@ function AssetManagement({
                   Xuất Excel
                 </button>
               </>
+            ) : (
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                {currentConsumableWorkspaceMeta.title}
+              </div>
             )}
           </div>
         </div>
@@ -2771,89 +2765,6 @@ function AssetManagement({
 
       {isConsumableTab ? (
         <div className="space-y-4">
-          <div className="border-b border-slate-200 dark:border-slate-800">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => handleSwitchConsumableWorkspace('OVERVIEW')}
-                className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
-                  consumableWorkspace === 'OVERVIEW'
-                    ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                Danh sách vật tư
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchConsumableWorkspace('WAREHOUSES')}
-                className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
-                  consumableWorkspace === 'WAREHOUSES'
-                    ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                Kho vật tư
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchConsumableWorkspace('ROOMS')}
-                className={`border-b-2 px-1 pb-2 text-sm font-semibold ${
-                  consumableWorkspace === 'ROOMS'
-                    ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                Theo dõi theo phòng
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSwitchConsumableWorkspace('DISPOSAL')}
-                className={`flex items-center gap-1.5 border-b-2 px-1 pb-2 text-sm font-semibold ${
-                  consumableWorkspace === 'DISPOSAL'
-                    ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Tiêu huỷ</span>
-                {!expiredLotsLoading && expiredLots.length > 0 && (
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-100 px-1.5 py-0.5 text-[11px] text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                    {expiredLots.length}
-                  </span>
-                )}
-              </button>
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => handleSwitchConsumableWorkspace('REQUESTS')}
-                  className={`inline-flex items-center gap-2 border-b-2 px-1 pb-2 text-sm font-semibold ${
-                    consumableWorkspace === 'REQUESTS'
-                      ? 'border-fptOrange text-fptOrangeDark dark:text-orange-300'
-                      : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                  }`}
-                >
-                  <span>Phiếu chờ duyệt</span>
-                  <span
-                    className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] ${
-                      consumableWorkspace === 'REQUESTS'
-                        ? 'bg-orange-100 text-fptOrangeDark dark:bg-orange-500/15 dark:text-orange-300'
-                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                    }`}
-                  >
-                    {pendingConsumableRequests.length + pendingDisposalRequests.length}
-                  </span>
-                </button>
-              )}
-            </div>
-            {consumableWorkspace !== 'OVERVIEW' && consumableWorkspace !== 'ROOMS' && consumableWorkspace !== 'WAREHOUSES' && (
-              <p className="mt-2 pb-1 text-sm text-slate-500 dark:text-slate-400">
-                {consumableWorkspace === 'DISPOSAL'
-                    ? 'Tạo phiếu tiêu huỷ theo lô, gộp nhiều lô cùng vật tư và tra cứu lịch sử xử lý.'
-                    : 'Duyệt hoặc từ chối phiếu cấp phát và yêu cầu tiêu huỷ đang chờ xử lý.'}
-              </p>
-            )}
-          </div>
-
           {consumableWorkspace === 'OVERVIEW' || consumableWorkspace === 'WAREHOUSES' ? (
             <>
               <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">

@@ -35,8 +35,9 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
     @Override
     public Page<UsageHistory> searchForAdminDynamic(
             String assetName,
-            Integer borrowedLocationId,
+            Integer homeLocationId,
             Integer userId,
+            String returnStatus,
             LocalDateTime startDateTime,
             LocalDateTime endDateTime,
             Pageable pageable
@@ -62,9 +63,11 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
                 assetJoin,
                 toLocationJoin,
                 userJoin,
+                homeLocationJoin,
                 assetName,
-                borrowedLocationId,
+                homeLocationId,
                 userId,
+                returnStatus,
                 startDateTime,
                 endDateTime
         ));
@@ -80,6 +83,7 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
         Join<UsageHistory, Asset> countAssetJoin = countRoot.join("asset", JoinType.INNER);
         Join<UsageHistory, Location> countToLocationJoin = countRoot.join("toLocation", JoinType.INNER);
         Join<UsageHistory, AppUser> countUserJoin = countRoot.join("user", JoinType.INNER);
+        Join<Asset, Location> countHomeLocationJoin = countAssetJoin.join("homeLocation", JoinType.LEFT);
         countQuery.select(cb.countDistinct(countRoot));
         countQuery.where(buildPredicates(
                 cb,
@@ -87,9 +91,11 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
                 countAssetJoin,
                 countToLocationJoin,
                 countUserJoin,
+                countHomeLocationJoin,
                 assetName,
-                borrowedLocationId,
+                homeLocationId,
                 userId,
+                returnStatus,
                 startDateTime,
                 endDateTime
         ));
@@ -104,9 +110,11 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
             Join<UsageHistory, Asset> assetJoin,
             Join<UsageHistory, Location> toLocationJoin,
             Join<UsageHistory, AppUser> userJoin,
+            Join<Asset, Location> homeLocationJoin,
             String assetName,
-            Integer borrowedLocationId,
+            Integer homeLocationId,
             Integer userId,
+            String returnStatus,
             LocalDateTime startDateTime,
             LocalDateTime endDateTime
     ) {
@@ -114,11 +122,19 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
         if (StringUtils.hasText(assetName)) {
             predicates.add(cb.like(cb.lower(assetJoin.get("name")), "%" + assetName.trim().toLowerCase() + "%"));
         }
-        if (borrowedLocationId != null) {
-            predicates.add(cb.equal(toLocationJoin.get("id"), borrowedLocationId));
+        if (homeLocationId != null) {
+            predicates.add(cb.equal(homeLocationJoin.get("id"), homeLocationId));
         }
         if (userId != null) {
             predicates.add(cb.equal(userJoin.get("id"), userId));
+        }
+        if (StringUtils.hasText(returnStatus)) {
+            String normalizedReturnStatus = returnStatus.trim().toUpperCase();
+            if ("RETURNED".equals(normalizedReturnStatus)) {
+                predicates.add(cb.isNotNull(root.get("endTime")));
+            } else if ("NOT_RETURNED".equals(normalizedReturnStatus)) {
+                predicates.add(cb.isNull(root.get("endTime")));
+            }
         }
         if (startDateTime != null) {
             predicates.add(cb.greaterThanOrEqualTo(root.get("startTime"), startDateTime));
@@ -148,10 +164,13 @@ public class UsageHistoryRepositoryImpl implements UsageHistoryRepositoryCustom 
             Path<?> path = switch (order.getProperty()) {
                 case "asset.qaCode" -> assetJoin.get("qaCode");
                 case "asset.name" -> assetJoin.get("name");
+                case "asset.technicalStatus" -> assetJoin.get("technicalStatus");
                 case "asset.homeLocation.roomName" -> homeLocationJoin.get("roomName");
                 case "toLocation.roomName" -> toLocationJoin.get("roomName");
+                case "user.fullName" -> userJoin.get("fullName");
                 case "user.username" -> userJoin.get("username");
-                default -> root.get(order.getProperty());
+                case "startTime", "endTime", "id" -> root.get(order.getProperty());
+                default -> root.get("startTime");
             };
             orders.add(order.isAscending() ? cb.asc(path) : cb.desc(path));
         }

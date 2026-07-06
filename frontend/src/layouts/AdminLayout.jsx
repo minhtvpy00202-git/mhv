@@ -55,6 +55,7 @@ const menuItems = [
           { to: '/admin/assets/consumables', label: 'Danh sách vật tư', icon: Boxes },
           { to: '/admin/categories/consumables', label: 'Loại vật tư', icon: Tags },
           { to: '/admin/assets/consumables/warehouses', label: 'Kho vật tư', icon: PackageSearch },
+          { to: '/admin/assets/consumables/rooms', label: 'Theo dõi theo phòng', icon: MapPin },
           { to: '/admin/assets/consumables/requests', label: 'Yêu cầu cấp phát / sử dụng', icon: Clock },
           { to: '/admin/assets/consumables/disposal', label: 'Thanh lý / hủy vật tư', icon: Wrench },
         ],

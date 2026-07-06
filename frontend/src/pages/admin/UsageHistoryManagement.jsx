@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  IconCalendar as Calendar,
+  IconFilter as Filter,
+  IconRefresh as RotateCcw,
+  IconSearch as Search,
+  IconFileSpreadsheet as Sheet,
+} from '@tabler/icons-react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
@@ -30,21 +37,26 @@ const usageHistoryColumnOptions = [
   { key: 'borrowerFullName', label: 'Người mượn' },
 ]
 const defaultUsageHistoryVisibleColumnKeys = ['index', 'assetQaCode', 'assetName', 'borrowedLocationName', 'startTime', 'endTime', 'borrowerFullName']
+const returnStatusOptions = [
+  { value: '', label: 'Tất cả trạng thái trả' },
+  { value: 'NOT_RETURNED', label: 'Chưa trả' },
+  { value: 'RETURNED', label: 'Đã trả' },
+]
+const filterInputClassName = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none ring-fptOrange transition focus:border-orange-300 focus:ring-2'
+const filterSelectClassName = 'rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm outline-none ring-fptOrange transition focus:border-orange-300 focus:ring-2'
 
 function UsageHistoryManagement() {
-  const locationFilterRef = useRef(null)
   const [histories, setHistories] = useState([])
   const [locations, setLocations] = useState([])
   const [users, setUsers] = useState([])
   const [filters, setFilters] = useState({
     assetName: '',
-    borrowedLocationId: '',
-    borrowedLocationKeyword: '',
+    homeLocationId: '',
     userId: '',
+    returnStatus: '',
     startDate: '',
     endDate: '',
   })
-  const [showLocationOptions, setShowLocationOptions] = useState(false)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [pageInfo, setPageInfo] = useState(defaultPageInfo)
@@ -100,27 +112,9 @@ function UsageHistoryManagement() {
     initializePage()
   }, [])
 
-  const filteredLocations = locations.filter((location) =>
-    location.roomName.toLowerCase().includes(filters.borrowedLocationKeyword.trim().toLowerCase()),
-  )
-
-  useEffect(() => {
-    const handlePointerDownOutside = (event) => {
-      const target = event.target
-      if (showLocationOptions && locationFilterRef.current && !locationFilterRef.current.contains(target)) {
-        setShowLocationOptions(false)
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDownOutside)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDownOutside)
-    }
-  }, [showLocationOptions])
-
   useDebouncedEffect(() => {
     void loadHistories(0, filters)
-  }, [filters.assetName, filters.borrowedLocationId, filters.userId, filters.startDate, filters.endDate], 300, true)
+  }, [filters.assetName, filters.homeLocationId, filters.userId, filters.returnStatus, filters.startDate, filters.endDate], 300, true)
 
   const tableColumns = useMemo(() => ([
     { key: 'index', label: 'STT', headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (_history, index) => pageInfo.page * pageInfo.size + index + 1 },
@@ -130,7 +124,7 @@ function UsageHistoryManagement() {
     { key: 'borrowedLocationName', label: <button type="button" onClick={() => handleSort('borrowedLocationName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('borrowedLocationName', 'Phòng mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.borrowedLocationName },
     { key: 'startTime', label: <button type="button" onClick={() => handleSort('startTime')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('startTime', 'Ngày mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => formatVietnamDateTime(history.startTime, '') },
     { key: 'endTime', label: <button type="button" onClick={() => handleSort('endTime')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('endTime', 'Ngày trả')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => (history.endTime ? formatVietnamDateTime(history.endTime, '') : '') },
-    { key: 'assetTechnicalStatus', label: 'Tình trạng kỹ thuật', headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => getTechnicalStatusLabel(history.assetTechnicalStatus) },
+    { key: 'assetTechnicalStatus', label: <button type="button" onClick={() => handleSort('assetTechnicalStatus')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('assetTechnicalStatus', 'Tình trạng kỹ thuật')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => getTechnicalStatusLabel(history.assetTechnicalStatus) },
     { key: 'borrowerFullName', label: <button type="button" onClick={() => handleSort('borrowerFullName')} className="whitespace-nowrap hover:text-fptOrange">{getSortLabel('borrowerFullName', 'Người mượn')}</button>, headClassName: 'whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600', cellClassName: 'px-3 py-2', render: (history) => history.borrowerFullName },
   ]), [getSortLabel, handleSort, pageInfo.page, pageInfo.size])
   const renderedColumns = useMemo(
@@ -146,8 +140,9 @@ function UsageHistoryManagement() {
       sortDirection: nextSort.direction,
     }
     if (nextFilters.assetName.trim()) params.assetName = nextFilters.assetName.trim()
-    if (nextFilters.borrowedLocationId) params.borrowedLocationId = Number(nextFilters.borrowedLocationId)
+    if (nextFilters.homeLocationId) params.homeLocationId = Number(nextFilters.homeLocationId)
     if (nextFilters.userId) params.userId = Number(nextFilters.userId)
+    if (nextFilters.returnStatus) params.returnStatus = nextFilters.returnStatus
     if (nextFilters.startDate) params.startDate = nextFilters.startDate
     if (nextFilters.endDate) params.endDate = nextFilters.endDate
     return params
@@ -178,9 +173,9 @@ function UsageHistoryManagement() {
   const handleResetFilters = async () => {
     const reset = {
       assetName: '',
-      borrowedLocationId: '',
-      borrowedLocationKeyword: '',
+      homeLocationId: '',
       userId: '',
+      returnStatus: '',
       startDate: '',
       endDate: '',
     }
@@ -214,8 +209,9 @@ function UsageHistoryManagement() {
     try {
       const params = {}
       if (filters.assetName.trim()) params.assetName = filters.assetName.trim()
-      if (filters.borrowedLocationId) params.borrowedLocationId = Number(filters.borrowedLocationId)
+      if (filters.homeLocationId) params.homeLocationId = Number(filters.homeLocationId)
       if (filters.userId) params.userId = Number(filters.userId)
+      if (filters.returnStatus) params.returnStatus = filters.returnStatus
       if (filters.startDate) params.startDate = filters.startDate
       if (filters.endDate) params.endDate = filters.endDate
       const response = await axiosClient.get('/api/reports/export-usage-history', {
@@ -239,6 +235,15 @@ function UsageHistoryManagement() {
     }
   }
 
+  const activeFilterCount = [
+    filters.assetName,
+    filters.homeLocationId,
+    filters.userId,
+    filters.returnStatus,
+    filters.startDate,
+    filters.endDate,
+  ].filter(Boolean).length
+
   return (
     <div className="space-y-4">
       <section className="rounded-xl bg-white p-4 shadow-sm">
@@ -249,130 +254,162 @@ function UsageHistoryManagement() {
       </section>
 
       <section className="rounded-xl bg-white p-4 shadow-sm">
-      <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        <input
-          value={filters.assetName}
-          onChange={(e) => setFilters((prev) => ({ ...prev, assetName: e.target.value }))}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-          placeholder="Tên thiết bị"
-        />
-        <div ref={locationFilterRef} className="relative">
-          <input
-            value={filters.borrowedLocationKeyword}
-            onFocus={() => setShowLocationOptions(true)}
-            onChange={(e) => {
-              setFilters((prev) => ({
-                ...prev,
-                borrowedLocationKeyword: e.target.value,
-                borrowedLocationId: '',
-              }))
-              setShowLocationOptions(true)
-            }}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-            placeholder="Phòng mượn (gõ để lọc)"
-          />
-          {showLocationOptions && (
-            <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-              <button
-                type="button"
-                onClick={() => {
-                  setFilters((prev) => ({ ...prev, borrowedLocationId: '', borrowedLocationKeyword: '' }))
-                  setShowLocationOptions(false)
-                }}
-                className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-              >
-                Tất cả phòng
-              </button>
-              {filteredLocations.map((location) => (
-                <button
-                  key={location.id}
-                  type="button"
-                  onClick={() => {
-                    setFilters((prev) => ({
-                      ...prev,
-                      borrowedLocationId: String(location.id),
-                      borrowedLocationKeyword: location.roomName,
-                    }))
-                    setShowLocationOptions(false)
-                  }}
-                  className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-orange-50"
-                >
-                  {location.roomName}
-                </button>
-              ))}
-              {filteredLocations.length === 0 && (
-                <p className="px-3 py-2 text-sm text-slate-500">Không có phòng phù hợp.</p>
-              )}
+        <div className="mb-4 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-orange-100 p-2 text-fptOrange">
+                <Filter size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Bộ lọc lịch sử</p>
+                <p className="text-xs text-slate-500">Tìm nhanh theo thiết bị, phòng gốc, người mượn, trạng thái trả và khoảng thời gian.</p>
+              </div>
             </div>
-          )}
+            <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
+              Đang bật {activeFilterCount} bộ lọc
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tên thiết bị</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  <Search size={16} />
+                </span>
+                <input
+                  value={filters.assetName}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, assetName: e.target.value }))}
+                  className={`${filterInputClassName} pl-10`}
+                  placeholder="Nhập tên hoặc mã thiết bị"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Phòng gốc</label>
+              <SearchableSelect
+                value={filters.homeLocationId}
+                onChange={(nextValue) => setFilters((prev) => ({ ...prev, homeLocationId: String(nextValue || '') }))}
+                options={locations}
+                getOptionValue={(location) => location.id}
+                getOptionLabel={(location) => location.roomName}
+                placeholder="Gõ để lọc theo phòng gốc"
+                emptyOptionLabel="Tất cả phòng gốc"
+                inputClassName={filterInputClassName}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Người mượn</label>
+              <SearchableSelect
+                value={filters.userId}
+                onChange={(nextValue) => setFilters((prev) => ({ ...prev, userId: String(nextValue || '') }))}
+                options={users}
+                getOptionValue={(user) => user.id}
+                getOptionLabel={(user) => user.fullName || user.username}
+                getOptionSearchText={(user) => `${user.fullName || ''} ${user.username || ''}`}
+                placeholder="Gõ để tìm người mượn"
+                emptyOptionLabel="Tất cả người mượn"
+                inputClassName={filterInputClassName}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Trạng thái trả</label>
+              <select
+                value={filters.returnStatus}
+                onChange={(e) => setFilters((prev) => ({ ...prev, returnStatus: e.target.value }))}
+                className={`${filterSelectClassName} w-full`}
+              >
+                {returnStatusOptions.map((option) => (
+                  <option key={option.value || 'all'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Từ ngày mượn</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  <Calendar size={16} />
+                </span>
+                <input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                  className={`${filterInputClassName} pl-10`}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Đến ngày mượn</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
+                  <Calendar size={16} />
+                </span>
+                <input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                  className={`${filterInputClassName} pl-10`}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <button
+              type="button"
+              onClick={() => loadHistories(0)}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-fptOrange px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-fptOrangeDark disabled:opacity-60"
+            >
+              <Search size={16} />
+              Tìm kiếm
+            </button>
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-60"
+            >
+              <RotateCcw size={16} />
+              Xóa bộ lọc
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+            >
+              <Sheet size={16} />
+              {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+            </button>
+            <div className="min-w-[180px]">
+              <ColumnVisibilityDropdown
+                columns={usageHistoryColumnOptions}
+                visibleColumns={visibleColumns}
+                selectedCount={selectedCount}
+                allSelected={allSelected}
+                onToggleColumn={(columnKey) => {
+                  if (visibleColumns[columnKey] && selectedCount === 1) {
+                    toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
+                    return
+                  }
+                  toggleColumn(columnKey)
+                }}
+                onSelectAll={selectAllColumns}
+                onResetDefault={resetDefaultColumns}
+              />
+            </div>
+          </div>
         </div>
-        <SearchableSelect
-          value={filters.userId}
-          onChange={(nextValue) => setFilters((prev) => ({ ...prev, userId: String(nextValue || '') }))}
-          options={users}
-          getOptionValue={(user) => user.id}
-          getOptionLabel={(user) => user.fullName || user.username}
-          getOptionSearchText={(user) => `${user.fullName || ''} ${user.username || ''}`}
-          placeholder="Gõ để tìm người mượn"
-          emptyOptionLabel="Tất cả người mượn"
-        />
-        <input
-          type="date"
-          value={filters.startDate}
-          onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-        />
-        <input
-          type="date"
-          value={filters.endDate}
-          onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
-        />
-      </div>
-      <div className="mb-4 grid gap-2 sm:grid-cols-3">
-        <button
-          type="button"
-          onClick={() => loadHistories(0)}
-          disabled={loading}
-          className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-        >
-          Tìm kiếm
-        </button>
-        <button
-          type="button"
-          onClick={handleResetFilters}
-          disabled={loading}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
-        >
-          Xóa bộ lọc
-        </button>
-        <button
-          type="button"
-          onClick={handleExportExcel}
-          disabled={exporting}
-          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-        >
-          Xuất Excel
-        </button>
-        <ColumnVisibilityDropdown
-          columns={usageHistoryColumnOptions}
-          visibleColumns={visibleColumns}
-          selectedCount={selectedCount}
-          allSelected={allSelected}
-          onToggleColumn={(columnKey) => {
-            if (visibleColumns[columnKey] && selectedCount === 1) {
-              toast.info('Cần giữ lại ít nhất 1 cột hiển thị.')
-              return
-            }
-            toggleColumn(columnKey)
-          }}
-          onSelectAll={selectAllColumns}
-          onResetDefault={resetDefaultColumns}
-        />
-      </div>
-      <div className="overflow-x-auto">
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+        <div className="overflow-x-auto">
         <table className="min-w-max divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50/90">
             <tr>
               {renderedColumns.map((column) => (
                 <th key={column.key} className={column.headClassName}>
@@ -381,7 +418,7 @@ function UsageHistoryManagement() {
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 bg-white">
             {loading &&
               Array.from({ length: 9 }).map((_, index) => (
                 <tr key={`history-loading-${index}`} className="animate-pulse">
@@ -392,7 +429,7 @@ function UsageHistoryManagement() {
               ))}
             {!loading &&
               histories.map((history, index) => (
-                <tr key={history.id}>
+                <tr key={history.id} className="hover:bg-orange-50/40">
                   {renderedColumns.map((column) => (
                     <td key={`${history.id}-${column.key}`} className={column.cellClassName}>
                       {column.render(history, index)}
@@ -402,7 +439,8 @@ function UsageHistoryManagement() {
               ))}
           </tbody>
         </table>
-      </div>
+        </div>
+        </div>
       {!loading && pageInfo.totalItems > 0 && (
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
           {currentPage >= 3 && (

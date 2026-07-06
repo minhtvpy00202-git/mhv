@@ -8,8 +8,9 @@ import org.springframework.data.domain.Pageable;
 public interface UsageHistoryRepositoryCustom {
     Page<UsageHistory> searchForAdminDynamic(
             String assetName,
-            Integer borrowedLocationId,
+            Integer homeLocationId,
             Integer userId,
+            String returnStatus,
             LocalDateTime startDateTime,
             LocalDateTime endDateTime,
             Pageable pageable

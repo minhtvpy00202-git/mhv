@@ -1,4 +1,11 @@
-import { IconBell as Bell, IconBoxMultiple as Boxes, IconLogout as LogOut } from '@tabler/icons-react'
+import {
+  IconBell as Bell,
+  IconBoxMultiple as Boxes,
+  IconLogout as LogOut,
+  IconMapPin as MapPin,
+  IconPackage as Package,
+  IconTool as Wrench,
+} from '@tabler/icons-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -9,6 +16,33 @@ import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
 import { formatVietnamDateTime } from '../utils/datetime'
+
+const consumableMenuItems = [
+  {
+    to: '/supply/consumables',
+    label: 'Danh sách vật tư',
+    description: 'Tồn kho tổng hợp',
+    icon: Boxes,
+  },
+  {
+    to: '/supply/consumables/warehouses',
+    label: 'Kho vật tư',
+    description: 'Theo dõi từng kho',
+    icon: Package,
+  },
+  {
+    to: '/supply/consumables/rooms',
+    label: 'Theo dõi theo phòng',
+    description: 'Cấp phát theo phòng',
+    icon: MapPin,
+  },
+  {
+    to: '/supply/consumables/disposal',
+    label: 'Thanh lý / hủy vật tư',
+    description: 'Lô hết hạn và lịch sử',
+    icon: Wrench,
+  },
+]
 
 function ConsumableManagerLayout() {
   const { user, logout } = useAuth()
@@ -87,17 +121,33 @@ function ConsumableManagerLayout() {
           <p className="mt-1 text-sm text-white/85">Vật tư tiêu hao</p>
         </div>
         <nav className="mt-4 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <NavLink
-            to="/supply/consumables"
-            className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-medium text-slate-600 transition hover:bg-orange-50 hover:text-fptOrangeDark dark:text-slate-300 dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
-            style={({ isActive }) => ({
-              backgroundColor: isActive ? toRgba(primaryColor, 0.1) : 'transparent',
-              color: isActive ? primaryColor : undefined,
+          <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            Không gian làm việc
+          </p>
+          <div className="space-y-1">
+            {consumableMenuItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className="flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition hover:bg-orange-50 hover:text-fptOrangeDark dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
+                  style={({ isActive }) => ({
+                    backgroundColor: isActive ? toRgba(primaryColor, 0.1) : 'transparent',
+                    color: isActive ? primaryColor : undefined,
+                  })}
+                >
+                  <span className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                    <Icon size={18} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{item.label}</span>
+                    <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{item.description}</span>
+                  </span>
+                </NavLink>
+              )
             })}
-          >
-            <Boxes size={18} />
-            <span>Quản lý vật tư tiêu hao</span>
-          </NavLink>
+          </div>
         </nav>
       </aside>
 

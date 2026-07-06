@@ -136,8 +136,9 @@ public class ReportService {
     @Transactional(readOnly = true)
     public byte[] exportUsageHistoryExcel(
             String assetName,
-            Integer borrowedLocationId,
+            Integer homeLocationId,
             Integer userId,
+            String returnStatus,
             LocalDate startDate,
             LocalDate endDate
     ) throws IOException {
@@ -154,10 +155,25 @@ public class ReportService {
                             : history.getAsset().getName().toLowerCase(Locale.ROOT);
                     return assetValue.contains(normalizedAssetName);
                 })
-                .filter(history -> borrowedLocationId == null
-                        || (history.getToLocation() != null && borrowedLocationId.equals(history.getToLocation().getId())))
+                .filter(history -> homeLocationId == null
+                        || (history.getAsset() != null
+                        && history.getAsset().getHomeLocation() != null
+                        && homeLocationId.equals(history.getAsset().getHomeLocation().getId())))
                 .filter(history -> userId == null
                         || (history.getUser() != null && userId.equals(history.getUser().getId())))
+                .filter(history -> {
+                    if (!StringUtils.hasText(returnStatus)) {
+                        return true;
+                    }
+                    String normalizedReturnStatus = returnStatus.trim().toUpperCase(Locale.ROOT);
+                    if ("RETURNED".equals(normalizedReturnStatus)) {
+                        return history.getEndTime() != null;
+                    }
+                    if ("NOT_RETURNED".equals(normalizedReturnStatus)) {
+                        return history.getEndTime() == null;
+                    }
+                    return true;
+                })
                 .filter(history -> startDateTime == null
                         || (history.getStartTime() != null && !history.getStartTime().isBefore(startDateTime)))
                 .filter(history -> endDateTime == null

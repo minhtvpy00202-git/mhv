@@ -193,8 +193,9 @@ public class UsageHistoryService {
             int page,
             int size,
             String assetName,
-            Integer borrowedLocationId,
+            Integer homeLocationId,
             Integer userId,
+            String returnStatus,
             LocalDate startDate,
             LocalDate endDate,
             String sortKey,
@@ -210,8 +211,9 @@ public class UsageHistoryService {
         );
         Page<UsageHistory> historyPage = usageHistoryRepository.searchForAdminDynamic(
                 normalizedAssetName,
-                borrowedLocationId,
+                homeLocationId,
                 userId,
+                returnStatus,
                 startDateTime,
                 endDateTime,
                 pageable
@@ -333,6 +335,7 @@ public class UsageHistoryService {
         return switch (normalizedSortKey) {
             case "assetQaCode" -> Sort.by(direction, "asset.qaCode").and(Sort.by(Sort.Direction.DESC, "id"));
             case "assetName" -> Sort.by(direction, "asset.name").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "assetTechnicalStatus" -> Sort.by(direction, "asset.technicalStatus").and(Sort.by(Sort.Direction.DESC, "id"));
             case "homeLocationName" -> Sort.by(direction, "asset.homeLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
             case "borrowedLocationName" -> Sort.by(direction, "toLocation.roomName").and(Sort.by(Sort.Direction.DESC, "id"));
             case "endTime" -> Sort.by(direction, "endTime").and(Sort.by(Sort.Direction.DESC, "id"));

@@ -63,13 +63,14 @@ public class ReportController {
     })
     public ResponseEntity<byte[]> exportUsageHistory(
             @RequestParam(required = false) String assetName,
-            @RequestParam(required = false) Integer borrowedLocationId,
+            @RequestParam(required = false) Integer homeLocationId,
             @RequestParam(required = false) Integer userId,
+            @RequestParam(required = false) String returnStatus,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         try {
-            byte[] excelBytes = reportService.exportUsageHistoryExcel(assetName, borrowedLocationId, userId, startDate, endDate);
+            byte[] excelBytes = reportService.exportUsageHistoryExcel(assetName, homeLocationId, userId, returnStatus, startDate, endDate);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             headers.setContentDisposition(ContentDisposition.attachment().filename("lich-su-muon-thiet-bi.xlsx").build());
