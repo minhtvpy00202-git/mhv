@@ -3484,7 +3484,7 @@ function AssetManagement({
                   {!loading &&
                     assets.map((asset) => {
                       const homeLocation = asset.homeLocationName || asset.homeLocationId || '-'
-                      const currentLocation = asset.currentLocationName || asset.homeLocationName || asset.homeLocationId || '-'
+                      const currentLocation = asset.locationName || asset.currentLocationName || asset.homeLocationName || asset.homeLocationId || '-'
                       return (
                         <tr key={asset.qaCode} className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60">
                           {qrSelectionMode && (
