@@ -26,7 +26,7 @@ public class MaintenanceReportRequest {
     @JsonAlias({"imageUrl", "image_url"})
     @Schema(
             description = "URL ảnh lỗi theo cách cũ. Giữ để tương thích, khuyến nghị dùng API multipart với field image.",
-            example = "/uploads/maintenance/maintenance-15-error.jpg",
+            example = "/api/media/uploads/maintenance/maintenance-15-error.jpg",
             nullable = true
     )
     private String imageUrl;

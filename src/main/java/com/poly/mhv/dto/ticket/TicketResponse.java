@@ -64,7 +64,7 @@ public class TicketResponse {
     @Schema(description = "Mô tả sự cố", example = "Máy chiếu không lên nguồn, đèn báo đỏ liên tục.")
     private String description;
 
-    @Schema(description = "Đường dẫn ảnh sự cố", example = "/uploads/tickets/ticket-15-error.jpg", nullable = true)
+    @Schema(description = "Đường dẫn ảnh sự cố", example = "/api/media/uploads/tickets/ticket-15-error.jpg", nullable = true)
     private String imageUrl;
 
     @Schema(description = "Mức độ ưu tiên", example = "HIGH")

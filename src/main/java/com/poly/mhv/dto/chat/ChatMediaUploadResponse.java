@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @Schema(name = "ChatMediaUploadResponse", description = "Kết quả upload media chat để client dùng khi publish message realtime")
 public class ChatMediaUploadResponse {
-    @Schema(description = "Đường dẫn media đã lưu", example = "/uploads/chat/chat-media-15-20260515.jpg")
+    @Schema(description = "Đường dẫn media đã lưu", example = "/api/media/uploads/chat/chat-media-15-20260515.jpg")
     private String mediaUrl;
 
     @Schema(description = "Loại media được nhận diện", example = "image", allowableValues = {"image", "audio"})

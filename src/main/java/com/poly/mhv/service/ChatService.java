@@ -160,7 +160,11 @@ public class ChatService {
                 throw new CustomException("Loại media không hợp lệ.");
             }
             String normalizedContent = StringUtils.hasText(rawContent) ? rawContent.trim() : null;
-            return new ChatMediaStorageService.ProcessedChatPayload(normalizedContent, mediaUrl, mediaType);
+            return new ChatMediaStorageService.ProcessedChatPayload(
+                    normalizedContent,
+                    chatMediaStorageService.normalizeTrustedMediaUrl(mediaUrl),
+                    mediaType
+            );
         }
         return chatMediaStorageService.processIncomingContent(rawContent);
     }

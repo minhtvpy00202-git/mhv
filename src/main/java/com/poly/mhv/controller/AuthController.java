@@ -2,16 +2,12 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.auth.JwtResponse;
 import com.poly.mhv.dto.auth.LoginRequest;
-import com.poly.mhv.dto.auth.RegisterRequest;
 import com.poly.mhv.exception.CustomException;
-import com.poly.mhv.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import com.poly.mhv.security.jwt.JwtUtils;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -21,27 +17,23 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/auth", "/auth"})
-@Tag(name = "Xác thực", description = "API đăng nhập, đăng ký và kiểm tra tài khoản")
+@Tag(name = "Xác thực", description = "API đăng nhập hệ thống")
 @Validated
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
-    private final UserService userService;
 
-    public AuthController(AuthenticationManager authenticationManager, JwtUtils jwtUtils, UserService userService) {
+    public AuthController(AuthenticationManager authenticationManager, JwtUtils jwtUtils) {
         this.authenticationManager = authenticationManager;
         this.jwtUtils = jwtUtils;
-        this.userService = userService;
     }
 
     @PostMapping("/login")
@@ -74,38 +66,5 @@ public class AuthController {
         } catch (BadCredentialsException ex) {
             throw new CustomException("Sai username hoặc password.");
         }
-    }
-
-    @PostMapping("/register")
-    @Operation(summary = "Đăng ký tài khoản", description = "Tạo mới tài khoản người dùng theo dữ liệu đăng ký.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Đăng ký thành công"),
-            @ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ hoặc username đã tồn tại")
-    })
-    public JwtResponse register(@Valid @RequestBody RegisterRequest request) {
-        var created = userService.register(request);
-        return JwtResponse.builder()
-                .id(created.getId())
-                .username(created.getUsername())
-                .fullName(created.getFullName())
-                .email(created.getEmail())
-                .role(created.getRole())
-                .techTypeIds(created.getTechTypeIds())
-                .techTypeNames(created.getTechTypeNames())
-                .build();
-    }
-
-    @GetMapping("/check-username")
-    @Operation(summary = "Kiểm tra username", description = "Kiểm tra username đã tồn tại trong hệ thống hay chưa.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Kiểm tra thành công")
-    })
-    public java.util.Map<String, Boolean> checkUsername(
-            @RequestParam
-            @Size(min = 4, max = 50, message = "Username phải từ 4 đến 50 ký tự.")
-            @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "Username chỉ được chứa chữ cái, số và dấu gạch dưới.")
-            String username
-    ) {
-        return java.util.Map.of("exists", userService.existsByUsername(username));
     }
 }

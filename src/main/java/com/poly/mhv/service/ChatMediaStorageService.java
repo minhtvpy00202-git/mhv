@@ -2,7 +2,6 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.exception.CustomException;
 import java.util.Base64;
-import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -12,23 +11,16 @@ public class ChatMediaStorageService {
 
     private static final String IMG_PREFIX = "[[IMG]]";
     private static final String AUDIO_PREFIX = "[[AUDIO]]";
-    private static final Map<String, String> MIME_EXTENSION = Map.of(
-            "image/jpeg", "jpg",
-            "image/jpg", "jpg",
-            "image/png", "png",
-            "image/webp", "webp",
-            "image/gif", "gif",
-            "audio/webm", "webm",
-            "audio/mpeg", "mp3",
-            "audio/mp3", "mp3",
-            "audio/wav", "wav",
-            "audio/ogg", "ogg"
-    );
 
     private final MediaStorageService mediaStorageService;
+    private final MediaSecurityService mediaSecurityService;
 
-    public ChatMediaStorageService(MediaStorageService mediaStorageService) {
+    public ChatMediaStorageService(
+            MediaStorageService mediaStorageService,
+            MediaSecurityService mediaSecurityService
+    ) {
         this.mediaStorageService = mediaStorageService;
+        this.mediaSecurityService = mediaSecurityService;
     }
 
     public ProcessedChatPayload processIncomingContent(String rawContent) {
@@ -47,7 +39,7 @@ public class ChatMediaStorageService {
                 StoredMedia media = decodeAndStoreDataUrl(value, "image");
                 return new ProcessedChatPayload(null, media.url(), "image");
             }
-            return new ProcessedChatPayload(null, value, "image");
+            return new ProcessedChatPayload(null, normalizeTrustedMediaUrl(value), "image");
         }
         if (normalized.startsWith(AUDIO_PREFIX)) {
             String value = normalized.substring(AUDIO_PREFIX.length());
@@ -55,7 +47,7 @@ public class ChatMediaStorageService {
                 StoredMedia media = decodeAndStoreDataUrl(value, "audio");
                 return new ProcessedChatPayload(null, media.url(), "audio");
             }
-            return new ProcessedChatPayload(null, value, "audio");
+            return new ProcessedChatPayload(null, normalizeTrustedMediaUrl(value), "audio");
         }
         return new ProcessedChatPayload(normalized, null, null);
     }
@@ -72,21 +64,23 @@ public class ChatMediaStorageService {
         if (file == null || file.isEmpty()) {
             throw new CustomException("File media không được để trống.");
         }
-        String mimeType = StringUtils.hasText(file.getContentType())
-                ? file.getContentType().trim().toLowerCase()
-                : null;
-        if (!StringUtils.hasText(mimeType)) {
-            throw new CustomException("Không xác định được loại media.");
+        try {
+            byte[] bytes = file.getBytes();
+            try {
+                MediaSecurityService.ValidatedMedia image = mediaSecurityService.validateImage(
+                        bytes,
+                        MediaSecurityService.SAFE_IMAGE_MIME_TYPES
+                );
+                return storeValidatedMedia(image);
+            } catch (CustomException ignored) {
+                MediaSecurityService.ValidatedMedia audio = mediaSecurityService.validateAudio(bytes);
+                return storeValidatedMedia(audio);
+            }
+        } catch (CustomException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new CustomException("Không thể lưu media.");
         }
-        String logicalType;
-        if (mimeType.startsWith("image/")) {
-            logicalType = "image";
-        } else if (mimeType.startsWith("audio/")) {
-            logicalType = "audio";
-        } else {
-            throw new CustomException("Chỉ hỗ trợ upload ảnh hoặc ghi âm.");
-        }
-        return writeBytes(file, logicalType, mimeType);
     }
 
     private StoredMedia decodeAndStoreDataUrl(String dataUrl, String expectedType) {
@@ -99,10 +93,6 @@ public class ChatMediaStorageService {
         if (!meta.contains(";base64")) {
             throw new CustomException("Media base64 không hợp lệ.");
         }
-        String mimeType = meta.substring(0, meta.indexOf(';')).toLowerCase();
-        if (!mimeType.startsWith(expectedType + "/")) {
-            throw new CustomException("Loại media không hợp lệ.");
-        }
         byte[] bytes;
         try {
             bytes = Base64.getDecoder().decode(base64);
@@ -112,28 +102,34 @@ public class ChatMediaStorageService {
         if (bytes.length == 0) {
             throw new CustomException("Media rỗng.");
         }
-        String extension = MIME_EXTENSION.getOrDefault(mimeType, expectedType.equals("image") ? "jpg" : "bin");
         try {
+            MediaSecurityService.ValidatedMedia media = "image".equals(expectedType)
+                    ? mediaSecurityService.validateImage(bytes, MediaSecurityService.SAFE_IMAGE_MIME_TYPES)
+                    : mediaSecurityService.validateAudio(bytes);
+            if (!expectedType.equalsIgnoreCase(media.category())) {
+                throw new CustomException("Loại media không hợp lệ.");
+            }
             return new StoredMedia(
-                    mediaStorageService.storeBytes(bytes, mimeType, resolvePrefix(expectedType), extension),
-                    mimeType
+                    mediaStorageService.storeBytes(media.bytes(), media.mimeType(), resolvePrefix(media.category()), media.extension()),
+                    media.mimeType()
             );
+        } catch (CustomException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new CustomException("Không thể lưu media.");
         }
     }
 
-    private ProcessedChatPayload writeBytes(MultipartFile file, String logicalType, String mimeType) {
-        String extension = MIME_EXTENSION.getOrDefault(mimeType, logicalType.equals("image") ? "jpg" : "bin");
-        try {
-            return new ProcessedChatPayload(
-                    null,
-                    mediaStorageService.storeBytes(file.getBytes(), mimeType, resolvePrefix(logicalType), extension),
-                    logicalType
-            );
-        } catch (Exception ex) {
-            throw new CustomException("Không thể lưu media.");
-        }
+    public String normalizeTrustedMediaUrl(String rawMediaUrl) {
+        return mediaSecurityService.normalizeStoredMediaUrl(rawMediaUrl);
+    }
+
+    private ProcessedChatPayload storeValidatedMedia(MediaSecurityService.ValidatedMedia media) {
+        return new ProcessedChatPayload(
+                null,
+                mediaStorageService.storeBytes(media.bytes(), media.mimeType(), resolvePrefix(media.category()), media.extension()),
+                media.category()
+        );
     }
 
     private String resolvePrefix(String logicalType) {

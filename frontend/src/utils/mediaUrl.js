@@ -22,20 +22,23 @@ export function resolveBackendMediaUrl(url) {
   }
 
   if (normalizedUrl.startsWith('/api/')) {
+    if (normalizedUrl.startsWith('/api/uploads/')) {
+      return joinApiPath(BACKEND_BASE_URL, normalizedUrl.replace('/api/uploads/', '/api/media/uploads/'))
+    }
     return joinApiPath(BACKEND_BASE_URL, normalizedUrl)
   }
 
   if (normalizedUrl.startsWith('/uploads/')) {
-    return joinApiPath(BACKEND_BASE_URL, normalizedUrl)
+    return joinApiPath(BACKEND_BASE_URL, `/api/media${normalizedUrl}`)
   }
 
   if (normalizedUrl.startsWith('uploads/')) {
-    return joinApiPath(BACKEND_BASE_URL, `/${normalizedUrl}`)
+    return joinApiPath(BACKEND_BASE_URL, `/api/media/${normalizedUrl}`)
   }
 
   const uploadsIndex = normalizedUrl.indexOf('/uploads/')
   if (uploadsIndex >= 0) {
-    return joinApiPath(BACKEND_BASE_URL, normalizedUrl.substring(uploadsIndex))
+    return joinApiPath(BACKEND_BASE_URL, `/api/media${normalizedUrl.substring(uploadsIndex)}`)
   }
 
   if (normalizedUrl.startsWith('/')) {

@@ -11,10 +11,12 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.MapFloorRepository;
 import com.poly.mhv.util.UtcDateTimes;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -45,6 +47,7 @@ public class AssetMapImportService {
     private final AssetMapService assetMapService;
     private final MapFloorRepository mapFloorRepository;
     private final MediaStorageService mediaStorageService;
+    private final MediaSecurityService mediaSecurityService;
     private final ObjectMapper objectMapper;
     private final Path sessionRootDir;
 
@@ -52,12 +55,14 @@ public class AssetMapImportService {
             AssetMapService assetMapService,
             MapFloorRepository mapFloorRepository,
             MediaStorageService mediaStorageService,
+            MediaSecurityService mediaSecurityService,
             ObjectMapper objectMapper,
             @org.springframework.beans.factory.annotation.Value("${app.upload-dir:uploads}") String uploadDir
     ) {
         this.assetMapService = assetMapService;
         this.mapFloorRepository = mapFloorRepository;
         this.mediaStorageService = mediaStorageService;
+        this.mediaSecurityService = mediaSecurityService;
         this.objectMapper = objectMapper;
         Path uploadRootDir = Paths.get(uploadDir).toAbsolutePath().normalize();
         this.sessionRootDir = uploadRootDir.resolve("asset-map-import-sessions");
@@ -68,16 +73,21 @@ public class AssetMapImportService {
             throw new CustomException("Vui long chon anh ban ve PNG, JPG hoac JPEG de import.");
         }
         String sourceFileName = StringUtils.hasText(file.getOriginalFilename()) ? file.getOriginalFilename().trim() : "drawing.png";
-        String sourceFileType = detectSupportedFileType(sourceFileName);
         try {
+            MediaSecurityService.ValidatedMedia validatedMedia = mediaSecurityService.validateImage(
+                    file.getBytes(),
+                    Set.of("image/png", "image/jpeg")
+            );
+            String sourceFileType = resolveSourceFileType(validatedMedia.mimeType());
             log.info("[asset-map-import] analyze image start fileName={} fileType={}", sourceFileName, sourceFileType);
             Files.createDirectories(sessionRootDir);
             String sessionId = UUID.randomUUID().toString();
             Path sessionDir = sessionRootDir.resolve(sessionId);
             Files.createDirectories(sessionDir);
 
-            Path sourceFilePath = sessionDir.resolve("source-" + sanitizeFileName(sourceFileName));
-            file.transferTo(sourceFilePath);
+            String safeSourceName = "source-" + stripExtension(sanitizeFileName(sourceFileName)) + "." + validatedMedia.extension();
+            Path sourceFilePath = sessionDir.resolve(safeSourceName).normalize();
+            Files.write(sourceFilePath, validatedMedia.bytes(), StandardOpenOption.CREATE_NEW);
 
             ImportSessionData sessionData = buildManualImageSession(
                     sessionId,
@@ -100,7 +110,7 @@ public class AssetMapImportService {
         if (drawingIds != null) {
             drawingIds.stream()
                     .filter(StringUtils::hasText)
-                    .map(String::trim)
+                    .map(value -> value.trim())
                     .forEach(selectedIds::add);
         }
         if (selectedIds.isEmpty()) {
@@ -140,7 +150,7 @@ public class AssetMapImportService {
         deleteSession(sessionId);
         return AssetMapImportApplyResponse.builder()
                 .message("Da tao tang anh nen thanh cong. Hay tu ve cac phong tren anh.")
-                .createdFloorIds(createdFloors.stream().map(MapFloorResponse::getId).toList())
+                .createdFloorIds(createdFloors.stream().map(createdFloor -> createdFloor.getId()).toList())
                 .build();
     }
 
@@ -150,12 +160,12 @@ public class AssetMapImportService {
             String sourceFileName,
             String sourceFileType
     ) throws IOException {
-        BufferedImage image = ImageIO.read(sourceFilePath.toFile());
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(Files.readAllBytes(sourceFilePath)));
         if (image == null) {
             throw new CustomException("Khong the doc file anh. Hay dung PNG, JPG hoac JPEG.");
         }
 
-        String previewUrl = "/uploads/asset-map-import-sessions/" + sessionId + "/" + sourceFilePath.getFileName();
+        String previewUrl = "/api/media/uploads/asset-map-import-sessions/" + sessionId + "/" + sourceFilePath.getFileName();
         String drawingTitle = stripExtension(sourceFileName);
         if (!StringUtils.hasText(drawingTitle)) {
             drawingTitle = "Anh ban ve " + UtcDateTimes.now().format(FALLBACK_NAME_TIME);
@@ -173,6 +183,7 @@ public class AssetMapImportService {
         return ImportSessionData.builder()
                 .sessionId(sessionId)
                 .sourceFileName(sourceFileName)
+                .storedFileName(sourceFilePath.getFileName().toString())
                 .sourceFileType(sourceFileType)
                 .createdAt(UtcDateTimes.now().toString())
                 .drawings(List.of(drawing))
@@ -239,12 +250,12 @@ public class AssetMapImportService {
 
     private String persistFloorBackground(ImportSessionData sessionData, Path sessionDir) {
         try {
-            String originalFileName = firstNonBlank(sessionData.getSourceFileName(), "drawing.png");
-            Path sourceFilePath = sessionDir.resolve("source-" + sanitizeFileName(originalFileName)).normalize();
+            String storedFileName = firstNonBlank(sessionData.getStoredFileName(), "source-drawing.png");
+            Path sourceFilePath = sessionDir.resolve(storedFileName).normalize();
             if (!sourceFilePath.startsWith(sessionDir) || !Files.exists(sourceFilePath)) {
                 throw new CustomException("Khong tim thay anh import de tao nen so do.");
             }
-            String sourceFileType = firstNonBlank(sessionData.getSourceFileType(), detectSupportedFileType(originalFileName));
+            String sourceFileType = firstNonBlank(sessionData.getSourceFileType(), resolveSourceFileTypeFromPath(sourceFilePath));
             String mimeType = resolveImageMimeType(sourceFileType);
             String extension = resolveImageExtension(sourceFileType);
             return mediaStorageService.storeBytes(
@@ -256,6 +267,26 @@ public class AssetMapImportService {
         } catch (IOException ex) {
             throw new CustomException("Khong the luu anh nen cho so do import.");
         }
+    }
+
+    private String resolveSourceFileType(String mimeType) {
+        String normalized = mimeType == null ? "" : mimeType.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "image/png" -> "PNG";
+            case "image/jpeg" -> "JPEG";
+            default -> throw new CustomException("Dinh dang anh nen so do khong hop le.");
+        };
+    }
+
+    private String resolveSourceFileTypeFromPath(Path path) {
+        String fileName = path == null || path.getFileName() == null ? "" : path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".png")) {
+            return "PNG";
+        }
+        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+            return "JPEG";
+        }
+        throw new CustomException("Dinh dang anh nen so do khong hop le.");
     }
 
     private String resolveImageMimeType(String sourceFileType) {
@@ -307,20 +338,6 @@ public class AssetMapImportService {
         return candidate;
     }
 
-    private String detectSupportedFileType(String fileName) {
-        String normalized = fileName == null ? "" : fileName.trim().toLowerCase(Locale.ROOT);
-        if (normalized.endsWith(".png")) {
-            return "PNG";
-        }
-        if (normalized.endsWith(".jpg")) {
-            return "JPG";
-        }
-        if (normalized.endsWith(".jpeg")) {
-            return "JPEG";
-        }
-        throw new CustomException("He thong hien chi ho tro anh PNG, JPG hoac JPEG. Hay chup hoac xuat ban ve thanh anh truoc khi import.");
-    }
-
     private String sanitizeFileName(String value) {
         String normalized = value == null ? "file" : value.trim();
         normalized = normalized.replaceAll("[^a-zA-Z0-9._-]+", "-");
@@ -356,6 +373,7 @@ public class AssetMapImportService {
     public static class ImportSessionData {
         private String sessionId;
         private String sourceFileName;
+        private String storedFileName;
         private String sourceFileType;
         private String createdAt;
         @Builder.Default

@@ -1,6 +1,5 @@
 package com.poly.mhv.service;
 
-import com.poly.mhv.dto.auth.RegisterRequest;
 import com.poly.mhv.dto.user.UserAdminRequest;
 import com.poly.mhv.dto.user.UserAdminResponse;
 import com.poly.mhv.dto.user.UserOptionResponse;
@@ -44,59 +43,6 @@ public class UserService {
         this.notificationService = notificationService;
         this.techSupportTypeRepository = techSupportTypeRepository;
         this.currentUserProvider = currentUserProvider;
-    }
-
-    @Transactional(readOnly = true)
-    public boolean existsByUsername(String username) {
-        if (!StringUtils.hasText(username)) {
-            return false;
-        }
-        return appUserRepository.existsByUsername(username.trim());
-    }
-
-    @Transactional
-    public UserAdminResponse register(RegisterRequest request) {
-        if (request == null) {
-            throw new CustomException("Dữ liệu đăng ký không được để trống.");
-        }
-        if (!StringUtils.hasText(request.getUsername())) {
-            throw new CustomException("username là bắt buộc.");
-        }
-        if (!StringUtils.hasText(request.getPassword())) {
-            throw new CustomException("password là bắt buộc.");
-        }
-        String username = request.getUsername().trim();
-        if (appUserRepository.existsByUsername(username)) {
-            throw new CustomException("Tên đăng nhập đã tồn tại, vui lòng chọn tên đăng nhập khác");
-        }
-        String normalizedEmail = normalizeEmail(request.getEmail());
-        validateEmailUniqueness(normalizedEmail, null);
-        AppUser appUser = AppUser.builder()
-                .username(username)
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role("NhanVien")
-                .fullName(request.getFullName().trim())
-                .email(normalizedEmail)
-                .birthday(request.getBirthday())
-                .phone(request.getPhone().trim())
-                .status("Hoạt động")
-                .techSupportTypes(new ArrayList<>())
-                .build();
-        AppUser saved = appUserRepository.save(appUser);
-        notificationService.createNotification(
-                "USER_REGISTER",
-                "Đăng ký tài khoản",
-                "Người dùng " + saved.getUsername() + " vừa đăng ký tài khoản.",
-                saved.getUsername(),
-                null,
-                saved.getFullName(),
-                Map.of(
-                        "Username", saved.getUsername(),
-                        "Họ tên", saved.getFullName(),
-                        "Vai trò", saved.getRole()
-                )
-        );
-        return mapToResponse(saved);
     }
 
     @Transactional(readOnly = true)

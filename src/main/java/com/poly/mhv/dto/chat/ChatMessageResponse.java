@@ -25,7 +25,7 @@ public class ChatMessageResponse {
     @Schema(description = "Nội dung tin nhắn", example = "Em đã kiểm tra sơ bộ, đang thay dây nguồn.", nullable = true)
     private String content;
 
-    @Schema(description = "Đường dẫn media đính kèm", example = "/uploads/chat/chat-media-15-20260515.jpg", nullable = true)
+    @Schema(description = "Đường dẫn media đính kèm", example = "/api/media/uploads/chat/chat-media-15-20260515.jpg", nullable = true)
     private String mediaUrl;
 
     @Schema(description = "Loại media", example = "image", nullable = true)

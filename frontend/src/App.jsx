@@ -11,7 +11,6 @@ import MobileTechSupportLayout from './layouts/MobileTechSupportLayout'
 import TechSupportLayout from './layouts/TechSupportLayout'
 import Home from './pages/Home'
 import Login from './pages/Login'
-import Register from './pages/Register'
 import TicketDetail from './pages/TicketDetail'
 import Unauthorized from './pages/Unauthorized'
 import MobileTechSupportTickets from './pages/tech/MobileTechSupportTickets'
@@ -131,7 +130,6 @@ function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route path="/403" element={<Unauthorized />} />
 
         <Route

@@ -63,7 +63,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/ws/**", "/api/ws/**").permitAll()
                         .requestMatchers("/ws-sockjs/**", "/api/ws-sockjs/**").permitAll()
-                        .requestMatchers("/uploads/**", "/api/uploads/**").permitAll()
+                        .requestMatchers("/api/media/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
                 );

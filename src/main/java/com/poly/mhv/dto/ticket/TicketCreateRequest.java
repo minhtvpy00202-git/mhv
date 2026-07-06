@@ -36,7 +36,7 @@ public class TicketCreateRequest {
     @JsonAlias({"imageUrl", "image_url"})
     @Schema(
             description = "URL ảnh lỗi theo cách cũ. Giữ để tương thích cũ, khuyến nghị dùng API multipart với field image.",
-            example = "/uploads/tickets/ticket-15-error.jpg",
+            example = "/api/media/uploads/tickets/ticket-15-error.jpg",
             nullable = true
     )
     @Size(max = 255, message = "Đường dẫn ảnh không được vượt quá 255 ký tự.")
