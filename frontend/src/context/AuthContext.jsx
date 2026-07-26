@@ -4,6 +4,7 @@ import { resetAuthExpiredNoticeFlag } from '../api/axiosClient'
 
 const AuthContext = createContext(null)
 
+// Chuẩn hóa tên vai trò để frontend chỉ xử lý một tập giá trị thống nhất.
 const normalizeRole = (role) => {
   if (!role) return role
   const value = String(role).trim().toLowerCase()
@@ -14,6 +15,7 @@ const normalizeRole = (role) => {
   return role
 }
 
+// Khôi phục thông tin người dùng đã lưu từ localStorage khi tải lại trang.
 const getStoredUser = () => ({
   userId: Number(localStorage.getItem('auth_user_id')) || null,
   role: normalizeRole(localStorage.getItem('auth_role')),
@@ -22,11 +24,13 @@ const getStoredUser = () => ({
   techTypeIds: JSON.parse(localStorage.getItem('auth_tech_type_ids') || '[]'),
 })
 
+// Cung cấp trạng thái xác thực, phiên đăng nhập và thông báo hết hạn cho toàn ứng dụng.
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(localStorage.getItem('auth_token'))
   const [user, setUser] = useState(getStoredUser())
   const [sessionExpiredNoticeOpen, setSessionExpiredNoticeOpen] = useState(false)
 
+  // Lưu token và hồ sơ người dùng sau khi đăng nhập thành công.
   const login = ({ token: nextToken, id, role, username, fullName, techTypeIds }) => {
     const normalizedRole = normalizeRole(role)
     const normalizedTechTypeIds = Array.isArray(techTypeIds)
@@ -50,6 +54,7 @@ export function AuthProvider({ children }) {
     resetAuthExpiredNoticeFlag()
   }
 
+  // Xóa toàn bộ dữ liệu phiên khi người dùng đăng xuất hoặc token không còn hợp lệ.
   const logout = useCallback(() => {
     setToken(null)
     setUser({ userId: null, role: null, username: null, fullName: null, techTypeIds: [] })
@@ -62,11 +67,13 @@ export function AuthProvider({ children }) {
     resetAuthExpiredNoticeFlag()
   }, [])
 
+  // Đóng thông báo hết phiên sau khi người dùng đã xác nhận.
   const acknowledgeSessionExpired = useCallback(() => {
     setSessionExpiredNoticeOpen(false)
     resetAuthExpiredNoticeFlag()
   }, [])
 
+  // Lắng nghe sự kiện hết hạn phiên do axios phát ra để đồng bộ trạng thái toàn app.
   useEffect(() => {
     const handleSessionExpired = () => {
       logout()
@@ -92,6 +99,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// Trả về context xác thực và chặn việc dùng hook ngoài AuthProvider.
 export function useAuth() {
   const context = useContext(AuthContext)
   if (!context) {

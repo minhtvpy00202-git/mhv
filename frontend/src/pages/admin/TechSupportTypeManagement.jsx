@@ -19,6 +19,7 @@ const techSupportTypeColumnOptions = [
 ]
 const defaultTechSupportTypeVisibleColumnKeys = ['id', 'name', 'categoryCount', 'techSupportUserCount', 'actions']
 
+// Tạo trạng thái mặc định cho các hộp thoại xác nhận ở màn loại kỹ thuật viên.
 function createDefaultConfirmDialog() {
   return {
     open: false,
@@ -32,12 +33,14 @@ function createDefaultConfirmDialog() {
   }
 }
 
+// Chuẩn hóa dữ liệu form để phát hiện thay đổi thực sự của người dùng.
 function normalizeTechSupportTypeForm(form) {
   return {
     name: String(form?.name || '').trim(),
   }
 }
 
+// Quản lý danh mục loại kỹ thuật viên, gồm tìm kiếm, phân trang và CRUD.
 function TechSupportTypeManagement() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -159,6 +162,7 @@ function TechSupportTypeManagement() {
     [activeColumns, tableColumns],
   )
 
+  // Tải danh sách loại kỹ thuật viên theo từ khóa tìm kiếm hiện tại.
   const loadItems = async (nextFilters = filters) => {
     setLoading(true)
     try {
@@ -183,6 +187,7 @@ function TechSupportTypeManagement() {
     void loadItems(filters)
   }, [filters.keyword], 300, true)
 
+  // Xóa dữ liệu biểu mẫu để quay về trạng thái thêm mới.
   const resetForm = () => {
     setSelectedId(null)
     const emptyForm = { name: '' }
@@ -190,16 +195,19 @@ function TechSupportTypeManagement() {
     setInitialForm(emptyForm)
   }
 
+  // Đóng modal nhập liệu và bỏ trạng thái đang chọn.
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
   }
 
+  // Hủy thay đổi đang nhập rồi đóng modal.
   const discardFormModal = () => {
     setConfirmDialog(createDefaultConfirmDialog())
     closeFormModal()
   }
 
+  // Nhắc người dùng về thay đổi chưa lưu trước khi đóng modal.
   const requestCloseFormModal = () => {
     if (submitting) return
     if (!hasFormChanges) {
@@ -221,11 +229,13 @@ function TechSupportTypeManagement() {
     })
   }
 
+  // Mở modal ở chế độ thêm mới loại kỹ thuật viên.
   const openCreateModal = () => {
     resetForm()
     setShowFormModal(true)
   }
 
+  // Nạp dữ liệu bản ghi được chọn vào form chỉnh sửa.
   const handleSelect = (item) => {
     setSelectedId(item.id)
     const nextForm = { name: item.name || '' }
@@ -234,6 +244,7 @@ function TechSupportTypeManagement() {
     setShowFormModal(true)
   }
 
+  // Gửi yêu cầu tạo mới loại kỹ thuật viên sau khi kiểm tra dữ liệu.
   const handleCreate = async () => {
     if (!form.name.trim()) {
       toast.error('Vui lòng nhập tên loại kỹ thuật viên.')
@@ -255,6 +266,7 @@ function TechSupportTypeManagement() {
     }
   }
 
+  // Lưu thay đổi cho loại kỹ thuật viên đang được chọn.
   const handleUpdate = async () => {
     if (!selectedId) return
     if (!hasFormChanges) {
@@ -281,6 +293,7 @@ function TechSupportTypeManagement() {
     }
   }
 
+  // Hiển thị xác nhận rồi xóa loại kỹ thuật viên nếu không còn liên kết cản trở.
   const handleDelete = async (id = selectedId) => {
     if (!id) return
     setConfirmDialog({
@@ -312,10 +325,12 @@ function TechSupportTypeManagement() {
     })
   }
 
+  // Đóng hộp thoại xác nhận nếu thao tác nền đã kết thúc.
   const closeConfirmDialog = () => {
     setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
   }
 
+  // Chạy hành động đã gắn vào hộp thoại xác nhận hiện tại.
   const handleConfirmDialogAccept = async () => {
     if (!confirmDialog.onConfirm || confirmDialog.busy) return
     setConfirmDialog((previous) => ({ ...previous, busy: true }))
@@ -327,6 +342,7 @@ function TechSupportTypeManagement() {
     setConfirmDialog(createDefaultConfirmDialog())
   }
 
+  // Xóa bộ lọc tìm kiếm và nạp lại danh sách từ đầu.
   const handleResetFilters = async () => {
     const nextFilters = { keyword: '' }
     setFilters(nextFilters)

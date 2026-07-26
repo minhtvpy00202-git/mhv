@@ -21,6 +21,7 @@ public class JwtUtils {
     @Value("${jwt.expiration-ms}")
     private long jwtExpirationMs;
 
+    // Tạo JWT chứa thông tin người dùng cần cho các request đã đăng nhập.
     public String generateJwtToken(UserDetailsImpl userPrincipal) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
@@ -38,26 +39,32 @@ public class JwtUtils {
                 .compact();
     }
 
+    // Đọc username từ JWT để nhận diện người dùng hiện tại.
     public String getUserNameFromJwtToken(String token) {
         return getClaims(token).getSubject();
     }
 
+    // Đọc id người dùng đã được lưu trong JWT.
     public Integer getUserIdFromJwtToken(String token) {
         return getClaims(token).get("id", Integer.class);
     }
 
+    // Đọc vai trò từ JWT để dựng lại quyền của người dùng.
     public String getRoleFromJwtToken(String token) {
         return getClaims(token).get("role", String.class);
     }
 
+    // Đọc họ tên hiển thị từ JWT để tránh phải truy vấn lại database ở mọi request.
     public String getFullNameFromJwtToken(String token) {
         return getClaims(token).get("fullName", String.class);
     }
 
+    // Đọc trạng thái tài khoản từ JWT để phục vụ khôi phục UserDetails.
     public String getStatusFromJwtToken(String token) {
         return getClaims(token).get("status", String.class);
     }
 
+    // Đọc danh sách id chuyên môn kỹ thuật từ JWT và ép về kiểu số nguyên.
     public List<Integer> getTechTypeIdsFromJwtToken(String token) {
         Object value = getClaims(token).get("techTypeIds");
         if (!(value instanceof List<?> rawList)) {
@@ -69,6 +76,7 @@ public class JwtUtils {
                 .toList();
     }
 
+    // Đọc danh sách tên chuyên môn kỹ thuật từ JWT.
     public List<String> getTechTypeNamesFromJwtToken(String token) {
         Object value = getClaims(token).get("techTypeNames");
         if (!(value instanceof List<?> rawList)) {
@@ -80,11 +88,13 @@ public class JwtUtils {
                 .toList();
     }
 
+    // Kiểm tra token có chữ ký hợp lệ và chưa hết hạn hay không.
     public boolean validateJwtToken(String authToken) {
         getClaims(authToken);
         return !isTokenExpired(authToken);
     }
 
+    // Giải mã token và trả về toàn bộ claims đã được ký.
     private Claims getClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -93,6 +103,7 @@ public class JwtUtils {
                 .getPayload();
     }
 
+    // Chuẩn hóa cấu hình secret và dựng khóa ký dùng cho JWT.
     private SecretKey getSigningKey() {
         if (jwtSecret == null || jwtSecret.isBlank()) {
             throw new IllegalStateException("JWT secret is missing.");
@@ -116,6 +127,7 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    // Kiểm tra riêng thời điểm hết hạn của token.
     private boolean isTokenExpired(String token) {
         return getClaims(token).getExpiration().before(new Date());
     }
