@@ -42,6 +42,7 @@ import com.poly.mhv.entity.ConsumableWarehouseTransfer;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
+import com.poly.mhv.exception.ResourceNotFoundException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AreaTypeCatalogRepository;
 import com.poly.mhv.repository.AssetRepository;
@@ -372,7 +373,7 @@ public class AssetService {
     @Transactional
     public AssetResponse updateAsset(String qaCode, AssetUpdateRequest request) {
         Asset asset = assetRepository.findById(qaCode)
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thiết bị với mã: " + qaCode));
         String oldName = asset.getName();
         String oldCategory = getCategoryDisplayName(asset.getCategory());
         String oldStatus = isItemizedMode(asset.getTrackingMode()) ? getItemizedDisplayStatus(asset) : asset.getStatus();
@@ -1665,6 +1666,9 @@ public class AssetService {
         if (purchasePrice != null && purchasePrice.signum() <= 0) {
             throw new CustomException("Giá mua phải lớn hơn 0.");
         }
+        if (purchaseDate != null && purchaseDate.isAfter(LocalDate.now())) {
+            throw new CustomException("Ngày mua không được ở tương lai.");
+        }
         if (purchaseDate != null && warrantyExpirationDate != null && warrantyExpirationDate.isBefore(purchaseDate)) {
             throw new CustomException("Hạn bảo hành không được nhỏ hơn ngày mua.");
         }
@@ -2233,10 +2237,9 @@ public class AssetService {
             throw new CustomException("Kho xuất không hợp lệ.");
         }
         List<ConsumableReceiptLot> availableLots = consumableReceiptLotRepository
-                .findByAssetQaCodeAndWarehouseLocationIdAndQuantityRemainingGreaterThan(
+                .findAvailableLotsForUpdate(
                         asset.getQaCode(),
-                        sourceWarehouseLocation.getId(),
-                        0
+                        sourceWarehouseLocation.getId()
                 )
                 .stream()
                 .sorted(buildLotAllocationComparator(isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled())))

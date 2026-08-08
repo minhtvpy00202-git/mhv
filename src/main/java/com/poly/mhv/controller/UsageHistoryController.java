@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class UsageHistoryController {
             @ApiResponse(responseCode = "400", description = "Thiết bị không thể mượn hoặc dữ liệu không hợp lệ"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<UsageHistoryResponse> checkout(@RequestBody CheckoutRequest request) {
+    public ResponseEntity<UsageHistoryResponse> checkout(@Valid @RequestBody CheckoutRequest request) {
         return ResponseEntity.ok(usageHistoryService.checkout(request));
     }
 
@@ -52,7 +53,7 @@ public class UsageHistoryController {
             @ApiResponse(responseCode = "400", description = "Thiết bị không có phiên mượn đang mở hoặc dữ liệu không hợp lệ"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
-    public ResponseEntity<UsageHistoryResponse> checkin(@RequestBody CheckinRequest request) {
+    public ResponseEntity<UsageHistoryResponse> checkin(@Valid @RequestBody CheckinRequest request) {
         return ResponseEntity.ok(usageHistoryService.checkin(request));
     }
 

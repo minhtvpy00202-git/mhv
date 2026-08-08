@@ -71,6 +71,7 @@ public class AssetController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Tạo thiết bị", description = "Tạo mới thiết bị. Mã QA sẽ được backend tự sinh theo loại thiết bị.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Tạo thiết bị thành công"),
@@ -84,6 +85,7 @@ public class AssetController {
     }
 
     @PutMapping("/{qaCode}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Cập nhật thiết bị", description = "Cập nhật thông tin thiết bị theo mã QA.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cập nhật thiết bị thành công"),
@@ -99,6 +101,7 @@ public class AssetController {
     }
 
     @DeleteMapping("/{qaCode}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Xóa thiết bị", description = "Xóa thiết bị theo mã QA nếu không còn ràng buộc nghiệp vụ.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Xóa thiết bị thành công"),
