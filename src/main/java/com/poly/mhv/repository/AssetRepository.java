@@ -3,6 +3,7 @@ package com.poly.mhv.repository;
 import com.poly.mhv.dto.asset.AssetAdminListItemResponse;
 import com.poly.mhv.dto.assetmap.AssetMapAssetResponse;
 import com.poly.mhv.entity.Asset;
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -11,10 +12,16 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AssetRepository extends JpaRepository<Asset, String> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"location", "homeLocation", "category", "category.techSupportType"})
+    @Query("select a from Asset a where a.qaCode = :qaCode")
+    Optional<Asset> findByQaCodeForUpdate(@Param("qaCode") String qaCode);
+
     List<Asset> findByLocationId(Integer locationId);
     @EntityGraph(attributePaths = {"location", "homeLocation"})
     List<Asset> findByHomeLocationId(Integer homeLocationId);
@@ -56,7 +63,11 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
                 a.wholesaleUnit,
                 a.wholesaleToRetailFactor,
                 s.id,
-                s.name
+                s.name,
+                (select max(assetCreateNotification.occurredAt)
+                 from Notification assetCreateNotification
+                 where assetCreateNotification.eventType = 'ASSET_CREATE'
+                   and assetCreateNotification.assetQaCode = a.qaCode)
             )
             from Asset a
             join a.location l

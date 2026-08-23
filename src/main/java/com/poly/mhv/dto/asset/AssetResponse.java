@@ -2,6 +2,7 @@ package com.poly.mhv.dto.asset;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -43,6 +44,7 @@ public class AssetResponse {
     private String supplierName;
     private String supplierAddress;
     private String supplierPhoneNumber;
+    private LocalDateTime createdAt;
     private List<ConsumableReceiptLotResponse> receiptLots;
     private String qrCodeBase64;
 }

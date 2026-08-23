@@ -12,9 +12,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import AuthenticatedImage from '../components/AuthenticatedImage'
 import ModalOverlay from '../components/ui/ModalOverlay'
 import { formatVietnamDateTime } from '../utils/datetime'
-import { resolveBackendMediaUrl } from '../utils/mediaUrl'
 import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 const quickActions = [
@@ -464,8 +464,8 @@ function Home() {
       {previewImageUrl && (
         <ModalOverlay className="bg-black/70 backdrop-blur-sm" zIndex={130}>
           <div className="w-full max-w-sm rounded-3xl bg-white p-4 shadow-xl dark:bg-slate-950">
-            <img
-              src={resolveBackendMediaUrl(previewImageUrl)}
+            <AuthenticatedImage
+              src={previewImageUrl}
               alt="error-preview"
               className="max-h-[70dvh] w-full rounded-2xl object-contain"
             />

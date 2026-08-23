@@ -66,10 +66,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             throw new IllegalArgumentException("Thiếu JWT token trong CONNECT headers.");
                         }
 
-                        String username = jwtUtils.getUserNameFromJwtToken(token);
-                        UserDetails userDetails = buildUserDetailsFromToken(token, username);
                         if (!jwtUtils.validateJwtToken(token)) {
                             throw new IllegalArgumentException("JWT token không hợp lệ.");
+                        }
+                        String username = jwtUtils.getUserNameFromJwtToken(token);
+                        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                        if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                            throw new IllegalArgumentException("Tài khoản đã bị khóa hoặc ngừng hoạt động.");
                         }
 
                         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -84,53 +87,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     }
                 }
                 return message;
-            }
-
-            private void enforcePrivateTopicSubscription(StompHeaderAccessor accessor) {
-                String destination = accessor.getDestination();
-                if (destination == null || destination.isBlank()) {
-                    return;
-                }
-                Matcher matcher = USER_TOPIC_PATTERN.matcher(destination);
-                if (!matcher.matches()) {
-                    return;
-                }
-                Integer authenticatedUserId = extractAuthenticatedUserId(accessor.getUser());
-                if (authenticatedUserId == null) {
-                    throw new IllegalArgumentException("Không xác định được người dùng để subscribe realtime.");
-                }
-                Integer requestedUserId = Integer.valueOf(matcher.group(1));
-                if (!requestedUserId.equals(authenticatedUserId)) {
-                    throw new IllegalArgumentException("Không được phép subscribe vào kênh realtime của người dùng khác.");
-                }
-            }
-
-            private Integer extractAuthenticatedUserId(Principal principal) {
-                if (principal instanceof UsernamePasswordAuthenticationToken authenticationToken) {
-                    Object principalObject = authenticationToken.getPrincipal();
-                    if (principalObject instanceof UserDetailsImpl userDetails) {
-                        return userDetails.getId();
-                    }
-                }
-                return null;
-            }
-
-            private UserDetails buildUserDetailsFromToken(String token, String username) {
-                Integer userId = jwtUtils.getUserIdFromJwtToken(token);
-                String role = jwtUtils.getRoleFromJwtToken(token);
-                String status = jwtUtils.getStatusFromJwtToken(token);
-                if (userId != null && role != null && status != null) {
-                    return UserDetailsImpl.fromJwtClaims(
-                            userId,
-                            username,
-                            jwtUtils.getFullNameFromJwtToken(token),
-                            role,
-                            status,
-                            jwtUtils.getTechTypeIdsFromJwtToken(token),
-                            jwtUtils.getTechTypeNamesFromJwtToken(token)
-                    );
-                }
-                return userDetailsService.loadUserByUsername(username);
             }
 
             private String extractToken(StompHeaderAccessor accessor) {
@@ -157,5 +113,34 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 return null;
             }
         });
+    }
+
+    void enforcePrivateTopicSubscription(StompHeaderAccessor accessor) {
+        String destination = accessor.getDestination();
+        if (destination == null || destination.isBlank()) {
+            return;
+        }
+        Matcher matcher = USER_TOPIC_PATTERN.matcher(destination);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Chỉ được subscribe vào kênh realtime riêng của tài khoản.");
+        }
+        Integer authenticatedUserId = extractAuthenticatedUserId(accessor.getUser());
+        if (authenticatedUserId == null) {
+            throw new IllegalArgumentException("Không xác định được người dùng để subscribe realtime.");
+        }
+        Integer requestedUserId = Integer.valueOf(matcher.group(1));
+        if (!requestedUserId.equals(authenticatedUserId)) {
+            throw new IllegalArgumentException("Không được phép subscribe vào kênh realtime của người dùng khác.");
+        }
+    }
+
+    private Integer extractAuthenticatedUserId(Principal principal) {
+        if (principal instanceof UsernamePasswordAuthenticationToken authenticationToken) {
+            Object principalObject = authenticationToken.getPrincipal();
+            if (principalObject instanceof UserDetailsImpl userDetails) {
+                return userDetails.getId();
+            }
+        }
+        return null;
     }
 }

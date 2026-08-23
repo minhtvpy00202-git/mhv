@@ -37,7 +37,13 @@ public class TicketAcceptedAtMigrationRunner implements ApplicationRunner {
         List<Ticket> ticketsNeedingBackfill = ticketRepository.findAllForKpi().stream()
                 .filter(ticket -> ticket.getAcceptedAt() == null)
                 .filter(ticket -> ticket.getAssignee() != null)
-                .filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus()) || "RESOLVED".equals(ticket.getStatus()))
+                .filter(ticket -> List.of(
+                                "IN_PROGRESS",
+                                "AWAITING_CONFIRMATION",
+                                "WAITING_REPLACEMENT",
+                                "RESOLVED",
+                                "CLOSED_UNRESOLVED")
+                        .contains(ticket.getStatus()))
                 .toList();
         if (ticketsNeedingBackfill.isEmpty()) {
             return;

@@ -9,16 +9,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AuthenticatedImage from '../../components/AuthenticatedImage'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
+import TicketResolutionModal from '../../components/TicketResolutionModal'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime } from '../../utils/datetime'
-import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 import TicketEventTimelineModal from '../../components/TicketEventTimelineModal'
 import { useAuth } from '../../context/AuthContext'
+import { getTicketStatusMeta, TICKET_TECH_WORK_STATUSES } from '../../utils/ticketStatus'
 
-const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
+const statusOptions = ['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION', 'RESOLVED', 'CLOSED_UNRESOLVED', 'CANCELLED', 'REJECTED']
 const techTicketColumnOptions = [
   { key: 'ticket', label: 'Ticket' },
   { key: 'assetQaCode', label: 'Mã thiết bị' },
@@ -41,7 +43,12 @@ function toVietnamesePriority(priority) {
 function toVietnameseStatus(status) {
   if (status === 'PENDING') return 'Mới báo hỏng'
   if (status === 'IN_PROGRESS') return 'Đang xử lý'
+  if (status === 'WAITING_REPLACEMENT') return 'Chờ thay thế'
+  if (status === 'AWAITING_CONFIRMATION') return 'Chờ xác nhận'
   if (status === 'RESOLVED') return 'Đã hoàn tất'
+  if (status === 'CLOSED_UNRESOLVED') return 'Đóng - không thể sửa'
+  if (status === 'CANCELLED') return 'Đã hủy'
+  if (status === 'REJECTED') return 'Đã từ chối'
   return status
 }
 
@@ -51,8 +58,8 @@ function getWorkspaceTickets(pendingRows, myRows) {
     byId.set(ticket.id, ticket)
   })
   return [...byId.values()].sort((left, right) => {
-    const leftPriority = left.status === 'PENDING' ? 0 : left.status === 'IN_PROGRESS' ? 1 : 2
-    const rightPriority = right.status === 'PENDING' ? 0 : right.status === 'IN_PROGRESS' ? 1 : 2
+    const leftPriority = left.status === 'PENDING' ? 0 : TICKET_TECH_WORK_STATUSES.includes(left.status) ? 1 : left.status === 'AWAITING_CONFIRMATION' ? 2 : 3
+    const rightPriority = right.status === 'PENDING' ? 0 : TICKET_TECH_WORK_STATUSES.includes(right.status) ? 1 : right.status === 'AWAITING_CONFIRMATION' ? 2 : 3
     if (leftPriority !== rightPriority) return leftPriority - rightPriority
     return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
   })
@@ -66,6 +73,7 @@ function TechSupportTickets() {
   const [submittingId, setSubmittingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  const [resolutionTicketId, setResolutionTicketId] = useState(null)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineTicket, setTimelineTicket] = useState(null)
   const [kpis, setKpis] = useState(null)
@@ -93,7 +101,7 @@ function TechSupportTickets() {
           params: { status: 'PENDING' },
         })
         data = response.data || []
-      } else if (nextStatus === 'IN_PROGRESS' || nextStatus === 'RESOLVED') {
+      } else if (['IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION', 'RESOLVED', 'CLOSED_UNRESOLVED', 'CANCELLED', 'REJECTED'].includes(nextStatus)) {
         const response = await axiosClient.get('/api/tickets', {
           params: { status: nextStatus, assignee_id: user?.userId },
         })
@@ -134,7 +142,10 @@ function TechSupportTickets() {
 
   const stats = useMemo(() => ({
     myInProgress: tickets.filter(
-      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'IN_PROGRESS',
+      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status),
+    ).length,
+    awaitingConfirmation: tickets.filter(
+      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'AWAITING_CONFIRMATION',
     ).length,
     myResolved: tickets.filter(
       (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'RESOLVED',
@@ -147,7 +158,7 @@ function TechSupportTickets() {
     { key: 'assetName', label: 'Tên TB', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetName || '-' },
     { key: 'description', label: 'Mô tả', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.description },
     { key: 'priority', label: 'Ưu tiên', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => toVietnamesePriority(ticket.priority) },
-    { key: 'status', label: 'Trạng thái', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ticket.status === 'RESOLVED' ? 'bg-emerald-100 text-emerald-800' : ticket.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{toVietnameseStatus(ticket.status)}</span> },
+    { key: 'status', label: 'Trạng thái', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => { const meta = getTicketStatusMeta(ticket.status); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.badgeClassName}`}>{meta.label}</span> } },
     { key: 'image', label: 'Ảnh lỗi', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <ActionIconButton icon={Detail} label="Xem ảnh lỗi" onClick={() => { if (!ticket.imageUrl) { toast.info('Ticket này chưa có ảnh lỗi.'); return } setPreviewImageUrl(ticket.imageUrl) }} /> },
     { key: 'dueDate', label: 'Hạn xử lý', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => formatVietnamDateTime(ticket.dueDate) },
     {
@@ -160,7 +171,7 @@ function TechSupportTickets() {
         return (
           <div className="flex flex-wrap gap-2">
             {ticket.status === 'PENDING' && <ActionIconButton icon={Play} label="Nhận xử lý" variant="primary" onClick={() => handleTakeTicket(ticket.id)} disabled={submittingId === ticket.id} />}
-            {ticket.status === 'IN_PROGRESS' && isMine && <ActionIconButton icon={Check} label="Hoàn tất xử lý" variant="success" onClick={() => handleResolve(ticket.id)} disabled={submittingId === ticket.id} />}
+            {TICKET_TECH_WORK_STATUSES.includes(ticket.status) && isMine && <ActionIconButton icon={Check} label={ticket.status === 'WAITING_REPLACEMENT' ? 'Cập nhật sau thay thế' : 'Gửi kết quả xử lý'} variant="success" onClick={() => setResolutionTicketId(ticket.id)} disabled={submittingId === ticket.id} />}
             <ActionIconButton icon={MessageCircle} label="Mở chat ticket" onClick={() => navigate(`/tech/tickets/${ticket.id}`)} />
             <ActionIconButton icon={History} label="Xem timeline ticket" variant="violet" onClick={() => { setTimelineTicket({ id: ticket.id, qaCode: ticket.assetQaCode, assetQaCode: ticket.assetQaCode, name: ticket.assetName, assetName: ticket.assetName }); setShowTimelineModal(true) }} />
           </div>
@@ -189,11 +200,18 @@ function TechSupportTickets() {
     }
   }
 
-  const handleResolve = async (ticketId) => {
+  const handleResolve = async ({ outcome, note, image }) => {
+    const ticketId = resolutionTicketId
+    if (!ticketId) return
     setSubmittingId(ticketId)
     try {
-      await axiosClient.put(`/api/tickets/${ticketId}/resolve`)
-      toast.success(`Đã hoàn tất ticket #${ticketId}.`)
+      const formData = new FormData()
+      formData.append('outcome', outcome)
+      formData.append('note', note)
+      if (image) formData.append('image', image)
+      await axiosClient.put(`/api/tickets/${ticketId}/resolve`, formData)
+      toast.success(`Đã cập nhật kết quả ticket #${ticketId}.`)
+      setResolutionTicketId(null)
       await Promise.all([loadTickets(), loadMyKpis()])
     } catch (error) {
       const message = error?.response?.data?.message || 'Hoàn tất ticket thất bại.'
@@ -217,9 +235,10 @@ function TechSupportTickets() {
       <section className="rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-800">Bảng việc kỹ thuật viên</h2>
         <p className="mt-1 text-sm text-slate-600">Nhận việc, xử lý sự cố và trao đổi trực tiếp với người báo.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-4">
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Chờ tiếp nhận: {stats.pending}</div>
           <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Đang xử lý: {stats.myInProgress}</div>
+          <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">Chờ xác nhận: {stats.awaitingConfirmation}</div>
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Đã hoàn tất: {stats.myResolved}</div>
         </div>
       </section>
@@ -314,7 +333,7 @@ function TechSupportTickets() {
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
           <div className="rounded-2xl bg-white p-4 shadow-xl">
-            <img src={resolveBackendMediaUrl(previewImageUrl)} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
+            <AuthenticatedImage src={previewImageUrl} alt="Ảnh lỗi ticket" className="h-[300px] w-[300px] rounded-lg object-cover" />
             <button
               type="button"
               onClick={() => setPreviewImageUrl('')}
@@ -332,6 +351,13 @@ function TechSupportTickets() {
           setTimelineTicket(null)
         }}
         ticket={timelineTicket}
+      />
+      <TicketResolutionModal
+        open={Boolean(resolutionTicketId)}
+        ticketId={resolutionTicketId}
+        submitting={submittingId === resolutionTicketId}
+        onClose={() => setResolutionTicketId(null)}
+        onSubmit={handleResolve}
       />
     </div>
   )

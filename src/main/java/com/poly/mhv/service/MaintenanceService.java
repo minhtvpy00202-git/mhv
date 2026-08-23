@@ -127,7 +127,7 @@ public class MaintenanceService {
                 .homeLocationName(asset.getHomeLocation().getRoomName())
                 .currentLocationName(asset.getLocation().getRoomName())
                 .reporterFullName(reporterFullName)
-                .description(ticket.getDescription())
+                .description(cleanLegacySlaMetadata(ticket.getDescription()))
                 .imageUrl(ticketImageStorageService.toPublicImageUrl(ticket.getImageUrl()))
                 .reportTime(ticket.getCreatedAt())
                 .assetStatus(AssetStatusSupport.deriveDisplayStatus(
@@ -138,6 +138,17 @@ public class MaintenanceService {
                 .technicalStatus(resolveTechnicalStatus(asset))
                 .usageStatus(resolveUsageStatus(asset))
                 .build();
+    }
+
+    private String cleanLegacySlaMetadata(String description) {
+        if (!StringUtils.hasText(description)) {
+            return description;
+        }
+        int start = description.indexOf("[SLA_RANGE:");
+        if (start < 0) {
+            return description;
+        }
+        return description.substring(0, start).trim();
     }
 
     private String resolveTechnicalStatus(Asset asset) {

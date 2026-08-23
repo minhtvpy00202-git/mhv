@@ -13,6 +13,7 @@ import com.poly.mhv.repository.InventoryAuditRepository;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.UtcDateTimes;
+import com.poly.mhv.util.TicketStatusSupport;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -29,6 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class HelpdeskKpiService {
+
+    private static final List<String> ACTIVE_TICKET_STATUSES = TicketStatusSupport.ACTIVE_STATUSES;
+    private static final List<String> SLA_MONITORED_STATUSES = List.of(
+            TicketStatusSupport.PENDING,
+            TicketStatusSupport.IN_PROGRESS,
+            TicketStatusSupport.WAITING_REPLACEMENT);
 
     private static final long KPI_CACHE_TTL_MS = 30_000L;
     private static final int REPEAT_INCIDENT_WINDOW_DAYS = 30;
@@ -53,7 +60,7 @@ public class HelpdeskKpiService {
             return cacheSnapshot.response();
         }
         List<Ticket> tickets = ticketRepository.findAllForKpi();
-        List<Ticket> resolvedTickets = tickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+        List<Ticket> resolvedTickets = tickets.stream().filter(this::isSuccessfullyResolved)
                 .toList();
         List<AppUser> technicians = appUserRepository.findByRole("TechSupport").stream()
                 .sorted(Comparator.comparing(this::getActorDisplayName, String.CASE_INSENSITIVE_ORDER))
@@ -61,7 +68,7 @@ public class HelpdeskKpiService {
 
         long newTicketCount = tickets.stream().filter(ticket -> "PENDING".equals(ticket.getStatus())).count();
         long resolvedTicketCount = resolvedTickets.size();
-        long inProgressTicketCount = tickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus()))
+        long inProgressTicketCount = tickets.stream().filter(ticket -> TicketStatusSupport.isTechnicianWork(ticket.getStatus()))
                 .count();
         long activeTicketCount = countActiveTickets(tickets);
         long overdueTicketCount = countOverdueActiveTickets(tickets);
@@ -164,7 +171,7 @@ public class HelpdeskKpiService {
                         && technician.getId().equals(ticket.getAssignee().getId()))
                 .toList();
         List<Ticket> myResolvedTickets = myAssignedTickets.stream()
-                .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .filter(this::isSuccessfullyResolved)
                 .toList();
 
         long newTicketCount = tickets.stream()
@@ -173,8 +180,9 @@ public class HelpdeskKpiService {
                 .count();
         long resolvedTicketCount = myResolvedTickets.size();
         long inProgressTicketCount = myAssignedTickets.stream()
-                .filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus())).count();
-        long activeTicketCount = myAssignedTickets.stream().filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
+                .filter(ticket -> TicketStatusSupport.isTechnicianWork(ticket.getStatus())).count();
+        long activeTicketCount = myAssignedTickets.stream()
+                .filter(ticket -> isActiveTicketStatus(ticket.getStatus()))
                 .count();
         long overdueTicketCount = countOverdueActiveTickets(myAssignedTickets);
         FirstResponseMetrics firstResponseMetrics = buildFirstResponseMetrics(tickets);
@@ -232,10 +240,10 @@ public class HelpdeskKpiService {
                 .filter(ticket -> ticket.getAssignee() != null
                         && technician.getId().equals(ticket.getAssignee().getId()))
                 .toList();
-        List<Ticket> resolvedTickets = assignedTickets.stream().filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+        List<Ticket> resolvedTickets = assignedTickets.stream().filter(this::isSuccessfullyResolved)
                 .toList();
         long resolvedCount = resolvedTickets.size();
-        long inProgressCount = assignedTickets.stream().filter(ticket -> "IN_PROGRESS".equals(ticket.getStatus()))
+        long inProgressCount = assignedTickets.stream().filter(ticket -> TicketStatusSupport.isTechnicianWork(ticket.getStatus()))
                 .count();
         long overdueCount = countOverdueActiveTickets(assignedTickets);
         long onTimeResolvedCount = countResolvedOnTimeTickets(resolvedTickets);
@@ -413,7 +421,7 @@ public class HelpdeskKpiService {
 
     private long calculateAverageResolutionMinutes(List<Ticket> tickets) {
         return Math.round(tickets.stream()
-                .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .filter(this::isSuccessfullyResolved)
                 .filter(ticket -> resolveAcceptedBaseline(ticket) != null && ticket.getResolvedAt() != null)
                 .mapToLong(
                         ticket -> Duration.between(resolveAcceptedBaseline(ticket), ticket.getResolvedAt()).toMinutes())
@@ -432,7 +440,7 @@ public class HelpdeskKpiService {
     private long countOverdueActiveTickets(List<Ticket> tickets) {
         LocalDateTime now = UtcDateTimes.now();
         return tickets.stream()
-                .filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
+                .filter(ticket -> SLA_MONITORED_STATUSES.contains(ticket.getStatus()))
                 .filter(ticket -> {
                     LocalDateTime penaltyDeadline = getPenaltyDeadline(ticket);
                     return penaltyDeadline != null && penaltyDeadline.isBefore(now);
@@ -442,8 +450,22 @@ public class HelpdeskKpiService {
 
     private long countActiveTickets(List<Ticket> tickets) {
         return tickets.stream()
-                .filter(ticket -> !"RESOLVED".equals(ticket.getStatus()))
+                .filter(ticket -> isActiveTicketStatus(ticket.getStatus()))
                 .count();
+    }
+
+    static boolean isActiveTicketStatus(String status) {
+        return ACTIVE_TICKET_STATUSES.contains(status);
+    }
+
+    private boolean isSuccessfullyResolved(Ticket ticket) {
+        if (ticket == null || !TicketStatusSupport.RESOLVED.equals(ticket.getStatus())) {
+            return false;
+        }
+        String outcome = ticket.getResolutionOutcome();
+        return outcome == null
+                || outcome.isBlank()
+                || List.of("REPAIRED", "NO_FAULT_FOUND").contains(outcome);
     }
 
     private long countResolvedOnTimeTickets(List<Ticket> resolvedTickets) {
@@ -459,6 +481,7 @@ public class HelpdeskKpiService {
     private Set<Integer> collectRepeatIncidentTicketIds(List<Ticket> tickets) {
         return tickets.stream()
                 .filter(ticket -> ticket.getAsset() != null && ticket.getAsset().getQaCode() != null)
+                .filter(ticket -> !List.of("CANCELLED", "REJECTED").contains(ticket.getStatus()))
                 .collect(Collectors.groupingBy(ticket -> ticket.getAsset().getQaCode()))
                 .values().stream()
                 .flatMap(groupedTickets -> {
@@ -470,7 +493,7 @@ public class HelpdeskKpiService {
                     Set<Integer> ticketIds = new java.util.HashSet<>();
                     for (int index = 0; index < sortedTickets.size(); index++) {
                         Ticket current = sortedTickets.get(index);
-                        if (!"RESOLVED".equals(current.getStatus()) || current.getResolvedAt() == null
+                        if (!isSuccessfullyResolved(current) || current.getResolvedAt() == null
                                 || current.getId() == null) {
                             continue;
                         }
@@ -623,6 +646,9 @@ public class HelpdeskKpiService {
         if (ticket == null) {
             return null;
         }
+        if (ticket.getCreatedAt() != null && ticket.getSlaMaxMinutes() != null) {
+            return ticket.getCreatedAt().plusMinutes(ticket.getSlaMaxMinutes());
+        }
         String desc = ticket.getDescription();
         if (desc != null && desc.contains("[SLA_RANGE:")) {
             int start = desc.indexOf("[SLA_RANGE:");
@@ -673,7 +699,7 @@ public class HelpdeskKpiService {
 
     private double calculateAverageResolutionScore(List<Ticket> tickets) {
         List<Ticket> resolved = tickets.stream()
-                .filter(ticket -> "RESOLVED".equals(ticket.getStatus()))
+                .filter(this::isSuccessfullyResolved)
                 .filter(ticket -> resolveAcceptedBaseline(ticket) != null && ticket.getResolvedAt() != null)
                 .toList();
         if (resolved.isEmpty()) {

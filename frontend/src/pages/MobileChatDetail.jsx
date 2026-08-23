@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import TicketChatBox from '../components/TicketChatBox'
 import { formatVietnamDateTime } from '../utils/datetime'
-import { getTicketStatusMeta } from '../utils/ticketStatus'
+import { getTicketStatusMeta, TICKET_CHAT_OPEN_STATUSES } from '../utils/ticketStatus'
 
 function MobileChatDetail() {
   const { ticketId } = useParams()
@@ -84,7 +84,11 @@ function MobileChatDetail() {
         )}
       </section>
 
-      <TicketChatBox ticketId={Number(ticketId)} embedded />
+      <TicketChatBox
+        ticketId={Number(ticketId)}
+        embedded
+        readOnly={Boolean(ticket) && !TICKET_CHAT_OPEN_STATUSES.includes(ticket.status)}
+      />
     </div>
   )
 }

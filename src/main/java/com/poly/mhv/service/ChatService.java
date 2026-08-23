@@ -10,6 +10,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.ChatMessageRepository;
 import com.poly.mhv.repository.TicketRepository;
+import com.poly.mhv.util.TicketStatusSupport;
 import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -58,6 +60,7 @@ public class ChatService {
         AppUser sender = appUserRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
         ensureCanAccessTicketChat(ticket, sender);
+        ensureTicketOpenForChat(ticket);
         ChatMediaStorageService.ProcessedChatPayload payload = normalizePayload(request);
         ChatMessage chatMessage = ChatMessage.builder()
                 .ticket(ticket)
@@ -98,6 +101,7 @@ public class ChatService {
         AppUser sender = appUserRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new CustomException("Không tìm thấy người gửi."));
         ensureCanAccessTicketChat(ticket, sender);
+        ensureTicketOpenForChat(ticket);
         ChatMediaStorageService.ProcessedChatPayload storedMedia = chatMediaStorageService.storeUploadedFile(file);
         return ChatMediaUploadResponse.builder()
                 .mediaUrl(storedMedia.mediaUrl())
@@ -113,7 +117,7 @@ public class ChatService {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy ticket."));
         AppUser actor = currentUserProvider.getCurrentUser();
-        ensureCanAccessTicketChat(ticket, actor);
+        ensureCanReadTicketChat(ticket, actor);
         int safeLimit = limit == null ? 0 : limit;
         if (safeLimit > 0) {
             int bounded = Math.min(safeLimit, 200);
@@ -176,7 +180,20 @@ public class ChatService {
         boolean isReporter = ticket.getReporter() != null && actor.getId().equals(ticket.getReporter().getId());
         boolean isAssignee = ticket.getAssignee() != null && actor.getId().equals(ticket.getAssignee().getId());
         if (!isReporter && !isAssignee) {
-            throw new CustomException("Bạn không có quyền truy cập chat của ticket này.");
+            throw new AccessDeniedException("Bạn không có quyền truy cập chat của ticket này.");
+        }
+    }
+
+    private void ensureCanReadTicketChat(Ticket ticket, AppUser actor) {
+        if (actor != null && "Admin".equals(actor.getRole())) {
+            return;
+        }
+        ensureCanAccessTicketChat(ticket, actor);
+    }
+
+    private void ensureTicketOpenForChat(Ticket ticket) {
+        if (!TicketStatusSupport.isChatOpen(ticket.getStatus())) {
+            throw new CustomException("Ticket đã đóng. Bạn chỉ có thể xem lại lịch sử trao đổi.");
         }
     }
 }

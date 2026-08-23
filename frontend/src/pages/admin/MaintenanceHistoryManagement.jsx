@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AuthenticatedImage from '../../components/AuthenticatedImage'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { getAssetStatusMeta, getTechnicalStatusMeta, getUsageStatusMeta } from '../../utils/assetStatus'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
-import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
 
 const PAGE_SIZE = 10
 const defaultPageInfo = {
@@ -102,12 +102,12 @@ function MaintenanceHistoryManagement() {
         return
       }
       const ticketToOpen = [...matchedTickets].sort((a, b) => {
-        const aOpen = a.status !== 'RESOLVED' ? 1 : 0
-        const bOpen = b.status !== 'RESOLVED' ? 1 : 0
+        const aOpen = ['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION'].includes(a.status) ? 1 : 0
+        const bOpen = ['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION'].includes(b.status) ? 1 : 0
         if (aOpen !== bOpen) return bOpen - aOpen
         return getServerDateTimeMs(b.createdAt) - getServerDateTimeMs(a.createdAt)
       })[0]
-      navigate(`/admin/tickets`)
+      navigate(`/admin/tickets/${ticketToOpen.id}`)
     } catch (error) {
       const message = error?.response?.data?.message || 'Không mở được ticket/chat.'
       toast.error(message)
@@ -175,9 +175,6 @@ function MaintenanceHistoryManagement() {
               {!loading &&
                 rows.map((item) => {
                   const rowKey = getRowKey(item)
-                  const assetStatusMeta = getAssetStatusMeta(item.assetStatus)
-                  const technicalStatusMeta = getTechnicalStatusMeta(item.technicalStatus)
-                  const usageStatusMeta = getUsageStatusMeta(item.usageStatus)
                   return (
                   <tr key={rowKey} className="border-t border-slate-100 align-top">
                     {renderedColumns.map((column) => (
@@ -242,7 +239,7 @@ function MaintenanceHistoryManagement() {
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
           <div className="rounded-2xl bg-white p-4 shadow-xl">
-            <img src={resolveBackendMediaUrl(previewImageUrl)} alt="error-preview" className="h-[300px] w-[300px] rounded-lg object-cover" />
+            <AuthenticatedImage src={previewImageUrl} alt="Ảnh lỗi ticket" className="h-[300px] w-[300px] rounded-lg object-cover" />
             <button
               type="button"
               onClick={() => setPreviewImageUrl('')}

@@ -56,7 +56,9 @@ import com.poly.mhv.repository.ConsumableRequestRepository;
 import com.poly.mhv.repository.ConsumableWarehouseTransferRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
+import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.AssetStatusSupport;
+import com.poly.mhv.util.TicketStatusSupport;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
 import com.poly.mhv.util.UtcDateTimes;
@@ -75,6 +77,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -92,6 +95,14 @@ public class AssetService {
     private static final String CATEGORY_KIND_CONSUMABLE = "CONSUMABLE";
     private static final String QUANTITY_UNIT_RETAIL = "RETAIL";
     private static final String QUANTITY_UNIT_WHOLESALE = "WHOLESALE";
+    private static final String ASSET_CREATED_AT_SORT_EXPRESSION = """
+            (select max(assetCreateNotification.occurredAt)
+             from Notification assetCreateNotification
+             where assetCreateNotification.eventType = 'ASSET_CREATE'
+               and assetCreateNotification.assetQaCode = a.qaCode)
+            """.replaceAll("\\s+", " ").trim();
+    private static final String ASSET_CREATED_AT_MISSING_SORT_EXPRESSION =
+            "case when " + ASSET_CREATED_AT_SORT_EXPRESSION + " is null then 1 else 0 end";
 
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
@@ -106,6 +117,7 @@ public class AssetService {
     private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
     private final LocationRepository locationRepository;
     private final SupplierRepository supplierRepository;
+    private final TicketRepository ticketRepository;
     private final QRCodeGenerator qrCodeGenerator;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
@@ -126,6 +138,7 @@ public class AssetService {
             ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
             LocationRepository locationRepository,
             SupplierRepository supplierRepository,
+            TicketRepository ticketRepository,
             QRCodeGenerator qrCodeGenerator,
             NotificationService notificationService,
             ObjectMapper objectMapper
@@ -143,6 +156,7 @@ public class AssetService {
         this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
         this.locationRepository = locationRepository;
         this.supplierRepository = supplierRepository;
+        this.ticketRepository = ticketRepository;
         this.qrCodeGenerator = qrCodeGenerator;
         this.notificationService = notificationService;
         this.objectMapper = objectMapper;
@@ -393,6 +407,7 @@ public class AssetService {
         }
         if (isItemizedMode(trackingMode)) {
             ensureItemizedStatusesInitialized(asset);
+            ensureTicketControlledStatusIsNotOverridden(asset, request);
             applyItemizedStatusUpdate(asset, request);
         }
         if (request.getCategoryId() != null) {
@@ -501,7 +516,7 @@ public class AssetService {
             asset.setExpiryTrackingEnabled(null);
             asset.setExpirationDate(null);
             validatePurchaseInfo(asset.getPurchasePrice(), asset.getPurchaseDate(), asset.getWarrantyExpirationDate());
-            syncItemizedLegacyStatus(asset, false);
+            syncItemizedLegacyStatus(asset, shouldPreserveRepairStatus(asset));
         }
         Asset updated = assetRepository.save(asset);
         AppUser actor = getCurrentUser();
@@ -1421,7 +1436,7 @@ public class AssetService {
         invalidateAssetCaches(qaCode);
     }
 
-    private void invalidateAssetCaches(String qaCode) {
+    public void invalidateAssetCaches(String qaCode) {
         if (!StringUtils.hasText(qaCode)) {
             return;
         }
@@ -1511,6 +1526,7 @@ public class AssetService {
                         : null)
                 .supplierId(item.getSupplierId())
                 .supplierName(item.getSupplierName())
+                .createdAt(item.getCreatedAt())
                 .build();
     }
 
@@ -1531,10 +1547,14 @@ public class AssetService {
         }
     }
 
-    private Sort buildSort(String sortKey, String sortDirection) {
+    static Sort buildSort(String sortKey, String sortDirection) {
         String normalizedSortKey = StringUtils.hasText(sortKey) ? sortKey.trim() : "qaCode";
         Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
         return switch (normalizedSortKey) {
+            case "createdAt" -> JpaSort
+                    .unsafe(Sort.Direction.ASC, ASSET_CREATED_AT_MISSING_SORT_EXPRESSION)
+                    .andUnsafe(direction, ASSET_CREATED_AT_SORT_EXPRESSION)
+                    .and(Sort.by(Sort.Direction.DESC, "qaCode"));
             case "name" -> Sort.by(direction, "name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
             case "category" -> Sort.by(direction, "category.name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
             case "trackingMode" -> Sort.by(direction, "trackingMode").and(Sort.by(Sort.Direction.ASC, "qaCode"));
@@ -1927,8 +1947,36 @@ public class AssetService {
         boolean hasTechnicalChange = StringUtils.hasText(request.getTechnicalStatus());
         boolean hasUsageChange = StringUtils.hasText(request.getUsageStatus());
         if (hasTechnicalChange || hasUsageChange) {
-            syncItemizedLegacyStatus(asset, false);
+            syncItemizedLegacyStatus(asset, shouldPreserveRepairStatus(asset));
             return;
+        }
+    }
+
+    static boolean shouldPreserveRepairStatus(Asset asset) {
+        return asset != null && AssetStatusSupport.isRepairInProgress(asset.getStatus());
+    }
+
+    private void ensureTicketControlledStatusIsNotOverridden(Asset asset, AssetUpdateRequest request) {
+        if (asset == null || request == null
+                || !ticketRepository.existsByAssetQaCodeAndStatusIn(
+                        asset.getQaCode(), TicketStatusSupport.ACTIVE_STATUSES)) {
+            return;
+        }
+        if (StringUtils.hasText(request.getStatus())) {
+            String currentDisplay = getItemizedDisplayStatus(asset);
+            String requestedDisplay = AssetStatusSupport.normalizeDisplayStatusFilter(request.getStatus());
+            if (!currentDisplay.equals(requestedDisplay)) {
+                throw new CustomException(
+                        "Không thể đổi trạng thái kỹ thuật khi tài sản đang có ticket hoạt động.");
+            }
+        }
+        if (StringUtils.hasText(request.getTechnicalStatus())) {
+            String currentTechnical = getItemizedTechnicalStatus(asset);
+            String requestedTechnical = AssetStatusSupport.normalizeTechnicalStatus(request.getTechnicalStatus());
+            if (!currentTechnical.equals(requestedTechnical)) {
+                throw new CustomException(
+                        "Không thể đổi tình trạng kỹ thuật khi tài sản đang có ticket hoạt động.");
+            }
         }
     }
 

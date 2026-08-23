@@ -14,18 +14,24 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AuthenticatedImage from '../../components/AuthenticatedImage'
+import TicketResolutionModal from '../../components/TicketResolutionModal'
 import ModalOverlay from '../../components/ui/ModalOverlay'
 import { useAuth } from '../../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../../utils/contact'
 import { formatVietnamDateTime } from '../../utils/datetime'
-import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
-import { getTicketStatusMeta } from '../../utils/ticketStatus'
+import { getTicketStatusMeta, TICKET_TECH_WORK_STATUSES } from '../../utils/ticketStatus'
 
 const filterTabs = [
   { value: '', label: 'Tất cả' },
   { value: 'PENDING', label: 'Mới báo' },
   { value: 'IN_PROGRESS', label: 'Đang xử lý' },
+  { value: 'WAITING_REPLACEMENT', label: 'Chờ thay thế' },
+  { value: 'AWAITING_CONFIRMATION', label: 'Chờ xác nhận' },
   { value: 'RESOLVED', label: 'Hoàn tất' },
+  { value: 'CLOSED_UNRESOLVED', label: 'Không thể sửa' },
+  { value: 'CANCELLED', label: 'Đã hủy' },
+  { value: 'REJECTED', label: 'Từ chối' },
 ]
 
 function toVietnamesePriority(priority) {
@@ -267,10 +273,12 @@ function TicketsTableModal({
                                   onClick={() => onTakeTicket(ticket.id)}
                                 />
                               )}
-                              {ticket.status === 'IN_PROGRESS' && isMine && (
+                              {TICKET_TECH_WORK_STATUSES.includes(ticket.status) && isMine && (
                                 <TicketActionIconButton
                                   icon={CheckCircle2}
-                                  label={`Hoàn tất ticket #${ticket.id}`}
+                                  label={ticket.status === 'WAITING_REPLACEMENT'
+                                    ? `Cập nhật sau thay thế ticket #${ticket.id}`
+                                    : `Gửi kết quả ticket #${ticket.id}`}
                                   tone="success"
                                   disabled={submittingId === ticket.id}
                                   onClick={() => onResolve(ticket.id)}
@@ -324,8 +332,8 @@ function getWorkspaceTickets(pendingRows, myRows) {
     byId.set(ticket.id, ticket)
   })
   return [...byId.values()].sort((left, right) => {
-    const leftPriority = left.status === 'PENDING' ? 0 : left.status === 'IN_PROGRESS' ? 1 : 2
-    const rightPriority = right.status === 'PENDING' ? 0 : right.status === 'IN_PROGRESS' ? 1 : 2
+    const leftPriority = left.status === 'PENDING' ? 0 : TICKET_TECH_WORK_STATUSES.includes(left.status) ? 1 : left.status === 'AWAITING_CONFIRMATION' ? 2 : 3
+    const rightPriority = right.status === 'PENDING' ? 0 : TICKET_TECH_WORK_STATUSES.includes(right.status) ? 1 : right.status === 'AWAITING_CONFIRMATION' ? 2 : 3
     if (leftPriority !== rightPriority) return leftPriority - rightPriority
     return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()
   })
@@ -343,6 +351,7 @@ function MobileTechSupportTickets() {
   const [keyword, setKeyword] = useState('')
   const [showTicketsModal, setShowTicketsModal] = useState(false)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  const [resolutionTicketId, setResolutionTicketId] = useState(null)
 
   const loadTickets = async () => {
     setLoading(true)
@@ -455,14 +464,21 @@ function MobileTechSupportTickets() {
     }
   }
 
-  const handleResolve = async (ticketId) => {
+  const handleResolve = async ({ outcome, note, image }) => {
+    const ticketId = resolutionTicketId
+    if (!ticketId) return
     setSubmittingId(ticketId)
     try {
-      await axiosClient.put(`/api/tickets/${ticketId}/resolve`)
-      toast.success(`Đã hoàn tất ticket #${ticketId}.`)
+      const formData = new FormData()
+      formData.append('outcome', outcome)
+      formData.append('note', note)
+      if (image) formData.append('image', image)
+      await axiosClient.put(`/api/tickets/${ticketId}/resolve`, formData)
+      toast.success(`Đã cập nhật kết quả ticket #${ticketId}.`)
+      setResolutionTicketId(null)
       await Promise.all([loadTickets(), loadKpis()])
     } catch (error) {
-      const message = error?.response?.data?.message || 'Hoàn tất ticket thất bại.'
+      const message = error?.response?.data?.message || 'Cập nhật kết quả ticket thất bại.'
       toast.error(message)
     } finally {
       setSubmittingId(null)
@@ -533,7 +549,7 @@ function MobileTechSupportTickets() {
         submittingId={submittingId}
         userId={user?.userId}
         onTakeTicket={handleTakeTicket}
-        onResolve={handleResolve}
+        onResolve={setResolutionTicketId}
         onOpenPreview={setPreviewImageUrl}
         onOpenTicket={(ticketId) => navigate(`/tech-mobile/tickets/${ticketId}`)}
       />
@@ -541,8 +557,8 @@ function MobileTechSupportTickets() {
       {previewImageUrl && (
         <ModalOverlay className="bg-black/70 backdrop-blur-sm" zIndex={130}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-3 shadow-xl">
-            <img
-              src={resolveBackendMediaUrl(previewImageUrl)}
+            <AuthenticatedImage
+              src={previewImageUrl}
               alt="ticket-error"
               className="max-h-[70vh] w-full rounded-xl object-contain"
             />
@@ -556,6 +572,13 @@ function MobileTechSupportTickets() {
           </div>
         </ModalOverlay>
       )}
+      <TicketResolutionModal
+        open={Boolean(resolutionTicketId)}
+        ticketId={resolutionTicketId}
+        submitting={submittingId === resolutionTicketId}
+        onClose={() => setResolutionTicketId(null)}
+        onSubmit={handleResolve}
+      />
     </section>
   )
 }

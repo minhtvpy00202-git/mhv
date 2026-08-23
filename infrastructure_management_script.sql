@@ -130,7 +130,7 @@ CREATE TABLE tickets (
     description NVARCHAR(500) NOT NULL,
     image_url NVARCHAR(MAX) NULL,
     priority VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL CONSTRAINT DF_tickets_status DEFAULT 'PENDING',
+    status VARCHAR(40) NOT NULL CONSTRAINT DF_tickets_status DEFAULT 'PENDING',
     created_at DATETIME2 NOT NULL CONSTRAINT DF_tickets_created_at DEFAULT SYSDATETIME(),
     due_date DATETIME2 NULL,
     resolved_at DATETIME2 NULL,
@@ -138,7 +138,16 @@ CREATE TABLE tickets (
     CONSTRAINT FK_tickets_reporter FOREIGN KEY (reporter_id) REFERENCES users(id),
     CONSTRAINT FK_tickets_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
     CONSTRAINT CK_tickets_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH')),
-    CONSTRAINT CK_tickets_status CHECK (status IN ('PENDING', 'IN_PROGRESS', 'RESOLVED'))
+    CONSTRAINT CK_tickets_status CHECK (status IN (
+        'PENDING',
+        'IN_PROGRESS',
+        'AWAITING_CONFIRMATION',
+        'WAITING_REPLACEMENT',
+        'RESOLVED',
+        'CLOSED_UNRESOLVED',
+        'CANCELLED',
+        'REJECTED'
+    ))
 );
 GO
 

@@ -18,7 +18,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 @Slf4j
@@ -86,9 +86,6 @@ public class MediaStorageService {
                     sanitizeUrlForLog(spacesPublicBaseUrl)
             );
             warnIfLikelyMisconfiguredEndpoint();
-            if (!StringUtils.hasText(spacesPublicBaseUrl)) {
-                log.error("APP_SPACES_PUBLIC_BASE_URL đang trống. Upload có thể thành công nhưng sẽ không trả được URL public.");
-            }
             return;
         }
 
@@ -130,10 +127,9 @@ public class MediaStorageService {
                     .bucket(spacesBucket)
                     .key(objectKey)
                     .contentType(mimeType)
-                    .acl(ObjectCannedACL.PUBLIC_READ)
                     .build();
             s3Client.putObject(request, RequestBody.fromBytes(bytes));
-            return buildSpacesPublicUrl(objectKey);
+            return "/uploads/" + objectKey.replace('\\', '/');
         } catch (Exception ex) {
             throw new CustomException("Không thể upload media lên DigitalOcean Spaces.");
         }
@@ -150,12 +146,35 @@ public class MediaStorageService {
         }
     }
 
-    private String buildSpacesPublicUrl(String objectKey) {
-        String normalizedKey = objectKey.replace('\\', '/');
-        if (StringUtils.hasText(spacesPublicBaseUrl)) {
-            return spacesPublicBaseUrl.replaceAll("/+$", "") + "/" + normalizedKey;
+    public StoredObject readStoredObject(String requestPath) {
+        if (!isSpacesProvider() || s3Client == null) {
+            throw new CustomException("Kho media từ xa chưa được cấu hình.");
         }
-        throw new IllegalStateException("Thiếu app.spaces.public-base-url để trả URL public cho media trên DigitalOcean Spaces.");
+        String objectKey = normalizeObjectKey(requestPath);
+        try {
+            byte[] bytes = s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(spacesBucket)
+                    .key(objectKey)
+                    .build()).asByteArray();
+            String fileName = objectKey.substring(objectKey.lastIndexOf('/') + 1);
+            return new StoredObject(bytes, fileName);
+        } catch (Exception ex) {
+            throw new CustomException("Không thể đọc media từ kho lưu trữ.");
+        }
+    }
+
+    private String normalizeObjectKey(String requestPath) {
+        if (!StringUtils.hasText(requestPath)) {
+            throw new CustomException("Đường dẫn media không hợp lệ.");
+        }
+        String normalized = requestPath.trim().replace('\\', '/').replaceAll("^/+", "");
+        if (normalized.startsWith("uploads/")) {
+            normalized = normalized.substring("uploads/".length());
+        }
+        if (!StringUtils.hasText(normalized) || normalized.contains("../") || normalized.contains("/..")) {
+            throw new CustomException("Đường dẫn media không hợp lệ.");
+        }
+        return normalized;
     }
 
     private void warnIfLikelyMisconfiguredEndpoint() {
@@ -203,4 +222,6 @@ public class MediaStorageService {
             s3Client.close();
         }
     }
+
+    public record StoredObject(byte[] bytes, String fileName) {}
 }

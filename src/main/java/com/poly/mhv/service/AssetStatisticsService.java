@@ -278,7 +278,12 @@ public class AssetStatisticsService {
             return switch (value) {
                 case "PENDING" -> "Ticket mới";
                 case "IN_PROGRESS" -> "Đang xử lý";
+                case "WAITING_REPLACEMENT" -> "Chờ thay thế";
+                case "AWAITING_CONFIRMATION" -> "Chờ xác nhận";
                 case "RESOLVED" -> "Đã xử lý";
+                case "CLOSED_UNRESOLVED" -> "Đóng - không thể sửa";
+                case "CANCELLED" -> "Đã hủy";
+                case "REJECTED" -> "Đã từ chối";
                 default -> value;
             };
         }

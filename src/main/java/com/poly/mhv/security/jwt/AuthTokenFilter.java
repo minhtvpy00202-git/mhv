@@ -34,9 +34,13 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         try {
             String jwt = parseJwt(request);
             if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                String username = jwtUtils.getUserNameFromJwtToken(jwt);
-                UserDetailsImpl userDetails = buildUserDetailsFromToken(jwt, username);
                 if (jwtUtils.validateJwtToken(jwt)) {
+                    String username = jwtUtils.getUserNameFromJwtToken(jwt);
+                    UserDetailsImpl userDetails = (UserDetailsImpl) userDetailsService.loadUserByUsername(username);
+                    if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,
@@ -50,24 +54,6 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         } catch (JwtException | IllegalArgumentException ignored) {
         }
         filterChain.doFilter(request, response);
-    }
-
-    private UserDetailsImpl buildUserDetailsFromToken(String jwt, String username) {
-        Integer userId = jwtUtils.getUserIdFromJwtToken(jwt);
-        String role = jwtUtils.getRoleFromJwtToken(jwt);
-        String status = jwtUtils.getStatusFromJwtToken(jwt);
-        if (userId != null && role != null && status != null) {
-            return UserDetailsImpl.fromJwtClaims(
-                    userId,
-                    username,
-                    jwtUtils.getFullNameFromJwtToken(jwt),
-                    role,
-                    status,
-                    jwtUtils.getTechTypeIdsFromJwtToken(jwt),
-                    jwtUtils.getTechTypeNamesFromJwtToken(jwt)
-            );
-        }
-        return (UserDetailsImpl) userDetailsService.loadUserByUsername(username);
     }
 
     private String parseJwt(HttpServletRequest request) {

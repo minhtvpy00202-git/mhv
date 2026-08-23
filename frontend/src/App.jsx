@@ -215,6 +215,8 @@ function App() {
           <Route path="/admin/branding" element={withSuspense(<BrandingSettings />)} />
           <Route path="/admin/notifications/:id" element={withSuspense(<NotificationDetail />)} />
           <Route path="/admin/tickets" element={withSuspense(<TicketManagement />)} />
+          <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
+          <Route path="/admin/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
           <Route path="/admin/tickets/extensions" element={withSuspense(<SlaExtensionManagement />)} />
 
         </Route>

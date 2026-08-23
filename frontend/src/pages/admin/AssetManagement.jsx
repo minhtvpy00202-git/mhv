@@ -89,7 +89,11 @@ const defaultConsumableStatusCounts = {
   healthy: 0,
   restock: 0,
 };
-const defaultSortState = {
+const defaultItemizedSortState = {
+  key: "createdAt",
+  direction: "desc",
+};
+const defaultConsumableSortState = {
   key: "qaCode",
   direction: "asc",
 };
@@ -285,6 +289,12 @@ function isConsumableMode(value) {
       .trim()
       .toUpperCase() === "CONSUMABLE"
   );
+}
+
+function getDefaultSortState(trackingMode) {
+  return isConsumableMode(trackingMode)
+    ? defaultConsumableSortState
+    : defaultItemizedSortState;
 }
 
 function getSpecLabelByTrackingMode(value) {
@@ -623,6 +633,7 @@ function AssetManagement({
     initialSection,
     restrictToConsumable,
   );
+  const initialDefaultSortState = getDefaultSortState(initialTrackingMode);
   const specEntryIdRef = useRef(0);
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin";
@@ -794,7 +805,7 @@ function AssetManagement({
   const [consumableStatusCounts, setConsumableStatusCounts] = useState(
     defaultConsumableStatusCounts,
   );
-  const [sortState, setSortState] = useState(defaultSortState);
+  const [sortState, setSortState] = useState(initialDefaultSortState);
   const [filters, setFilters] = useState({
     name: "",
     status: "",
@@ -1223,7 +1234,11 @@ function AssetManagement({
   };
 
   const buildAssetQueryParams = useCallback(
-    (page = 0, nextFilters = {}, nextSort = defaultSortState) => {
+    (
+      page = 0,
+      nextFilters = {},
+      nextSort = getDefaultSortState(nextFilters.trackingMode),
+    ) => {
       const params = {
         page,
         size: PAGE_SIZE,
@@ -1331,7 +1346,7 @@ function AssetManagement({
                 ...buildAssetQueryParams(
                   0,
                   { ...countFilters, status: "" },
-                  defaultSortState,
+                  defaultConsumableSortState,
                 ),
                 size: 1,
               },
@@ -1341,7 +1356,7 @@ function AssetManagement({
                 ...buildAssetQueryParams(
                   0,
                   { ...countFilters, status: "Còn hàng" },
-                  defaultSortState,
+                  defaultConsumableSortState,
                 ),
                 size: 1,
               },
@@ -1351,7 +1366,7 @@ function AssetManagement({
                 ...buildAssetQueryParams(
                   0,
                   { ...countFilters, status: "Cần nhập" },
-                  defaultSortState,
+                  defaultConsumableSortState,
                 ),
                 size: 1,
               },
@@ -1475,6 +1490,7 @@ function AssetManagement({
       initialSection,
       restrictToConsumable,
     );
+    const bootstrapSortState = getDefaultSortState(bootstrapTrackingMode);
     const initializePage = async () => {
       try {
         const response = await axiosClient.get("/api/assets/bootstrap", {
@@ -1482,8 +1498,8 @@ function AssetManagement({
             page: 0,
             size: PAGE_SIZE,
             trackingMode: bootstrapTrackingMode,
-            sortKey: defaultSortState.key,
-            sortDirection: defaultSortState.direction,
+            sortKey: bootstrapSortState.key,
+            sortDirection: bootstrapSortState.direction,
           },
         });
         const data = response.data || {};
@@ -1500,7 +1516,7 @@ function AssetManagement({
         setCategoryDetailsById({});
         setAssetDetailsByQaCode({});
         setSuppliers(data.suppliers || []);
-        setSortState(defaultSortState);
+        setSortState(bootstrapSortState);
         if (isConsumableMode(bootstrapTrackingMode)) {
           await loadConsumableStatusCounts({
             name: "",
@@ -1660,6 +1676,7 @@ function AssetManagement({
 
   const handleSwitchTab = async (nextTab) => {
     if (nextTab === activeTrackingMode) return;
+    const nextSortState = getDefaultSortState(nextTab);
     const nextFilters = {
       name: "",
       status: "",
@@ -1678,7 +1695,7 @@ function AssetManagement({
     } else {
       setItemizedFilterDraft(nextFilters);
     }
-    setSortState(defaultSortState);
+    setSortState(nextSortState);
     setQrImage("");
     setConsumableWorkspace(
       normalizeConsumableWorkspace(initialConsumableWorkspace, isAdmin),
@@ -1687,7 +1704,7 @@ function AssetManagement({
       setShowFormModal(false);
       resetForm();
     }
-    await loadAssets(0, nextFilters, defaultSortState);
+    await loadAssets(0, nextFilters, nextSortState);
     if (nextTab === "CONSUMABLE" && isAdmin) {
       await loadPendingConsumableRequests();
     }
@@ -4238,7 +4255,7 @@ function AssetManagement({
 
             <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
               <table
-                className={`${qrSelectionMode ? "min-w-[1040px]" : "min-w-[980px]"} divide-y divide-slate-200 text-xs dark:divide-slate-800`}
+                className={`${qrSelectionMode ? "min-w-[1180px]" : "min-w-[1120px]"} divide-y divide-slate-200 text-xs dark:divide-slate-800`}
               >
                 <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
@@ -4279,6 +4296,9 @@ function AssetManagement({
                       </button>
                     </th>
                     <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      Vị trí hiện tại
+                    </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                       <button
                         type="button"
                         onClick={() => handleSort("homeLocationName")}
@@ -4286,9 +4306,6 @@ function AssetManagement({
                       >
                         {getSortLabel("homeLocationName", "Vị trí gốc")}
                       </button>
-                    </th>
-                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
-                      Vị trí hiện tại
                     </th>
                     <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                       <button
@@ -4302,6 +4319,15 @@ function AssetManagement({
                     <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
                       Trạng thái sử dụng
                     </th>
+                    <th className="whitespace-nowrap px-3 py-2 text-left font-semibold text-slate-600">
+                      <button
+                        type="button"
+                        onClick={() => handleSort("createdAt")}
+                        className="whitespace-nowrap hover:text-fptOrange"
+                      >
+                        {getSortLabel("createdAt", "Ngày tạo")}
+                      </button>
+                    </th>
                     <th className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-600">
                       Thao tác
                     </th>
@@ -4311,7 +4337,7 @@ function AssetManagement({
                   {loading &&
                     Array.from({ length: 6 }).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="animate-pulse">
-                        {Array.from({ length: qrSelectionMode ? 8 : 7 }).map(
+                        {Array.from({ length: qrSelectionMode ? 9 : 8 }).map(
                           (__, cellIndex) => (
                             <td key={`cell-${cellIndex}`} className="px-3 py-2">
                               <div className="h-3.5 w-24 rounded bg-slate-200" />
@@ -4358,10 +4384,10 @@ function AssetManagement({
                             </p>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
-                            {homeLocation}
+                            {currentLocation}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
-                            {currentLocation}
+                            {homeLocation}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
                             {getTechnicalStatusLabel(
@@ -4370,6 +4396,9 @@ function AssetManagement({
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
                             {getUsageStatusLabel(asset.usageStatus)}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200">
+                            {formatDate(asset.createdAt)}
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex justify-end gap-1">

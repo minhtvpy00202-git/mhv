@@ -61,7 +61,7 @@ function TicketSatisfactionReview() {
   const statusMeta = useMemo(() => getTicketStatusMeta(ticket?.status), [ticket?.status])
   const assetStatusMeta = useMemo(() => getAssetStatusMeta(ticket?.assetDisplayStatus), [ticket?.assetDisplayStatus])
   const canRate = ticket?.status === 'RESOLVED'
-    && (Number(ticket?.reporterId) === Number(user?.userId) || user?.role === 'Admin')
+    && Number(ticket?.reporterId) === Number(user?.userId)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
