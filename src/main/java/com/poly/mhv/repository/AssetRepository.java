@@ -28,6 +28,26 @@ public interface AssetRepository extends JpaRepository<Asset, String> {
     List<Asset> findByStatus(String status);
     List<Asset> findByQaCodeContainingIgnoreCaseOrNameContainingIgnoreCase(String qaCode, String name);
     List<Asset> findByCategoryId(Integer categoryId);
+
+    @EntityGraph(attributePaths = {"location", "homeLocation", "category"})
+    @Query("""
+            select a from Asset a
+            where (coalesce(:keyword, '') = ''
+                   or lower(a.qaCode) like lower(concat('%', :keyword, '%'))
+                   or lower(a.name) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(a.category.name, '')) like lower(concat('%', :keyword, '%'))
+                   or lower(coalesce(a.location.roomName, '')) like lower(concat('%', :keyword, '%')))
+              and (:trackingMode is null or a.trackingMode = :trackingMode)
+              and (:categoryId is null or a.category.id = :categoryId)
+              and (:locationId is null or a.location.id = :locationId or a.homeLocation.id = :locationId)
+            order by a.name asc, a.qaCode asc
+            """)
+    List<Asset> searchForInquiry(
+            @Param("keyword") String keyword,
+            @Param("trackingMode") String trackingMode,
+            @Param("categoryId") Integer categoryId,
+            @Param("locationId") Integer locationId,
+            Pageable pageable);
     long countByHomeLocationId(Integer homeLocationId);
     long countBySupplierId(Integer supplierId);
     long countByCategoryId(Integer categoryId);

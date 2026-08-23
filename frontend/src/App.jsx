@@ -23,6 +23,11 @@ const MaintenanceReport = lazy(() => import('./pages/MaintenanceReport'))
 const InventoryAuditScanner = lazy(() => import('./pages/InventoryAuditScanner'))
 const MobileChats = lazy(() => import('./pages/MobileChats'))
 const MobileChatDetail = lazy(() => import('./pages/MobileChatDetail'))
+const MobileInquiries = lazy(() => import('./pages/MobileInquiries'))
+const InquiryInbox = lazy(() => import('./pages/InquiryInbox'))
+const InquiryDetail = lazy(() => import('./pages/InquiryDetail'))
+const InquiryReports = lazy(() => import('./pages/InquiryReports'))
+const InquiryWorkflowSettings = lazy(() => import('./pages/admin/InquiryWorkflowSettings'))
 const TechSupportChats = lazy(() => import('./pages/tech/TechSupportChats'))
 const MobileTechSupportChats = lazy(() => import('./pages/tech/MobileTechSupportChats'))
 const TicketSatisfactionReview = lazy(() => import('./pages/TicketSatisfactionReview'))
@@ -145,6 +150,8 @@ function App() {
           <Route path="/mobile/scan" element={withSuspense(<QRScanner />)} />
           <Route path="/mobile/chats" element={withSuspense(<MobileChats />)} />
           <Route path="/mobile/chats/:ticketId" element={withSuspense(<MobileChatDetail />)} />
+          <Route path="/mobile/inquiries" element={withSuspense(<MobileInquiries />)} />
+          <Route path="/mobile/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
           <Route path="/mobile/maintenance" element={withSuspense(<MaintenanceReport />)} />
           <Route path="/mobile/tickets/:ticketId" element={<TicketDetail />} />
           <Route path="/mobile/tickets/:ticketId/review" element={withSuspense(<TicketSatisfactionReview />)} />
@@ -192,6 +199,10 @@ function App() {
           )}
         >
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
+          <Route path="/admin/inquiries" element={withSuspense(<InquiryInbox />)} />
+          <Route path="/admin/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
+          <Route path="/admin/inquiry-reports" element={withSuspense(<InquiryReports />)} />
+          <Route path="/admin/inquiry-settings" element={withSuspense(<InquiryWorkflowSettings />)} />
           <Route path="/admin/assets" element={withSuspense(<AssetManagement key="assets-root" showTabSwitcher />)} />
           <Route path="/admin/assets/fixed" element={withSuspense(<AssetManagement key="assets-fixed" initialSection="fixed" />)} />
           <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
@@ -231,6 +242,9 @@ function App() {
           )}
         >
           <Route path="/supply/consumables" element={withSuspense(<AssetManagement restrictToConsumable />)} />
+          <Route path="/supply/inquiries" element={withSuspense(<InquiryInbox />)} />
+          <Route path="/supply/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
+          <Route path="/supply/inquiry-reports" element={withSuspense(<InquiryReports />)} />
           <Route path="/supply/consumables/warehouses" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="WAREHOUSES" />)} />
           <Route path="/supply/consumables/rooms" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="ROOMS" />)} />
           <Route path="/supply/consumables/disposal" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="DISPOSAL" />)} />

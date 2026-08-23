@@ -8,6 +8,7 @@ import {
   IconHistory as History,
   IconLogout as LogOut,
   IconMapPin as MapPin,
+  IconMessageCircle as MessageCircle,
   IconPhone as Phone,
   IconPackage as PackageSearch,
   IconReceiptTax as ReceiptTax,
@@ -32,6 +33,8 @@ import { formatVietnamDateTime } from '../utils/datetime'
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
+  { to: '/admin/inquiries', label: 'Yêu cầu & phê duyệt', icon: MessageCircle },
+  { to: '/admin/inquiry-reports', label: 'Báo cáo yêu cầu', icon: BarChart3 },
   {
     id: 'assets-root',
     label: 'Tài sản',
@@ -112,6 +115,7 @@ const menuItems = [
     label: 'Cài đặt hệ thống',
     icon: Settings,
     children: [
+      { to: '/admin/inquiry-settings', label: 'SLA & duyệt yêu cầu', icon: Clock },
       { to: '/admin/branding', label: 'Cài đặt thương hiệu', icon: Settings },
     ],
   },

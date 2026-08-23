@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import axiosClient from '../api/axiosClient'
 import SearchableSelect from '../components/ui/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +10,9 @@ import { parseSpecsToEntries } from '../utils/assetSpecs'
 const scannerElementId = 'qa-scanner'
 
 function QRScanner() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const inquiryMode = searchParams.get('mode') === 'inquiry'
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
@@ -137,6 +141,11 @@ function QRScanner() {
       setScannedQaCode('')
       return false
     }
+    if (inquiryMode) {
+      keepScannerAliveRef.current = false
+      navigate(`/mobile/inquiries?qaCode=${encodeURIComponent(normalizedQaCode)}`, { replace: true })
+      return true
+    }
     setShowActionModal(true)
     return true
   }
@@ -243,7 +252,7 @@ function QRScanner() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-slate-800">Quét mã QR thiết bị</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">{inquiryMode ? 'Quét QR để tạo yêu cầu' : 'Quét mã QR thiết bị'}</h2>
         <div id={scannerElementId} className="overflow-hidden rounded-xl border border-slate-200" />
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-800">Hoặc nhập tay mã QA</p>

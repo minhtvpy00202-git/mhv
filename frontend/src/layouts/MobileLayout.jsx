@@ -1,5 +1,6 @@
 import {
   IconBell as Bell,
+  IconClipboardText as ClipboardText,
   IconHome as Home,
   IconLogout as LogOut,
   IconMenu2 as Menu2,
@@ -21,6 +22,7 @@ import { formatVietnamDateTime } from '../utils/datetime'
 const navItems = [
   { to: '/mobile/home', label: 'Home', icon: Home },
   { to: '/mobile/scan', label: 'Quét QR', icon: QrCode },
+  { to: '/mobile/inquiries', label: 'Yêu cầu', icon: ClipboardText },
   { to: '/mobile/chats', label: 'Chat', icon: MessageCircle },
   { to: '/mobile/maintenance', label: 'Báo hỏng', icon: Wrench },
 ]

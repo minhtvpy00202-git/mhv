@@ -50,6 +50,7 @@ import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestItemRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestRepository;
 import com.poly.mhv.repository.ConsumableIssueRepository;
+import com.poly.mhv.repository.ConsumableInquiryFulfillmentRepository;
 import com.poly.mhv.repository.ConsumableLocationStockRepository;
 import com.poly.mhv.repository.ConsumableReceiptLotRepository;
 import com.poly.mhv.repository.ConsumableRequestRepository;
@@ -112,6 +113,7 @@ public class AssetService {
     private final ConsumableLocationStockRepository consumableLocationStockRepository;
     private final ConsumableReceiptLotRepository consumableReceiptLotRepository;
     private final ConsumableRequestRepository consumableRequestRepository;
+    private final ConsumableInquiryFulfillmentRepository consumableInquiryFulfillmentRepository;
     private final ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository;
     private final ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository;
     private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
@@ -133,6 +135,7 @@ public class AssetService {
             ConsumableLocationStockRepository consumableLocationStockRepository,
             ConsumableReceiptLotRepository consumableReceiptLotRepository,
             ConsumableRequestRepository consumableRequestRepository,
+            ConsumableInquiryFulfillmentRepository consumableInquiryFulfillmentRepository,
             ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository,
             ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository,
             ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
@@ -151,6 +154,7 @@ public class AssetService {
         this.consumableLocationStockRepository = consumableLocationStockRepository;
         this.consumableReceiptLotRepository = consumableReceiptLotRepository;
         this.consumableRequestRepository = consumableRequestRepository;
+        this.consumableInquiryFulfillmentRepository = consumableInquiryFulfillmentRepository;
         this.consumableWarehouseTransferRepository = consumableWarehouseTransferRepository;
         this.consumableDisposalRequestItemRepository = consumableDisposalRequestItemRepository;
         this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
@@ -1125,8 +1129,19 @@ public class AssetService {
 
     @Transactional
     public ConsumableRequestResponse createConsumableRequest(Integer locationId, ConsumableRequestCreateRequest request) {
+        return createConsumableRequestForRequester(locationId, request, getCurrentUser());
+    }
+
+    @Transactional
+    public ConsumableRequestResponse createConsumableRequestForRequester(
+            Integer locationId,
+            ConsumableRequestCreateRequest request,
+            AppUser requester) {
         if (request == null) {
             throw new CustomException("Dữ liệu yêu cầu cấp phát không được để trống.");
+        }
+        if (requester == null || requester.getId() == null) {
+            throw new CustomException("Không xác định được người yêu cầu cấp phát.");
         }
         if (!StringUtils.hasText(request.getAssetQaCode())) {
             throw new CustomException("Mã vật tư là bắt buộc.");
@@ -1150,7 +1165,6 @@ public class AssetService {
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
-        AppUser requester = getCurrentUser();
         ConsumableRequest consumableRequest = ConsumableRequest.builder()
                 .asset(asset)
                 .location(location)
@@ -1189,6 +1203,21 @@ public class AssetService {
         if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
             throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
         }
+        AppUser actor = getCurrentUser();
+        consumableInquiryFulfillmentRepository.findForUpdateByActiveConsumableRequestId(requestId)
+                .ifPresent(fulfillment -> {
+                    if (Boolean.TRUE.equals(fulfillment.getRequiresAdminApproval())
+                            && !Boolean.TRUE.equals(fulfillment.getAdminApproved())) {
+                        if (!"Admin".equals(actor.getRole())) {
+                            throw new CustomException("Phiếu cấp phát này đang chờ Admin phê duyệt.");
+                        }
+                        fulfillment.setAdminApproved(true);
+                        fulfillment.setAdminApprovedBy(actor);
+                        fulfillment.setAdminApprovedAt(UtcDateTimes.now());
+                        fulfillment.setUpdatedAt(UtcDateTimes.now());
+                        consumableInquiryFulfillmentRepository.save(fulfillment);
+                    }
+                });
         Asset asset = assetRepository.findDetailByQaCode(consumableRequest.getAsset().getQaCode())
                 .orElseThrow(() -> new CustomException("Không tìm thấy vật tư yêu cầu cấp phát."));
         if (!isConsumableMode(asset.getTrackingMode())) {
@@ -1199,7 +1228,6 @@ public class AssetService {
             throw new CustomException("Số lượng tồn không đủ để duyệt cấp phát phiếu này.");
         }
 
-        AppUser actor = getCurrentUser();
         LocalDateTime now = UtcDateTimes.now();
         Location sourceWarehouseLocation = resolveConsumableRequestSourceWarehouse(consumableRequest, request);
         List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, consumableRequest.getQuantityRequested());
@@ -1268,6 +1296,27 @@ public class AssetService {
         );
         notifyLowStockIfNeeded(updated, actor);
         return mapToConsumableRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableRequestResponse fulfillConsumableRequest(
+            Long requestId,
+            Integer quantity,
+            ConsumableRequestDecisionRequest request) {
+        ConsumableRequest consumableRequest = consumableRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phiếu yêu cầu cấp phát."));
+        if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
+            throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
+        }
+        int pendingQuantity = safeInteger(consumableRequest.getQuantityRequested());
+        if (quantity == null || quantity <= 0 || quantity > pendingQuantity) {
+            throw new CustomException("Số lượng cấp phát phải lớn hơn 0 và không vượt quá số lượng còn chờ cấp.");
+        }
+        if (quantity != pendingQuantity) {
+            consumableRequest.setQuantityRequested(quantity);
+            consumableRequestRepository.save(consumableRequest);
+        }
+        return approveConsumableRequest(requestId, request);
     }
 
     @Transactional

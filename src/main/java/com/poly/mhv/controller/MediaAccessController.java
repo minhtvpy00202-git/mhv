@@ -4,6 +4,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.service.MediaSecurityService;
 import com.poly.mhv.service.MediaStorageService;
 import com.poly.mhv.service.ChatMediaAccessService;
+import com.poly.mhv.service.InquiryMediaAccessService;
 import com.poly.mhv.service.TicketMediaAccessService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
@@ -25,16 +26,19 @@ public class MediaAccessController {
     private final MediaSecurityService mediaSecurityService;
     private final TicketMediaAccessService ticketMediaAccessService;
     private final ChatMediaAccessService chatMediaAccessService;
+    private final InquiryMediaAccessService inquiryMediaAccessService;
     private final MediaStorageService mediaStorageService;
 
     public MediaAccessController(
             MediaSecurityService mediaSecurityService,
             TicketMediaAccessService ticketMediaAccessService,
             ChatMediaAccessService chatMediaAccessService,
+            InquiryMediaAccessService inquiryMediaAccessService,
             MediaStorageService mediaStorageService) {
         this.mediaSecurityService = mediaSecurityService;
         this.ticketMediaAccessService = ticketMediaAccessService;
         this.chatMediaAccessService = chatMediaAccessService;
+        this.inquiryMediaAccessService = inquiryMediaAccessService;
         this.mediaStorageService = mediaStorageService;
     }
 
@@ -53,6 +57,8 @@ public class MediaAccessController {
                 ticketMediaAccessService.ensureCanRead("/" + mediaPath);
             } else if (mediaPath.startsWith("uploads/chat/")) {
                 chatMediaAccessService.ensureCanRead("/" + mediaPath);
+            } else if (mediaPath.startsWith("uploads/inquiries/")) {
+                inquiryMediaAccessService.ensureCanRead("/" + mediaPath);
             }
             MediaSecurityService.ValidatedMedia media;
             String fileName;

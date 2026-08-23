@@ -1,8 +1,10 @@
 import {
   IconBell as Bell,
   IconBoxMultiple as Boxes,
+  IconChartBar as ChartBar,
   IconLogout as LogOut,
   IconMapPin as MapPin,
+  IconMessageCircle as MessageCircle,
   IconPackage as Package,
   IconTool as Wrench,
 } from '@tabler/icons-react'
@@ -18,6 +20,18 @@ import { normalizeHexColor, toRgba } from '../utils/brandingTheme'
 import { formatVietnamDateTime } from '../utils/datetime'
 
 const consumableMenuItems = [
+  {
+    to: '/supply/inquiries',
+    label: 'Yêu cầu cấp phát',
+    description: 'Trao đổi với nhân viên',
+    icon: MessageCircle,
+  },
+  {
+    to: '/supply/inquiry-reports',
+    label: 'Báo cáo yêu cầu',
+    description: 'SLA và nhu cầu vật tư',
+    icon: ChartBar,
+  },
   {
     to: '/supply/consumables',
     label: 'Danh sách vật tư',
