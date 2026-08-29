@@ -12,6 +12,7 @@ const axiosClient = axios.create({
   },
 })
 
+// Chuẩn hóa URL, tự gắn token và bỏ Content-Type cứng cho request upload.
 axiosClient.interceptors.request.use(
   (config) => {
     if (typeof config.url === 'string' && config.url.startsWith('/')) {
@@ -29,6 +30,7 @@ axiosClient.interceptors.request.use(
   (error) => Promise.reject(error),
 )
 
+// Cố gắng rút ra thông điệp lỗi dễ hiểu từ response text hoặc JSON dạng chuỗi.
 const getErrorMessageFromText = (text, fallbackMessage) => {
   if (!text) return fallbackMessage
   try {
@@ -40,6 +42,7 @@ const getErrorMessageFromText = (text, fallbackMessage) => {
   return fallbackMessage
 }
 
+// Chuẩn hóa lỗi trả về và phát sự kiện hết phiên khi backend phản hồi 401.
 axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -85,6 +88,7 @@ axiosClient.interceptors.response.use(
   },
 )
 
+// Cho phép mở lại thông báo hết phiên sau khi người dùng đăng nhập hoặc xác nhận.
 export function resetAuthExpiredNoticeFlag() {
   authExpiredNoticeEmitted = false
 }

@@ -18,17 +18,20 @@ public class BrandingSettingsController {
 
     private final BrandingSettingsService brandingSettingsService;
 
+    // Tiêm service xử lý việc đọc và cập nhật cấu hình thương hiệu hệ thống.
     public BrandingSettingsController(BrandingSettingsService brandingSettingsService) {
         this.brandingSettingsService = brandingSettingsService;
     }
 
     @GetMapping
+    // Trả về cấu hình branding hiện tại để frontend hiển thị trên login, sidebar và các màn hình khác.
     public ResponseEntity<BrandingSettingsResponse> getBrandingSettings() {
         return ResponseEntity.ok(brandingSettingsService.getBrandingSettings());
     }
 
     @PutMapping
     @PreAuthorize("hasRole('Admin')")
+    // Chỉ admin được phép cập nhật cấu hình thương hiệu của toàn hệ thống.
     public ResponseEntity<BrandingSettingsResponse> updateBrandingSettings(@Valid @RequestBody BrandingSettingsRequest request) {
         return ResponseEntity.ok(brandingSettingsService.updateBrandingSettings(request));
     }

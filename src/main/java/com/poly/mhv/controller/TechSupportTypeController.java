@@ -35,6 +35,7 @@ public class TechSupportTypeController {
 
     private final TechSupportTypeService techSupportTypeService;
 
+    // Tiêm service xử lý danh mục chuyên môn kỹ thuật viên cho controller này.
     public TechSupportTypeController(TechSupportTypeService techSupportTypeService) {
         this.techSupportTypeService = techSupportTypeService;
     }
@@ -46,6 +47,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
     })
+    // Trả về danh sách loại kỹ thuật viên để hiển thị ở màn quản trị.
     public ResponseEntity<List<TechSupportTypeResponse>> getAll(@RequestParam(required = false) String keyword) {
         return ResponseEntity.ok(techSupportTypeService.getAll(keyword));
     }
@@ -57,6 +59,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
     })
+    // Trả về danh sách rút gọn dùng cho dropdown hoặc ô chọn chuyên môn.
     public ResponseEntity<List<TechSupportTypeOptionResponse>> getOptions(@RequestParam(required = false) String keyword) {
         return ResponseEntity.ok(techSupportTypeService.getOptions(keyword));
     }
@@ -69,6 +72,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "403", description = "Không có quyền truy cập"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy loại kỹ thuật viên")
     })
+    // Lấy chi tiết một loại kỹ thuật viên cụ thể theo id.
     public ResponseEntity<TechSupportTypeResponse> getById(@PathVariable Integer id) {
         return ResponseEntity.ok(techSupportTypeService.getById(id));
     }
@@ -81,6 +85,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Không có quyền tạo")
     })
+    // Tạo mới một loại kỹ thuật viên để gán cho thiết bị và tài khoản.
     public ResponseEntity<TechSupportTypeResponse> create(@Valid @RequestBody TechSupportTypeCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(techSupportTypeService.create(request));
     }
@@ -94,6 +99,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "403", description = "Không có quyền cập nhật"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy loại kỹ thuật viên")
     })
+    // Cập nhật thông tin loại kỹ thuật viên theo id.
     public ResponseEntity<TechSupportTypeResponse> update(
             @PathVariable Integer id,
             @Valid @RequestBody TechSupportTypeUpdateRequest request
@@ -109,6 +115,7 @@ public class TechSupportTypeController {
             @ApiResponse(responseCode = "403", description = "Không có quyền xóa"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy loại kỹ thuật viên")
     })
+    // Xóa loại kỹ thuật viên khi bản ghi này chưa bị tham chiếu ở nơi khác.
     public ResponseEntity<Map<String, String>> delete(@PathVariable Integer id) {
         techSupportTypeService.delete(id);
         return ResponseEntity.ok(Map.of("message", "Xóa loại kỹ thuật viên thành công."));

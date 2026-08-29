@@ -31,6 +31,7 @@ public class UserService {
     private final TechSupportTypeRepository techSupportTypeRepository;
     private final CurrentUserProvider currentUserProvider;
 
+    // Tiêm các thành phần cần thiết cho nghiệp vụ quản lý tài khoản người dùng.
     public UserService(
             AppUserRepository appUserRepository,
             PasswordEncoder passwordEncoder,
@@ -46,6 +47,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    // Lấy danh sách người dùng đang hoạt động để hiển thị ở ô chọn người mượn.
     public List<UserOptionResponse> getBorrowers() {
         return appUserRepository.findAllByOrderByUsernameAsc().stream()
                 .filter(user -> "Hoạt động".equals(user.getStatus()))
@@ -57,6 +59,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    // Lấy đầy đủ thông tin các tài khoản kỹ thuật viên cùng danh sách chuyên môn của họ.
     public List<UserAdminResponse> getTechSupportUsers() {
         List<AppUser> techSupportUsers = appUserRepository.findByRole("TechSupport");
         List<Integer> userIds = techSupportUsers.stream()
@@ -72,6 +75,7 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
+    // Phân trang và lọc danh sách tài khoản cho màn quản trị.
     public UserPageResponse getUsers(int page, int size, String keyword, String role, String status) {
         int normalizedPage = Math.max(0, page);
         int normalizedSize = Math.max(1, Math.min(size, 100));
@@ -103,6 +107,7 @@ public class UserService {
     }
 
     @Transactional
+    // Tạo tài khoản mới, mã hóa mật khẩu và gán chuyên môn nếu là kỹ thuật viên.
     public UserAdminResponse createUser(UserAdminRequest request) {
         validateForCreate(request);
         String username = request.getUsername().trim();
@@ -144,6 +149,7 @@ public class UserService {
     }
 
     @Transactional
+    // Cập nhật thông tin tài khoản hiện có và thay đổi chuyên môn khi cần.
     public UserAdminResponse updateUser(Integer id, UserAdminRequest request) {
         if (id == null) {
             throw new CustomException("id là bắt buộc.");
@@ -203,6 +209,7 @@ public class UserService {
     }
 
     @Transactional
+    // Xóa tài khoản theo id nhưng giữ lại tài khoản admin mặc định để bảo toàn hệ thống.
     public void deleteUser(Integer id) {
         if (id == null) {
             throw new CustomException("id là bắt buộc.");
@@ -230,6 +237,7 @@ public class UserService {
         );
     }
 
+    // Kiểm tra dữ liệu bắt buộc trước khi cho phép tạo tài khoản mới.
     private void validateForCreate(UserAdminRequest request) {
         if (request == null) {
             throw new CustomException("Dữ liệu tạo tài khoản không được để trống.");
@@ -264,6 +272,7 @@ public class UserService {
         }
     }
 
+    // Chuyển entity người dùng sang response trả về cho giao diện quản trị.
     private UserAdminResponse mapToResponse(AppUser appUser) {
         List<TechSupportType> effectiveTechSupportTypes = getEffectiveTechSupportTypes(appUser);
         List<Integer> techTypeIds = effectiveTechSupportTypes.stream()
@@ -286,6 +295,7 @@ public class UserService {
                 .build();
     }
 
+    // Kiểm tra vai trò đầu vào và chuẩn hóa về giá trị hệ thống chấp nhận.
     private String validateRole(String role) {
         if (!StringUtils.hasText(role)) {
             throw new CustomException("Vai trò là bắt buộc.");
@@ -297,6 +307,7 @@ public class UserService {
         return normalizedRole;
     }
 
+    // Chuẩn hóa nhiều cách nhập vai trò về một bộ mã vai trò thống nhất.
     private String normalizeRoleValue(String role) {
         if (!StringUtils.hasText(role)) {
             return null;
@@ -317,6 +328,7 @@ public class UserService {
         return null;
     }
 
+    // Chỉ cho phép lưu các trạng thái tài khoản hợp lệ của hệ thống.
     private String validateStatus(String status) {
         if (!StringUtils.hasText(status)) {
             throw new CustomException("Trạng thái là bắt buộc.");
@@ -328,12 +340,14 @@ public class UserService {
         return normalizedStatus;
     }
 
+    // Chuẩn hóa email rồi kiểm tra trùng trước khi ghi xuống database.
     private String validateEmailForWrite(String email, Integer currentUserId) {
         String normalizedEmail = normalizeEmail(email);
         validateEmailUniqueness(normalizedEmail, currentUserId);
         return normalizedEmail;
     }
 
+    // Kiểm tra email đã được tài khoản khác sử dụng hay chưa.
     private void validateEmailUniqueness(String normalizedEmail, Integer currentUserId) {
         if (!StringUtils.hasText(normalizedEmail)) {
             return;
@@ -345,6 +359,7 @@ public class UserService {
                 });
     }
 
+    // Làm sạch email đầu vào để tránh lệch do khoảng trắng hoặc khác chữ hoa thường.
     private String normalizeEmail(String email) {
         if (!StringUtils.hasText(email)) {
             return null;
@@ -352,6 +367,7 @@ public class UserService {
         return email.trim().toLowerCase();
     }
 
+    // Suy ra danh sách chuyên môn phải gắn cho tài khoản kỹ thuật viên.
     private List<TechSupportType> resolveTechSupportTypes(String role, UserAdminRequest request) {
         if (!"TechSupport".equals(role)) {
             return List.of();
@@ -365,6 +381,7 @@ public class UserService {
                 .toList();
     }
 
+    // Rút ra danh sách id chuyên môn hợp lệ và loại bỏ giá trị trùng.
     private List<Integer> extractTechTypeIds(UserAdminRequest request) {
         if (request == null) {
             return List.of();
@@ -377,11 +394,13 @@ public class UserService {
                         .toList();
     }
 
+    // Lấy loại chuyên môn theo id hoặc báo lỗi nếu id không tồn tại.
     private TechSupportType getTechSupportTypeOrThrow(Integer techTypeId) {
         return techSupportTypeRepository.findById(techTypeId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại chuyên môn kỹ thuật."));
     }
 
+    // Trả về danh sách chuyên môn hợp lệ đang gắn với tài khoản.
     private List<TechSupportType> getEffectiveTechSupportTypes(AppUser appUser) {
         if (appUser.getTechSupportTypes() != null) {
             return appUser.getTechSupportTypes().stream()
@@ -391,6 +410,7 @@ public class UserService {
         return List.of();
     }
 
+    // Lấy tên hiển thị của người thực hiện để ghi thông báo hệ thống.
     private String getActorDisplayName(AppUser actor) {
         if (actor == null) {
             return "Hệ thống";

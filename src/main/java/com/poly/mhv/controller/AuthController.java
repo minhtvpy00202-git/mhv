@@ -32,6 +32,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
 
+    // Tiêm các thành phần dùng để xác thực thông tin đăng nhập và tạo JWT.
     public AuthController(AuthenticationManager authenticationManager, JwtUtils jwtUtils) {
         this.authenticationManager = authenticationManager;
         this.jwtUtils = jwtUtils;
@@ -43,6 +44,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Đăng nhập thành công"),
             @ApiResponse(responseCode = "400", description = "Sai username hoặc password, hoặc tài khoản bị khóa")
     })
+    // Xác thực username/password và trả về token cùng thông tin người dùng sau đăng nhập.
     public JwtResponse authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         try {
             Authentication authentication = authenticationManager.authenticate(

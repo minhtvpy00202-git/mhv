@@ -32,6 +32,7 @@ public class UserController {
 
     private final UserService userService;
 
+    // Tiêm service xử lý toàn bộ nghiệp vụ tài khoản cho các endpoint quản trị.
     public UserController(UserService userService) {
         this.userService = userService;
     }
@@ -42,6 +43,7 @@ public class UserController {
             @ApiResponse(responseCode = "200", description = "Lấy danh sách người mượn thành công"),
             @ApiResponse(responseCode = "401", description = "Chưa xác thực")
     })
+    // Trả về danh sách người dùng đang hoạt động để chọn ở nghiệp vụ mượn thiết bị.
     public ResponseEntity<List<UserOptionResponse>> getBorrowers() {
         return ResponseEntity.ok(userService.getBorrowers());
     }
@@ -54,6 +56,7 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép truy cập")
     })
+    // Trả về danh sách tài khoản kỹ thuật viên để phục vụ điều phối và gán việc.
     public ResponseEntity<List<UserAdminResponse>> getTechSupportUsers() {
         return ResponseEntity.ok(userService.getTechSupportUsers());
     }
@@ -66,6 +69,7 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép truy cập")
     })
+    // Trả về danh sách tài khoản có phân trang cho màn quản lý người dùng.
     public ResponseEntity<UserPageResponse> getUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -85,6 +89,7 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Chưa xác thực"),
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép tạo tài khoản")
     })
+    // Tạo tài khoản mới từ dữ liệu quản trị viên nhập trên giao diện.
     public ResponseEntity<UserAdminResponse> createUser(@RequestBody UserAdminRequest request) {
         return ResponseEntity.ok(userService.createUser(request));
     }
@@ -99,6 +104,7 @@ public class UserController {
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép cập nhật"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy tài khoản")
     })
+    // Cập nhật thông tin và chuyên môn của tài khoản theo id.
     public ResponseEntity<UserAdminResponse> updateUser(@PathVariable Integer id, @RequestBody UserAdminRequest request) {
         return ResponseEntity.ok(userService.updateUser(id, request));
     }
@@ -112,6 +118,7 @@ public class UserController {
             @ApiResponse(responseCode = "403", description = "Chỉ quản trị viên được phép xóa"),
             @ApiResponse(responseCode = "404", description = "Không tìm thấy tài khoản")
     })
+    // Xóa tài khoản theo id và trả về thông báo kết quả cho frontend.
     public ResponseEntity<Map<String, String>> deleteUser(@PathVariable Integer id) {
         userService.deleteUser(id);
         return ResponseEntity.ok(Map.of("message", "Xóa tài khoản thành công."));

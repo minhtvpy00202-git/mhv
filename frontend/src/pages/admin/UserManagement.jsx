@@ -13,6 +13,7 @@ import { formatVietnamDate } from '../../utils/datetime'
 
 const roleOptions = ['Admin', 'NhanVien', 'ConsumableManager', 'TechSupport']
 
+// Quy đổi mã vai trò sang nhãn tiếng Việt để hiển thị trong bảng và form.
 function toRoleLabel(role) {
   if (role === 'Admin') return 'Quản trị viên'
   if (role === 'NhanVien') return 'Nhân viên'
@@ -21,6 +22,7 @@ function toRoleLabel(role) {
   return role || '-'
 }
 
+// Trả về giá trị sắp xếp phù hợp cho từng cột, kể cả cột vai trò và chuyên môn.
 function getUserSortValue(user, key) {
   if (key === 'roleLabel') return toRoleLabel(user.role)
   if (key === 'techTypeDisplay') {
@@ -44,6 +46,7 @@ const userColumnOptions = [
 ]
 const defaultUserVisibleColumnKeys = ['username', 'fullName', 'email', 'phone', 'role', 'status', 'actions']
 
+// Tạo trạng thái mặc định cho các hộp thoại xác nhận trong màn quản lý tài khoản.
 function createDefaultConfirmDialog() {
   return {
     open: false,
@@ -57,6 +60,7 @@ function createDefaultConfirmDialog() {
   }
 }
 
+// Chuẩn hóa dữ liệu form để so sánh thay đổi mà không bị lệch bởi khoảng trắng hay kiểu dữ liệu.
 function normalizeUserForm(form) {
   return {
     username: String(form?.username || '').trim(),
@@ -74,6 +78,7 @@ function normalizeUserForm(form) {
   }
 }
 
+// Quản lý danh sách tài khoản, bộ lọc, phân trang và form CRUD cho quản trị viên.
 function UserManagement() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -143,6 +148,7 @@ function UserManagement() {
     [normalizedForm, normalizedInitialForm],
   )
 
+  // Tải danh sách tài khoản theo trang và bộ lọc hiện tại.
   const loadUsers = async (page = 0, nextFilters = filters) => {
     setLoading(true)
     try {
@@ -170,6 +176,7 @@ function UserManagement() {
     }
   }
 
+  // Lấy danh sách chuyên môn kỹ thuật để gán cho tài khoản kỹ thuật viên.
   const loadTechSupportTypes = async () => {
     try {
       const options = await fetchTechSupportTypeOptions()
@@ -192,6 +199,7 @@ function UserManagement() {
     void loadUsers(0, filters)
   }, [filters.keyword, filters.role, filters.status], 300, true)
 
+  // Đưa form về trạng thái tạo mới ban đầu.
   const resetForm = () => {
     setSelectedUserId(null)
     const emptyForm = {
@@ -209,16 +217,19 @@ function UserManagement() {
     setInitialForm(emptyForm)
   }
 
+  // Đóng modal tài khoản và xóa dữ liệu đang chọn.
   const closeFormModal = () => {
     setShowFormModal(false)
     resetForm()
   }
 
+  // Bỏ thay đổi đang nhập và đóng luôn modal biểu mẫu.
   const discardFormModal = () => {
     setConfirmDialog(createDefaultConfirmDialog())
     closeFormModal()
   }
 
+  // Kiểm tra thay đổi chưa lưu trước khi cho phép đóng modal.
   const requestCloseFormModal = () => {
     if (submitting) return
     if (!hasFormChanges) {
@@ -240,11 +251,13 @@ function UserManagement() {
     })
   }
 
+  // Mở modal ở chế độ thêm mới tài khoản.
   const openCreateModal = () => {
     resetForm()
     setShowFormModal(true)
   }
 
+  // Nạp dữ liệu tài khoản được chọn vào form để chỉnh sửa.
   const handleSelect = (item) => {
     const nextForm = {
       username: item.username || '',
@@ -263,6 +276,7 @@ function UserManagement() {
     setShowFormModal(true)
   }
 
+  // Kiểm tra dữ liệu và gửi yêu cầu tạo tài khoản mới.
   const handleCreate = async () => {
     if (!form.username || !form.password || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
       toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
@@ -310,6 +324,7 @@ function UserManagement() {
     }
   }
 
+  // Kiểm tra thay đổi rồi cập nhật tài khoản đang được chọn.
   const handleUpdate = async () => {
     if (!selectedUserId) return
     if (!hasFormChanges) {
@@ -362,6 +377,7 @@ function UserManagement() {
     }
   }
 
+  // Mở xác nhận xóa và xử lý xóa tài khoản sau khi người dùng đồng ý.
   const handleDelete = async (id = selectedUserId) => {
     if (!id) return
     setConfirmDialog({
@@ -393,10 +409,12 @@ function UserManagement() {
     })
   }
 
+  // Đóng hộp thoại xác nhận khi không còn thao tác nền đang chạy.
   const closeConfirmDialog = () => {
     setConfirmDialog((previous) => (previous.busy ? previous : createDefaultConfirmDialog()))
   }
 
+  // Thực thi hành động đã gắn cho hộp thoại xác nhận hiện tại.
   const handleConfirmDialogAccept = async () => {
     if (!confirmDialog.onConfirm || confirmDialog.busy) return
     setConfirmDialog((previous) => ({ ...previous, busy: true }))
