@@ -2,6 +2,8 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.ticket.TicketAssignRequest;
 import com.poly.mhv.dto.ticket.TicketCreateRequest;
+import com.poly.mhv.dto.ticket.TicketReasonRequest;
+import com.poly.mhv.dto.ticket.TicketResolutionRequest;
 import com.poly.mhv.dto.ticket.TicketPageResponse;
 import com.poly.mhv.dto.ticket.TicketResponse;
 import com.poly.mhv.dto.ticket.TicketSatisfactionRequest;
@@ -111,7 +113,7 @@ public class TicketController {
                 return ResponseEntity.ok(ticketService.assignTicket(id, request));
         }
 
-        @PutMapping("/{id}/resolve")
+        @PutMapping(path = "/{id}/resolve", consumes = MediaType.APPLICATION_JSON_VALUE)
         @PreAuthorize("hasAnyRole('Admin','TechSupport')")
         @Operation(summary = "Hoàn tất ticket", description = "Đánh dấu ticket đã được xử lý xong.")
         @ApiResponses({
@@ -121,8 +123,71 @@ public class TicketController {
                         @ApiResponse(responseCode = "404", description = "Không tìm thấy ticket")
         })
         public ResponseEntity<TicketResponse> resolveTicket(
-                        @Parameter(description = "ID ticket cần hoàn tất", example = "15") @PathVariable Integer id) {
-                return ResponseEntity.ok(ticketService.resolveTicket(id));
+                        @Parameter(description = "ID ticket cần hoàn tất", example = "15") @PathVariable Integer id,
+                        @Valid @RequestBody TicketResolutionRequest request) {
+                return ResponseEntity.ok(ticketService.resolveTicket(id, request));
+        }
+
+        @PutMapping(path = "/{id}/resolve", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        @PreAuthorize("hasAnyRole('Admin','TechSupport')")
+        public ResponseEntity<TicketResponse> resolveTicketMultipart(
+                        @PathVariable Integer id,
+                        @RequestParam("outcome") @NotBlank @Pattern(regexp = "^(REPAIRED|NO_FAULT_FOUND|UNREPAIRABLE|REPLACEMENT_REQUIRED)$") String outcome,
+                        @RequestParam("note") @NotBlank @Size(min = 10, max = 1000) String note,
+                        @RequestPart(name = "image", required = false) MultipartFile image) {
+                TicketResolutionRequest request = TicketResolutionRequest.builder()
+                                .outcome(outcome)
+                                .note(note)
+                                .build();
+                return ResponseEntity.ok(ticketService.resolveTicket(id, request, image));
+        }
+
+        @PutMapping("/{id}/confirm-resolution")
+        @PreAuthorize("hasAnyRole('NhanVien','Admin')")
+        @Operation(summary = "Xác nhận kết quả xử lý", description = "Người báo xác nhận thiết bị đã được xử lý đạt yêu cầu.")
+        public ResponseEntity<TicketResponse> confirmResolution(@PathVariable Integer id) {
+                return ResponseEntity.ok(ticketService.confirmResolution(id));
+        }
+
+        @PutMapping("/{id}/reject-resolution")
+        @PreAuthorize("hasAnyRole('NhanVien','Admin')")
+        @Operation(summary = "Yêu cầu xử lý lại", description = "Người báo từ chối kết quả và đưa ticket trở lại trạng thái đang xử lý.")
+        public ResponseEntity<TicketResponse> rejectResolution(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody TicketReasonRequest request) {
+                return ResponseEntity.ok(ticketService.rejectResolution(id, request));
+        }
+
+        @PutMapping("/{id}/reassign")
+        @PreAuthorize("hasRole('Admin')")
+        public ResponseEntity<TicketResponse> reassignTicket(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody TicketAssignRequest request) {
+                return ResponseEntity.ok(ticketService.reassignTicket(id, request));
+        }
+
+        @PutMapping("/{id}/cancel")
+        @PreAuthorize("hasAnyRole('Admin','NhanVien')")
+        public ResponseEntity<TicketResponse> cancelTicket(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody TicketReasonRequest request) {
+                return ResponseEntity.ok(ticketService.cancelTicket(id, request));
+        }
+
+        @PutMapping("/{id}/reject")
+        @PreAuthorize("hasRole('Admin')")
+        public ResponseEntity<TicketResponse> rejectTicket(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody TicketReasonRequest request) {
+                return ResponseEntity.ok(ticketService.rejectTicket(id, request));
+        }
+
+        @PostMapping("/{id}/reopen")
+        @PreAuthorize("hasAnyRole('Admin','NhanVien')")
+        public ResponseEntity<TicketResponse> reopenTicket(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody TicketReasonRequest request) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.reopenTicket(id, request));
         }
 
         @PutMapping("/{id}/satisfaction")
@@ -163,8 +228,8 @@ public class TicketController {
         })
         public ResponseEntity<List<TicketResponse>> getTickets(
                         @Parameter(description = "Lọc theo trạng thái ticket", example = "IN_PROGRESS", schema = @Schema(allowableValues = {
-                                        "PENDING", "IN_PROGRESS",
-                                        "RESOLVED" })) @RequestParam(required = false) String status,
+                                        "PENDING", "IN_PROGRESS", "AWAITING_CONFIRMATION", "WAITING_REPLACEMENT",
+                                        "RESOLVED", "CLOSED_UNRESOLVED", "CANCELLED", "REJECTED" })) @RequestParam(required = false) String status,
                         @Parameter(description = "Lọc theo ID kỹ thuật viên đang được giao ticket", example = "7") @RequestParam(name = "assignee_id", required = false) @Positive(message = "Kỹ thuật viên không hợp lệ.") Integer assigneeId,
                         @Parameter(description = "Lọc theo mã QA thiết bị", example = "AT0007") @RequestParam(name = "asset_qa_code", required = false) @Size(max = 20, message = "Mã QA thiết bị không được vượt quá 20 ký tự.") String assetQaCode,
                         @Parameter(description = "Lọc theo ID người báo hỏng", example = "12") @RequestParam(name = "reporter_id", required = false) @Positive(message = "Người báo hỏng không hợp lệ.") Integer reporterId) {

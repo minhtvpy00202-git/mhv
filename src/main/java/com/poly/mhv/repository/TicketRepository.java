@@ -2,13 +2,16 @@ package com.poly.mhv.repository;
 
 import com.poly.mhv.entity.Ticket;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -27,6 +30,18 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
         List<Ticket> findByReporterIdOrderByCreatedAtDesc(Integer reporterId);
 
         List<Ticket> findAllByOrderByCreatedAtDesc();
+
+        boolean existsByAssetQaCodeAndStatusIn(String assetQaCode, Collection<String> statuses);
+
+        boolean existsByReopenedFromTicketId(Integer reopenedFromTicketId);
+
+        long countByAssetQaCodeAndStatusIn(String assetQaCode, Collection<String> statuses);
+
+        List<Ticket> findByAssetQaCodeAndStatusIn(String assetQaCode, Collection<String> statuses);
+
+        Optional<Ticket> findFirstByAssetQaCodeOrderByCreatedAtDescIdDesc(String assetQaCode);
+
+        List<Ticket> findByStatusAndConfirmationDueAtLessThanEqual(String status, LocalDateTime confirmationDueAt);
 
         List<Ticket> findByImageUrlIsNotNullOrderByIdAsc();
 
@@ -89,6 +104,15 @@ public interface TicketRepository extends JpaRepository<Ticket, Integer> {
                         "reporter", "assignee" })
         @Query("select t from Ticket t where t.id = :id")
         Optional<Ticket> findDetailById(@Param("id") Integer id);
+
+        @Lock(LockModeType.PESSIMISTIC_WRITE)
+        @EntityGraph(attributePaths = { "asset", "asset.location", "asset.homeLocation", "asset.category",
+                        "asset.category.techSupportType", "reporter", "assignee" })
+        @Query("select t from Ticket t where t.id = :id")
+        Optional<Ticket> findDetailForUpdateById(@Param("id") Integer id);
+
+        @EntityGraph(attributePaths = { "asset", "asset.category", "asset.category.techSupportType", "reporter", "assignee" })
+        Optional<Ticket> findFirstByImageUrlOrResolutionImageUrl(String imageUrl, String resolutionImageUrl);
 
         @EntityGraph(attributePaths = { "asset", "asset.location", "asset.homeLocation", "reporter" })
         @Query("""

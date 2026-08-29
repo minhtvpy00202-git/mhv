@@ -27,6 +27,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -60,6 +61,13 @@ public class UsageHistoryService {
     @Transactional
     public UsageHistoryResponse checkout(CheckoutRequest request) {
         validateCheckoutRequest(request);
+        AppUser actor = getCurrentUser();
+        if (!List.of("Admin", "NhanVien").contains(actor.getRole())) {
+            throw new AccessDeniedException("Bạn không có quyền thực hiện mượn thiết bị.");
+        }
+        if ("NhanVien".equals(actor.getRole()) && !actor.getId().equals(request.getUserId())) {
+            throw new AccessDeniedException("Nhân viên chỉ được tạo phiên mượn cho chính mình.");
+        }
 
         Asset asset = assetRepository.findById(request.getAssetQaCode())
                 .orElseThrow(() -> new CustomException("Mã tài sản không tồn tại"));
@@ -127,6 +135,15 @@ public class UsageHistoryService {
 
     @Transactional
     public UsageHistoryResponse checkin(CheckinRequest request) {
+        return checkinInternal(request);
+    }
+
+    @Transactional
+    public UsageHistoryResponse checkinForAdmin(String assetQaCode) {
+        return checkinInternal(CheckinRequest.builder().assetQaCode(assetQaCode).build());
+    }
+
+    private UsageHistoryResponse checkinInternal(CheckinRequest request) {
         if (request == null || !StringUtils.hasText(request.getAssetQaCode())) {
             throw new CustomException("assetQaCode là bắt buộc.");
         }
@@ -137,7 +154,8 @@ public class UsageHistoryService {
         UsageHistory usageHistory = usageHistoryRepository.findByAssetQaCodeAndEndTimeIsNull(request.getAssetQaCode())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phiên mượn đang mở của thiết bị: " + request.getAssetQaCode()));
         AppUser actor = getCurrentUser();
-        if (!usageHistory.getUser().getId().equals(actor.getId())) {
+        if (!usageHistory.getUser().getId().equals(actor.getId())
+                && !"Admin".equals(actor.getRole())) {
             throw new CustomException("Bạn không phải người đã mượn thiết bị này, nên không thể thực hiện trả.");
         }
 

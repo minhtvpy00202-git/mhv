@@ -19,7 +19,12 @@ function formatDurationMinutes(createdAt, resolvedAt) {
 function toVietnameseStatus(status) {
   if (status === 'PENDING') return 'Mới báo hỏng'
   if (status === 'IN_PROGRESS') return 'Đang sửa chữa'
+  if (status === 'WAITING_REPLACEMENT') return 'Chờ thay thế'
+  if (status === 'AWAITING_CONFIRMATION') return 'Chờ xác nhận'
   if (status === 'RESOLVED') return 'Đã hoàn tất'
+  if (status === 'CLOSED_UNRESOLVED') return 'Đóng - không thể sửa'
+  if (status === 'CANCELLED') return 'Đã hủy'
+  if (status === 'REJECTED') return 'Đã từ chối'
   return status || '-'
 }
 

@@ -8,7 +8,9 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 public interface ConsumableReceiptLotRepository extends JpaRepository<ConsumableReceiptLot, Long> {
 
@@ -23,6 +25,18 @@ public interface ConsumableReceiptLotRepository extends JpaRepository<Consumable
             String assetQaCode,
             Integer warehouseLocationId,
             Integer quantityRemaining
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select lot from ConsumableReceiptLot lot
+            where lot.asset.qaCode = :assetQaCode
+              and lot.warehouseLocation.id = :warehouseLocationId
+              and lot.quantityRemaining > 0
+            """)
+    List<ConsumableReceiptLot> findAvailableLotsForUpdate(
+            @Param("assetQaCode") String assetQaCode,
+            @Param("warehouseLocationId") Integer warehouseLocationId
     );
 
     @EntityGraph(attributePaths = {"asset", "supplier", "receivedBy", "warehouseLocation"})

@@ -42,6 +42,7 @@ import com.poly.mhv.entity.ConsumableWarehouseTransfer;
 import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.Supplier;
 import com.poly.mhv.exception.CustomException;
+import com.poly.mhv.exception.ResourceNotFoundException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AreaTypeCatalogRepository;
 import com.poly.mhv.repository.AssetRepository;
@@ -49,13 +50,16 @@ import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestItemRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestRepository;
 import com.poly.mhv.repository.ConsumableIssueRepository;
+import com.poly.mhv.repository.ConsumableInquiryFulfillmentRepository;
 import com.poly.mhv.repository.ConsumableLocationStockRepository;
 import com.poly.mhv.repository.ConsumableReceiptLotRepository;
 import com.poly.mhv.repository.ConsumableRequestRepository;
 import com.poly.mhv.repository.ConsumableWarehouseTransferRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.SupplierRepository;
+import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.AssetStatusSupport;
+import com.poly.mhv.util.TicketStatusSupport;
 import com.poly.mhv.security.services.UserDetailsImpl;
 import com.poly.mhv.util.QRCodeGenerator;
 import com.poly.mhv.util.UtcDateTimes;
@@ -74,6 +78,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.JpaSort;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -91,6 +96,14 @@ public class AssetService {
     private static final String CATEGORY_KIND_CONSUMABLE = "CONSUMABLE";
     private static final String QUANTITY_UNIT_RETAIL = "RETAIL";
     private static final String QUANTITY_UNIT_WHOLESALE = "WHOLESALE";
+    private static final String ASSET_CREATED_AT_SORT_EXPRESSION = """
+            (select max(assetCreateNotification.occurredAt)
+             from Notification assetCreateNotification
+             where assetCreateNotification.eventType = 'ASSET_CREATE'
+               and assetCreateNotification.assetQaCode = a.qaCode)
+            """.replaceAll("\\s+", " ").trim();
+    private static final String ASSET_CREATED_AT_MISSING_SORT_EXPRESSION =
+            "case when " + ASSET_CREATED_AT_SORT_EXPRESSION + " is null then 1 else 0 end";
 
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
@@ -100,11 +113,13 @@ public class AssetService {
     private final ConsumableLocationStockRepository consumableLocationStockRepository;
     private final ConsumableReceiptLotRepository consumableReceiptLotRepository;
     private final ConsumableRequestRepository consumableRequestRepository;
+    private final ConsumableInquiryFulfillmentRepository consumableInquiryFulfillmentRepository;
     private final ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository;
     private final ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository;
     private final ConsumableDisposalRequestRepository consumableDisposalRequestRepository;
     private final LocationRepository locationRepository;
     private final SupplierRepository supplierRepository;
+    private final TicketRepository ticketRepository;
     private final QRCodeGenerator qrCodeGenerator;
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
@@ -120,11 +135,13 @@ public class AssetService {
             ConsumableLocationStockRepository consumableLocationStockRepository,
             ConsumableReceiptLotRepository consumableReceiptLotRepository,
             ConsumableRequestRepository consumableRequestRepository,
+            ConsumableInquiryFulfillmentRepository consumableInquiryFulfillmentRepository,
             ConsumableWarehouseTransferRepository consumableWarehouseTransferRepository,
             ConsumableDisposalRequestItemRepository consumableDisposalRequestItemRepository,
             ConsumableDisposalRequestRepository consumableDisposalRequestRepository,
             LocationRepository locationRepository,
             SupplierRepository supplierRepository,
+            TicketRepository ticketRepository,
             QRCodeGenerator qrCodeGenerator,
             NotificationService notificationService,
             ObjectMapper objectMapper
@@ -137,11 +154,13 @@ public class AssetService {
         this.consumableLocationStockRepository = consumableLocationStockRepository;
         this.consumableReceiptLotRepository = consumableReceiptLotRepository;
         this.consumableRequestRepository = consumableRequestRepository;
+        this.consumableInquiryFulfillmentRepository = consumableInquiryFulfillmentRepository;
         this.consumableWarehouseTransferRepository = consumableWarehouseTransferRepository;
         this.consumableDisposalRequestItemRepository = consumableDisposalRequestItemRepository;
         this.consumableDisposalRequestRepository = consumableDisposalRequestRepository;
         this.locationRepository = locationRepository;
         this.supplierRepository = supplierRepository;
+        this.ticketRepository = ticketRepository;
         this.qrCodeGenerator = qrCodeGenerator;
         this.notificationService = notificationService;
         this.objectMapper = objectMapper;
@@ -372,7 +391,7 @@ public class AssetService {
     @Transactional
     public AssetResponse updateAsset(String qaCode, AssetUpdateRequest request) {
         Asset asset = assetRepository.findById(qaCode)
-                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị với mã: " + qaCode));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thiết bị với mã: " + qaCode));
         String oldName = asset.getName();
         String oldCategory = getCategoryDisplayName(asset.getCategory());
         String oldStatus = isItemizedMode(asset.getTrackingMode()) ? getItemizedDisplayStatus(asset) : asset.getStatus();
@@ -392,6 +411,7 @@ public class AssetService {
         }
         if (isItemizedMode(trackingMode)) {
             ensureItemizedStatusesInitialized(asset);
+            ensureTicketControlledStatusIsNotOverridden(asset, request);
             applyItemizedStatusUpdate(asset, request);
         }
         if (request.getCategoryId() != null) {
@@ -500,7 +520,7 @@ public class AssetService {
             asset.setExpiryTrackingEnabled(null);
             asset.setExpirationDate(null);
             validatePurchaseInfo(asset.getPurchasePrice(), asset.getPurchaseDate(), asset.getWarrantyExpirationDate());
-            syncItemizedLegacyStatus(asset, false);
+            syncItemizedLegacyStatus(asset, shouldPreserveRepairStatus(asset));
         }
         Asset updated = assetRepository.save(asset);
         AppUser actor = getCurrentUser();
@@ -1109,8 +1129,19 @@ public class AssetService {
 
     @Transactional
     public ConsumableRequestResponse createConsumableRequest(Integer locationId, ConsumableRequestCreateRequest request) {
+        return createConsumableRequestForRequester(locationId, request, getCurrentUser());
+    }
+
+    @Transactional
+    public ConsumableRequestResponse createConsumableRequestForRequester(
+            Integer locationId,
+            ConsumableRequestCreateRequest request,
+            AppUser requester) {
         if (request == null) {
             throw new CustomException("Dữ liệu yêu cầu cấp phát không được để trống.");
+        }
+        if (requester == null || requester.getId() == null) {
+            throw new CustomException("Không xác định được người yêu cầu cấp phát.");
         }
         if (!StringUtils.hasText(request.getAssetQaCode())) {
             throw new CustomException("Mã vật tư là bắt buộc.");
@@ -1134,7 +1165,6 @@ public class AssetService {
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
-        AppUser requester = getCurrentUser();
         ConsumableRequest consumableRequest = ConsumableRequest.builder()
                 .asset(asset)
                 .location(location)
@@ -1173,6 +1203,21 @@ public class AssetService {
         if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
             throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
         }
+        AppUser actor = getCurrentUser();
+        consumableInquiryFulfillmentRepository.findForUpdateByActiveConsumableRequestId(requestId)
+                .ifPresent(fulfillment -> {
+                    if (Boolean.TRUE.equals(fulfillment.getRequiresAdminApproval())
+                            && !Boolean.TRUE.equals(fulfillment.getAdminApproved())) {
+                        if (!"Admin".equals(actor.getRole())) {
+                            throw new CustomException("Phiếu cấp phát này đang chờ Admin phê duyệt.");
+                        }
+                        fulfillment.setAdminApproved(true);
+                        fulfillment.setAdminApprovedBy(actor);
+                        fulfillment.setAdminApprovedAt(UtcDateTimes.now());
+                        fulfillment.setUpdatedAt(UtcDateTimes.now());
+                        consumableInquiryFulfillmentRepository.save(fulfillment);
+                    }
+                });
         Asset asset = assetRepository.findDetailByQaCode(consumableRequest.getAsset().getQaCode())
                 .orElseThrow(() -> new CustomException("Không tìm thấy vật tư yêu cầu cấp phát."));
         if (!isConsumableMode(asset.getTrackingMode())) {
@@ -1183,7 +1228,6 @@ public class AssetService {
             throw new CustomException("Số lượng tồn không đủ để duyệt cấp phát phiếu này.");
         }
 
-        AppUser actor = getCurrentUser();
         LocalDateTime now = UtcDateTimes.now();
         Location sourceWarehouseLocation = resolveConsumableRequestSourceWarehouse(consumableRequest, request);
         List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, consumableRequest.getQuantityRequested());
@@ -1252,6 +1296,27 @@ public class AssetService {
         );
         notifyLowStockIfNeeded(updated, actor);
         return mapToConsumableRequestResponse(savedRequest);
+    }
+
+    @Transactional
+    public ConsumableRequestResponse fulfillConsumableRequest(
+            Long requestId,
+            Integer quantity,
+            ConsumableRequestDecisionRequest request) {
+        ConsumableRequest consumableRequest = consumableRequestRepository.findById(requestId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy phiếu yêu cầu cấp phát."));
+        if (!"PENDING".equalsIgnoreCase(consumableRequest.getStatus())) {
+            throw new CustomException("Phiếu yêu cầu này đã được xử lý.");
+        }
+        int pendingQuantity = safeInteger(consumableRequest.getQuantityRequested());
+        if (quantity == null || quantity <= 0 || quantity > pendingQuantity) {
+            throw new CustomException("Số lượng cấp phát phải lớn hơn 0 và không vượt quá số lượng còn chờ cấp.");
+        }
+        if (quantity != pendingQuantity) {
+            consumableRequest.setQuantityRequested(quantity);
+            consumableRequestRepository.save(consumableRequest);
+        }
+        return approveConsumableRequest(requestId, request);
     }
 
     @Transactional
@@ -1420,7 +1485,7 @@ public class AssetService {
         invalidateAssetCaches(qaCode);
     }
 
-    private void invalidateAssetCaches(String qaCode) {
+    public void invalidateAssetCaches(String qaCode) {
         if (!StringUtils.hasText(qaCode)) {
             return;
         }
@@ -1510,6 +1575,7 @@ public class AssetService {
                         : null)
                 .supplierId(item.getSupplierId())
                 .supplierName(item.getSupplierName())
+                .createdAt(item.getCreatedAt())
                 .build();
     }
 
@@ -1530,10 +1596,14 @@ public class AssetService {
         }
     }
 
-    private Sort buildSort(String sortKey, String sortDirection) {
+    static Sort buildSort(String sortKey, String sortDirection) {
         String normalizedSortKey = StringUtils.hasText(sortKey) ? sortKey.trim() : "qaCode";
         Sort.Direction direction = "desc".equalsIgnoreCase(sortDirection) ? Sort.Direction.DESC : Sort.Direction.ASC;
         return switch (normalizedSortKey) {
+            case "createdAt" -> JpaSort
+                    .unsafe(Sort.Direction.ASC, ASSET_CREATED_AT_MISSING_SORT_EXPRESSION)
+                    .andUnsafe(direction, ASSET_CREATED_AT_SORT_EXPRESSION)
+                    .and(Sort.by(Sort.Direction.DESC, "qaCode"));
             case "name" -> Sort.by(direction, "name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
             case "category" -> Sort.by(direction, "category.name").and(Sort.by(Sort.Direction.ASC, "qaCode"));
             case "trackingMode" -> Sort.by(direction, "trackingMode").and(Sort.by(Sort.Direction.ASC, "qaCode"));
@@ -1664,6 +1734,9 @@ public class AssetService {
     ) {
         if (purchasePrice != null && purchasePrice.signum() <= 0) {
             throw new CustomException("Giá mua phải lớn hơn 0.");
+        }
+        if (purchaseDate != null && purchaseDate.isAfter(LocalDate.now())) {
+            throw new CustomException("Ngày mua không được ở tương lai.");
         }
         if (purchaseDate != null && warrantyExpirationDate != null && warrantyExpirationDate.isBefore(purchaseDate)) {
             throw new CustomException("Hạn bảo hành không được nhỏ hơn ngày mua.");
@@ -1923,8 +1996,36 @@ public class AssetService {
         boolean hasTechnicalChange = StringUtils.hasText(request.getTechnicalStatus());
         boolean hasUsageChange = StringUtils.hasText(request.getUsageStatus());
         if (hasTechnicalChange || hasUsageChange) {
-            syncItemizedLegacyStatus(asset, false);
+            syncItemizedLegacyStatus(asset, shouldPreserveRepairStatus(asset));
             return;
+        }
+    }
+
+    static boolean shouldPreserveRepairStatus(Asset asset) {
+        return asset != null && AssetStatusSupport.isRepairInProgress(asset.getStatus());
+    }
+
+    private void ensureTicketControlledStatusIsNotOverridden(Asset asset, AssetUpdateRequest request) {
+        if (asset == null || request == null
+                || !ticketRepository.existsByAssetQaCodeAndStatusIn(
+                        asset.getQaCode(), TicketStatusSupport.ACTIVE_STATUSES)) {
+            return;
+        }
+        if (StringUtils.hasText(request.getStatus())) {
+            String currentDisplay = getItemizedDisplayStatus(asset);
+            String requestedDisplay = AssetStatusSupport.normalizeDisplayStatusFilter(request.getStatus());
+            if (!currentDisplay.equals(requestedDisplay)) {
+                throw new CustomException(
+                        "Không thể đổi trạng thái kỹ thuật khi tài sản đang có ticket hoạt động.");
+            }
+        }
+        if (StringUtils.hasText(request.getTechnicalStatus())) {
+            String currentTechnical = getItemizedTechnicalStatus(asset);
+            String requestedTechnical = AssetStatusSupport.normalizeTechnicalStatus(request.getTechnicalStatus());
+            if (!currentTechnical.equals(requestedTechnical)) {
+                throw new CustomException(
+                        "Không thể đổi tình trạng kỹ thuật khi tài sản đang có ticket hoạt động.");
+            }
         }
     }
 
@@ -2233,10 +2334,9 @@ public class AssetService {
             throw new CustomException("Kho xuất không hợp lệ.");
         }
         List<ConsumableReceiptLot> availableLots = consumableReceiptLotRepository
-                .findByAssetQaCodeAndWarehouseLocationIdAndQuantityRemainingGreaterThan(
+                .findAvailableLotsForUpdate(
                         asset.getQaCode(),
-                        sourceWarehouseLocation.getId(),
-                        0
+                        sourceWarehouseLocation.getId()
                 )
                 .stream()
                 .sorted(buildLotAllocationComparator(isExpiryTrackingEnabled(asset.getExpiryTrackingEnabled())))

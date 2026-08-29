@@ -9,13 +9,7 @@ import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import { useAuth } from '../../context/AuthContext'
 import { formatVietnamDateTime } from '../../utils/datetime'
-
-function toVietnameseStatus(status) {
-  if (status === 'PENDING') return 'Mới báo hỏng'
-  if (status === 'IN_PROGRESS') return 'Đang xử lý'
-  if (status === 'RESOLVED') return 'Đã hoàn tất'
-  return status
-}
+import { getTicketStatusMeta, TICKET_TECH_WORK_STATUSES } from '../../utils/ticketStatus'
 
 function MobileTechSupportChats() {
   const navigate = useNavigate()
@@ -52,8 +46,8 @@ function MobileTechSupportChats() {
         return searchable.includes(normalized)
       })
       .sort((left, right) => {
-        const leftScore = left.status === 'IN_PROGRESS' ? 0 : left.status === 'PENDING' ? 1 : 2
-        const rightScore = right.status === 'IN_PROGRESS' ? 0 : right.status === 'PENDING' ? 1 : 2
+        const leftScore = TICKET_TECH_WORK_STATUSES.includes(left.status) ? 0 : left.status === 'AWAITING_CONFIRMATION' ? 1 : 2
+        const rightScore = TICKET_TECH_WORK_STATUSES.includes(right.status) ? 0 : right.status === 'AWAITING_CONFIRMATION' ? 1 : 2
         return leftScore - rightScore
       })
   }, [keyword, tickets])
@@ -79,8 +73,9 @@ function MobileTechSupportChats() {
         {!loading && filteredTickets.length === 0 && (
           <p className="rounded-xl bg-white px-3 py-3 text-sm text-slate-500 shadow-sm">Bạn chưa có ticket nào đang phụ trách để trao đổi.</p>
         )}
-        {!loading && filteredTickets.map((ticket) => (
-          <button
+        {!loading && filteredTickets.map((ticket) => {
+          const statusMeta = getTicketStatusMeta(ticket.status)
+          return <button
             key={ticket.id}
             type="button"
             onClick={() => navigate(`/tech-mobile/tickets/${ticket.id}`)}
@@ -91,15 +86,8 @@ function MobileTechSupportChats() {
                 <p className="text-sm font-semibold text-slate-800">Ticket #{ticket.id}</p>
                 <p className="mt-1 truncate text-xs text-slate-600">{ticket.assetQaCode} - {ticket.assetName}</p>
               </div>
-              <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                ticket.status === 'RESOLVED'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : ticket.status === 'IN_PROGRESS'
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-amber-100 text-amber-700'
-              }`}
-              >
-                {toVietnameseStatus(ticket.status)}
+              <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusMeta.badgeClassName}`}>
+                {statusMeta.label}
               </span>
             </div>
 
@@ -119,7 +107,7 @@ function MobileTechSupportChats() {
               </span>
             </div>
           </button>
-        ))}
+        })}
       </div>
     </section>
   )

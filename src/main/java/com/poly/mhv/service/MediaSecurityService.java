@@ -68,23 +68,26 @@ public class MediaSecurityService {
 
     public ValidatedMedia inspectStoredLocalMedia(Path path) {
         try {
-            byte[] bytes = Files.readAllBytes(path);
-            String mimeType = detectMimeType(bytes);
-            if (!StringUtils.hasText(mimeType)) {
-                throw new CustomException("Media không hợp lệ.");
-            }
-            boolean safeImage = SAFE_IMAGE_MIME_TYPES.contains(mimeType);
-            boolean safeAudio = SAFE_AUDIO_MIME_TYPES.contains(mimeType);
-            if (!safeImage && !safeAudio) {
-                throw new CustomException("Media không hợp lệ.");
-            }
-            if (safeImage && requiresRasterValidation(mimeType) && !isReadableImage(bytes)) {
-                throw new CustomException("Media không hợp lệ.");
-            }
-            return new ValidatedMedia(bytes, mimeType, extensionForMimeType(mimeType), safeImage ? "image" : "audio");
+            return inspectStoredMediaBytes(Files.readAllBytes(path));
         } catch (IOException ex) {
             throw new CustomException("Không thể đọc media.");
         }
+    }
+
+    public ValidatedMedia inspectStoredMediaBytes(byte[] bytes) {
+        String mimeType = detectMimeType(bytes);
+        if (!StringUtils.hasText(mimeType)) {
+            throw new CustomException("Media không hợp lệ.");
+        }
+        boolean safeImage = SAFE_IMAGE_MIME_TYPES.contains(mimeType);
+        boolean safeAudio = SAFE_AUDIO_MIME_TYPES.contains(mimeType);
+        if (!safeImage && !safeAudio) {
+            throw new CustomException("Media không hợp lệ.");
+        }
+        if (safeImage && requiresRasterValidation(mimeType) && !isReadableImage(bytes)) {
+            throw new CustomException("Media không hợp lệ.");
+        }
+        return new ValidatedMedia(bytes, mimeType, extensionForMimeType(mimeType), safeImage ? "image" : "audio");
     }
 
     public String normalizeStoredMediaUrl(String rawUrl) {

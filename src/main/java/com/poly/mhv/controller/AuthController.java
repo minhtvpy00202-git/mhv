@@ -13,6 +13,7 @@ import com.poly.mhv.security.services.UserDetailsImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -63,7 +64,7 @@ public class AuthController {
                     .techTypeIds(userDetails.getTechTypeIds())
                     .techTypeNames(userDetails.getTechTypeNames())
                     .build();
-        } catch (DisabledException ex) {
+        } catch (DisabledException | LockedException ex) {
             throw new CustomException("Tài khoản đang bị khóa.");
         } catch (BadCredentialsException ex) {
             throw new CustomException("Sai username hoặc password.");

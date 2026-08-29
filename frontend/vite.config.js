@@ -9,6 +9,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true,
+        navigateFallbackAllowlist: [/^\/.*$/],
       },
       workbox: {
         navigateFallbackDenylist: [

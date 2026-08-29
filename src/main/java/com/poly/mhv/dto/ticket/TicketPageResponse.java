@@ -18,5 +18,8 @@ public class TicketPageResponse {
     private long totalItems;
     private long pendingCount;
     private long inProgressCount;
+    private long awaitingConfirmationCount;
+    private long waitingReplacementCount;
     private long resolvedCount;
+    private long closedUnresolvedCount;
 }

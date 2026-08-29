@@ -85,6 +85,30 @@ public class TicketResponse {
     @Schema(description = "Thời điểm hoàn tất ticket theo UTC", example = "2026-05-15T10:05:00", nullable = true)
     private LocalDateTime resolvedAt;
 
+    @Schema(description = "Thời điểm ticket bị hủy hoặc từ chối", nullable = true)
+    private LocalDateTime closedAt;
+
+    @Schema(description = "Lý do ticket bị hủy hoặc từ chối", nullable = true)
+    private String closedReason;
+
+    @Schema(description = "Hạn cuối để người báo xác nhận kết quả xử lý", nullable = true)
+    private LocalDateTime confirmationDueAt;
+
+    @Schema(description = "Thời điểm người báo xác nhận kết quả", nullable = true)
+    private LocalDateTime confirmedAt;
+
+    @Schema(description = "Kết quả xử lý", example = "REPAIRED", nullable = true)
+    private String resolutionOutcome;
+
+    @Schema(description = "Ghi chú kết quả xử lý", nullable = true)
+    private String resolutionNote;
+
+    @Schema(description = "Ảnh xác nhận sau xử lý", nullable = true)
+    private String resolutionImageUrl;
+
+    @Schema(description = "ID ticket cũ nếu ticket này được mở lại", nullable = true)
+    private Integer reopenedFromTicketId;
+
     @Schema(description = "Điểm hài lòng người dùng từ 1 đến 5", example = "4", nullable = true)
     private Integer satisfactionScore;
 

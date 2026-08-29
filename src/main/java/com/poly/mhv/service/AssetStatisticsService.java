@@ -4,6 +4,7 @@ import com.poly.mhv.dto.statistics.AssetStatisticsAuditResponse;
 import com.poly.mhv.dto.statistics.AssetStatisticsCountResponse;
 import com.poly.mhv.dto.statistics.AssetStatisticsRankResponse;
 import com.poly.mhv.dto.statistics.AssetStatisticsResponse;
+import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.dto.statistics.AssetStatisticsSummaryResponse;
 import com.poly.mhv.dto.statistics.AssetStatisticsTrendResponse;
 import com.poly.mhv.repository.AssetRepository;
@@ -185,7 +186,7 @@ public class AssetStatisticsService {
         LocalDate safeToDate = toDate == null ? today : toDate;
         LocalDate safeFromDate = fromDate == null ? safeToDate.minusDays(DEFAULT_RANGE_DAYS - 1L) : fromDate;
         if (safeFromDate.isAfter(safeToDate)) {
-            return new DateRange(safeToDate, safeFromDate);
+            throw new CustomException("fromDate không được lớn hơn toDate.");
         }
         return new DateRange(safeFromDate, safeToDate);
     }
@@ -277,7 +278,12 @@ public class AssetStatisticsService {
             return switch (value) {
                 case "PENDING" -> "Ticket mới";
                 case "IN_PROGRESS" -> "Đang xử lý";
+                case "WAITING_REPLACEMENT" -> "Chờ thay thế";
+                case "AWAITING_CONFIRMATION" -> "Chờ xác nhận";
                 case "RESOLVED" -> "Đã xử lý";
+                case "CLOSED_UNRESOLVED" -> "Đóng - không thể sửa";
+                case "CANCELLED" -> "Đã hủy";
+                case "REJECTED" -> "Đã từ chối";
                 default -> value;
             };
         }
@@ -403,7 +409,7 @@ public class AssetStatisticsService {
         for (AssetStatisticsCountResponse item : rows) {
             Row row = sheet.createRow(rowIndex++);
             createCell(row, 0, item.getLabel());
-            createCell(row, 1, String.valueOf(item.getCount()));
+            createNumericCell(row, 1, item.getCount());
         }
         autoSize(sheet, 2);
     }
@@ -481,6 +487,11 @@ public class AssetStatisticsService {
     private void createCell(Row row, int column, String value) {
         Cell cell = row.createCell(column);
         cell.setCellValue(value == null ? "" : value);
+    }
+
+    private void createNumericCell(Row row, int column, Long value) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value == null ? 0D : value.doubleValue());
     }
 
     private void autoSize(XSSFSheet sheet, int columns) {

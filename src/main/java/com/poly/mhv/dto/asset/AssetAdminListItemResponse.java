@@ -2,6 +2,7 @@ package com.poly.mhv.dto.asset;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -35,4 +36,5 @@ public class AssetAdminListItemResponse {
     private Integer wholesaleToRetailFactor;
     private Integer supplierId;
     private String supplierName;
+    private LocalDateTime createdAt;
 }

@@ -76,16 +76,16 @@ public class NotificationService {
             boolean shouldNotifyAdmin = false;
             for (NotificationTarget target : deduplicateTargets(targets)) {
                 Notification notification = Notification.builder()
-                        .eventType(eventType)
-                        .title(title)
-                        .message(message)
-                        .linkPath(resolveLinkPath(target))
-                        .actorUsername(actorUsername)
-                        .assetQaCode(assetQaCode)
-                        .assetName(assetName)
+                        .eventType(limitText(eventType, 50, "SYSTEM"))
+                        .title(limitText(title, 255, "Thông báo hệ thống"))
+                        .message(limitText(message, 500, "Có cập nhật mới."))
+                        .linkPath(limitText(resolveLinkPath(target), 255, "/"))
+                        .actorUsername(limitText(actorUsername, 50, "system"))
+                        .assetQaCode(limitNullableText(assetQaCode, 20))
+                        .assetName(limitNullableText(assetName, 255))
                         .receiverUserId(target.receiverUserId())
                         .receiverRole(target.receiverRole())
-                        .detailJson(detailJson)
+                        .detailJson(limitText(detailJson, 4000, ""))
                         .occurredAt(occurredAt)
                         .isRead(false)
                         .build();
@@ -172,6 +172,19 @@ public class NotificationService {
             }
         }
         return builder.toString();
+    }
+
+    private String limitText(String value, int maxLength, String fallback) {
+        String normalized = StringUtils.hasText(value) ? value.trim() : fallback;
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
+    }
+
+    private String limitNullableText(String value, int maxLength) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
     }
 
     private List<NotificationTarget> deduplicateTargets(Collection<NotificationTarget> targets) {

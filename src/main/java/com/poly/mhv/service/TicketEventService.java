@@ -9,6 +9,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.TicketEventRepository;
 import com.poly.mhv.repository.TicketRepository;
 import com.poly.mhv.util.UtcDateTimes;
+import com.poly.mhv.util.TicketStatusSupport;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -37,11 +39,11 @@ public class TicketEventService {
                 : (StringUtils.hasText(actor.getFullName()) ? actor.getFullName() : actor.getUsername());
         TicketEvent event = TicketEvent.builder()
                 .ticket(ticket)
-                .eventType(eventType)
+                .eventType(limitText(eventType, 40, "TICKET_EVENT"))
                 .actorId(actor != null ? actor.getId() : null)
-                .actorName(actorName)
-                .message(StringUtils.hasText(message) ? message : eventType)
-                .detailJson(formatDetail(detail))
+                .actorName(limitText(actorName, 120, "Hệ thống"))
+                .message(limitText(StringUtils.hasText(message) ? message : eventType, 500, "TICKET_EVENT"))
+                .detailJson(limitText(formatDetail(detail), 4000, ""))
                 .occurredAt(UtcDateTimes.now())
                 .build();
         ticketEventRepository.save(event);
@@ -88,6 +90,11 @@ public class TicketEventService {
         return builder.toString();
     }
 
+    private String limitText(String value, int maxLength, String fallback) {
+        String normalized = StringUtils.hasText(value) ? value.trim() : fallback;
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength);
+    }
+
     private void ensureCanViewTicket(Ticket ticket, AppUser actor) {
         if ("Admin".equals(actor.getRole())) {
             return;
@@ -102,11 +109,13 @@ public class TicketEventService {
             Integer ticketTechTypeId = (asset != null && asset.getCategory() != null && asset.getCategory().getTechSupportType() != null)
                     ? asset.getCategory().getTechSupportType().getId()
                     : 0;
-            if (ticketTechTypeId > 0 && userHasTechSupportType(actor, ticketTechTypeId)) {
+            if (TicketStatusSupport.PENDING.equals(ticket.getStatus())
+                    && ticketTechTypeId > 0
+                    && userHasTechSupportType(actor, ticketTechTypeId)) {
                 return;
             }
         }
-        throw new CustomException("Bạn không có quyền xem lịch sử ticket này.");
+        throw new AccessDeniedException("Bạn không có quyền xem lịch sử ticket này.");
     }
 
     private boolean userHasTechSupportType(AppUser user, Integer techTypeId) {

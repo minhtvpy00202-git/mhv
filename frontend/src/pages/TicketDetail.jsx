@@ -4,20 +4,26 @@ import {
   IconHistory as History,
   IconMessageCircle as MessageCircle,
   IconPhone as Phone,
+  IconRefresh as Refresh,
   IconStar as Star,
+  IconTrash as Trash,
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import AuthenticatedImage from '../components/AuthenticatedImage'
 import TicketChatBox from '../components/TicketChatBox'
 import TicketEventTimelineModal from '../components/TicketEventTimelineModal'
+import TicketReasonModal from '../components/TicketReasonModal'
+import TicketResolutionModal from '../components/TicketResolutionModal'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useAuth } from '../context/AuthContext'
 import { copyText, getZaloUrl, normalizePhone } from '../utils/contact'
-import { formatVietnamDateTime } from '../utils/datetime'
+import { formatVietnamDateTime, parseServerDateTime } from '../utils/datetime'
 import { isTechSupportMobilePath } from '../utils/navigation'
 import { getTechnicalStatusMeta, getUsageStatusMeta } from '../utils/assetStatus'
-import { getTicketStatusMeta } from '../utils/ticketStatus'
+import { getTicketStatusMeta, TICKET_CHAT_OPEN_STATUSES, TICKET_TECH_WORK_STATUSES } from '../utils/ticketStatus'
 
 function toVietnameseRole(role) {
   if (role === 'Admin') return 'Quản trị viên'
@@ -31,6 +37,21 @@ function getAssetBadgeClassName(tone) {
   if (tone === 'red') return 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
   if (tone === 'amber') return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
   return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+}
+
+function toVietnameseResolutionOutcome(outcome) {
+  if (outcome === 'REPAIRED') return 'Đã sửa chữa thành công'
+  if (outcome === 'NO_FAULT_FOUND') return 'Không phát hiện lỗi'
+  if (outcome === 'UNREPAIRABLE') return 'Không thể sửa chữa'
+  if (outcome === 'REPLACEMENT_REQUIRED') return 'Cần thay thế thiết bị'
+  return outcome || 'Chưa ghi nhận'
+}
+
+function isWithinReopenWindow(ticket) {
+  const completedAt = parseServerDateTime(ticket?.closedAt || ticket?.resolvedAt)
+  if (!completedAt) return false
+  const elapsed = Date.now() - completedAt.getTime()
+  return elapsed >= 0 && elapsed <= 7 * 24 * 60 * 60 * 1000
 }
 
 function TicketDetail() {
@@ -53,6 +74,11 @@ function TicketDetail() {
   const [reviewRejectReason, setReviewRejectReason] = useState('')
   const [showRejectPrompt, setShowRejectPrompt] = useState(false)
   const [submittingExtension, setSubmittingExtension] = useState(false)
+  const [reasonAction, setReasonAction] = useState(null)
+  const [submittingLifecycle, setSubmittingLifecycle] = useState(false)
+  const [showResolutionModal, setShowResolutionModal] = useState(false)
+  const [submittingResolution, setSubmittingResolution] = useState(false)
+  const [showConfirmResolution, setShowConfirmResolution] = useState(false)
 
   const loadEvents = async () => {
     try {
@@ -77,6 +103,16 @@ function TicketDetail() {
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được thông tin ticket.'
       toast.error(message)
+      if (error?.response?.status === 403) {
+        const fallbackPath = location.pathname.startsWith('/admin/')
+          ? '/admin/tickets'
+          : isTechSupportMobilePath(location.pathname)
+            ? '/tech-mobile/tickets'
+            : location.pathname.startsWith('/tech/')
+              ? '/tech/tickets'
+              : '/mobile/home'
+        navigate(fallbackPath, { replace: true })
+      }
     } finally {
       setLoading(false)
     }
@@ -92,12 +128,20 @@ function TicketDetail() {
   const assetTechnicalStatusMeta = useMemo(() => getTechnicalStatusMeta(ticket?.assetTechnicalStatus), [ticket?.assetTechnicalStatus])
   const assetUsageStatusMeta = useMemo(() => getUsageStatusMeta(ticket?.assetUsageStatus), [ticket?.assetUsageStatus])
 
-  const maxSlaDate = useMemo(() => {
+  const minSlaDate = (() => {
+    if (!ticket?.createdAt || !ticket?.minSlaMinutes) return null
+    const date = parseServerDateTime(ticket.createdAt)
+    if (!date) return null
+    date.setMinutes(date.getMinutes() + ticket.minSlaMinutes)
+    return date
+  })()
+  const maxSlaDate = (() => {
     if (!ticket?.createdAt || !ticket?.maxSlaMinutes) return null
-    const date = new Date(ticket.createdAt)
+    const date = parseServerDateTime(ticket.createdAt)
+    if (!date) return null
     date.setMinutes(date.getMinutes() + ticket.maxSlaMinutes)
     return date
-  }, [ticket?.createdAt, ticket?.maxSlaMinutes])
+  })()
 
   const pendingExtension = useMemo(() => {
     const sorted = [...events].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
@@ -106,7 +150,7 @@ function TicketDetail() {
 
     const lastRequestIndex = sorted.indexOf(lastRequest)
     const hasResponse = sorted.slice(0, lastRequestIndex).some(e =>
-      e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
+      ['EXTENSION_APPROVED', 'EXTENSION_REJECTED', 'EXTENSION_EXPIRED'].includes(e.eventType)
     )
 
     if (hasResponse) return null
@@ -139,7 +183,7 @@ function TicketDetail() {
     const sorted = [...events].sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
 
     const lastResponse = sorted.find(e =>
-      e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
+      ['EXTENSION_APPROVED', 'EXTENSION_REJECTED', 'EXTENSION_EXPIRED'].includes(e.eventType)
     )
     if (!lastResponse) return null
 
@@ -203,8 +247,18 @@ function TicketDetail() {
   const isMobileRoute = isStandardMobileRoute || isTechMobileRoute
   const canOpenChat = !isTechSupportRoute || Number(ticket?.assigneeId) === Number(user?.userId)
   const canRateSatisfaction = ticket?.status === 'RESOLVED'
-    && (Number(ticket?.reporterId) === Number(user?.userId) || user?.role === 'Admin')
+    && Number(ticket?.reporterId) === Number(user?.userId)
     && !isTechSupportRoute
+  const isReporter = Number(ticket?.reporterId) === Number(user?.userId)
+  const canCancelTicket = ['PENDING', 'IN_PROGRESS', 'AWAITING_CONFIRMATION', 'WAITING_REPLACEMENT'].includes(ticket?.status)
+    && (user?.role === 'Admin' || (isReporter && ticket?.status === 'PENDING'))
+  const canReopenTicket = ticket?.status === 'RESOLVED'
+    && isReporter
+    && isWithinReopenWindow(ticket)
+  const canConfirmResolution = ticket?.status === 'AWAITING_CONFIRMATION' && isReporter
+  const canResolveTicket = isTechSupportRoute
+    && TICKET_TECH_WORK_STATUSES.includes(ticket?.status)
+    && Number(ticket?.assigneeId) === Number(user?.userId)
   const reviewPath = location.pathname.startsWith('/admin/')
     ? `/admin/tickets/${ticketId}/review`
     : `/mobile/tickets/${ticketId}/review`
@@ -214,7 +268,7 @@ function TicketDetail() {
   const assigneeZaloUrl = getZaloUrl(ticket?.assigneePhone)
   const mobileChatPath = `/mobile/chats/${ticketId}`
   const showSupportContactCard = isStandardMobileRoute
-    && ticket?.status !== 'RESOLVED'
+    && TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)
     && (assigneePhone || assigneeZaloUrl)
 
   const handleRequestExtension = async (e) => {
@@ -272,6 +326,72 @@ function TicketDetail() {
     }
   }
 
+  const handleLifecycleAction = async (reason) => {
+    if (!reasonAction) return
+    setSubmittingLifecycle(true)
+    try {
+      if (reasonAction === 'reopen') {
+        const response = await axiosClient.post(`/api/tickets/${ticketId}/reopen`, { reason })
+        const newTicketId = response.data?.id
+        toast.success(`Đã mở lại bằng ticket #${newTicketId}.`)
+        setReasonAction(null)
+        if (newTicketId) {
+          const prefix = user?.role === 'Admin' ? '/admin/tickets' : '/mobile/tickets'
+          navigate(`${prefix}/${newTicketId}`)
+        }
+      } else if (reasonAction === 'rejectResolution') {
+        await axiosClient.put(`/api/tickets/${ticketId}/reject-resolution`, { reason })
+        toast.success(`Ticket #${ticketId} đã được trả lại cho kỹ thuật viên xử lý tiếp.`)
+        setReasonAction(null)
+        await Promise.all([loadTicket(), loadEvents()])
+      } else {
+        await axiosClient.put(`/api/tickets/${ticketId}/cancel`, { reason })
+        toast.success(`Đã hủy ticket #${ticketId}.`)
+        setReasonAction(null)
+        await Promise.all([loadTicket(), loadEvents()])
+      }
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể cập nhật ticket.'
+      toast.error(message)
+    } finally {
+      setSubmittingLifecycle(false)
+    }
+  }
+
+  const handleConfirmResolution = async () => {
+    setSubmittingLifecycle(true)
+    try {
+      await axiosClient.put(`/api/tickets/${ticketId}/confirm-resolution`)
+      toast.success(`Đã xác nhận hoàn tất ticket #${ticketId}.`)
+      setShowConfirmResolution(false)
+      await Promise.all([loadTicket(), loadEvents()])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể xác nhận kết quả xử lý.'
+      toast.error(message)
+    } finally {
+      setSubmittingLifecycle(false)
+    }
+  }
+
+  const handleResolveTicket = async ({ outcome, note, image }) => {
+    setSubmittingResolution(true)
+    try {
+      const formData = new FormData()
+      formData.append('outcome', outcome)
+      formData.append('note', note)
+      if (image) formData.append('image', image)
+      await axiosClient.put(`/api/tickets/${ticketId}/resolve`, formData)
+      toast.success('Đã cập nhật kết quả xử lý ticket.')
+      setShowResolutionModal(false)
+      await Promise.all([loadTicket(), loadEvents()])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể hoàn tất ticket.'
+      toast.error(message)
+    } finally {
+      setSubmittingResolution(false)
+    }
+  }
+
   return (
     <div className={`space-y-5 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
       <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
@@ -305,6 +425,58 @@ function TicketDetail() {
 
       {!loading && ticket && (
         <section className="space-y-4">
+          {(canCancelTicket || canReopenTicket || canResolveTicket || canConfirmResolution) && (
+            <div className="flex flex-wrap gap-2 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              {canResolveTicket && (
+                <button
+                  type="button"
+                  onClick={() => setShowResolutionModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+                >
+                  {ticket.status === 'WAITING_REPLACEMENT' ? 'Cập nhật sau thay thế' : 'Gửi kết quả xử lý'}
+                </button>
+              )}
+              {canConfirmResolution && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmResolution(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+                  >
+                    Xác nhận thiết bị đã ổn
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReasonAction('rejectResolution')}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                  >
+                    Yêu cầu xử lý lại
+                  </button>
+                </>
+              )}
+              {canCancelTicket && (
+                <button
+                  type="button"
+                  onClick={() => setReasonAction('cancel')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                >
+                  <Trash size={16} />
+                  Hủy ticket
+                </button>
+              )}
+              {canReopenTicket && (
+                <button
+                  type="button"
+                  onClick={() => setReasonAction('reopen')}
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                >
+                  <Refresh size={16} />
+                  Báo tái lỗi / mở lại
+                </button>
+              )}
+            </div>
+          )}
+
           {/* SLA Extension Approval Card for Admin */}
           {user?.role === 'Admin' && pendingExtension && (
             <div className="rounded-[28px] border border-orange-200 bg-orange-50/70 p-5 shadow-sm dark:border-orange-500/30 dark:bg-orange-500/10 space-y-3">
@@ -367,7 +539,7 @@ function TicketDetail() {
           )}
 
           {/* SLA Extension Cohesive Row Card for TechSupport */}
-          {isTechSupportRoute && Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'IN_PROGRESS' && (
+          {isTechSupportRoute && Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status) && (
             (() => {
               let cardBg = 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
               let titleText = 'Yêu cầu gia hạn thời gian sửa chữa'
@@ -467,7 +639,7 @@ function TicketDetail() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hạn xử lý (Min)</span>
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(ticket.dueDate)}</span>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(minSlaDate)}</span>
                     </div>
                     {maxSlaDate && (
                       <div className="flex items-center justify-between">
@@ -496,7 +668,7 @@ function TicketDetail() {
                     <p className="text-sm font-medium text-slate-500 dark:text-slate-400 font-semibold text-fptOrange">Hạn SLA</p>
                     <div className="mt-2 space-y-1">
                       <p className="text-xs text-slate-600 dark:text-slate-350">
-                        Hạn xử lý (Min): <span className="font-semibold text-slate-900 dark:text-slate-50">{formatVietnamDateTime(ticket.dueDate)}</span>
+                        Hạn xử lý (Min): <span className="font-semibold text-slate-900 dark:text-slate-50">{formatVietnamDateTime(minSlaDate)}</span>
                       </p>
                       {maxSlaDate && (
                         <p className="text-xs text-slate-600 dark:text-slate-350">
@@ -512,6 +684,13 @@ function TicketDetail() {
               <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
                 <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Mô tả sự cố</p>
                 <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-300">{ticket.description}</p>
+                {ticket.imageUrl && (
+                  <AuthenticatedImage
+                    src={ticket.imageUrl}
+                    alt="Ảnh sự cố ban đầu"
+                    className="mt-4 max-h-80 w-full rounded-2xl object-contain"
+                  />
+                )}
               </div>
             </div>
 
@@ -524,9 +703,42 @@ function TicketDetail() {
                     <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận')}</p>
                   </div>
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Hoàn tất lúc</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {ticket.status === 'AWAITING_CONFIRMATION' ? 'Gửi kết quả lúc' : 'Hoàn tất lúc'}
+                    </p>
                     <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.resolvedAt, 'Chưa hoàn tất')}</p>
                   </div>
+                  {ticket.status === 'AWAITING_CONFIRMATION' && (
+                    <div className="rounded-[22px] border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-500/10">
+                      <p className="text-xs text-violet-700 dark:text-violet-300">Chờ người báo xác nhận</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Hạn xác nhận: {formatVietnamDateTime(ticket.confirmationDueAt)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                        Quá thời hạn này, hệ thống sẽ tự động đóng ticket nếu không có phản hồi.
+                      </p>
+                    </div>
+                  )}
+                  {ticket.resolutionOutcome && (
+                    <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">Kết quả xử lý</p>
+                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{toVietnameseResolutionOutcome(ticket.resolutionOutcome)}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{ticket.resolutionNote}</p>
+                      {ticket.resolutionImageUrl && (
+                        <AuthenticatedImage
+                          src={ticket.resolutionImageUrl}
+                          alt="Ảnh sau xử lý"
+                          className="mt-3 max-h-72 w-full rounded-2xl object-contain"
+                        />
+                      )}
+                    </div>
+                  )}
+                  {ticket.closedReason && (
+                    <div className="rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
+                      <p className="text-xs text-red-700 dark:text-red-300">Lý do đóng ticket</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{ticket.closedReason}</p>
+                    </div>
+                  )}
                   <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
                     <p className="text-xs text-slate-500 dark:text-slate-400">Người báo</p>
                     <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}</p>
@@ -673,8 +885,8 @@ function TicketDetail() {
       {canOpenChat && (!isStandardMobileRoute ? (
         <>
           {isTechMobileRoute ? (
-            <TicketChatBox ticketId={Number(ticketId)} embedded />
-          ) : showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} />}
+            <TicketChatBox ticketId={Number(ticketId)} embedded readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />
+          ) : showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />}
           {!showChat && (
             <button
               type="button"
@@ -690,6 +902,45 @@ function TicketDetail() {
         open={showTimelineModal}
         onClose={() => setShowTimelineModal(false)}
         ticket={ticket}
+      />
+      <TicketReasonModal
+        open={Boolean(reasonAction)}
+        title={reasonAction === 'reopen'
+          ? `Mở lại ticket #${ticketId}`
+          : reasonAction === 'rejectResolution'
+            ? `Yêu cầu xử lý lại ticket #${ticketId}`
+            : `Hủy ticket #${ticketId}`}
+        description={reasonAction === 'reopen'
+          ? 'Hệ thống sẽ tạo ticket mới, liên kết với ticket này và chuyển thiết bị về trạng thái báo hỏng.'
+          : reasonAction === 'rejectResolution'
+            ? 'Mô tả rõ lỗi vẫn còn để kỹ thuật viên tiếp tục xử lý trên chính ticket này.'
+            : 'Bạn chỉ có thể hủy khi ticket chưa được kỹ thuật viên tiếp nhận.'}
+        confirmLabel={reasonAction === 'reopen'
+          ? 'Tạo ticket mở lại'
+          : reasonAction === 'rejectResolution'
+            ? 'Gửi yêu cầu xử lý lại'
+            : 'Xác nhận hủy'}
+        tone={reasonAction === 'reopen' || reasonAction === 'rejectResolution' ? 'primary' : 'danger'}
+        submitting={submittingLifecycle}
+        onClose={() => setReasonAction(null)}
+        onSubmit={handleLifecycleAction}
+      />
+      <ConfirmDialog
+        open={showConfirmResolution}
+        title={`Xác nhận hoàn tất ticket #${ticketId}`}
+        message="Chỉ xác nhận khi thiết bị đã hoạt động đúng. Sau khi xác nhận, ticket sẽ được đóng và bạn có thể gửi đánh giá."
+        confirmLabel="Xác nhận hoàn tất"
+        tone="primary"
+        busy={submittingLifecycle}
+        onConfirm={handleConfirmResolution}
+        onClose={() => setShowConfirmResolution(false)}
+      />
+      <TicketResolutionModal
+        open={showResolutionModal}
+        ticketId={Number(ticketId)}
+        submitting={submittingResolution}
+        onClose={() => setShowResolutionModal(false)}
+        onSubmit={handleResolveTicket}
       />
 
       {/* SLA Extension Modal */}

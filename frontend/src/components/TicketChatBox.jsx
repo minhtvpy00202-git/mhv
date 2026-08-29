@@ -178,7 +178,7 @@ function VoiceMessagePlayer({ src, isMine }) {
   )
 }
 
-function TicketChatBox({ ticketId, onClose, embedded = false }) {
+function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }) {
   const { token, user } = useAuth()
   const { connected, subscribe, publish } = useWebSocket(token)
   const [messages, setMessages] = useState([])
@@ -531,6 +531,11 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
         </div>
       </div>
 
+      {readOnly ? (
+        <div className={`border-t border-slate-200 p-3 text-center text-sm text-slate-500 md:p-4 ${embedded ? 'bg-white' : ''}`}>
+          Ticket đã đóng. Nội dung trao đổi được giữ ở chế độ chỉ xem.
+        </div>
+      ) : (
       <form onSubmit={handleSendMessage} className={`border-t border-slate-200 p-3 md:p-4 ${embedded ? 'bg-white' : ''}`}>
         <input
           ref={fileInputRef}
@@ -603,6 +608,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false }) {
           </p>
         )}
       </form>
+      )}
       </>
       )}
     </section>

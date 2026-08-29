@@ -1,13 +1,23 @@
-import { IconCheck as Check, IconPhoto as ImageIcon } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  IconBan as Ban,
+  IconCheck as Check,
+  IconExternalLink as ExternalLink,
+  IconPhoto as ImageIcon,
+  IconRefresh as Refresh,
+  IconTrash as Trash,
+} from '@tabler/icons-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
+import AuthenticatedImage from '../../components/AuthenticatedImage'
+import TicketReasonModal from '../../components/TicketReasonModal'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import SearchableSelect from '../../components/ui/SearchableSelect'
 import { formatVietnamDateTime, getServerDateTimeMs } from '../../utils/datetime'
-import { resolveBackendMediaUrl } from '../../utils/mediaUrl'
+import { getTicketStatusMeta } from '../../utils/ticketStatus'
 
-const statusOptions = ['PENDING', 'IN_PROGRESS', 'RESOLVED']
+const statusOptions = ['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION', 'RESOLVED', 'CLOSED_UNRESOLVED', 'CANCELLED', 'REJECTED']
 const PAGE_SIZE = 10
 const defaultPageInfo = {
   page: 0,
@@ -18,7 +28,10 @@ const defaultPageInfo = {
 const defaultStats = {
   pending: 0,
   inProgress: 0,
+  awaitingConfirmation: 0,
+  waitingReplacement: 0,
   resolved: 0,
+  closedUnresolved: 0,
 }
 
 function toVietnamesePriority(priority) {
@@ -30,18 +43,24 @@ function toVietnamesePriority(priority) {
 function toVietnameseStatus(status) {
   if (status === 'PENDING') return 'Mới báo hỏng'
   if (status === 'IN_PROGRESS') return 'Đang xử lý'
+  if (status === 'WAITING_REPLACEMENT') return 'Chờ thay thế'
+  if (status === 'AWAITING_CONFIRMATION') return 'Chờ xác nhận'
   if (status === 'RESOLVED') return 'Đã hoàn tất'
+  if (status === 'CLOSED_UNRESOLVED') return 'Đóng - không thể sửa'
+  if (status === 'CANCELLED') return 'Đã hủy'
+  if (status === 'REJECTED') return 'Đã từ chối'
   return status
 }
 
 function isOverdue(ticket) {
-  if (!ticket?.dueDate || ticket?.status === 'RESOLVED') return false
+  if (!ticket?.dueDate || !['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT'].includes(ticket?.status)) return false
   const dueTime = getServerDateTimeMs(ticket.dueDate)
   if (Number.isNaN(dueTime)) return false
   return dueTime < Date.now()
 }
 
 function TicketManagement() {
+  const navigate = useNavigate()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState(null)
@@ -55,11 +74,16 @@ function TicketManagement() {
     assigneeId: '',
   })
   const [assignDraft, setAssignDraft] = useState({})
+  const [reasonAction, setReasonAction] = useState(null)
 
   const getEligibleTechSupports = (ticket) => {
     const techTypeId = Number(ticket?.assetCategoryTechTypeId) || 0
     if (!techTypeId) return []
-    return techSupports.filter((tech) => Array.isArray(tech.techTypeIds) && tech.techTypeIds.map(Number).includes(techTypeId))
+    return techSupports.filter((tech) => (
+      tech.status === 'Hoạt động'
+      && Array.isArray(tech.techTypeIds)
+      && tech.techTypeIds.map(Number).includes(techTypeId)
+    ))
   }
 
   const loadTechSupports = async () => {
@@ -100,7 +124,10 @@ function TicketManagement() {
       setStats({
         pending: data.pendingCount || 0,
         inProgress: data.inProgressCount || 0,
+        awaitingConfirmation: data.awaitingConfirmationCount || 0,
+        waitingReplacement: data.waitingReplacementCount || 0,
         resolved: data.resolvedCount || 0,
+        closedUnresolved: data.closedUnresolvedCount || 0,
       })
       setAssignDraft(
         items.reduce((acc, item) => ({
@@ -156,12 +183,50 @@ function TicketManagement() {
     }
   }
 
+  const handleReassign = async (ticketId) => {
+    const assigneeId = assignDraft[ticketId]
+    if (!assigneeId) {
+      toast.error('Vui lòng chọn kỹ thuật viên mới.')
+      return
+    }
+    setSubmittingId(ticketId)
+    try {
+      await axiosClient.put(`/api/tickets/${ticketId}/reassign`, {
+        assignee_id: Number(assigneeId),
+      })
+      toast.success(`Đã đổi kỹ thuật viên phụ trách ticket #${ticketId}.`)
+      await loadTickets(pageInfo.page)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Đổi kỹ thuật viên thất bại.'
+      toast.error(message)
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
+  const handleReasonAction = async (reason) => {
+    if (!reasonAction) return
+    const { ticketId, action } = reasonAction
+    setSubmittingId(ticketId)
+    try {
+      await axiosClient.put(`/api/tickets/${ticketId}/${action}`, { reason })
+      toast.success(action === 'reject' ? `Đã từ chối ticket #${ticketId}.` : `Đã hủy ticket #${ticketId}.`)
+      setReasonAction(null)
+      await loadTickets(pageInfo.page)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không thể cập nhật ticket.'
+      toast.error(message)
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Điều phối ticket sửa chữa</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Theo dõi ticket báo hỏng, xem nhanh thông tin sự cố và gán kỹ thuật viên phụ trách.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Chờ tiếp nhận</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{stats.pending}</p>
@@ -169,6 +234,14 @@ function TicketManagement() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Đang xử lý</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-slate-100">{stats.inProgress}</p>
+          </div>
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-4 py-3 dark:border-orange-500/30 dark:bg-orange-500/10">
+            <p className="text-xs font-medium text-orange-700 dark:text-orange-300">Chờ thay thế</p>
+            <p className="mt-1 text-2xl font-semibold text-orange-900 dark:text-orange-200">{stats.waitingReplacement}</p>
+          </div>
+          <div className="rounded-xl border border-violet-200 bg-violet-50/70 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-500/10">
+            <p className="text-xs font-medium text-violet-700 dark:text-violet-300">Chờ xác nhận</p>
+            <p className="mt-1 text-2xl font-semibold text-violet-900 dark:text-violet-200">{stats.awaitingConfirmation}</p>
           </div>
           <div className="rounded-xl border border-orange-200 bg-orange-50/70 px-4 py-3 dark:border-orange-500/30 dark:bg-orange-500/10">
             <p className="text-xs font-medium text-orange-700 dark:text-orange-300">Đã giải quyết</p>
@@ -222,7 +295,7 @@ function TicketManagement() {
         </div>
 
         <div className="overflow-auto rounded-2xl border border-slate-200">
-          <table className="min-w-[1750px] text-sm">
+          <table className="min-w-[1900px] text-sm">
             <thead className="bg-slate-50/80">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Ticket</th>
@@ -237,6 +310,7 @@ function TicketManagement() {
                 <th className="whitespace-nowrap px-3 py-2 text-left">KTV phụ trách</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Ngày báo</th>
                 <th className="whitespace-nowrap px-3 py-2 text-left">Hạn sửa chữa</th>
+                <th className="whitespace-nowrap px-3 py-2 text-left">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -271,15 +345,10 @@ function TicketManagement() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">{toVietnamesePriority(ticket.priority)}</td>
                   <td className="whitespace-nowrap px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ticket.status === 'RESOLVED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : ticket.status === 'IN_PROGRESS'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {toVietnameseStatus(ticket.status)}
-                    </span>
+                    {(() => {
+                      const meta = getTicketStatusMeta(ticket.status)
+                      return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.badgeClassName}`}>{meta.label}</span>
+                    })()}
                   </td>
                   <td className="px-3 py-2">
                     {ticket.status === 'PENDING' ? (
@@ -314,6 +383,27 @@ function TicketManagement() {
                           disabled={submittingId === ticket.id}
                         />
                       </div>
+                    ) : ['IN_PROGRESS', 'WAITING_REPLACEMENT'].includes(ticket.status) ? (
+                      <div className="flex min-w-[240px] items-center gap-2">
+                        <SearchableSelect
+                          value={assignDraft[ticket.id] || ''}
+                          onChange={(nextValue) => setAssignDraft((prev) => ({ ...prev, [ticket.id]: String(nextValue || '') }))}
+                          options={getEligibleTechSupports(ticket)}
+                          getOptionValue={(tech) => tech.id}
+                          getOptionLabel={(tech) => tech.fullName || tech.username}
+                          getOptionSearchText={(tech) => `${tech.fullName || ''} ${tech.username || ''}`}
+                          placeholder="Đổi kỹ thuật viên"
+                          emptyOptionLabel="Chọn kỹ thuật viên"
+                          inputClassName="rounded border border-slate-300 px-2 py-1 text-xs"
+                        />
+                        <ActionIconButton
+                          icon={Refresh}
+                          label="Đổi kỹ thuật viên"
+                          variant="primary"
+                          onClick={() => handleReassign(ticket.id)}
+                          disabled={submittingId === ticket.id}
+                        />
+                      </div>
                     ) : (
                       <p className="whitespace-nowrap text-xs text-slate-700">{ticket.assigneeName || `#${ticket.assigneeId}`}</p>
                     )}
@@ -323,11 +413,41 @@ function TicketManagement() {
                     <p className="whitespace-nowrap">{formatVietnamDateTime(ticket.dueDate)}</p>
                     {isOverdue(ticket) && <p className="text-xs font-semibold text-red-600">Quá hạn SLA</p>}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <div className="flex gap-2">
+                      <ActionIconButton
+                        icon={ExternalLink}
+                        label="Xem chi tiết ticket"
+                        onClick={() => navigate(`/admin/tickets/${ticket.id}`)}
+                      />
+                      {ticket.status === 'PENDING' && (
+                        <ActionIconButton
+                          icon={Ban}
+                          label="Từ chối báo hỏng"
+                          variant="danger"
+                          onClick={() => setReasonAction({ ticketId: ticket.id, action: 'reject' })}
+                          disabled={submittingId === ticket.id}
+                        />
+                      )}
+                      {['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION'].includes(ticket.status) && (
+                        <ActionIconButton
+                          icon={Trash}
+                          label="Hủy ticket"
+                          variant="danger"
+                          onClick={() => setReasonAction({ ticketId: ticket.id, action: 'cancel' })}
+                          disabled={submittingId === ticket.id}
+                        />
+                      )}
+                      {!['PENDING', 'IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION'].includes(ticket.status) && (
+                        <span className="text-xs text-slate-500">Đã đóng</span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!loading && tickets.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={13} className="px-3 py-8 text-center text-slate-500">
                     Không có ticket phù hợp.
                   </td>
                 </tr>
@@ -382,7 +502,7 @@ function TicketManagement() {
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
           <div className="rounded-2xl bg-white p-4 shadow-xl">
-            <img src={resolveBackendMediaUrl(previewImageUrl)} alt="ticket-error-preview" className="max-h-[70vh] max-w-[80vw] rounded-lg object-contain" />
+            <AuthenticatedImage src={previewImageUrl} alt="Ảnh lỗi ticket" className="max-h-[70vh] max-w-[80vw] rounded-lg object-contain" />
             <button
               type="button"
               onClick={() => setPreviewImageUrl('')}
@@ -393,6 +513,17 @@ function TicketManagement() {
           </div>
         </div>
       )}
+      <TicketReasonModal
+        open={Boolean(reasonAction)}
+        title={reasonAction?.action === 'reject' ? `Từ chối ticket #${reasonAction?.ticketId}` : `Hủy ticket #${reasonAction?.ticketId}`}
+        description={reasonAction?.action === 'reject'
+          ? 'Dùng khi báo hỏng không hợp lệ hoặc không thuộc phạm vi xử lý.'
+          : 'Ticket sẽ được đóng và lý do được lưu vào timeline.'}
+        confirmLabel={reasonAction?.action === 'reject' ? 'Xác nhận từ chối' : 'Xác nhận hủy'}
+        submitting={submittingId === reasonAction?.ticketId}
+        onClose={() => setReasonAction(null)}
+        onSubmit={handleReasonAction}
+      />
     </div>
   )
 }

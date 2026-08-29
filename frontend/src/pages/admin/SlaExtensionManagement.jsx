@@ -14,6 +14,7 @@ import {
   IconEye as Eye
 } from '@tabler/icons-react'
 import { useAuth } from '../../context/AuthContext'
+import { getTicketStatusMeta } from '../../utils/ticketStatus'
 
 const PAGE_SIZE = 10
 
@@ -171,8 +172,7 @@ function SlaExtensionManagement() {
     const lastRequest = sorted.find(e => e.eventType === 'EXTENSION_REQUESTED')
     if (!lastRequest) return null
     const lastReview = sorted.find(
-      e =>
-        e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
+      e => ['EXTENSION_APPROVED', 'EXTENSION_REJECTED', 'EXTENSION_EXPIRED'].includes(e.eventType)
     )
     if (lastReview && new Date(lastReview.occurredAt) > new Date(lastRequest.occurredAt)) {
       return null
@@ -202,13 +202,12 @@ function SlaExtensionManagement() {
     const lastRequest = sorted.find(e => e.eventType === 'EXTENSION_REQUESTED')
     if (!lastRequest) return null
     const lastReview = sorted.find(
-      e =>
-        e.eventType === 'EXTENSION_APPROVED' || e.eventType === 'EXTENSION_REJECTED'
+      e => ['EXTENSION_APPROVED', 'EXTENSION_REJECTED', 'EXTENSION_EXPIRED'].includes(e.eventType)
     )
     if (lastReview && new Date(lastReview.occurredAt) > new Date(lastRequest.occurredAt)) {
-      return lastReview.eventType === 'EXTENSION_APPROVED' 
-        ? 'Yêu cầu gia hạn này đã được duyệt.' 
-        : `Yêu cầu gia hạn này đã bị từ chối. Lý do từ chối: ${lastReview.message ? lastReview.message.replace(/^\[Từ chối gia hạn\]\s*/, '') : ''}`
+      if (lastReview.eventType === 'EXTENSION_APPROVED') return 'Yêu cầu gia hạn này đã được duyệt.'
+      if (lastReview.eventType === 'EXTENSION_EXPIRED') return 'Yêu cầu gia hạn đã hết hiệu lực vì ticket đã đóng.'
+      return `Yêu cầu gia hạn này đã bị từ chối. Lý do từ chối: ${lastReview.message ? lastReview.message.replace(/^\[Từ chối gia hạn\]\s*/, '') : ''}`
     }
     return null
   }, [events])
@@ -246,18 +245,7 @@ function SlaExtensionManagement() {
     }
   }
 
-  const getTicketStatusBadgeClass = (status) => {
-    switch (status) {
-      case 'PENDING':
-        return 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50'
-      case 'IN_PROGRESS':
-        return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50'
-      case 'RESOLVED':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50'
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-850 dark:text-slate-300 dark:border-slate-800'
-    }
-  }
+  const getTicketStatusBadgeClass = (status) => getTicketStatusMeta(status).badgeClassName
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -481,9 +469,7 @@ function SlaExtensionManagement() {
                       <div className="flex justify-between items-center gap-2">
                         <span className="text-slate-450 whitespace-nowrap">Trạng thái ticket:</span>
                         <span className={`px-2 py-0.5 rounded-full text-xxs font-semibold border ${getTicketStatusBadgeClass(ticket.status)}`}>
-                          {ticket.status === 'PENDING' ? 'Chờ tiếp nhận' :
-                           ticket.status === 'IN_PROGRESS' ? 'Đang xử lý' :
-                           ticket.status === 'RESOLVED' ? 'Đã hoàn thành' : ticket.status}
+                          {getTicketStatusMeta(ticket.status).label}
                         </span>
                       </div>
 
