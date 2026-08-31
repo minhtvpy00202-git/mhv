@@ -6,6 +6,8 @@ import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -17,6 +19,9 @@ public class OpenApiConfig {
     @Bean
     public OpenAPI mhvOpenAPI() {
         return new OpenAPI()
+                .servers(List.of(new Server()
+                        .url("https://qltsmhv.click")
+                        .description("Production server")))
                 .info(new Info()
                         .title("MHV Asset Management API")
                         .description("Tài liệu API cho hệ thống.")

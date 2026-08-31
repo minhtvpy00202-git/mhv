@@ -20,12 +20,14 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private final JwtUtils jwtUtils;
     private final UserDetailsServiceImpl userDetailsService;
 
+    // Tiêm công cụ xử lý JWT và service fallback để dựng UserDetails khi cần.
     public AuthTokenFilter(JwtUtils jwtUtils, UserDetailsServiceImpl userDetailsService) {
         this.jwtUtils = jwtUtils;
         this.userDetailsService = userDetailsService;
     }
 
     @Override
+    // Đọc token từ request, xác thực và gắn người dùng vào SecurityContext.
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
@@ -56,6 +58,26 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    // Dựng nhanh UserDetails từ claims trong token hoặc fallback sang database nếu thiếu dữ liệu.
+    private UserDetailsImpl buildUserDetailsFromToken(String jwt, String username) {
+        Integer userId = jwtUtils.getUserIdFromJwtToken(jwt);
+        String role = jwtUtils.getRoleFromJwtToken(jwt);
+        String status = jwtUtils.getStatusFromJwtToken(jwt);
+        if (userId != null && role != null && status != null) {
+            return UserDetailsImpl.fromJwtClaims(
+                    userId,
+                    username,
+                    jwtUtils.getFullNameFromJwtToken(jwt),
+                    role,
+                    status,
+                    jwtUtils.getTechTypeIdsFromJwtToken(jwt),
+                    jwtUtils.getTechTypeNamesFromJwtToken(jwt)
+            );
+        }
+        return (UserDetailsImpl) userDetailsService.loadUserByUsername(username);
+    }
+
+    // Lấy JWT từ header Authorization hoặc tham số query cho các luồng đặc biệt.
     private String parseJwt(HttpServletRequest request) {
         String headerAuth = request.getHeader("Authorization");
         if (headerAuth != null && headerAuth.startsWith("Bearer ")) {

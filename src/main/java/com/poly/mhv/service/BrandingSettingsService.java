@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class BrandingSettingsService {
 
+    // Các key dùng để lưu branding trong bảng app_settings thay vì hard-code trong nhiều nơi.
     private static final String COMPANY_NAME_KEY = "branding.companyName";
     private static final String LEGAL_ENTITY_NAME_KEY = "branding.legalEntityName";
     private static final String TAX_CODE_KEY = "branding.taxCode";
@@ -29,6 +30,7 @@ public class BrandingSettingsService {
     private final String defaultAddress;
     private final String defaultPhoneNumber;
 
+    // Tiêm repository và các giá trị mặc định từ application properties để làm fallback khi DB chưa có cấu hình.
     public BrandingSettingsService(
             AppSettingRepository appSettingRepository,
             @Value("${app.branding.company-name:FPT}") String defaultCompanyName,
@@ -50,7 +52,9 @@ public class BrandingSettingsService {
     }
 
     @Transactional(readOnly = true)
+    // Ghép cấu hình branding hiện tại từ app_settings và giá trị mặc định để trả về cho frontend.
     public BrandingSettingsResponse getBrandingSettings() {
+        // Mỗi trường được đọc riêng theo key để dễ mở rộng thêm cấu hình mới sau này.
         String companyName = findSettingValue(COMPANY_NAME_KEY, defaultCompanyName);
         String legalEntityName = findSettingValue(LEGAL_ENTITY_NAME_KEY, defaultLegalEntityName);
         String taxCode = findSettingValue(TAX_CODE_KEY, defaultTaxCode);
@@ -73,6 +77,7 @@ public class BrandingSettingsService {
     }
 
     @Transactional
+    // Lưu toàn bộ cấu hình branding mới xuống app_settings rồi trả lại trạng thái mới nhất cho frontend.
     public BrandingSettingsResponse updateBrandingSettings(BrandingSettingsRequest request) {
         saveSetting(COMPANY_NAME_KEY, request.getCompanyName());
         saveSetting(LEGAL_ENTITY_NAME_KEY, request.getLegalEntityName());
@@ -85,15 +90,18 @@ public class BrandingSettingsService {
     }
 
     @Transactional(readOnly = true)
+    // Hàm tiện ích cho các nơi chỉ cần tên viết tắt doanh nghiệp.
     public String getCompanyName() {
         return getBrandingSettings().getCompanyName();
     }
 
     @Transactional(readOnly = true)
+    // Hàm tiện ích cho các nơi chỉ cần tên ứng dụng đang được cấu hình.
     public String getAppName() {
         return getBrandingSettings().getAppName();
     }
 
+    // Tìm giá trị theo key trong app_settings và fallback về cấu hình mặc định nếu DB chưa có hoặc giá trị rỗng.
     private String findSettingValue(String key, String fallbackValue) {
         return appSettingRepository.findById(key)
                 .map(AppSetting::getSettingValue)
@@ -102,6 +110,7 @@ public class BrandingSettingsService {
                 .orElse(fallbackValue);
     }
 
+    // Chuẩn hóa giá trị trước khi lưu để tránh null và khoảng trắng dư trong database.
     private void saveSetting(String key, String value) {
         String normalizedValue = value == null ? "" : value.trim();
         appSettingRepository.save(

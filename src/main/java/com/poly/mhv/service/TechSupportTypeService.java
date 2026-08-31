@@ -25,6 +25,7 @@ public class TechSupportTypeService {
     private final NotificationService notificationService;
     private final CurrentUserProvider currentUserProvider;
 
+    // Tiêm repository và service phụ trợ cần cho nghiệp vụ loại kỹ thuật viên.
     public TechSupportTypeService(
             TechSupportTypeRepository techSupportTypeRepository,
             CategoryRepository categoryRepository,
@@ -40,12 +41,14 @@ public class TechSupportTypeService {
     }
 
     @Transactional(readOnly = true)
+    // Lấy danh sách loại kỹ thuật viên kèm số liệu tổng hợp cho màn quản trị.
     public List<TechSupportTypeResponse> getAll(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         return techSupportTypeRepository.searchSummaryForAdmin(normalizedKeyword);
     }
 
     @Transactional(readOnly = true)
+    // Lấy danh sách rút gọn để dùng ở dropdown chọn chuyên môn.
     public List<TechSupportTypeOptionResponse> getOptions(String keyword) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         return techSupportTypeRepository.searchForAdmin(normalizedKeyword).stream()
@@ -57,11 +60,13 @@ public class TechSupportTypeService {
     }
 
     @Transactional(readOnly = true)
+    // Lấy chi tiết một loại kỹ thuật viên theo id sau khi kiểm tra hợp lệ.
     public TechSupportTypeResponse getById(Integer id) {
         return mapToResponse(getManageableTypeOrThrow(id));
     }
 
     @Transactional
+    // Tạo loại kỹ thuật viên mới và phát thông báo cho hệ thống.
     public TechSupportTypeResponse create(TechSupportTypeCreateRequest request) {
         String normalizedName = normalizeName(request.getName());
         if (techSupportTypeRepository.existsByNameIgnoreCase(normalizedName)) {
@@ -92,6 +97,7 @@ public class TechSupportTypeService {
     }
 
     @Transactional
+    // Cập nhật tên loại kỹ thuật viên và ghi nhận thông báo thay đổi.
     public TechSupportTypeResponse update(Integer id, TechSupportTypeUpdateRequest request) {
         TechSupportType techSupportType = getManageableTypeOrThrow(id);
         String normalizedName = normalizeName(request.getName());
@@ -118,6 +124,7 @@ public class TechSupportTypeService {
     }
 
     @Transactional
+    // Xóa loại kỹ thuật viên nếu chưa bị gán cho loại thiết bị hoặc tài khoản nào.
     public void delete(Integer id) {
         TechSupportType techSupportType = getManageableTypeOrThrow(id);
         long linkedCategories = categoryRepository.countByTechSupportTypeId(id);
@@ -145,6 +152,7 @@ public class TechSupportTypeService {
         );
     }
 
+    // Tìm bản ghi theo id và ném lỗi nếu id không hợp lệ hoặc không tồn tại.
     private TechSupportType getManageableTypeOrThrow(Integer id) {
         if (id == null || id <= 0) {
             throw new CustomException("Không tìm thấy loại kỹ thuật viên.");
@@ -153,6 +161,7 @@ public class TechSupportTypeService {
                 .orElseThrow(() -> new CustomException("Không tìm thấy loại kỹ thuật viên với id: " + id));
     }
 
+    // Chuẩn hóa và kiểm tra tên loại kỹ thuật viên trước khi ghi xuống database.
     private String normalizeName(String name) {
         String normalizedName = name == null ? null : name.trim();
         if (!StringUtils.hasText(normalizedName)) {
@@ -161,6 +170,7 @@ public class TechSupportTypeService {
         return normalizedName;
     }
 
+    // Chuyển entity sang response đầy đủ bằng cách tự tính các số liệu liên quan.
     private TechSupportTypeResponse mapToResponse(TechSupportType techSupportType) {
         return mapToResponse(
                 techSupportType,
@@ -169,6 +179,7 @@ public class TechSupportTypeService {
         );
     }
 
+    // Dựng response từ entity và các bộ đếm đã được chuẩn bị sẵn.
     private TechSupportTypeResponse mapToResponse(
             TechSupportType techSupportType,
             Map<Integer, Long> categoryCountsByTechTypeId,
@@ -182,6 +193,7 @@ public class TechSupportTypeService {
                 .build();
     }
 
+    // Chọn tên hiển thị phù hợp cho người thực hiện để ghi log và thông báo.
     private String getActorDisplayName(AppUser actor) {
         if (actor == null) {
             return "Hệ thống";

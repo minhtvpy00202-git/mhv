@@ -8,10 +8,12 @@ import { useBranding } from '../context/BrandingContext'
 import { getTechSupportHomePath } from '../utils/navigation'
 import { validateLoginForm } from '../utils/validation'
 
+// Trả về class input theo trạng thái hợp lệ để đồng bộ giao diện form đăng nhập.
 function getFieldClass(hasError) {
   return `w-full rounded-lg border bg-white px-3 py-2 text-slate-900 caret-slate-900 outline-none ring-fptOrange placeholder:text-slate-400 focus:ring-2 dark:bg-slate-950 dark:text-slate-100 dark:caret-slate-100 dark:placeholder:text-slate-500 ${hasError ? 'border-red-400 bg-red-50' : 'border-slate-300'}`
 }
 
+// Quản lý form đăng nhập và điều hướng người dùng về đúng màn hình theo vai trò.
 function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -21,6 +23,7 @@ function Login() {
   const { login } = useAuth()
   const { branding } = useBranding()
 
+  // Gửi thông tin đăng nhập, lưu phiên làm việc và chuyển hướng sau khi xác thực thành công.
   const handleSubmit = async (event) => {
     event.preventDefault()
     const nextErrors = validateLoginForm({ username, password })
