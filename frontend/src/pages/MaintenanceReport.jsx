@@ -9,7 +9,7 @@ import {
   IconTicket as Ticket,
   IconX as X,
 } from '@tabler/icons-react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -33,6 +33,24 @@ const getSlaRangeLimits = (p) => {
   return { minLimit: 2880, maxLimit: 5040, step: 60 }
 }
 
+const getDefaultSlaRange = (priority) => {
+  if (priority === 'HIGH') return { minSla: 30, maxSla: 120 }
+  if (priority === 'MEDIUM') return { minSla: 720, maxSla: 1440 }
+  return { minSla: 3600, maxSla: 4320 }
+}
+
+const extractQaCode = (decodedText) => {
+  try {
+    const parsed = JSON.parse(decodedText)
+    if (parsed?.qa_code) {
+      return String(parsed.qa_code).trim()
+    }
+  } catch {
+    return decodedText.trim()
+  }
+  return decodedText.trim()
+}
+
 const formatMinutes = (mins) => {
   if (mins < 60) return `${mins} phút`
   const hours = Math.floor(mins / 60)
@@ -53,6 +71,7 @@ function MaintenanceReport() {
   const { user } = useAuth()
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
+  const scannerStartingRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
@@ -66,18 +85,6 @@ function MaintenanceReport() {
   const [minSla, setMinSla] = useState(720)
   const [maxSla, setMaxSla] = useState(1440)
 
-  useEffect(() => {
-    if (priority === 'HIGH') {
-      setMinSla(30)
-      setMaxSla(120)
-    } else if (priority === 'MEDIUM') {
-      setMinSla(720)
-      setMaxSla(1440)
-    } else {
-      setMinSla(3600)
-      setMaxSla(4320)
-    }
-  }, [priority])
   const [imageFile, setImageFile] = useState(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState('')
   const [showScannerModal, setShowScannerModal] = useState(false)
@@ -89,7 +96,114 @@ function MaintenanceReport() {
   const [latestTicket, setLatestTicket] = useState(null)
   const [formErrors, setFormErrors] = useState({})
   const [scannerError, setScannerError] = useState('')
+  const [scannerRestartKey, setScannerRestartKey] = useState(0)
   const processingFallbackTimerRef = useRef(null)
+
+  useEffect(() => {
+    if (!user?.userId) return
+    let mounted = true
+    const loadLatestTicket = async () => {
+      try {
+        const response = await axiosClient.get('/api/maintenance/latest-ticket/me')
+        if (!mounted) return
+        setLatestTicket(response.data || null)
+      } catch (error) {
+        if (!mounted) return
+        const message = error?.response?.data?.message || 'Không tải được ticket gần nhất.'
+        toast.error(message)
+        setLatestTicket(null)
+      }
+    }
+    loadLatestTicket()
+    return () => {
+      mounted = false
+    }
+  }, [user?.userId])
+
+  const stopScanner = useCallback(async () => {
+    const scanner = scannerRef.current
+    if (!scanner) return
+    try {
+      if (isScanningRef.current) {
+        await scanner.stop()
+      }
+      await scanner.clear()
+    } catch {
+      return
+    } finally {
+      isScanningRef.current = false
+      scannerRef.current = null
+    }
+  }, [])
+
+  const openTicketFormByQaCode = useCallback(async (qaCode) => {
+    try {
+      const normalizedQaCode = String(qaCode || '').trim()
+      if (!normalizedQaCode) return false
+      const response = await axiosClient.get(`/api/assets/${normalizedQaCode}`)
+      setAssetQaCode(normalizedQaCode)
+      setAssetName(response.data?.name || '')
+      setAssetLocationName(response.data?.locationName || '')
+      setAssetHomeLocationName(response.data?.homeLocationName || '')
+      setAssetSpecs(parseSpecsToEntries(response.data?.specs))
+      setFormErrors({})
+      setManualQaCode(normalizedQaCode)
+      setShowScannerModal(false)
+      setShowModal(true)
+      return true
+    } catch {
+      setAssetQaCode('')
+      setAssetName('')
+      setAssetLocationName('')
+      setAssetHomeLocationName('')
+      setAssetSpecs([])
+      return false
+    }
+  }, [])
+
+  const startScanner = useCallback(async () => {
+    if (isScanningRef.current || scannerStartingRef.current) return
+    const scannerElement = document.getElementById(scannerElementId)
+    if (!scannerElement) {
+      setScannerError('Không tìm thấy khung camera để khởi động máy quét.')
+      return
+    }
+    scannerStartingRef.current = true
+    setScannerError('')
+    await stopScanner()
+    const scanner = new Html5Qrcode(scannerElementId)
+    scannerRef.current = scanner
+    try {
+      await scanner.start(
+        { facingMode: 'environment' },
+        scannerConfig,
+        async (decodedText) => {
+          const qaCode = extractQaCode(decodedText)
+          if (!qaCode) return
+          await stopScanner()
+          const opened = await openTicketFormByQaCode(qaCode)
+          if (!opened) {
+            toast.error('Mã tài sản không tồn tại')
+            setScannerRestartKey((key) => key + 1)
+          }
+        },
+        () => { },
+      )
+      isScanningRef.current = true
+      setScannerError('')
+    } catch (error) {
+      const message = error?.message || ''
+      const denied = /denied|permission|notallowed|secure/i.test(message)
+      const blockedMessage = denied
+        ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
+        : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
+      setScannerError(blockedMessage)
+      toast.error(blockedMessage, { toastId: 'maintenance-camera-open-error' })
+      await stopScanner()
+    } finally {
+      scannerStartingRef.current = false
+    }
+  }, [openTicketFormByQaCode, stopScanner])
 
   useEffect(() => {
     let restartTimer = null
@@ -118,133 +232,24 @@ function MaintenanceReport() {
       if (restartTimer) {
         window.clearTimeout(restartTimer)
       }
-      if (processingFallbackTimerRef.current) {
-        clearTimeout(processingFallbackTimerRef.current)
-        processingFallbackTimerRef.current = null
-      }
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl)
-      }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pagehide', handlePageHide)
       void stopScanner()
     }
-  }, [showModal, showScannerModal])
+  }, [scannerRestartKey, showModal, showScannerModal, startScanner, stopScanner])
 
-  useEffect(() => {
-    if (!user?.userId) return
-    let mounted = true
-    const loadLatestTicket = async () => {
-      try {
-        const response = await axiosClient.get('/api/maintenance/latest-ticket/me')
-        if (!mounted) return
-        setLatestTicket(response.data || null)
-      } catch (error) {
-        if (!mounted) return
-        const message = error?.response?.data?.message || 'Không tải được ticket gần nhất.'
-        toast.error(message)
-        setLatestTicket(null)
-      }
+  useEffect(() => () => {
+    if (processingFallbackTimerRef.current) {
+      clearTimeout(processingFallbackTimerRef.current)
+      processingFallbackTimerRef.current = null
     }
-    loadLatestTicket()
-    return () => {
-      mounted = false
-    }
-  }, [user?.userId])
+  }, [])
 
-  const extractQaCode = (decodedText) => {
-    try {
-      const parsed = JSON.parse(decodedText)
-      if (parsed?.qa_code) {
-        return String(parsed.qa_code).trim()
-      }
-    } catch {
-      return decodedText.trim()
+  useEffect(() => () => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl)
     }
-    return decodedText.trim()
-  }
-
-  const startScanner = async () => {
-    if (isScanningRef.current) return
-    const scannerElement = document.getElementById(scannerElementId)
-    if (!scannerElement) {
-      setScannerError('Không tìm thấy khung camera để khởi động máy quét.')
-      return
-    }
-    setScannerError('')
-    await stopScanner()
-    const scanner = new Html5Qrcode(scannerElementId)
-    scannerRef.current = scanner
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        scannerConfig,
-        async (decodedText) => {
-          const qaCode = extractQaCode(decodedText)
-          if (!qaCode) return
-          await stopScanner()
-          const opened = await openTicketFormByQaCode(qaCode)
-          if (!opened) {
-            toast.error('Mã tài sản không tồn tại')
-            startScanner()
-          }
-        },
-        () => { },
-      )
-      isScanningRef.current = true
-      setScannerError('')
-    } catch (error) {
-      const message = error?.message || ''
-      const denied = /denied|permission|notallowed|secure/i.test(message)
-      const blockedMessage = denied
-        ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
-        : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
-      setScannerError(blockedMessage)
-      toast.error(blockedMessage, { toastId: 'maintenance-camera-open-error' })
-      await stopScanner()
-    }
-  }
-
-  const openTicketFormByQaCode = async (qaCode) => {
-    try {
-      const normalizedQaCode = String(qaCode || '').trim()
-      if (!normalizedQaCode) return false
-      const response = await axiosClient.get(`/api/assets/${normalizedQaCode}`)
-      setAssetQaCode(normalizedQaCode)
-      setAssetName(response.data?.name || '')
-      setAssetLocationName(response.data?.locationName || '')
-      setAssetHomeLocationName(response.data?.homeLocationName || '')
-      setAssetSpecs(parseSpecsToEntries(response.data?.specs))
-      setFormErrors({})
-      setManualQaCode(normalizedQaCode)
-      setShowScannerModal(false)
-      setShowModal(true)
-      return true
-    } catch {
-      setAssetQaCode('')
-      setAssetName('')
-      setAssetLocationName('')
-      setAssetHomeLocationName('')
-      setAssetSpecs([])
-      return false
-    }
-  }
-
-  const stopScanner = async () => {
-    const scanner = scannerRef.current
-    if (!scanner) return
-    try {
-      if (isScanningRef.current) {
-        await scanner.stop()
-      }
-      await scanner.clear()
-    } catch {
-      return
-    } finally {
-      isScanningRef.current = false
-      scannerRef.current = null
-    }
-  }
+  }, [imagePreviewUrl])
 
   const resetForm = () => {
     setAssetQaCode('')
@@ -603,7 +608,10 @@ function MaintenanceReport() {
                       key={option.value}
                       type="button"
                       onClick={() => {
+                        const nextSlaRange = getDefaultSlaRange(option.value)
                         setPriority(option.value)
+                        setMinSla(nextSlaRange.minSla)
+                        setMaxSla(nextSlaRange.maxSla)
                         setFormErrors((prev) => {
                           const copy = { ...prev }
                           delete copy.sla

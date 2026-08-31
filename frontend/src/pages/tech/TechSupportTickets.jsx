@@ -10,7 +10,7 @@ import {
   IconSparkles as Sparkles,
   IconTool as Tool,
 } from '@tabler/icons-react'
-import { createElement, useEffect, useMemo, useState } from 'react'
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
@@ -72,10 +72,12 @@ function getWorkspaceTickets(pendingRows, myRows) {
 function TechSupportTickets() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const userId = user?.userId
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const statusFilterRef = useRef(statusFilter)
   const [keyword, setKeyword] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [resolutionTicketId, setResolutionTicketId] = useState(null)
@@ -95,7 +97,7 @@ function TechSupportTickets() {
     defaultVisibleKeys: defaultTechTicketVisibleColumnKeys,
   })
 
-  const loadTickets = async (nextStatus = statusFilter) => {
+  const loadTickets = useCallback(async (nextStatus = '') => {
     setLoading(true)
     try {
       let data = []
@@ -106,13 +108,13 @@ function TechSupportTickets() {
         data = response.data || []
       } else if (['IN_PROGRESS', 'WAITING_REPLACEMENT', 'AWAITING_CONFIRMATION', 'RESOLVED', 'CLOSED_UNRESOLVED', 'CANCELLED', 'REJECTED'].includes(nextStatus)) {
         const response = await axiosClient.get('/api/tickets', {
-          params: { status: nextStatus, assignee_id: user?.userId },
+          params: { status: nextStatus, assignee_id: userId },
         })
         data = response.data || []
       } else {
         const [pendingRes, myRes] = await Promise.all([
           axiosClient.get('/api/tickets', { params: { status: 'PENDING' } }),
-          axiosClient.get('/api/tickets', { params: { assignee_id: user?.userId } }),
+          axiosClient.get('/api/tickets', { params: { assignee_id: userId } }),
         ])
         data = getWorkspaceTickets(pendingRes.data || [], myRes.data || [])
       }
@@ -123,24 +125,47 @@ function TechSupportTickets() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
 
   useEffect(() => {
-    loadTickets()
-  }, [user?.userId])
+    statusFilterRef.current = statusFilter
+  }, [statusFilter])
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      void loadTickets(statusFilterRef.current)
+    }, 0)
+    return () => window.clearTimeout(timerId)
+  }, [loadTickets])
+
+  const handleTakeTicket = useCallback(async (ticketId) => {
+    setSubmittingId(ticketId)
+    try {
+      await axiosClient.put(`/api/tickets/${ticketId}/assign`, {
+        assignee_id: Number(userId),
+      })
+      toast.success(`Đã nhận xử lý ticket #${ticketId}.`)
+      await loadTickets(statusFilter)
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Nhận xử lý ticket thất bại.'
+      toast.error(message)
+    } finally {
+      setSubmittingId(null)
+    }
+  }, [loadTickets, statusFilter, userId])
 
   const stats = useMemo(() => ({
     myInProgress: tickets.filter(
-      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status),
+      (ticket) => Number(ticket.assigneeId) === Number(userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status),
     ).length,
     awaitingConfirmation: tickets.filter(
-      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'AWAITING_CONFIRMATION',
+      (ticket) => Number(ticket.assigneeId) === Number(userId) && ticket.status === 'AWAITING_CONFIRMATION',
     ).length,
     myResolved: tickets.filter(
-      (ticket) => Number(ticket.assigneeId) === Number(user?.userId) && ticket.status === 'RESOLVED',
+      (ticket) => Number(ticket.assigneeId) === Number(userId) && ticket.status === 'RESOLVED',
     ).length,
     pending: tickets.filter((ticket) => ticket.status === 'PENDING').length,
-  }), [tickets, user?.userId])
+  }), [tickets, userId])
   const filteredTickets = useMemo(() => {
     const normalized = keyword.trim().toLowerCase()
     if (!normalized) return tickets
@@ -161,7 +186,7 @@ function TechSupportTickets() {
       headClassName: 'px-3 py-2 text-left',
       cellClassName: 'px-3 py-2',
       render: (ticket) => {
-        const isMine = Number(ticket.assigneeId) === Number(user?.userId)
+        const isMine = Number(ticket.assigneeId) === Number(userId)
         return (
           <div className="flex flex-wrap gap-2">
             {ticket.status === 'PENDING' && <ActionIconButton icon={Play} label="Nhận xử lý" variant="primary" onClick={() => handleTakeTicket(ticket.id)} disabled={submittingId === ticket.id} />}
@@ -172,27 +197,11 @@ function TechSupportTickets() {
         )
       },
     },
-  ]), [navigate, submittingId, user?.userId])
+  ]), [handleTakeTicket, navigate, submittingId, userId])
   const renderedColumns = useMemo(
     () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
     [activeColumns, tableColumns],
   )
-
-  const handleTakeTicket = async (ticketId) => {
-    setSubmittingId(ticketId)
-    try {
-      await axiosClient.put(`/api/tickets/${ticketId}/assign`, {
-        assignee_id: Number(user?.userId),
-      })
-      toast.success(`Đã nhận xử lý ticket #${ticketId}.`)
-      await loadTickets()
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Nhận xử lý ticket thất bại.'
-      toast.error(message)
-    } finally {
-      setSubmittingId(null)
-    }
-  }
 
   const handleResolve = async ({ outcome, note, image }) => {
     const ticketId = resolutionTicketId
@@ -206,7 +215,7 @@ function TechSupportTickets() {
       await axiosClient.put(`/api/tickets/${ticketId}/resolve`, formData)
       toast.success(`Đã cập nhật kết quả ticket #${ticketId}.`)
       setResolutionTicketId(null)
-      await loadTickets()
+      await loadTickets(statusFilter)
     } catch (error) {
       const message = error?.response?.data?.message || 'Hoàn tất ticket thất bại.'
       toast.error(message)
@@ -225,7 +234,7 @@ function TechSupportTickets() {
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">Bảng việc kỹ thuật viên</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Ưu tiên ticket cần nhận, theo dõi SLA và hoàn tất công việc ngay trên một màn hình.</p>
           </div>
-          <button type="button" onClick={() => loadTickets()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-white/80 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><Refresh size={17} className={loading ? 'animate-spin' : ''} /> Đồng bộ dữ liệu</button>
+          <button type="button" onClick={() => loadTickets(statusFilter)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-white/80 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><Refresh size={17} className={loading ? 'animate-spin' : ''} /> Đồng bộ dữ liệu</button>
         </div>
         <div className="relative mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[

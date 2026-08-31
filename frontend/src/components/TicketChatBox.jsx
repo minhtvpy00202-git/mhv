@@ -97,11 +97,6 @@ function ResilientChatImage({ src, alt }) {
   const [attempts, setAttempts] = useState(0)
   const authenticatedMedia = useAuthenticatedMediaSource(src, retryKey)
 
-  useEffect(() => {
-    setRetryKey(0)
-    setAttempts(0)
-  }, [src])
-
   const displaySrc = useMemo(
     () => authenticatedMedia.source?.startsWith('blob:')
       ? authenticatedMedia.source
@@ -341,7 +336,10 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
   }, [syncMessages])
 
   useEffect(() => {
-    void syncMessages()
+    const initialSyncId = window.setTimeout(() => {
+      void syncMessages()
+    }, 0)
+    return () => window.clearTimeout(initialSyncId)
   }, [syncMessages])
 
   useEffect(() => {
@@ -370,7 +368,10 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
 
   useEffect(() => {
     if (!connected) return
-    void syncMessages({ silent: true })
+    const reconnectSyncId = window.setTimeout(() => {
+      void syncMessages({ silent: true })
+    }, 0)
+    return () => window.clearTimeout(reconnectSyncId)
   }, [connected, syncMessages])
 
   useEffect(() => {
@@ -600,7 +601,11 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
                   {message.isMine ? 'Bạn' : `User #${message.senderId}`} - {message.timeText}
                 </p>
                 {message.parsed.type === 'image' && (
-                  <ResilientChatImage src={message.parsed.value} alt="chat-img" />
+                  <ResilientChatImage
+                    key={`${message.id}-${message.parsed.value}`}
+                    src={message.parsed.value}
+                    alt="chat-img"
+                  />
                 )}
                 {message.parsed.type === 'audio' && (
                   <VoiceMessagePlayer src={message.parsed.value} isMine={message.isMine} />

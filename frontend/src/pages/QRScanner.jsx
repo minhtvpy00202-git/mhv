@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -9,12 +9,25 @@ import { parseSpecsToEntries } from '../utils/assetSpecs'
 
 const scannerElementId = 'qa-scanner'
 
+const extractQaCode = (decodedText) => {
+  try {
+    const parsed = JSON.parse(decodedText)
+    if (parsed?.qa_code) {
+      return String(parsed.qa_code).trim()
+    }
+  } catch {
+    return decodedText.trim()
+  }
+  return decodedText.trim()
+}
+
 function QRScanner() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const inquiryMode = searchParams.get('mode') === 'inquiry'
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
+  const scannerStartingRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
   const [scannedQaCode, setScannedQaCode] = useState('')
   const [scannedAssetName, setScannedAssetName] = useState('')
@@ -29,49 +42,12 @@ function QRScanner() {
   const [loadingAction, setLoadingAction] = useState(false)
   const [manualQaCode, setManualQaCode] = useState('')
   const [manualLookupLoading, setManualLookupLoading] = useState(false)
+  const [scannerRestartKey, setScannerRestartKey] = useState(0)
   const { user } = useAuth()
 
   const userId = useMemo(() => user?.userId ?? null, [user])
-  useEffect(() => {
-    if (!showActionModal && keepScannerAliveRef.current) {
-      void startScanner()
-    } else {
-      void stopScanner()
-    }
-    fetchLocations()
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        void stopScanner()
-        return
-      }
-      if (!showActionModal && keepScannerAliveRef.current) {
-        void startScanner()
-      }
-    }
-    const handlePageHide = () => {
-      void stopScanner()
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    window.addEventListener('pagehide', handlePageHide)
-    return () => {
-      keepScannerAliveRef.current = false
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      window.removeEventListener('pagehide', handlePageHide)
-      void stopScanner()
-    }
-  }, [showActionModal])
 
-  async function fetchLocations() {
-    try {
-      const response = await axiosClient.get('/api/locations')
-      setLocations(response.data || [])
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không tải được danh sách phòng.'
-      toast.error(message)
-    }
-  }
-
-  const fetchAssetInfo = async (qaCode) => {
+  const fetchAssetInfo = useCallback(async (qaCode) => {
     try {
       const response = await axiosClient.get(`/api/assets/${qaCode}`)
       setScannedAssetName(response.data?.name || '')
@@ -91,49 +67,25 @@ function QRScanner() {
       toast.error('Mã tài sản không tồn tại')
       return false
     }
-  }
+  }, [])
 
-  const extractQaCode = (decodedText) => {
+  const stopScanner = useCallback(async () => {
+    const scanner = scannerRef.current
+    if (!scanner) return
     try {
-      const parsed = JSON.parse(decodedText)
-      if (parsed?.qa_code) {
-        return String(parsed.qa_code).trim()
+      if (isScanningRef.current) {
+        await scanner.stop()
       }
+      await scanner.clear()
     } catch {
-      return decodedText.trim()
+      return
+    } finally {
+      isScanningRef.current = false
+      scannerRef.current = null
     }
-    return decodedText.trim()
-  }
+  }, [])
 
-  async function startScanner() {
-    if (isScanningRef.current) return
-    const scanner = new Html5Qrcode(scannerElementId)
-    scannerRef.current = scanner
-    try {
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
-        async (decodedText) => {
-          const qaCode = extractQaCode(decodedText)
-          if (!qaCode) return
-          await stopScanner()
-          const exists = await openActionModalByQaCode(qaCode)
-          if (!exists) {
-            startScanner()
-            return
-          }
-        },
-        () => {},
-      )
-      isScanningRef.current = true
-    } catch {
-      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.', {
-        toastId: 'qr-camera-open-error',
-      })
-    }
-  }
-
-  const openActionModalByQaCode = async (qaCode) => {
+  const openActionModalByQaCode = useCallback(async (qaCode) => {
     const normalizedQaCode = String(qaCode || '').trim()
     if (!normalizedQaCode) return false
     setScannedQaCode(normalizedQaCode)
@@ -150,25 +102,91 @@ function QRScanner() {
     }
     setShowActionModal(true)
     return true
-  }
+  }, [fetchAssetInfo, inquiryMode, navigate])
 
-  async function stopScanner() {
-    const scanner = scannerRef.current
-    if (!scanner) return
+  const startScanner = useCallback(async () => {
+    if (isScanningRef.current || scannerStartingRef.current) return
+    const scannerElement = document.getElementById(scannerElementId)
+    if (!scannerElement) return
+    scannerStartingRef.current = true
+    await stopScanner()
+    const scanner = new Html5Qrcode(scannerElementId)
+    scannerRef.current = scanner
     try {
-      if (isScanningRef.current) {
-        await scanner.stop()
-      }
-      await scanner.clear()
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        async (decodedText) => {
+          const qaCode = extractQaCode(decodedText)
+          if (!qaCode) return
+          await stopScanner()
+          const exists = await openActionModalByQaCode(qaCode)
+          if (!exists) {
+            setScannerRestartKey((key) => key + 1)
+          }
+        },
+        () => {},
+      )
+      isScanningRef.current = true
     } catch {
-      return
+      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.', {
+        toastId: 'qr-camera-open-error',
+      })
+      await stopScanner()
     } finally {
-      isScanningRef.current = false
-      scannerRef.current = null
+      scannerStartingRef.current = false
     }
-  }
+  }, [openActionModalByQaCode, stopScanner])
+
+  useEffect(() => {
+    let mounted = true
+    const loadLocations = async () => {
+      try {
+        const response = await axiosClient.get('/api/locations')
+        if (mounted) {
+          setLocations(response.data || [])
+        }
+      } catch (error) {
+        if (!mounted) return
+        const message = error?.response?.data?.message || 'Không tải được danh sách phòng.'
+        toast.error(message)
+      }
+    }
+    void loadLocations()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showActionModal && keepScannerAliveRef.current) {
+      void startScanner()
+    } else {
+      void stopScanner()
+    }
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        void stopScanner()
+        return
+      }
+      if (!showActionModal && keepScannerAliveRef.current) {
+        void startScanner()
+      }
+    }
+    const handlePageHide = () => {
+      void stopScanner()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pagehide', handlePageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pagehide', handlePageHide)
+      void stopScanner()
+    }
+  }, [scannerRestartKey, showActionModal, startScanner, stopScanner])
 
   const closeModal = () => {
+    keepScannerAliveRef.current = true
     setShowActionModal(false)
     setScannedQaCode('')
     setScannedAssetName('')
@@ -179,7 +197,6 @@ function QRScanner() {
     setScannedSpecs([])
     setToLocationId('')
     setManualQaCode('')
-    startScanner()
   }
 
   const handleManualLookup = async () => {
@@ -193,7 +210,8 @@ function QRScanner() {
     await stopScanner()
     const exists = await openActionModalByQaCode(normalizedQaCode)
     if (!exists) {
-      startScanner()
+      keepScannerAliveRef.current = true
+      setScannerRestartKey((key) => key + 1)
     }
     setManualLookupLoading(false)
   }
