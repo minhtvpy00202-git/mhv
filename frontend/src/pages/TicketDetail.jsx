@@ -393,15 +393,16 @@ function TicketDetail() {
   }
 
   return (
-    <div className={`space-y-5 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+    <div className={`space-y-5 ${isMobileRoute || isTechRoute ? 'pb-4' : 'pb-24'}`}>
+      <section className="relative overflow-hidden rounded-[28px] border border-orange-100 bg-gradient-to-br from-white via-orange-50/50 to-amber-50 p-5 shadow-sm dark:border-orange-500/20 dark:from-slate-950 dark:via-slate-950 dark:to-orange-950/30 sm:p-6">
         <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.18),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.24),transparent_62%)]" />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-3xl">
             <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>
               {statusMeta.label}
             </span>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+            <p className="mt-4 text-xs font-bold uppercase tracking-[0.18em] text-orange-600">Trung tâm xử lý sự cố</p>
+            <h2 className="mt-1 text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
               Ticket #{ticketId}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
@@ -884,10 +885,10 @@ function TicketDetail() {
 
       {canOpenChat && (!isStandardMobileRoute ? (
         <>
-          {isTechMobileRoute ? (
+          {isTechMobileRoute || isTechRoute ? (
             <TicketChatBox ticketId={Number(ticketId)} embedded readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />
           ) : showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />}
-          {!showChat && (
+          {!isTechRoute && !isTechMobileRoute && !showChat && (
             <button
               type="button"
               onClick={() => setShowChat(true)}

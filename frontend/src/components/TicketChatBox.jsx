@@ -57,16 +57,73 @@ function appendRetryQuery(url, retryKey) {
   return `${url}${separator}chat_media_retry=${retryKey}`
 }
 
+function useAuthenticatedMediaSource(src, retryKey = 0) {
+  const [loadState, setLoadState] = useState({ src: '', objectUrl: '', failed: false })
+  const requiresAuthenticatedFetch = Boolean(src?.includes('/api/media/'))
+
+  useEffect(() => {
+    if (!src || !requiresAuthenticatedFetch) return undefined
+    let active = true
+    let objectUrl = ''
+
+    axiosClient.get(src, { responseType: 'blob', timeout: 30000 })
+      .then((response) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(response.data)
+        setLoadState({ src, objectUrl, failed: false })
+      })
+      .catch(() => {
+        if (active) setLoadState({ src, objectUrl: '', failed: true })
+      })
+
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [requiresAuthenticatedFetch, retryKey, src])
+
+  if (!requiresAuthenticatedFetch) {
+    return { source: src, loading: false, failed: false }
+  }
+  return {
+    source: loadState.src === src ? loadState.objectUrl : '',
+    loading: loadState.src !== src || (!loadState.objectUrl && !loadState.failed),
+    failed: loadState.src === src && loadState.failed,
+  }
+}
+
 function ResilientChatImage({ src, alt }) {
   const [retryKey, setRetryKey] = useState(0)
   const [attempts, setAttempts] = useState(0)
+  const authenticatedMedia = useAuthenticatedMediaSource(src, retryKey)
 
   useEffect(() => {
     setRetryKey(0)
     setAttempts(0)
   }, [src])
 
-  const displaySrc = useMemo(() => appendRetryQuery(src, retryKey), [src, retryKey])
+  const displaySrc = useMemo(
+    () => authenticatedMedia.source?.startsWith('blob:')
+      ? authenticatedMedia.source
+      : appendRetryQuery(authenticatedMedia.source, retryKey),
+    [authenticatedMedia.source, retryKey],
+  )
+
+  if (authenticatedMedia.loading) {
+    return <div className="rounded-lg bg-white/20 px-3 py-4 text-center text-xs">Đang tải ảnh...</div>
+  }
+
+  if (authenticatedMedia.failed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setRetryKey(Date.now())}
+        className="w-full rounded-lg bg-white/20 px-3 py-4 text-center text-xs"
+      >
+        Không tải được ảnh. Nhấn để thử lại.
+      </button>
+    )
+  }
 
   return (
     <img
@@ -90,6 +147,8 @@ function VoiceMessagePlayer({ src, isMine }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
+  const [retryKey, setRetryKey] = useState(0)
+  const authenticatedMedia = useAuthenticatedMediaSource(src, retryKey)
 
   useEffect(() => {
     const audio = audioRef.current
@@ -122,7 +181,7 @@ function VoiceMessagePlayer({ src, isMine }) {
       audio.removeEventListener('pause', handlePause)
       audio.removeEventListener('play', handlePlay)
     }
-  }, [src])
+  }, [authenticatedMedia.source])
 
   const togglePlayback = async () => {
     const audio = audioRef.current
@@ -141,13 +200,29 @@ function VoiceMessagePlayer({ src, isMine }) {
   const shownTime = isPlaying ? currentTime : duration
   const waveformBars = [18, 28, 22, 34]
 
+  if (authenticatedMedia.loading) {
+    return <div className="min-w-[180px] rounded-2xl bg-white/20 px-3 py-4 text-center text-xs">Đang tải ghi âm...</div>
+  }
+
+  if (authenticatedMedia.failed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setRetryKey(Date.now())}
+        className="min-w-[180px] rounded-2xl bg-white/20 px-3 py-4 text-center text-xs"
+      >
+        Không tải được ghi âm. Nhấn để thử lại.
+      </button>
+    )
+  }
+
   return (
     <div
       className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2 ${
         isMine ? 'bg-orange-100/20' : 'bg-white/70'
       }`}
     >
-      <audio ref={audioRef} preload="metadata" src={src} />
+      <audio ref={audioRef} preload="metadata" src={authenticatedMedia.source} />
       <button
         type="button"
         onClick={togglePlayback}
@@ -352,7 +427,9 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
   const uploadChatMedia = useCallback(async (file) => {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await axiosClient.post(`/api/tickets/${ticketId}/chats/media`, formData)
+    const response = await axiosClient.post(`/api/tickets/${ticketId}/chats/media`, formData, {
+      timeout: 30000,
+    })
     if (!response.data?.mediaUrl || !response.data?.mediaType) {
       throw new Error('invalid-upload-response')
     }
@@ -370,6 +447,13 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
       setContent('')
       inputRef.current?.focus()
     }
+  }
+
+  const handleComposerKeyDown = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) return
+    event.preventDefault()
+    if (!content.trim() || sending) return
+    event.currentTarget.form?.requestSubmit()
   }
 
   const handleSelectImage = async (event) => {
@@ -557,7 +641,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={processingImage || sending}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImagePlus size={14} />
             Ảnh
@@ -566,7 +650,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
             type="button"
             onClick={handleOpenCamera}
             disabled={processingImage || sending}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImagePlus size={14} />
             Chụp ảnh
@@ -575,7 +659,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
             type="button"
             onClick={handleToggleRecording}
             disabled={sending}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold ${
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
               recording
                 ? 'border-red-500 bg-red-50 text-red-700'
                 : 'border-slate-300 text-slate-700 hover:bg-slate-50'
@@ -590,6 +674,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
             ref={inputRef}
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
             rows={2}
             placeholder="Nhập nội dung trao đổi..."
             className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fptOrange"

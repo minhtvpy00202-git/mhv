@@ -54,7 +54,9 @@ axiosClient.interceptors.response.use(
           authExpiredNoticeEmitted = true
           window.dispatchEvent(new CustomEvent('mhv-auth-session-expired'))
         }
-        return new Promise(() => {})
+        // Luôn kết thúc request để các màn hình chạy được khối finally và mở khóa UI.
+        // Modal hết phiên vẫn được phát qua event ở trên.
+        return Promise.reject(error)
       }
       if (typeof data === 'string') {
         normalizedMessage = getErrorMessageFromText(data, normalizedMessage)

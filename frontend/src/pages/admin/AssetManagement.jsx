@@ -32,6 +32,7 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import SearchableSelect from "../../components/ui/SearchableSelect";
 import { useAuth } from "../../context/AuthContext";
 import useColumnVisibility from "../../hooks/useColumnVisibility";
+import useDebouncedEffect from "../../hooks/useDebouncedEffect";
 import {
   mergeSpecEntries,
   normalizeSpecTemplates,
@@ -927,29 +928,6 @@ function AssetManagement({
       itemizedFilterDraft.locationId,
     ],
   );
-  const hasPendingItemizedFilterChanges = useMemo(
-    () =>
-      itemizedFilterDraft.name.trim() !== filters.name.trim() ||
-      itemizedFilterDraft.status !== filters.status ||
-      itemizedFilterDraft.technicalStatus !== filters.technicalStatus ||
-      itemizedFilterDraft.usageStatus !== filters.usageStatus ||
-      itemizedFilterDraft.categoryId !== filters.categoryId ||
-      itemizedFilterDraft.locationId !== filters.locationId,
-    [
-      filters.name,
-      filters.status,
-      filters.technicalStatus,
-      filters.usageStatus,
-      filters.categoryId,
-      filters.locationId,
-      itemizedFilterDraft.name,
-      itemizedFilterDraft.status,
-      itemizedFilterDraft.technicalStatus,
-      itemizedFilterDraft.usageStatus,
-      itemizedFilterDraft.categoryId,
-      itemizedFilterDraft.locationId,
-    ],
-  );
   const hasActiveConsumableFilters = useMemo(
     () =>
       Boolean(
@@ -962,23 +940,6 @@ function AssetManagement({
         consumableFilterDraft.categoryId ||
         consumableFilterDraft.locationId,
       ),
-    [
-      filters.name,
-      filters.status,
-      filters.categoryId,
-      filters.locationId,
-      consumableFilterDraft.name,
-      consumableFilterDraft.status,
-      consumableFilterDraft.categoryId,
-      consumableFilterDraft.locationId,
-    ],
-  );
-  const hasPendingConsumableFilterChanges = useMemo(
-    () =>
-      consumableFilterDraft.name.trim() !== filters.name.trim() ||
-      consumableFilterDraft.status !== filters.status ||
-      consumableFilterDraft.categoryId !== filters.categoryId ||
-      consumableFilterDraft.locationId !== filters.locationId,
     [
       filters.name,
       filters.status,
@@ -1328,6 +1289,36 @@ function AssetManagement({
     }
   };
 
+  useDebouncedEffect(
+    () => {
+      const draft = isConsumableTab
+        ? consumableFilterDraft
+        : itemizedFilterDraft;
+      const nextFilters = {
+        ...draft,
+        trackingMode: activeTrackingMode,
+      };
+      setFilters(nextFilters);
+      void loadAssets(0, nextFilters);
+    },
+    [
+      activeTrackingMode,
+      isConsumableTab,
+      itemizedFilterDraft.name,
+      itemizedFilterDraft.status,
+      itemizedFilterDraft.technicalStatus,
+      itemizedFilterDraft.usageStatus,
+      itemizedFilterDraft.categoryId,
+      itemizedFilterDraft.locationId,
+      consumableFilterDraft.name,
+      consumableFilterDraft.status,
+      consumableFilterDraft.categoryId,
+      consumableFilterDraft.locationId,
+    ],
+    300,
+    true,
+  );
+
   const buildConsumableStatusCountFilters = (nextFilters) => ({
     name: nextFilters.name,
     trackingMode: "CONSUMABLE",
@@ -1576,33 +1567,22 @@ function AssetManagement({
     )
       return;
     if (
-      String(filters.locationId || "") ===
-        String(selectedWarehouseLocationId) &&
       String(consumableFilterDraft.locationId || "") ===
-        String(selectedWarehouseLocationId)
+      String(selectedWarehouseLocationId)
     ) {
       return;
     }
-    const nextFilters = {
-      ...filters,
-      trackingMode: "CONSUMABLE",
-      locationId: String(selectedWarehouseLocationId),
-    };
     const nextDraft = {
       ...consumableFilterDraft,
       trackingMode: "CONSUMABLE",
       locationId: String(selectedWarehouseLocationId),
     };
-    setFilters(nextFilters);
     setConsumableFilterDraft(nextDraft);
-    void loadAssets(0, nextFilters, sortState);
   }, [
     consumableFilterDraft,
     consumableWorkspace,
-    filters,
     isConsumableTab,
     selectedWarehouseLocationId,
-    sortState,
   ]);
 
   useEffect(() => {
@@ -1704,7 +1684,6 @@ function AssetManagement({
       setShowFormModal(false);
       resetForm();
     }
-    await loadAssets(0, nextFilters, nextSortState);
     if (nextTab === "CONSUMABLE" && isAdmin) {
       await loadPendingConsumableRequests();
     }
@@ -2280,16 +2259,7 @@ function AssetManagement({
     }
   };
 
-  const handleSearch = async () => {
-    const draft = isConsumableTab ? consumableFilterDraft : itemizedFilterDraft;
-    const nextFilters = { ...draft, trackingMode: activeTrackingMode };
-    setFilters(nextFilters);
-    if (isConsumableTab) setConsumableFilterDraft(nextFilters);
-    else setItemizedFilterDraft(nextFilters);
-    await loadAssets(0, nextFilters);
-  };
-
-  const handleResetFilters = async () => {
+  const handleResetFilters = () => {
     const reset = {
       name: "",
       status: "",
@@ -2304,7 +2274,6 @@ function AssetManagement({
     setFilters(reset);
     setItemizedFilterDraft(reset);
     setConsumableFilterDraft(reset);
-    await loadAssets(0, reset);
   };
 
   const handleOpenIssueModal = async (
@@ -3507,7 +3476,6 @@ function AssetManagement({
                           name: e.target.value,
                         }))
                       }
-                      onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                       className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                       placeholder="Tìm tên hoặc mã vật tư"
                     />
@@ -3528,18 +3496,6 @@ function AssetManagement({
                         Bộ lọc nâng cao
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={handleSearch}
-                      disabled={loading}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
-                        hasPendingConsumableFilterChanges
-                          ? "bg-fptOrangeDark shadow-sm ring-2 ring-orange-200 hover:bg-fptOrange"
-                          : "bg-fptOrange hover:bg-fptOrangeDark"
-                      }`}
-                    >
-                      Lọc
-                    </button>
                     {hasActiveConsumableFilters && (
                       <button
                         type="button"
@@ -3552,13 +3508,6 @@ function AssetManagement({
                     )}
                   </div>
                 </div>
-
-                {hasPendingConsumableFilterChanges && (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                    Có thay đổi bộ lọc chưa áp dụng. Bấm Lọc để cập nhật danh
-                    sách.
-                  </p>
-                )}
 
                 {showConsumableAdvancedFilters &&
                   consumableWorkspace !== "WAREHOUSES" && (
@@ -4051,7 +4000,6 @@ function AssetManagement({
                       name: e.target.value,
                     }))
                   }
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   placeholder="Tìm tên hoặc mã QA"
                 />
@@ -4068,18 +4016,6 @@ function AssetManagement({
                   />
                   Bộ lọc nâng cao
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSearch}
-                  disabled={loading}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
-                    hasPendingItemizedFilterChanges
-                      ? "bg-fptOrangeDark shadow-sm ring-2 ring-orange-200 hover:bg-fptOrange"
-                      : "bg-fptOrange hover:bg-fptOrangeDark"
-                  }`}
-                >
-                  Lọc
-                </button>
                 {hasActiveItemizedFilters && (
                   <button
                     type="button"
@@ -4092,12 +4028,6 @@ function AssetManagement({
                 )}
               </div>
             </div>
-
-            {hasPendingItemizedFilterChanges && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                Có thay đổi bộ lọc chưa áp dụng. Bấm Lọc để cập nhật danh sách.
-              </p>
-            )}
 
             {showAdvancedFilters && (
               <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 dark:border-slate-800 md:grid-cols-2 xl:grid-cols-4">

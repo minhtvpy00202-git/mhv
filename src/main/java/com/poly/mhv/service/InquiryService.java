@@ -170,6 +170,8 @@ public class InquiryService {
                 .slaResponseDueAt(now.plusMinutes(consumable
                         ? workflowSettings.consumableResponseSlaMinutes()
                         : workflowSettings.assetResponseSlaMinutes()))
+                .approvalQuantityThreshold(workflowSettings.largeQuantityThreshold())
+                .approvalValueThreshold(workflowSettings.highValueThreshold())
                 .overdueReminderCount(0)
                 .build();
         ServiceInquiry saved = inquiryRepository.save(inquiry);
@@ -325,6 +327,9 @@ public class InquiryService {
         ensureTargetRole(inquiry, actor);
         AppUser nextAssignee = appUserRepository.findById(request.getAssigneeUserId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy người nhận xử lý."));
+        if (inquiry.getAssignee() != null && inquiry.getAssignee().getId().equals(nextAssignee.getId())) {
+            throw new CustomException("Vui lòng chọn người xử lý khác với người đang phụ trách.");
+        }
         if (!inquiry.getTargetRole().equals(nextAssignee.getRole()) || !"Hoạt động".equals(nextAssignee.getStatus())) {
             throw new CustomException("Người được chuyển không thuộc nhóm xử lý phù hợp hoặc đang ngừng hoạt động.");
         }
@@ -491,12 +496,19 @@ public class InquiryService {
         }
         ensureNotConverted(inquiry);
         recordFirstResponse(inquiry, UtcDateTimes.now());
-        Asset effectiveAsset = effectiveAsset(inquiry);
-        if (!Boolean.TRUE.equals(mapAvailability(effectiveAsset).getAvailable())) {
-            throw new CustomException("Thiết bị hiện không sẵn sàng để tạo phiếu mượn.");
+        Asset selectedAsset = effectiveAsset(inquiry);
+        Asset effectiveAsset = assetRepository.findByQaCodeForUpdate(selectedAsset.getQaCode())
+                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị cần tạo phiếu mượn."));
+        if (isBrokenOrRepairing(effectiveAsset)) {
+            throw new CustomException("Thiết bị đang hỏng hoặc sửa chữa nên chưa thể tạo phiếu mượn.");
         }
-        if (borrowRequestRepository.existsByAssetQaCodeAndStatusIn(effectiveAsset.getQaCode(), ACTIVE_BORROW_STATUSES)) {
-            throw new CustomException("Thiết bị đã có một phiếu mượn hoặc giữ chỗ đang hoạt động.");
+        if (borrowRequestRepository.existsOverlappingSchedule(
+                effectiveAsset.getQaCode(),
+                inquiry.getNeededFrom(),
+                inquiry.getExpectedReturnDate(),
+                ACTIVE_BORROW_STATUSES,
+                -1L)) {
+            throw new CustomException("Thiết bị đã có lịch mượn trùng với khoảng ngày được yêu cầu.");
         }
         AssetBorrowRequest borrowRequest = AssetBorrowRequest.builder()
                 .inquiry(inquiry)
@@ -546,13 +558,19 @@ public class InquiryService {
         Location sourceWarehouse = locationRepository.findById(created.getSourceWarehouseLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy kho xuất của phiếu cấp phát."));
         InquiryWorkflowSettingService.EffectiveSettings settings = workflowSettingService.getEffectiveSettings();
+        int approvalQuantityThreshold = inquiry.getApprovalQuantityThreshold() != null
+                ? inquiry.getApprovalQuantityThreshold()
+                : settings.largeQuantityThreshold();
+        BigDecimal approvalValueThreshold = inquiry.getApprovalValueThreshold() != null
+                ? inquiry.getApprovalValueThreshold()
+                : settings.highValueThreshold();
         BigDecimal purchasePrice = effectiveAsset.getPurchasePrice() == null
                 ? BigDecimal.ZERO
                 : effectiveAsset.getPurchasePrice();
         BigDecimal totalValue = purchasePrice.multiply(BigDecimal.valueOf(effectiveQuantity));
-        boolean exceedsQuantityThreshold = effectiveQuantity >= settings.largeQuantityThreshold();
-        boolean exceedsValueThreshold = settings.highValueThreshold().signum() > 0
-                && totalValue.compareTo(settings.highValueThreshold()) >= 0;
+        boolean exceedsQuantityThreshold = effectiveQuantity >= approvalQuantityThreshold;
+        boolean exceedsValueThreshold = approvalValueThreshold.signum() > 0
+                && totalValue.compareTo(approvalValueThreshold) >= 0;
         boolean requiresAdminApproval = exceedsQuantityThreshold || exceedsValueThreshold;
         LocalDateTime now = UtcDateTimes.now();
         inquiry.setLinkedEntityType("CONSUMABLE_REQUEST");
@@ -791,7 +809,7 @@ public class InquiryService {
             available = false;
             code = "BORROWED";
             label = "Đang được mượn";
-        } else if (borrowRequestRepository.existsByAssetQaCodeAndStatusIn(asset.getQaCode(), Set.of("APPROVED", "RESERVED"))) {
+        } else if (borrowRequestRepository.existsByAssetQaCodeAndStatusIn(asset.getQaCode(), Set.of("RESERVED"))) {
             available = false;
             code = "RESERVED";
             label = "Đã được giữ chỗ";

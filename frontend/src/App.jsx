@@ -15,6 +15,7 @@ import TicketDetail from './pages/TicketDetail'
 import Unauthorized from './pages/Unauthorized'
 import MobileTechSupportTickets from './pages/tech/MobileTechSupportTickets'
 import TechSupportInventoryAuditHistory from './pages/tech/TechSupportInventoryAuditHistory'
+import TechSupportPerformance from './pages/tech/TechSupportPerformance'
 import TechSupportTickets from './pages/tech/TechSupportTickets'
 import { getTechSupportHomePath } from './utils/navigation'
 
@@ -167,6 +168,7 @@ function App() {
           )}
         >
           <Route path="/tech/tickets" element={<TechSupportTickets />} />
+          <Route path="/tech/performance" element={<TechSupportPerformance />} />
           <Route path="/tech/chats" element={withSuspense(<TechSupportChats />)} />
           <Route path="/tech/inventory-audits" element={withSuspense(<InventoryAuditScanner />)} />
           <Route path="/tech/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />
@@ -183,6 +185,7 @@ function App() {
           )}
         >
           <Route path="/tech-mobile/tickets" element={<MobileTechSupportTickets />} />
+          <Route path="/tech-mobile/performance" element={<TechSupportPerformance />} />
           <Route path="/tech-mobile/chats" element={withSuspense(<MobileTechSupportChats />)} />
           <Route path="/tech-mobile/inventory-audits" element={withSuspense(<InventoryAuditScanner />)} />
           <Route path="/tech-mobile/inventory-audits/history" element={<TechSupportInventoryAuditHistory />} />

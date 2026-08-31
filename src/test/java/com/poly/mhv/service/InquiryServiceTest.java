@@ -124,6 +124,8 @@ class InquiryServiceTest {
         assertThat(captor.getValue().getInquiryType()).isEqualTo("CONSUMABLE_REQUEST");
         assertThat(captor.getValue().getQuantityRequested()).isEqualTo(4);
         assertThat(captor.getValue().getExpectedReturnDate()).isNull();
+        assertThat(captor.getValue().getApprovalQuantityThreshold()).isEqualTo(20);
+        assertThat(captor.getValue().getApprovalValueThreshold()).isEqualByComparingTo("5000000");
         assertThat(java.time.Duration.between(
                 captor.getValue().getCreatedAt(),
                 captor.getValue().getSlaResponseDueAt()).toMinutes()).isEqualTo(45);

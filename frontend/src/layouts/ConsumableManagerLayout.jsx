@@ -145,7 +145,8 @@ function ConsumableManagerLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  className="flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition hover:bg-orange-50 hover:text-fptOrangeDark dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
+                  end={item.to.startsWith('/supply/consumables')}
+                  className="flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition active:bg-orange-50 md:hover:bg-orange-50 md:hover:text-fptOrangeDark dark:active:bg-orange-500/10 dark:md:hover:bg-orange-500/10 dark:md:hover:text-orange-300"
                   style={({ isActive }) => ({
                     backgroundColor: isActive ? toRgba(primaryColor, 0.1) : 'transparent',
                     color: isActive ? primaryColor : undefined,

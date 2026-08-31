@@ -1,5 +1,6 @@
 import {
   IconBell as Bell,
+  IconChartBar as ChartBar,
   IconChecklist as ClipboardCheck,
   IconClipboardList as ClipboardList,
   IconHistory as History,
@@ -25,6 +26,7 @@ import {
 
 const navItems = [
   { to: '/tech-mobile/tickets', label: 'Công việc', icon: ClipboardList },
+  { to: '/tech-mobile/performance', label: 'Hiệu suất', icon: ChartBar, end: true },
   { to: '/tech-mobile/inventory-audits', label: 'Kiểm kê', icon: ClipboardCheck, end: true },
   { to: '/tech-mobile/inventory-audits/history', label: 'Lịch sử', icon: History, end: true },
   { to: '/tech-mobile/chats', label: 'Tin nhắn', icon: MessageCircle },
@@ -348,7 +350,7 @@ function MobileTechSupportLayout() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
-        {navItems.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: NavIcon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -360,7 +362,7 @@ function MobileTechSupportLayout() {
             }
             style={({ isActive }) => (isActive ? { backgroundColor: toRgba(primaryColor, 0.1), color: primaryColor } : undefined)}
           >
-            <Icon size={18} />
+            <NavIcon size={18} />
             <span>{label}</span>
           </NavLink>
         ))}

@@ -1,18 +1,22 @@
 import {
   IconCheck as Check,
+  IconClock as Clock,
   IconFileDescription as Detail,
   IconHistory as History,
   IconMessageCircle as MessageCircle,
   IconPlayerPlay as Play,
+  IconRefresh as Refresh,
+  IconSearch as Search,
+  IconSparkles as Sparkles,
+  IconTool as Tool,
 } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { createElement, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import AuthenticatedImage from '../../components/AuthenticatedImage'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
-import HelpdeskKpiPanel from '../../components/HelpdeskKpiPanel'
 import TicketResolutionModal from '../../components/TicketResolutionModal'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import { formatVietnamDateTime } from '../../utils/datetime'
@@ -72,12 +76,11 @@ function TechSupportTickets() {
   const [loading, setLoading] = useState(false)
   const [submittingId, setSubmittingId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [keyword, setKeyword] = useState('')
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [resolutionTicketId, setResolutionTicketId] = useState(null)
   const [showTimelineModal, setShowTimelineModal] = useState(false)
   const [timelineTicket, setTimelineTicket] = useState(null)
-  const [kpis, setKpis] = useState(null)
-  const [kpiLoading, setKpiLoading] = useState(false)
   const {
     visibleColumns,
     activeColumns,
@@ -122,22 +125,8 @@ function TechSupportTickets() {
     }
   }
 
-  const loadMyKpis = async () => {
-    setKpiLoading(true)
-    try {
-      const response = await axiosClient.get('/api/dashboard/helpdesk-kpis/me')
-      setKpis(response.data)
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Không tải được KPI cá nhân.'
-      toast.error(message)
-    } finally {
-      setKpiLoading(false)
-    }
-  }
-
   useEffect(() => {
     loadTickets()
-    loadMyKpis()
   }, [user?.userId])
 
   const stats = useMemo(() => ({
@@ -152,12 +141,17 @@ function TechSupportTickets() {
     ).length,
     pending: tickets.filter((ticket) => ticket.status === 'PENDING').length,
   }), [tickets, user?.userId])
+  const filteredTickets = useMemo(() => {
+    const normalized = keyword.trim().toLowerCase()
+    if (!normalized) return tickets
+    return tickets.filter((ticket) => `${ticket.id} ${ticket.assetQaCode} ${ticket.assetName} ${ticket.description} ${ticket.reporterName}`.toLowerCase().includes(normalized))
+  }, [keyword, tickets])
   const tableColumns = useMemo(() => ([
-    { key: 'ticket', label: 'Ticket', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => `#${ticket.id}` },
-    { key: 'assetQaCode', label: 'Mã thiết bị', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetQaCode },
-    { key: 'assetName', label: 'Tên TB', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetName || '-' },
+    { key: 'ticket', label: 'Ticket', headClassName: 'px-4 py-3 text-left', cellClassName: 'px-4 py-3', render: (ticket) => <span className="font-bold text-orange-600">#{ticket.id}</span> },
+    { key: 'assetQaCode', label: 'Mã thiết bị', headClassName: 'px-4 py-3 text-left', cellClassName: 'px-4 py-3', render: (ticket) => <span className="rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs font-semibold text-slate-700">{ticket.assetQaCode}</span> },
+    { key: 'assetName', label: 'Thiết bị', headClassName: 'px-4 py-3 text-left', cellClassName: 'px-4 py-3', render: (ticket) => <div><p className="max-w-64 font-semibold text-slate-900">{ticket.assetName || '-'}</p>{ticket.reporterName && <p className="mt-0.5 text-xs text-slate-400">Báo bởi {ticket.reporterName}</p>}</div> },
     { key: 'description', label: 'Mô tả', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.description },
-    { key: 'priority', label: 'Ưu tiên', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => toVietnamesePriority(ticket.priority) },
+    { key: 'priority', label: 'Ưu tiên', headClassName: 'px-4 py-3 text-left', cellClassName: 'px-4 py-3', render: (ticket) => <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${ticket.priority === 'HIGH' ? 'bg-red-50 text-red-700' : ticket.priority === 'LOW' ? 'bg-slate-100 text-slate-600' : 'bg-amber-50 text-amber-700'}`}>{toVietnamesePriority(ticket.priority)}</span> },
     { key: 'status', label: 'Trạng thái', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => { const meta = getTicketStatusMeta(ticket.status); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.badgeClassName}`}>{meta.label}</span> } },
     { key: 'image', label: 'Ảnh lỗi', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <ActionIconButton icon={Detail} label="Xem ảnh lỗi" onClick={() => { if (!ticket.imageUrl) { toast.info('Ticket này chưa có ảnh lỗi.'); return } setPreviewImageUrl(ticket.imageUrl) }} /> },
     { key: 'dueDate', label: 'Hạn xử lý', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => formatVietnamDateTime(ticket.dueDate) },
@@ -191,7 +185,7 @@ function TechSupportTickets() {
         assignee_id: Number(user?.userId),
       })
       toast.success(`Đã nhận xử lý ticket #${ticketId}.`)
-      await Promise.all([loadTickets(), loadMyKpis()])
+      await loadTickets()
     } catch (error) {
       const message = error?.response?.data?.message || 'Nhận xử lý ticket thất bại.'
       toast.error(message)
@@ -212,7 +206,7 @@ function TechSupportTickets() {
       await axiosClient.put(`/api/tickets/${ticketId}/resolve`, formData)
       toast.success(`Đã cập nhật kết quả ticket #${ticketId}.`)
       setResolutionTicketId(null)
-      await Promise.all([loadTickets(), loadMyKpis()])
+      await loadTickets()
     } catch (error) {
       const message = error?.response?.data?.message || 'Hoàn tất ticket thất bại.'
       toast.error(message)
@@ -222,61 +216,30 @@ function TechSupportTickets() {
   }
 
   return (
-    <div className="space-y-4">
-      <HelpdeskKpiPanel
-        title="KPI cá nhân"
-        subtitle="Bộ KPI giai đoạn 2 của kỹ thuật viên, dùng acceptedAt, điểm hài lòng và xếp loại tự động."
-        summary={kpis}
-        loading={kpiLoading}
-        tableTitle="Chi tiết xếp loại của bạn"
-        emptyText="Chưa có dữ liệu KPI cá nhân."
-      />
-
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">Bảng việc kỹ thuật viên</h2>
-        <p className="mt-1 text-sm text-slate-600">Nhận việc, xử lý sự cố và trao đổi trực tiếp với người báo.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Chờ tiếp nhận: {stats.pending}</div>
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Đang xử lý: {stats.myInProgress}</div>
-          <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-800">Chờ xác nhận: {stats.awaitingConfirmation}</div>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Đã hoàn tất: {stats.myResolved}</div>
+    <div className="space-y-5">
+      <section className="relative overflow-hidden rounded-[28px] border border-blue-100 bg-gradient-to-br from-white via-blue-50/70 to-cyan-50 p-5 shadow-sm dark:border-blue-500/20 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/30 sm:p-6">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-blue-200/40 blur-3xl dark:bg-blue-500/10" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-600"><Sparkles size={15} /> Không gian làm việc</p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">Bảng việc kỹ thuật viên</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-300">Ưu tiên ticket cần nhận, theo dõi SLA và hoàn tất công việc ngay trên một màn hình.</p>
+          </div>
+          <button type="button" onClick={() => loadTickets()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-white/80 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:shadow disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><Refresh size={17} className={loading ? 'animate-spin' : ''} /> Đồng bộ dữ liệu</button>
+        </div>
+        <div className="relative mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Chờ tiếp nhận', value: stats.pending, icon: Clock, tone: 'border-amber-200 bg-amber-50/90 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300' },
+            { label: 'Đang xử lý', value: stats.myInProgress, icon: Tool, tone: 'border-blue-200 bg-blue-50/90 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300' },
+            { label: 'Chờ xác nhận', value: stats.awaitingConfirmation, icon: MessageCircle, tone: 'border-violet-200 bg-violet-50/90 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300' },
+            { label: 'Đã hoàn tất', value: stats.myResolved, icon: Check, tone: 'border-emerald-200 bg-emerald-50/90 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300' },
+          ].map(({ label, value, icon, tone }) => <div key={label} className={`flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm backdrop-blur ${tone}`}><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/80 shadow-sm dark:bg-slate-950/50">{createElement(icon, { size: 20 })}</span><div><p className="text-2xl font-bold leading-none">{value}</p><p className="mt-1 text-xs font-semibold opacity-80">{label}</p></div></div>)}
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="mb-3 grid gap-2 md:grid-cols-3">
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Tất cả trạng thái</option>
-            {statusOptions.map((status) => (
-              <option key={status} value={status}>
-                {toVietnameseStatus(status)}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => loadTickets(statusFilter)}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Lọc ticket
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              setStatusFilter('')
-              await loadTickets('')
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Đặt lại
-          </button>
-        </div>
-
-        <div className="mb-3 flex justify-end">
+      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div><h3 className="text-lg font-bold text-slate-900 dark:text-white">Hàng đợi ticket</h3><p className="mt-1 text-sm text-slate-500">{filteredTickets.length} ticket đang hiển thị</p></div>
           <ColumnVisibilityDropdown
             columns={techTicketColumnOptions}
             visibleColumns={visibleColumns}
@@ -293,10 +256,46 @@ function TechSupportTickets() {
             onResetDefault={resetDefaultColumns}
           />
         </div>
+        <div className="mb-4 grid gap-2 lg:grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.2fr)_auto_auto]">
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="">Tất cả trạng thái</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>
+                {toVietnameseStatus(status)}
+              </option>
+            ))}
+          </select>
+          <div className="relative">
+            <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm ticket, mã QA hoặc thiết bị..." className="h-full w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950" />
+          </div>
+          <button
+            type="button"
+            onClick={() => loadTickets(statusFilter)}
+            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            Áp dụng
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setStatusFilter('')
+              setKeyword('')
+              await loadTickets('')
+            }}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Đặt lại
+          </button>
+        </div>
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
           <table className="min-w-[1250px] text-sm">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50/90 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950">
               <tr>
                 {renderedColumns.map((column) => (
                   <th key={column.key} className={column.headClassName}>
@@ -306,9 +305,9 @@ function TechSupportTickets() {
               </tr>
             </thead>
             <tbody>
-              {!loading && tickets.map((ticket) => {
+              {!loading && filteredTickets.map((ticket) => {
                 return (
-                  <tr key={ticket.id} className="border-t border-slate-100 align-top">
+                  <tr key={ticket.id} className="border-t border-slate-100 align-middle transition hover:bg-blue-50/40 dark:border-slate-800 dark:hover:bg-blue-500/5">
                     {renderedColumns.map((column) => (
                       <td key={`${ticket.id}-${column.key}`} className={column.cellClassName}>
                         {column.render(ticket)}
@@ -317,18 +316,17 @@ function TechSupportTickets() {
                   </tr>
                 )
               })}
-              {!loading && tickets.length === 0 && (
+              {!loading && filteredTickets.length === 0 && (
                 <tr>
-                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-3 py-3 text-center text-slate-500">
+                  <td colSpan={Math.max(renderedColumns.length, 1)} className="px-4 py-12 text-center text-slate-500">
                     Không có ticket cần xử lý.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-          {loading && <p className="px-3 py-3 text-sm text-slate-500">Đang tải ticket...</p>}
+          {loading && <p className="px-4 py-10 text-center text-sm text-slate-500">Đang tải ticket...</p>}
         </div>
-
       </section>
       {previewImageUrl && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">

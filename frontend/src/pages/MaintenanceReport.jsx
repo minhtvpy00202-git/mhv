@@ -200,7 +200,7 @@ function MaintenanceReport() {
         ? 'Camera đang bị chặn hoặc chưa được cấp quyền. Hãy bấm vào biểu tượng camera trên thanh địa chỉ rồi cho phép truy cập.'
         : 'Không thể mở camera. Vui lòng kiểm tra quyền camera hoặc thử tải lại trang.'
       setScannerError(blockedMessage)
-      toast.error(blockedMessage)
+      toast.error(blockedMessage, { toastId: 'maintenance-camera-open-error' })
       await stopScanner()
     }
   }

@@ -9,12 +9,15 @@ import com.poly.mhv.entity.AssetBorrowRequest;
 import com.poly.mhv.entity.ServiceInquiry;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AssetBorrowRequestRepository;
+import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.ServiceInquiryRepository;
 import com.poly.mhv.util.InquiryStatusSupport;
 import com.poly.mhv.util.UtcDateTimes;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -28,8 +31,13 @@ import org.springframework.util.StringUtils;
 public class AssetBorrowRequestService {
 
     private static final ZoneOffset STORAGE_OFFSET = ZoneOffset.UTC;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VIETNAM_DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final List<String> SCHEDULE_BLOCKING_STATUSES =
+            List.of("PENDING", "APPROVED", "RESERVED", "CHECKED_OUT");
 
     private final AssetBorrowRequestRepository repository;
+    private final AssetRepository assetRepository;
     private final ServiceInquiryRepository inquiryRepository;
     private final CurrentUserProvider currentUserProvider;
     private final UsageHistoryService usageHistoryService;
@@ -68,6 +76,16 @@ public class AssetBorrowRequestService {
         AppUser admin = requireAdmin();
         AssetBorrowRequest request = getForUpdate(id);
         requireStatus(request, "PENDING");
+        assetRepository.findByQaCodeForUpdate(request.getAsset().getQaCode())
+                .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị cần duyệt."));
+        if (repository.existsOverlappingSchedule(
+                request.getAsset().getQaCode(),
+                request.getNeededFrom(),
+                request.getExpectedReturnDate(),
+                SCHEDULE_BLOCKING_STATUSES,
+                request.getId())) {
+            throw new CustomException("Thiết bị đã có lịch mượn trùng với khoảng ngày được yêu cầu.");
+        }
         LocalDateTime now = UtcDateTimes.now();
         request.setStatus("APPROVED");
         request.setApprovedBy(admin);
@@ -85,20 +103,27 @@ public class AssetBorrowRequestService {
         AppUser admin = requireAdmin();
         AssetBorrowRequest request = getForUpdate(id);
         requireStatus(request, "APPROVED");
-        int minutes = decision != null && decision.getReservationMinutes() != null
-                ? Math.min(decision.getReservationMinutes(), 7 * 24 * 60)
-                : 120;
         LocalDateTime now = UtcDateTimes.now();
+        LocalDateTime reservationOpensAt = request.getNeededFrom().minusDays(1).atStartOfDay(BUSINESS_ZONE)
+                .withZoneSameInstant(STORAGE_OFFSET)
+                .toLocalDateTime();
+        if (now.isBefore(reservationOpensAt)) {
+            throw new CustomException("Chỉ có thể giữ chỗ trong vòng 24 giờ trước ngày cần "
+                    + formatDate(request.getNeededFrom()) + ".");
+        }
+        LocalDateTime neededDateExpiry = request.getNeededFrom().plusDays(1).atStartOfDay(BUSINESS_ZONE)
+                .withZoneSameInstant(STORAGE_OFFSET)
+                .toLocalDateTime();
         request.setStatus("RESERVED");
         request.setReservedAt(now);
-        request.setReservationExpiresAt(now.plusMinutes(minutes));
+        request.setReservationExpiresAt(neededDateExpiry);
         if (StringUtils.hasText(note(decision))) {
             request.setDecisionNote(note(decision));
         }
         AssetBorrowRequest saved = repository.save(request);
         notifyRequester(saved, "BORROW_REQUEST_RESERVED", "Thiết bị đã được giữ chỗ",
                 displayName(admin) + " đã giữ thiết bị " + saved.getAsset().getQaCode()
-                        + " cho bạn trong " + minutes + " phút.");
+                        + " cho bạn đến hết ngày cần " + formatDate(saved.getNeededFrom()) + ".");
         broadcast(saved);
         return mapResponse(saved);
     }
@@ -132,6 +157,13 @@ public class AssetBorrowRequestService {
             throw new CustomException("Phiếu mượn chưa được duyệt hoặc đã được bàn giao.");
         }
         LocalDateTime now = UtcDateTimes.now();
+        LocalDateTime handoverOpensAt = request.getNeededFrom().atStartOfDay(BUSINESS_ZONE)
+                .withZoneSameInstant(STORAGE_OFFSET)
+                .toLocalDateTime();
+        if (now.isBefore(handoverOpensAt)) {
+            throw new CustomException("Chỉ có thể bàn giao thiết bị từ ngày cần "
+                    + formatDate(request.getNeededFrom()) + ".");
+        }
         if ("RESERVED".equals(request.getStatus()) && request.getReservationExpiresAt() != null
                 && request.getReservationExpiresAt().isBefore(now)) {
             request.setStatus("EXPIRED");
@@ -285,5 +317,9 @@ public class AssetBorrowRequestService {
 
     private OffsetDateTime toOffset(LocalDateTime value) {
         return value == null ? null : value.atOffset(STORAGE_OFFSET);
+    }
+
+    private String formatDate(java.time.LocalDate value) {
+        return value == null ? "-" : value.format(VIETNAM_DATE_FORMAT);
     }
 }

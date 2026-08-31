@@ -5,6 +5,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDate;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -29,4 +30,19 @@ public interface AssetBorrowRequestRepository extends JpaRepository<AssetBorrowR
     Optional<AssetBorrowRequest> findForUpdateById(@Param("id") Long id);
 
     boolean existsByAssetQaCodeAndStatusIn(String assetQaCode, Collection<String> statuses);
+
+    @Query("""
+            select (count(b) > 0) from AssetBorrowRequest b
+            where b.asset.qaCode = :assetQaCode
+              and b.id <> :excludedId
+              and b.status in :statuses
+              and b.neededFrom <= :expectedReturnDate
+              and b.expectedReturnDate >= :neededFrom
+            """)
+    boolean existsOverlappingSchedule(
+            @Param("assetQaCode") String assetQaCode,
+            @Param("neededFrom") LocalDate neededFrom,
+            @Param("expectedReturnDate") LocalDate expectedReturnDate,
+            @Param("statuses") Collection<String> statuses,
+            @Param("excludedId") Long excludedId);
 }

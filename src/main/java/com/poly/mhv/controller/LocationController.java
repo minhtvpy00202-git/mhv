@@ -40,6 +40,7 @@ public class LocationController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('Admin','NhanVien')")
     @Operation(summary = "Lấy danh sách phòng", description = "Lấy toàn bộ phòng hoặc lọc theo tên phòng, khu vực.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách phòng thành công"),

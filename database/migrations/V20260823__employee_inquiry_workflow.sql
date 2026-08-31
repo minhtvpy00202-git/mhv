@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS service_inquiries (
     completed_at TIMESTAMP WITHOUT TIME ZONE,
     received_at TIMESTAMP WITHOUT TIME ZONE,
     sla_response_due_at TIMESTAMP WITHOUT TIME ZONE,
+    approval_quantity_threshold INTEGER,
+    approval_value_threshold NUMERIC(19, 2),
     first_response_at TIMESTAMP WITHOUT TIME ZONE,
     sla_breached_at TIMESTAMP WITHOUT TIME ZONE,
     last_overdue_reminder_at TIMESTAMP WITHOUT TIME ZONE,
@@ -37,6 +39,8 @@ CREATE TABLE IF NOT EXISTS service_inquiries (
 
 ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS received_at TIMESTAMP WITHOUT TIME ZONE;
 ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS sla_response_due_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS approval_quantity_threshold INTEGER;
+ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS approval_value_threshold NUMERIC(19, 2);
 ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMP WITHOUT TIME ZONE;
 ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS sla_breached_at TIMESTAMP WITHOUT TIME ZONE;
 ALTER TABLE service_inquiries ADD COLUMN IF NOT EXISTS last_overdue_reminder_at TIMESTAMP WITHOUT TIME ZONE;
@@ -123,6 +127,14 @@ INSERT INTO inquiry_workflow_settings (
     updated_at
 ) VALUES (1, 30, 45, 24, 20, 5000000.00, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 ON CONFLICT (id) DO NOTHING;
+
+UPDATE service_inquiries AS inquiry
+SET approval_quantity_threshold = setting.large_quantity_threshold,
+    approval_value_threshold = setting.high_value_threshold
+FROM inquiry_workflow_settings AS setting
+WHERE setting.id = 1
+  AND (inquiry.approval_quantity_threshold IS NULL
+       OR inquiry.approval_value_threshold IS NULL);
 
 CREATE TABLE IF NOT EXISTS consumable_inquiry_fulfillments (
     id BIGSERIAL PRIMARY KEY,

@@ -127,7 +127,9 @@ function QRScanner() {
       )
       isScanningRef.current = true
     } catch {
-      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.')
+      toast.error('Không thể mở camera. Vui lòng cấp quyền truy cập camera.', {
+        toastId: 'qr-camera-open-error',
+      })
     }
   }
 

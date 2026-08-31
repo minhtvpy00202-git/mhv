@@ -11,6 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -110,6 +111,12 @@ public class ServiceInquiry {
 
     @Column(name = "sla_response_due_at")
     private LocalDateTime slaResponseDueAt;
+
+    @Column(name = "approval_quantity_threshold")
+    private Integer approvalQuantityThreshold;
+
+    @Column(name = "approval_value_threshold", precision = 19, scale = 2)
+    private BigDecimal approvalValueThreshold;
 
     @Column(name = "first_response_at")
     private LocalDateTime firstResponseAt;

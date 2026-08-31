@@ -1,5 +1,6 @@
 import {
   IconBell as Bell,
+  IconChartBar as ChartBar,
   IconChecklist as ClipboardCheck,
   IconClipboardList as ClipboardList,
   IconHistory as History,
@@ -20,6 +21,7 @@ import { isNarrowViewport, toTechSupportMobilePath } from '../utils/navigation'
 
 const navItems = [
   { to: '/tech/tickets', label: 'Danh sách Ticket', icon: ClipboardList },
+  { to: '/tech/performance', label: 'Hiệu suất cá nhân', icon: ChartBar, end: true },
   { to: '/tech/inventory-audits', label: 'Kiểm kê thiết bị', icon: ClipboardCheck, end: true },
   { to: '/tech/inventory-audits/history', label: 'Lịch sử kiểm kê', icon: History, end: true },
 ]
