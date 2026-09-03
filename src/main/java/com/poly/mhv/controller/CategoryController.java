@@ -29,7 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/categories", "/categories"})
-@PreAuthorize("hasRole('Admin')")
 @Tag(name = "Loại thiết bị", description = "API quản lý danh mục loại thiết bị")
 @SecurityRequirement(name = "bearerAuth")
 public class CategoryController {
@@ -41,6 +40,7 @@ public class CategoryController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Lấy danh sách loại thiết bị", description = "Lấy toàn bộ loại thiết bị hoặc lọc theo từ khóa và loại kỹ thuật viên phụ trách.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách loại thiết bị thành công"),
@@ -55,6 +55,7 @@ public class CategoryController {
     }
 
     @GetMapping("/options")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Lấy danh sách loại thiết bị gọn", description = "Trả về danh sách nhẹ phục vụ dropdown và form chọn loại thiết bị.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách loại thiết bị gọn thành công"),
@@ -65,6 +66,7 @@ public class CategoryController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Lấy chi tiết loại thiết bị", description = "Tra cứu chi tiết một loại thiết bị theo id.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy chi tiết loại thiết bị thành công"),
@@ -76,6 +78,7 @@ public class CategoryController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Tạo loại thiết bị", description = "Tạo mới loại thiết bị. Code prefix được backend tự sinh từ tên loại thiết bị.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Tạo loại thiết bị thành công"),
@@ -88,6 +91,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Cập nhật loại thiết bị", description = "Cập nhật thông tin loại thiết bị theo id.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cập nhật loại thiết bị thành công"),
@@ -103,6 +107,7 @@ public class CategoryController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Xóa loại thiết bị", description = "Xóa loại thiết bị nếu chưa được gán cho thiết bị nào.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Xóa loại thiết bị thành công"),

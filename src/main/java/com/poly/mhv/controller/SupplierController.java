@@ -27,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping({"/api/suppliers", "/suppliers"})
-@PreAuthorize("hasRole('Admin')")
 @Tag(name = "Nhà cung cấp", description = "API quản lý danh mục nhà cung cấp tài sản")
 @SecurityRequirement(name = "bearerAuth")
 public class SupplierController {
@@ -39,6 +38,7 @@ public class SupplierController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Lấy danh sách nhà cung cấp", description = "Lấy toàn bộ nhà cung cấp hoặc lọc theo tên.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy danh sách nhà cung cấp thành công"),
@@ -50,6 +50,7 @@ public class SupplierController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Lấy chi tiết nhà cung cấp", description = "Tra cứu chi tiết một nhà cung cấp theo id.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lấy chi tiết nhà cung cấp thành công"),
@@ -62,6 +63,7 @@ public class SupplierController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('Admin','ConsumableManager')")
     @Operation(summary = "Tạo nhà cung cấp", description = "Tạo mới một nhà cung cấp để gán cho thiết bị.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Tạo nhà cung cấp thành công"),
@@ -74,6 +76,7 @@ public class SupplierController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Cập nhật nhà cung cấp", description = "Cập nhật tên nhà cung cấp theo id.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Cập nhật nhà cung cấp thành công"),
@@ -90,6 +93,7 @@ public class SupplierController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Xóa nhà cung cấp", description = "Xóa nhà cung cấp nếu chưa được gán cho thiết bị nào.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Xóa nhà cung cấp thành công"),

@@ -62,6 +62,16 @@ export function formatVietnamDateTime(value, fallback = '-') {
   }), fallback)
 }
 
+export function formatVietnamDateTimeShort(value, fallback = '-') {
+  return formatDateWithUserTimeZone(value, buildFormatter({
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }), fallback)
+}
+
 export function formatVietnamTime(value, fallback = '--:--') {
   return formatDateWithUserTimeZone(value, buildFormatter({
     hour: '2-digit',

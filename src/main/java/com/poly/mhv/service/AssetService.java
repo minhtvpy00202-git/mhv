@@ -1132,6 +1132,20 @@ public class AssetService {
         return createConsumableRequestForRequester(locationId, request, getCurrentUser());
     }
 
+    /**
+     * Used by method security to keep ConsumableManager mutations scoped to
+     * consumable inventory. Admin mutations do not need this lookup.
+     */
+    @Transactional(readOnly = true)
+    public boolean isConsumableAsset(String qaCode) {
+        if (!StringUtils.hasText(qaCode)) {
+            return false;
+        }
+        return assetRepository.findById(qaCode)
+                .map(asset -> isConsumableMode(asset.getTrackingMode()))
+                .orElse(false);
+    }
+
     @Transactional
     public ConsumableRequestResponse createConsumableRequestForRequester(
             Integer locationId,

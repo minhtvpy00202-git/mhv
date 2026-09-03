@@ -52,7 +52,7 @@ function MobileChatDetail() {
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
-            to="/mobile/chats"
+            to="/mobile/chats?tab=repairs"
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft size={16} />

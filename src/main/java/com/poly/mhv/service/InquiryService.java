@@ -5,6 +5,7 @@ import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.inquiry.InquiryActionRequest;
 import com.poly.mhv.dto.inquiry.InquiryAlternativeRequest;
 import com.poly.mhv.dto.inquiry.InquiryAvailabilityResponse;
+import com.poly.mhv.dto.inquiry.InquiryAvailabilityPageResponse;
 import com.poly.mhv.dto.inquiry.InquiryConsumableConversionRequest;
 import com.poly.mhv.dto.inquiry.InquiryCreateRequest;
 import com.poly.mhv.dto.inquiry.InquiryLocationOptionResponse;
@@ -29,6 +30,7 @@ import com.poly.mhv.repository.AreaTypeCatalogRepository;
 import com.poly.mhv.repository.AssetBorrowRequestRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.ConsumableInquiryFulfillmentRepository;
+import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.InquiryMessageRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.ServiceInquiryRepository;
@@ -47,7 +49,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,6 +67,7 @@ public class InquiryService {
     private final InquiryMessageRepository messageRepository;
     private final AssetBorrowRequestRepository borrowRequestRepository;
     private final AssetRepository assetRepository;
+    private final CategoryRepository categoryRepository;
     private final LocationRepository locationRepository;
     private final AppUserRepository appUserRepository;
     private final AreaTypeCatalogRepository areaTypeCatalogRepository;
@@ -82,16 +85,76 @@ public class InquiryService {
             String trackingMode,
             Integer categoryId,
             Integer locationId,
+            String availability,
+            Integer minQuantity,
+            String sort,
             Integer limit) {
+        int boundedLimit = Math.max(1, Math.min(limit == null ? 30 : limit, 100));
+        return findAvailabilityMatches(keyword, trackingMode, categoryId, locationId, availability, minQuantity, sort)
+                .stream()
+                .limit(boundedLimit)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public InquiryAvailabilityPageResponse searchAvailabilityPage(
+            String keyword,
+            String trackingMode,
+            Integer categoryId,
+            Integer locationId,
+            String availability,
+            Integer minQuantity,
+            String sort,
+            Integer page,
+            Integer size) {
+        int normalizedPage = Math.max(0, page == null ? 0 : page);
+        int normalizedSize = Math.max(1, Math.min(size == null ? 8 : size, 24));
+        List<InquiryAvailabilityResponse> matches = findAvailabilityMatches(
+                keyword, trackingMode, categoryId, locationId, availability, minQuantity, sort);
+        int totalElements = matches.size();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / normalizedSize);
+        int safePage = totalPages == 0 ? 0 : Math.min(normalizedPage, totalPages - 1);
+        int fromIndex = Math.min(safePage * normalizedSize, totalElements);
+        int toIndex = Math.min(fromIndex + normalizedSize, totalElements);
+        return InquiryAvailabilityPageResponse.builder()
+                .items(matches.subList(fromIndex, toIndex))
+                .page(safePage)
+                .size(normalizedSize)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .build();
+    }
+
+    private List<InquiryAvailabilityResponse> findAvailabilityMatches(
+            String keyword,
+            String trackingMode,
+            Integer categoryId,
+            Integer locationId,
+            String availability,
+            Integer minQuantity,
+            String sort) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         String normalizedMode = normalizeTrackingMode(trackingMode);
-        int boundedLimit = Math.max(1, Math.min(limit == null ? 30 : limit, 100));
+        String normalizedAvailability = StringUtils.hasText(availability) ? availability.trim().toUpperCase(Locale.ROOT) : null;
+        String normalizedSort = StringUtils.hasText(sort) ? sort.trim().toLowerCase(Locale.ROOT) : "name";
+        int normalizedMinQuantity = Math.max(0, minQuantity == null ? 0 : minQuantity);
+        Comparator<Asset> comparator = switch (normalizedSort) {
+            case "quantity_desc" -> Comparator.comparing(
+                    asset -> asset.getQuantityOnHand() == null ? 0 : asset.getQuantityOnHand(),
+                    Comparator.reverseOrder());
+            case "availability" -> Comparator.comparing(
+                    asset -> Boolean.TRUE.equals(mapAvailability(asset).getAvailable()) ? 0 : 1);
+            default -> Comparator.comparing(Asset::getName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+        };
         return assetRepository.searchForInquiry(
                         normalizedKeyword,
                         normalizedMode,
                         categoryId,
                         locationId,
-                        PageRequest.of(0, boundedLimit)).stream()
+                        Pageable.unpaged()).stream()
+                .filter(asset -> matchesAvailabilityFilter(asset, normalizedAvailability))
+                .filter(asset -> !isConsumable(asset) || (asset.getQuantityOnHand() == null ? 0 : asset.getQuantityOnHand()) >= normalizedMinQuantity)
+                .sorted(comparator.thenComparing(Asset::getQaCode, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
                 .map(this::mapAvailability)
                 .toList();
     }
@@ -128,7 +191,11 @@ public class InquiryService {
                             .build())
                     .toList();
         }
-        return InquiryOptionsResponse.builder().locations(locations).handlers(handlers).build();
+        return InquiryOptionsResponse.builder()
+                .categories(categoryRepository.findAllOptions())
+                .locations(locations)
+                .handlers(handlers)
+                .build();
     }
 
     @Transactional
@@ -241,9 +308,9 @@ public class InquiryService {
                 ? request.getMediaType().trim().toLowerCase(Locale.ROOT)
                 : null;
         if (content == null && mediaUrl == null) {
-            throw new CustomException("Tin nhắn hoặc ảnh đính kèm là bắt buộc.");
+            throw new CustomException("Tin nhắn hoặc media đính kèm là bắt buộc.");
         }
-        if (mediaUrl != null && !"image".equals(mediaType)) {
+        if (mediaUrl != null && !List.of("image", "audio").contains(mediaType)) {
             throw new CustomException("Loại media của yêu cầu không hợp lệ.");
         }
         LocalDateTime now = UtcDateTimes.now();
@@ -264,7 +331,7 @@ public class InquiryService {
         inquiryRepository.save(inquiry);
         InquiryMessageResponse response = mapMessage(saved);
         broadcastMessage(inquiry, response, actor);
-        notifyMessage(inquiry, actor, content != null ? content : "[Ảnh]");
+        notifyMessage(inquiry, actor, content != null ? content : ("audio".equals(mediaType) ? "[Ghi âm]" : "[Ảnh]"));
         return response;
     }
 
@@ -274,9 +341,9 @@ public class InquiryService {
         AppUser actor = currentUserProvider.getCurrentUser();
         ensureCanMessage(inquiry, actor);
         if (InquiryStatusSupport.isTerminal(inquiry.getStatus())) {
-            throw new CustomException("Yêu cầu đã kết thúc. Không thể tải thêm ảnh.");
+            throw new CustomException("Yêu cầu đã kết thúc. Không thể tải thêm media.");
         }
-        InquiryMediaStorageService.StoredInquiryMedia stored = mediaStorageService.storeImage(file);
+        InquiryMediaStorageService.StoredInquiryMedia stored = mediaStorageService.storeMedia(file);
         return InquiryMediaUploadResponse.builder()
                 .mediaUrl(stored.mediaUrl())
                 .mediaType(stored.mediaType())
@@ -834,6 +901,23 @@ public class InquiryService {
                 .availableQuantity(consumable ? quantity : (available ? 1 : 0))
                 .unit(asset.getUnit())
                 .build();
+    }
+
+    private boolean matchesAvailabilityFilter(Asset asset, String availability) {
+        if (!StringUtils.hasText(availability)) {
+            return true;
+        }
+        if (isConsumable(asset)) {
+            int quantity = asset.getQuantityOnHand() == null ? 0 : Math.max(0, asset.getQuantityOnHand());
+            int minimumStock = asset.getMinimumStock() == null ? 0 : Math.max(0, asset.getMinimumStock());
+            return switch (availability) {
+                case "IN_STOCK", "AVAILABLE" -> quantity > 0;
+                case "LOW_STOCK" -> quantity > 0 && quantity <= minimumStock;
+                case "OUT_OF_STOCK" -> quantity == 0;
+                default -> true;
+            };
+        }
+        return availability.equalsIgnoreCase(mapAvailability(asset).getAvailabilityCode());
     }
 
     private InquiryResponse mapInquiry(ServiceInquiry inquiry, AppUser viewer) {

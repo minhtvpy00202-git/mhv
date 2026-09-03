@@ -7,10 +7,13 @@ import {
   IconHash as Hash,
   IconMapPin as MapPin,
   IconMessageCircle as MessageCircle,
+  IconMicrophone as Mic,
   IconPackage as Package,
+  IconPhotoPlus as ImagePlus,
   IconRefresh as Refresh,
   IconSend as Send,
   IconSparkles as Sparkles,
+  IconSquare as Square,
   IconUser as User,
   IconUserCheck as UserCheck,
 } from '@tabler/icons-react'
@@ -19,9 +22,10 @@ import { Link, useParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import AuthenticatedInquiryImage from '../components/AuthenticatedInquiryImage'
+import { VoiceMessagePlayer } from '../components/TicketChatBox'
 import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
-import { formatVietnamDate, formatVietnamDateTime } from '../utils/datetime'
+import { formatVietnamDate, formatVietnamDateTime, formatVietnamDateTimeShort } from '../utils/datetime'
 import {
   BORROW_STATUS,
   CONSUMABLE_FULFILLMENT_STATUS,
@@ -32,7 +36,7 @@ import {
   getInquiryTypeLabel,
 } from '../utils/inquiry'
 
-function InquiryDetail() {
+function InquiryDetail({ chatOnly = false }) {
   const { id } = useParams()
   const { token, user } = useAuth()
   const { connected, subscribe } = useWebSocket(token)
@@ -44,20 +48,18 @@ function InquiryDetail() {
   const [text, setText] = useState('')
   const [note, setNote] = useState('')
   const [transferUserId, setTransferUserId] = useState('')
-  const [alternativeQaCode, setAlternativeQaCode] = useState('')
-  const [alternativeQuantity, setAlternativeQuantity] = useState('1')
   const [warehouseId, setWarehouseId] = useState('')
   const [prepareQuantity, setPrepareQuantity] = useState('')
-  const [templates, setTemplates] = useState([])
-  const [selectedTemplateId, setSelectedTemplateId] = useState('')
-  const [templateContent, setTemplateContent] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [currentTime, setCurrentTime] = useState(() => Date.now())
+  const [recording, setRecording] = useState(false)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const mediaStreamRef = useRef(null)
   const messageEndRef = useRef(null)
 
-  const basePath = getInquiryBasePath(user?.role)
+  const basePath = chatOnly ? '/mobile/chats?tab=inquiries' : getInquiryBasePath(user?.role)
   const isEmployee = user?.role === 'NhanVien'
   const isHandlerRole = ['Admin', 'ConsumableManager'].includes(user?.role)
   const isAssignedHandler = isHandlerRole && Number(inquiry?.assigneeId) === Number(user?.userId)
@@ -66,17 +68,6 @@ function InquiryDetail() {
   const canMessage = !isTerminal && (isEmployee || isAssignedHandler)
   const statusMeta = getInquiryStatusMeta(inquiry?.status)
   const slaMeta = getInquirySlaMeta(inquiry)
-  const reservationOpensAt = borrowRequest?.neededFrom
-    ? new Date(`${borrowRequest.neededFrom}T00:00:00+07:00`).getTime() - 24 * 60 * 60 * 1000
-    : null
-  const canStartReservation = reservationOpensAt == null || currentTime >= reservationOpensAt
-  const reservationButtonLabel = borrowRequest?.neededFrom
-    ? `Giữ chỗ đến hết ${formatVietnamDate(borrowRequest.neededFrom)}`
-    : 'Giữ chỗ theo ngày cần'
-  const reservationAvailableLabel = borrowRequest?.neededFrom
-    ? `Có thể giữ chỗ từ ${new Date(reservationOpensAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`
-    : 'Chưa đến thời gian giữ chỗ'
-
   const warehouseOptions = useMemo(() => options.locations.filter((location) => {
     if (location.storageWarehouse) return true
     const textValue = `${location.areaTypeKey || ''} ${location.areaTypeLabel || ''} ${location.name || ''}`.toLowerCase()
@@ -87,11 +78,6 @@ function InquiryDetail() {
     () => options.handlers.filter((handler) => Number(handler.id) !== Number(inquiry?.assigneeId)),
     [inquiry?.assigneeId, options.handlers],
   )
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   const loadLinkedRecord = useCallback(async (currentInquiry) => {
     setBorrowRequest(null)
@@ -132,16 +118,6 @@ function InquiryDetail() {
     }
   }, [id, loadLinkedRecord])
 
-  const loadTemplates = useCallback(async () => {
-    if (!isHandlerRole) return
-    try {
-      const response = await axiosClient.get('/api/inquiry-reply-templates')
-      setTemplates(response.data || [])
-    } catch {
-      setTemplates([])
-    }
-  }, [isHandlerRole])
-
   useEffect(() => {
     const timer = window.setTimeout(() => void loadDetail(), 0)
     const interval = window.setInterval(() => void loadDetail(true), 20000)
@@ -150,11 +126,6 @@ function InquiryDetail() {
       window.clearInterval(interval)
     }
   }, [loadDetail])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void loadTemplates(), 0)
-    return () => window.clearTimeout(timer)
-  }, [loadTemplates])
 
   useEffect(() => {
     if (!connected || !user?.userId) return undefined
@@ -182,6 +153,11 @@ function InquiryDetail() {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages])
+
+  useEffect(() => () => {
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop()
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+  }, [])
 
   const runAction = async (request, successMessage) => {
     setBusy(true)
@@ -220,58 +196,66 @@ function InquiryDetail() {
     event.currentTarget.form?.requestSubmit()
   }
 
-  const uploadImage = async (event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
+  const sendMedia = async (file) => {
     if (!file || !canMessage) return
     const formData = new FormData()
     formData.append('file', file)
     setBusy(true)
     try {
-      const upload = await axiosClient.post(`/api/inquiries/${id}/media`, formData)
+      const upload = await axiosClient.post(`/api/inquiries/${id}/media`, formData, { timeout: 30000 })
       const response = await axiosClient.post(`/api/inquiries/${id}/messages`, {
         mediaUrl: upload.data.mediaUrl,
         mediaType: upload.data.mediaType,
       })
       setMessages((current) => current.some((item) => item.id === response.data?.id) ? current : [...current, response.data])
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Không gửi được ảnh.')
+      toast.error(error?.response?.data?.message || 'Không gửi được media.')
     } finally {
       setBusy(false)
     }
   }
 
-  const createTemplate = async () => {
-    if (!templateContent.trim()) return
-    setBusy(true)
-    try {
-      const response = await axiosClient.post('/api/inquiry-reply-templates', {
-        title: templateContent.trim().slice(0, 100),
-        content: templateContent.trim(),
-      })
-      toast.success('Đã lưu câu trả lời mẫu cho bộ phận.')
-      setTemplateContent('')
-      await loadTemplates()
-      setSelectedTemplateId(String(response.data?.id || ''))
-    } catch (error) {
-      toast.error(error?.response?.data?.message || 'Không lưu được câu trả lời mẫu.')
-    } finally {
-      setBusy(false)
-    }
+  const uploadImage = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    await sendMedia(file)
   }
 
-  const deleteTemplate = async () => {
-    if (!selectedTemplateId) return
-    setBusy(true)
+  const toggleRecording = async () => {
+    if (recording) {
+      mediaRecorderRef.current?.stop()
+      setRecording(false)
+      return
+    }
     try {
-      await axiosClient.delete(`/api/inquiry-reply-templates/${selectedTemplateId}`)
-      toast.success('Đã xóa câu trả lời mẫu.')
-      setSelectedTemplateId('')
-      await loadTemplates()
-    } catch (error) {
-      toast.error(error?.response?.data?.message || 'Không xóa được câu trả lời mẫu.')
-    } finally {
-      setBusy(false)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      const chunks = []
+      mediaStreamRef.current = stream
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data)
+      }
+      recorder.onstop = () => {
+        void (async () => {
+          const blob = new Blob(chunks, { type: 'audio/webm' })
+          try {
+            if (blob.size > 2 * 1024 * 1024) {
+              toast.error('File ghi âm vượt quá 2MB.')
+              return
+            }
+            await sendMedia(new File([blob], `inquiry-audio-${Date.now()}.webm`, { type: 'audio/webm' }))
+          } finally {
+            stream.getTracks().forEach((track) => track.stop())
+            mediaStreamRef.current = null
+            mediaRecorderRef.current = null
+          }
+        })()
+      }
+      recorder.start()
+      setRecording(true)
+    } catch {
+      toast.error('Không thể truy cập microphone.')
     }
   }
 
@@ -282,14 +266,23 @@ function InquiryDetail() {
     if (!borrowRequest) return null
     const status = borrowRequest.status
     return (
-      <div className="mt-3 flex flex-wrap gap-2">
-        {user?.role === 'Admin' && status === 'PENDING' && <>
-          <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/approve`, { note }), 'Đã duyệt phiếu mượn.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Duyệt</button>
-          <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/reject`, { note }), 'Đã từ chối phiếu mượn.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Từ chối</button>
-        </>}
-        {user?.role === 'Admin' && status === 'APPROVED' && <button disabled={busy || !canStartReservation} title={!canStartReservation ? reservationAvailableLabel : undefined} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/reserve`, { note }), `Đã giữ thiết bị đến hết ngày cần ${formatVietnamDate(borrowRequest.neededFrom, '')}.`)} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{canStartReservation ? reservationButtonLabel : reservationAvailableLabel}</button>}
-        {user?.role === 'Admin' && ['APPROVED', 'RESERVED'].includes(status) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/handover`), 'Đã xác nhận bàn giao thiết bị.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white">Xác nhận bàn giao</button>}
-        {status === 'CHECKED_OUT' && ['Admin', 'NhanVien'].includes(user?.role) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/return`), 'Đã xác nhận trả thiết bị.')} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-white">Xác nhận trả</button>}
+      <div className="mt-3 space-y-3">
+        {user?.role === 'Admin' && status === 'PENDING' && <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú phê duyệt hoặc lý do từ chối..." className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-sm dark:border-indigo-900 dark:bg-slate-950" />}
+        <div className="flex flex-wrap gap-2">
+          {user?.role === 'Admin' && status === 'PENDING' && <>
+            <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/approve`, { note }), 'Đã duyệt phiếu mượn.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Duyệt</button>
+            <button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/reject`, { note: note.trim() }), 'Đã từ chối phiếu mượn.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Từ chối</button>
+          </>}
+          {['APPROVED', 'RESERVED'].includes(status) && (
+            <div className="inline-flex min-h-9 items-center rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-300">
+              {status === 'RESERVED'
+                ? `Đã giữ thiết bị đến hết ${formatVietnamDate(borrowRequest.neededFrom, '')}`
+                : `Ngày cần thiết bị: ${formatVietnamDate(borrowRequest.neededFrom, 'Chưa xác định')}`}
+            </div>
+          )}
+          {user?.role === 'Admin' && ['APPROVED', 'RESERVED'].includes(status) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/handover`), 'Đã xác nhận bàn giao thiết bị.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white">Xác nhận bàn giao</button>}
+          {status === 'CHECKED_OUT' && ['Admin', 'NhanVien'].includes(user?.role) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/return`), 'Đã xác nhận trả thiết bị.')} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-white">Xác nhận trả</button>}
+        </div>
       </div>
     )
   }
@@ -299,7 +292,7 @@ function InquiryDetail() {
       <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="relative min-w-0">
-            <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-orange-600"><ArrowLeft size={16} /> Quay lại hộp thư</Link>
+            <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-orange-600"><ArrowLeft size={16} /> {chatOnly ? 'Quay lại danh sách chat' : 'Quay lại hộp thư'}</Link>
             <p className="mt-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-orange-600"><Sparkles size={14} /> {getInquiryTypeLabel(inquiry.inquiryType)} #{inquiry.id}</p>
             <h2 className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">{inquiry.assetQaCode} · {inquiry.assetName}</h2>
           </div>
@@ -308,7 +301,8 @@ function InquiryDetail() {
             <button type="button" onClick={() => loadDetail()} disabled={loading || busy} aria-label="Làm mới yêu cầu" className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-orange-500/10"><Refresh size={17} className={loading ? 'animate-spin' : ''} /></button>
           </div>
         </div>
-        <div className="relative mt-5 grid gap-x-5 gap-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 sm:grid-cols-2 xl:grid-cols-4">
+        {chatOnly && <Link to={`/mobile/inquiries/${id}`} className="mt-4 inline-flex items-center rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">Xem chi tiết yêu cầu</Link>}
+        {!chatOnly && <div className={`relative mt-5 grid gap-x-5 gap-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 sm:grid-cols-2 ${isEmployee ? '' : 'xl:grid-cols-4'}`}>
           {[
             { label: 'Người yêu cầu', value: inquiry.requesterName, icon: User },
             { label: 'Người phụ trách', value: inquiry.assigneeName || 'Chưa tiếp nhận', icon: User },
@@ -318,44 +312,46 @@ function InquiryDetail() {
             { label: 'Ngày trả dự kiến', value: formatVietnamDate(inquiry.expectedReturnDate), icon: Calendar },
           ].map(({ label, value, icon }) => <div key={label} className="flex min-w-0 items-start gap-2.5"><span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800">{createElement(icon, { size: 16 })}</span><p className="min-w-0"><span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</span><b className="mt-0.5 block truncate text-slate-800 dark:text-slate-100">{value}</b></p></div>)}
           <div className="sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mục đích sử dụng</p><p className="mt-1 font-semibold leading-6 text-slate-800 dark:text-slate-100">{inquiry.purpose}</p></div>
-        </div>
-        {inquiry.alternativeAssetQaCode && <div className="mt-3 rounded-xl border border-violet-200 border-l-4 border-l-violet-500 bg-white p-3 text-sm text-slate-700 dark:border-violet-500/30 dark:border-l-violet-400 dark:bg-slate-900 dark:text-slate-200">Phương án thay thế: <b>{inquiry.alternativeAssetQaCode} · {inquiry.alternativeAssetName}</b>{inquiry.proposedQuantity ? `, số lượng ${inquiry.proposedQuantity}` : ''}. {inquiry.alternativeAccepted ? 'Nhân viên đã đồng ý.' : 'Đang chờ nhân viên xác nhận.'}</div>}
-        {inquiry.decisionNote && <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"><b>Ghi chú xử lý:</b> {inquiry.decisionNote}</p>}
-        <div className={`relative mt-3 flex items-center gap-2 rounded-xl border-l-4 bg-slate-50 p-3 text-sm dark:bg-slate-900 ${slaMeta.breached ? 'border-l-rose-500 text-rose-700 dark:text-rose-300' : 'border-l-emerald-500 text-emerald-700 dark:text-emerald-300'}`}><Clock size={17} /><span><b>SLA phản hồi:</b> {slaMeta.label} · Hạn {formatVietnamDateTime(inquiry.slaResponseDueAt)}</span></div>
+        </div>}
+        {!chatOnly && inquiry.alternativeAssetQaCode && <div className="mt-3 rounded-xl border border-violet-200 border-l-4 border-l-violet-500 bg-white p-3 text-sm text-slate-700 dark:border-violet-500/30 dark:border-l-violet-400 dark:bg-slate-900 dark:text-slate-200">Phương án thay thế: <b>{inquiry.alternativeAssetQaCode} · {inquiry.alternativeAssetName}</b>{inquiry.proposedQuantity ? `, số lượng ${inquiry.proposedQuantity}` : ''}. {inquiry.alternativeAccepted ? 'Nhân viên đã đồng ý.' : 'Đang chờ nhân viên xác nhận.'}</div>}
+        {!chatOnly && inquiry.decisionNote && <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"><b>Ghi chú xử lý:</b> {inquiry.decisionNote}</p>}
+        {!chatOnly && isHandlerRole && <div className={`relative mt-3 flex items-center gap-2 rounded-xl border-l-4 bg-slate-50 p-3 text-sm dark:bg-slate-900 ${slaMeta.breached ? 'border-l-rose-500 text-rose-700 dark:text-rose-300' : 'border-l-emerald-500 text-emerald-700 dark:text-emerald-300'}`}><Clock size={17} /><span><b>SLA:</b> {slaMeta.label} · Hạn {formatVietnamDateTimeShort(inquiry.slaResponseDueAt)}</span></div>}
       </section>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-      <div className="space-y-4 xl:order-2 xl:sticky xl:top-5">
+      <div className={`grid min-w-0 items-start gap-5 ${isEmployee || chatOnly ? '' : 'xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]'}`}>
+      <div className={`${chatOnly ? 'hidden' : 'min-w-0 space-y-4'} ${isEmployee ? '' : 'xl:order-2 xl:sticky xl:top-5'}`}>
 
       {isTargetHandler && !inquiry.assigneeId && !isTerminal && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/claim`), 'Đã nhận xử lý yêu cầu.')} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white"><UserCheck size={18} /> Nhận xử lý yêu cầu</button>}
 
+      {borrowRequest && <section className="rounded-2xl border border-slate-200 border-l-4 border-l-indigo-500 bg-white p-4 shadow-sm dark:border-slate-800 dark:border-l-indigo-400 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Phiếu mượn #{borrowRequest.id}</p><p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Trạng thái: <b>{BORROW_STATUS[borrowRequest.status] || borrowRequest.status}</b>{borrowRequest.reservationExpiresAt ? ` · Giữ đến ${formatVietnamDateTime(borrowRequest.reservationExpiresAt)}` : ''}</p>{renderBorrowActions()}</section>}
+
+      {isAssignedHandler && !isTerminal && !inquiry.linkedEntityId && (
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Xử lý yêu cầu</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Tạo phiếu nghiệp vụ hoặc từ chối yêu cầu.</p>
+          <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú xử lý hoặc lý do từ chối..." className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
+          <div className="mt-3 flex flex-wrap gap-2">
+            {inquiry.inquiryType === 'ASSET_BORROW' && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-borrow-request`), 'Đã tạo phiếu mượn thiết bị.')} className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white"><Package size={16} /> Tạo phiếu mượn</button>}
+            {inquiry.inquiryType === 'CONSUMABLE_REQUEST' && <><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs"><option value="">Chọn kho xuất</option>{warehouseOptions.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select><button disabled={busy || !warehouseId} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-consumable-request`, { sourceWarehouseLocationId: Number(warehouseId), note: note || null }), 'Đã tạo phiếu cấp phát vật tư.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Tạo phiếu cấp phát</button></>}
+            <button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/reject`, { note: note.trim() }), 'Đã từ chối yêu cầu.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Từ chối yêu cầu</button>
+          </div>
+        </section>
+      )}
+
       {isAssignedHandler && !isTerminal && (
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Xử lý nghiệp vụ</h3>
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100">Phân công người xử lý</h3>
           <div className="mt-3 grid gap-3">
             <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-950">
               <label className="text-xs font-semibold text-slate-500">Chuyển người phụ trách</label>
               <div className="mt-2 flex gap-2"><select value={transferUserId} onChange={(event) => setTransferUserId(event.target.value)} disabled={busy || transferableHandlers.length === 0} className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:disabled:bg-slate-800"><option value="">{transferableHandlers.length ? 'Chọn người xử lý' : 'Không có người phù hợp'}</option>{transferableHandlers.map((handler) => <option key={handler.id} value={handler.id}>{handler.fullName || handler.username}</option>)}</select><button type="button" disabled={busy || !transferUserId} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/transfer`, { assigneeUserId: Number(transferUserId) }), 'Đã chuyển người phụ trách.')} className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700">Chuyển</button></div>
               {transferableHandlers.length === 0 && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Hiện không có người xử lý nào khác trong cùng nhóm để chuyển yêu cầu.</p>}
             </div>
-            {!inquiry.linkedEntityId && <div className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-950">
-              <label className="text-xs font-semibold text-slate-500">Đề xuất thiết bị/vật tư thay thế</label>
-              <div className="mt-2 grid grid-cols-[1fr_5rem_auto] gap-2"><input value={alternativeQaCode} onChange={(event) => setAlternativeQaCode(event.target.value)} placeholder="Mã QA" className="min-w-0 rounded-xl border border-slate-300 px-3 py-2 text-sm" /><input type="number" min="1" value={alternativeQuantity} onChange={(event) => setAlternativeQuantity(event.target.value)} className="rounded-xl border border-slate-300 px-2 py-2 text-sm" /><button disabled={busy || !alternativeQaCode.trim()} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/alternative`, { alternativeAssetQaCode: alternativeQaCode.trim(), proposedQuantity: Number(alternativeQuantity), note: note || null }), 'Đã gửi phương án thay thế.')} className="rounded-xl bg-violet-600 px-3 text-xs font-semibold text-white disabled:opacity-40">Đề xuất</button></div>
-            </div>}
-          </div>
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú xử lý hoặc lý do từ chối..." className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            {!inquiry.linkedEntityId && inquiry.inquiryType === 'ASSET_BORROW' && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-borrow-request`), 'Đã tạo phiếu mượn thiết bị.')} className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white"><Package size={16} /> Tạo phiếu mượn</button>}
-            {!inquiry.linkedEntityId && inquiry.inquiryType === 'CONSUMABLE_REQUEST' && <><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs"><option value="">Chọn kho xuất</option>{warehouseOptions.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select><button disabled={busy || !warehouseId} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-consumable-request`, { sourceWarehouseLocationId: Number(warehouseId), note: note || null }), 'Đã tạo phiếu cấp phát vật tư.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Tạo phiếu cấp phát</button></>}
-            {!inquiry.linkedEntityId && <button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/reject`, { note: note.trim() }), 'Đã từ chối yêu cầu.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Từ chối yêu cầu</button>}
-            {!inquiry.linkedEntityId && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/close`, { note: note || null }), 'Đã hoàn tất yêu cầu.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Đóng hoàn tất</button>}
           </div>
         </section>
       )}
 
       {isEmployee && !isTerminal && <div className="flex flex-wrap gap-2">{inquiry.alternativeAssetQaCode && !inquiry.alternativeAccepted && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/alternative/accept`), 'Đã chấp nhận phương án thay thế.')} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white"><Check size={16} /> Chấp nhận phương án</button>}{inquiry.linkedEntityId && inquiry.status === 'WAITING_EMPLOYEE' && (inquiry.linkedEntityType !== 'CONSUMABLE_REQUEST' || consumableFulfillment?.status === 'FULFILLED' || consumableFulfillment?.closedPartial) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/confirm-receipt`), 'Đã xác nhận bạn đã nhận thiết bị/vật tư.')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"><Check size={16} /> Xác nhận đã nhận</button>}{!inquiry.linkedEntityId && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/cancel`, { note: note || null }), 'Đã hủy yêu cầu.')} className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600">Hủy yêu cầu</button>}</div>}
-
-      {borrowRequest && <section className="rounded-2xl border border-slate-200 border-l-4 border-l-indigo-500 bg-white p-4 shadow-sm dark:border-slate-800 dark:border-l-indigo-400 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600 dark:text-indigo-300">Phiếu mượn #{borrowRequest.id}</p><p className="mt-2 text-sm text-slate-700 dark:text-slate-200">Trạng thái: <b>{BORROW_STATUS[borrowRequest.status] || borrowRequest.status}</b>{borrowRequest.reservationExpiresAt ? ` · Giữ đến ${formatVietnamDateTime(borrowRequest.reservationExpiresAt)}` : ''}</p>{renderBorrowActions()}</section>}
 
       {consumableFulfillment && <section className="rounded-2xl border border-slate-200 border-l-4 border-l-indigo-500 bg-white p-4 shadow-sm dark:border-slate-800 dark:border-l-indigo-400 dark:bg-slate-900">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -370,6 +366,7 @@ function InquiryDetail() {
         {user?.role === 'Admin' && consumableFulfillment.requiresAdminApproval && !consumableFulfillment.adminApproved && consumableFulfillment.status === 'PENDING' && <div className="mt-3 space-y-2"><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú phê duyệt hoặc lý do từ chối..." className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-sm" /><div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/admin-approve`, { note: note || null }), 'Đã phê duyệt yêu cầu cấp vật tư.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Phê duyệt</button><button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/reject`, { note: note.trim() }), 'Đã từ chối yêu cầu cấp vật tư.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Từ chối</button></div></div>}
         {isEmployee && consumableFulfillment.status === 'PENDING' && (consumableFulfillment.fulfilledQuantity || 0) === 0 && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/cancel`, { note: note || null }), 'Đã hủy phiếu cấp vật tư.')} className="mt-3 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600">Hủy phiếu cấp vật tư</button>}
         {isAssignedHandler && user?.role === 'ConsumableManager' && !consumableFulfillment.closedPartial && !['FULFILLED', 'REJECTED', 'CANCELLED'].includes(consumableFulfillment.status) && <div className="mt-4 space-y-3 border-t border-indigo-200 pt-3">
+          <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú xử lý (không bắt buộc)..." className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-sm dark:border-indigo-900 dark:bg-slate-950" />
           {['PENDING', 'PARTIALLY_FULFILLED'].includes(consumableFulfillment.status) && <>
             <div className="flex flex-wrap gap-2"><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="min-w-48 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs"><option value="">Chọn kho xuất</option>{warehouseOptions.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select><button disabled={busy || !warehouseId || (consumableFulfillment.requiresAdminApproval && !consumableFulfillment.adminApproved)} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/warehouse`, { warehouseLocationId: Number(warehouseId) }), 'Đã cập nhật kho xuất.')} className="rounded-xl border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 disabled:opacity-40">Đổi kho</button></div>
             <div className="flex flex-wrap gap-2"><input type="number" min="1" max={consumableFulfillment.remainingQuantity} value={prepareQuantity} onChange={(event) => setPrepareQuantity(event.target.value)} className="w-32 rounded-xl border border-indigo-200 px-3 py-2 text-xs" /><button disabled={busy || !prepareQuantity || Number(prepareQuantity) <= 0 || Number(prepareQuantity) > Number(consumableFulfillment.remainingQuantity) || (consumableFulfillment.requiresAdminApproval && !consumableFulfillment.adminApproved)} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/prepare`, { quantity: Number(prepareQuantity), note: note || null }), 'Đã bắt đầu chuẩn bị vật tư.')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Bắt đầu chuẩn bị</button>{consumableFulfillment.status === 'PARTIALLY_FULFILLED' && <button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/consumable-fulfillments/${consumableFulfillment.id}/close-partial`, { note: note.trim() }), 'Đã kết thúc yêu cầu ở mức cấp một phần.')} className="rounded-xl border border-orange-300 bg-white px-3 py-2 text-xs font-semibold text-orange-700 disabled:opacity-40">Kết thúc cấp một phần</button>}</div>
@@ -381,42 +378,26 @@ function InquiryDetail() {
       </section>}
 
       </div>
-      <div className="xl:order-1">
+      <div id="conversation" className={`min-w-0 ${isEmployee || chatOnly ? '' : 'xl:order-1'}`}>
       <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800"><h3 className="inline-flex items-center gap-2 font-semibold"><MessageCircle size={18} className="text-orange-600" /> Hội thoại</h3><span className={`text-xs font-semibold ${connected ? 'text-emerald-600' : 'text-slate-400'}`}>{connected ? 'Trực tuyến' : 'Đang đồng bộ'}</span></div>
         <div className="max-h-[32rem] min-h-72 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && <p className="py-10 text-center text-sm text-slate-400">Chưa có tin nhắn.</p>}
           {messages.map((message) => {
             const mine = Number(message.senderId) === Number(user?.userId)
-            return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}><p className={`text-[11px] font-semibold ${mine ? 'text-white/75' : 'text-slate-400'}`}>{message.senderName} · {formatVietnamDateTime(message.createdAt)}</p>{message.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{message.content}</p>}{message.mediaUrl && <AuthenticatedInquiryImage src={message.mediaUrl} className="mt-2 max-h-72 w-full rounded-xl object-cover" />}</div></div>
+            return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[85%] rounded-2xl px-3 py-2 ${mine ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}><p className={`text-[11px] font-semibold ${mine ? 'text-white/75' : 'text-slate-400'}`}>{message.senderName} · {formatVietnamDateTime(message.createdAt)}</p>{message.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{message.content}</p>}{message.mediaUrl && (message.mediaType === 'audio' ? <div className="mt-2"><VoiceMessagePlayer src={message.mediaUrl} isMine={mine} /></div> : <AuthenticatedInquiryImage src={message.mediaUrl} className="mt-2 max-h-72 w-full rounded-xl object-cover" />)}</div></div>
           })}
           <div ref={messageEndRef} />
         </div>
         {canMessage ? (
           <form onSubmit={sendMessage} className="flex flex-wrap items-end gap-2 border-t border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/50">
-            {isAssignedHandler && (
-              <div className="w-full rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">Câu trả lời mẫu</p>
-                  <span className="text-[11px] text-slate-400">{templates.length} mẫu đã lưu</span>
-                </div>
-                <div className="mt-2 flex max-h-32 flex-wrap gap-2 overflow-y-auto">
-                  {templates.length === 0 && <p className="w-full rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-400 dark:bg-slate-800">Chưa có nội dung mẫu.</p>}
-                  {templates.map((template) => (
-                    <button key={template.id} type="button" onClick={() => { setSelectedTemplateId(String(template.id)); setText(template.content) }} className={`max-w-full rounded-lg border px-3 py-2 text-left text-sm transition ${String(template.id) === selectedTemplateId ? 'border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-300' : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-orange-200 hover:bg-orange-50/60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'}`}>
-                      {template.content}
-                    </button>
-                  ))}
-                </div>
-                <textarea value={templateContent} onChange={(event) => setTemplateContent(event.target.value)} maxLength={4000} rows={2} placeholder="Nhập nội dung muốn lưu..." aria-label="Nội dung câu trả lời mẫu mới" className="mt-2 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950" />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" disabled={busy || !templateContent.trim()} onClick={createTemplate} className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 dark:disabled:bg-slate-700">Lưu nội dung</button>
-                  <button type="button" disabled={busy || !selectedTemplateId} onClick={deleteTemplate} className="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300">Xóa nội dung đã chọn</button>
-                </div>
-              </div>
-            )}
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadImage} className="hidden" />
-            <button type="button" disabled={busy} onClick={() => fileInputRef.current?.click()} aria-label="Gửi ảnh" className="rounded-xl border border-slate-300 bg-white p-2.5 text-slate-500 transition hover:text-orange-600 disabled:opacity-50 dark:bg-slate-900"><Camera size={19} /></button>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={uploadImage} className="hidden" />
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <button type="button" disabled={busy} onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><ImagePlus size={15} /> Ảnh</button>
+              <button type="button" disabled={busy} onClick={() => cameraInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"><Camera size={15} /> Chụp ảnh</button>
+              <button type="button" disabled={busy} onClick={toggleRecording} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${recording ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>{recording ? <Square size={15} /> : <Mic size={15} />} {recording ? 'Dừng ghi âm' : 'Ghi âm'}</button>
+            </div>
             <textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={handleMessageKeyDown} rows={1} maxLength={4000} placeholder="Nhập nội dung trao đổi..." className="min-h-11 flex-1 resize-none rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-100 dark:bg-slate-900" />
             <button disabled={busy || !text.trim()} aria-label="Gửi tin nhắn" className="rounded-xl bg-orange-600 p-3 text-white shadow-sm transition hover:bg-orange-700 disabled:bg-slate-300"><Send size={18} /></button>
           </form>

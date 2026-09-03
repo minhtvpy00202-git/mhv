@@ -5,6 +5,7 @@ target/
 
 frontend/node_modules/
 frontend/dist/
+outputs/demo-videos/
 .agents/skills/drawio-skill/styles/schema.json
 .agents/skills/drawio-skill/styles/built-in/handdrawn.json
 .agents/skills/drawio-skill/styles/built-in/default.json

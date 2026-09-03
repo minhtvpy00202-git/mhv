@@ -20,10 +20,10 @@ import { useAuth } from '../context/AuthContext'
 import { formatVietnamDateTime } from '../utils/datetime'
 
 const navItems = [
-  { to: '/mobile/home', label: 'Home', icon: Home },
+  { to: '/mobile/home', label: 'Trang chủ', icon: Home },
   { to: '/mobile/scan', label: 'Quét QR', icon: QrCode },
-  { to: '/mobile/inquiries', label: 'Yêu cầu', icon: ClipboardText },
-  { to: '/mobile/chats', label: 'Chat', icon: MessageCircle },
+  { to: '/mobile/inquiries', label: 'Mượn/Cấp', icon: ClipboardText },
+  { to: '/mobile/chats', label: 'Hộp thư', icon: MessageCircle },
   { to: '/mobile/maintenance', label: 'Báo hỏng', icon: Wrench },
 ]
 
@@ -207,7 +207,7 @@ function MobileLayout() {
               )}
             </button>
             {showActionMenu && (
-              <div className="absolute right-0 top-full z-[125] mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-orange-100 bg-white p-2 text-slate-700 shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+              <div className="absolute right-0 top-full z-[125] mt-2 max-h-[calc(100dvh-5rem)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-2xl border border-orange-100 bg-white p-2 text-slate-700 shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 <ThemeToggle className="w-full justify-start rounded-xl border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" />
                 <button
                   type="button"
@@ -249,7 +249,7 @@ function MobileLayout() {
                         Đánh dấu tất cả
                       </button>
                     </div>
-                    <div className="max-h-[min(24rem,calc(100dvh-8rem))] overflow-auto">
+                    <div className="max-h-[min(18rem,calc(100dvh-14rem))] overflow-y-auto overscroll-contain">
                       {!hasNotifications && (
                         <p className="px-3 py-4 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo mới.</p>
                       )}

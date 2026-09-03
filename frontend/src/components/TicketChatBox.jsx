@@ -137,20 +137,32 @@ function ResilientChatImage({ src, alt }) {
   )
 }
 
-function VoiceMessagePlayer({ src, isMine }) {
+export function VoiceMessagePlayer({ src, isMine }) {
   const audioRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [retryKey, setRetryKey] = useState(0)
-  const authenticatedMedia = useAuthenticatedMediaSource(src, retryKey)
+  const resolvedSrc = resolveMediaUrl(src)
+  const authenticatedMedia = useAuthenticatedMediaSource(resolvedSrc, retryKey)
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return undefined
 
     const handleLoadedMetadata = () => {
-      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration)
+        return
+      }
+      // MediaRecorder WebM thường không ghi duration vào header. Seek tạm đến cuối
+      // để Chromium tính lại thời lượng, rồi đưa đầu phát về vị trí ban đầu.
+      audio.currentTime = Number.MAX_SAFE_INTEGER
+    }
+    const handleDurationChange = () => {
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return
+      setDuration(audio.duration)
+      if (audio.currentTime > audio.duration) audio.currentTime = 0
     }
     const handleTimeUpdate = () => {
       setCurrentTime(Number.isFinite(audio.currentTime) ? audio.currentTime : 0)
@@ -163,6 +175,7 @@ function VoiceMessagePlayer({ src, isMine }) {
     const handlePlay = () => setIsPlaying(true)
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
+    audio.addEventListener('durationchange', handleDurationChange)
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('ended', handleEnded)
     audio.addEventListener('pause', handlePause)
@@ -171,6 +184,7 @@ function VoiceMessagePlayer({ src, isMine }) {
     return () => {
       audio.pause()
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      audio.removeEventListener('durationchange', handleDurationChange)
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('pause', handlePause)

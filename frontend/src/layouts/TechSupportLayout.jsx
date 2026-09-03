@@ -289,8 +289,8 @@ function TechSupportLayout() {
                 )}
               </button>
               {showNotificationDropdown && (
-                <div className="absolute right-0 z-[120] mt-2 w-[26rem] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                <div className="absolute right-0 z-[120] mt-2 flex max-h-[min(22rem,calc(100dvh-6rem))] w-[26rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-3 py-2 dark:border-slate-800">
                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-100">Thông báo</p>
                     <button
                       type="button"
@@ -301,7 +301,7 @@ function TechSupportLayout() {
                       Đánh dấu tất cả là đã đọc
                     </button>
                   </div>
-                  <div className="max-h-96 overflow-auto">
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     {chatNotifications.map((notification) => (
                       <button
                         key={notification.id}

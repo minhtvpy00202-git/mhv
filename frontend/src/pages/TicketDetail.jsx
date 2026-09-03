@@ -266,7 +266,7 @@ function TicketDetail() {
   const reporterZaloUrl = getZaloUrl(ticket?.reporterPhone)
   const assigneePhone = normalizePhone(ticket?.assigneePhone)
   const assigneeZaloUrl = getZaloUrl(ticket?.assigneePhone)
-  const mobileChatPath = `/mobile/chats/${ticketId}`
+  const mobileChatPath = `/mobile/chats/repairs/${ticketId}`
   const showSupportContactCard = isStandardMobileRoute
     && TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)
     && (assigneePhone || assigneeZaloUrl)

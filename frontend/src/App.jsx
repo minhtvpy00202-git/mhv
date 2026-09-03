@@ -150,6 +150,8 @@ function App() {
           <Route path="/mobile/home" element={<Home />} />
           <Route path="/mobile/scan" element={withSuspense(<QRScanner />)} />
           <Route path="/mobile/chats" element={withSuspense(<MobileChats />)} />
+          <Route path="/mobile/chats/inquiries/:id" element={withSuspense(<InquiryDetail chatOnly />)} />
+          <Route path="/mobile/chats/repairs/:ticketId" element={withSuspense(<MobileChatDetail />)} />
           <Route path="/mobile/chats/:ticketId" element={withSuspense(<MobileChatDetail />)} />
           <Route path="/mobile/inquiries" element={withSuspense(<MobileInquiries />)} />
           <Route path="/mobile/inquiries/:id" element={withSuspense(<InquiryDetail />)} />

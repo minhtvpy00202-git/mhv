@@ -2,7 +2,6 @@ package com.poly.mhv.controller;
 
 import com.poly.mhv.dto.inquiry.InquiryActionRequest;
 import com.poly.mhv.dto.inquiry.InquiryAlternativeRequest;
-import com.poly.mhv.dto.inquiry.InquiryAvailabilityResponse;
 import com.poly.mhv.dto.inquiry.InquiryConsumableConversionRequest;
 import com.poly.mhv.dto.inquiry.InquiryCreateRequest;
 import com.poly.mhv.dto.inquiry.InquiryMediaUploadResponse;
@@ -37,13 +36,23 @@ public class InquiryController {
 
     @GetMapping("/availability")
     @PreAuthorize("hasAnyRole('NhanVien','Admin','ConsumableManager')")
-    public ResponseEntity<List<InquiryAvailabilityResponse>> searchAvailability(
+    public ResponseEntity<?> searchAvailability(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
+            @RequestParam(required = false) String availability,
+            @RequestParam(required = false) Integer minQuantity,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(inquiryService.searchAvailability(keyword, trackingMode, categoryId, locationId, limit));
+        if (page != null || size != null) {
+            return ResponseEntity.ok(inquiryService.searchAvailabilityPage(
+                    keyword, trackingMode, categoryId, locationId, availability, minQuantity, sort, page, size));
+        }
+        return ResponseEntity.ok(inquiryService.searchAvailability(
+                keyword, trackingMode, categoryId, locationId, availability, minQuantity, sort, limit));
     }
 
     @GetMapping("/options")

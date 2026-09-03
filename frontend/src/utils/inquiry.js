@@ -61,13 +61,13 @@ export function getInquirySlaMeta(inquiry) {
   const minutes = Math.max(0, Math.ceil(Math.abs(dueAt - observedAt) / 60000))
   if (firstResponseAt) {
     return {
-      label: breached ? `Phản hồi trễ ${minutes} phút` : `Phản hồi đúng SLA (${minutes} phút sớm)`,
+      label: breached ? `Trễ ${minutes} phút` : `Đúng hạn · Sớm ${minutes} phút`,
       breached,
       completed: true,
     }
   }
   return {
-    label: breached ? `Quá hạn phản hồi ${minutes} phút` : `Còn ${minutes} phút để phản hồi`,
+    label: breached ? `Quá hạn ${minutes} phút` : `Còn ${minutes} phút`,
     breached,
     completed: false,
   }

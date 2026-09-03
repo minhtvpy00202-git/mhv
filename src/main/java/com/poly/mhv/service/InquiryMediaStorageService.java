@@ -17,24 +17,28 @@ public class InquiryMediaStorageService {
         this.mediaSecurityService = mediaSecurityService;
     }
 
-    public StoredInquiryMedia storeImage(MultipartFile file) {
+    public StoredInquiryMedia storeMedia(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new CustomException("Ảnh đính kèm không được để trống.");
+            throw new CustomException("Media đính kèm không được để trống.");
         }
         try {
-            MediaSecurityService.ValidatedMedia image = mediaSecurityService.validateImage(
-                    file.getBytes(),
-                    MediaSecurityService.SAFE_IMAGE_MIME_TYPES);
+            byte[] bytes = file.getBytes();
+            MediaSecurityService.ValidatedMedia media;
+            try {
+                media = mediaSecurityService.validateImage(bytes, MediaSecurityService.SAFE_IMAGE_MIME_TYPES);
+            } catch (CustomException ignored) {
+                media = mediaSecurityService.validateAudio(bytes);
+            }
             String url = mediaStorageService.storeBytes(
-                    image.bytes(),
-                    image.mimeType(),
-                    "inquiries/image",
-                    image.extension());
-            return new StoredInquiryMedia(url, "image");
+                    media.bytes(),
+                    media.mimeType(),
+                    "inquiries/" + media.category(),
+                    media.extension());
+            return new StoredInquiryMedia(url, media.category());
         } catch (CustomException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new CustomException("Không thể lưu ảnh đính kèm.");
+            throw new CustomException("Không thể lưu media đính kèm.");
         }
     }
 

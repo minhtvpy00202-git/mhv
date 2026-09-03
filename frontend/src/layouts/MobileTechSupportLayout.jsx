@@ -214,7 +214,7 @@ function MobileTechSupportLayout() {
               )}
             </button>
             {showActionMenu && (
-              <div className="absolute right-0 top-full z-[125] mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-blue-100 bg-white p-2 text-slate-700 shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+              <div className="absolute right-0 top-full z-[125] mt-2 max-h-[calc(100dvh-5rem)] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto overscroll-contain rounded-2xl border border-blue-100 bg-white p-2 text-slate-700 shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
                 <ThemeToggle className="w-full justify-start rounded-xl border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700" />
                 <button
                   type="button"
@@ -256,7 +256,7 @@ function MobileTechSupportLayout() {
                         Đánh dấu tất cả
                       </button>
                     </div>
-                    <div className="max-h-[min(24rem,calc(100dvh-8rem))] overflow-auto">
+                    <div className="max-h-[min(18rem,calc(100dvh-14rem))] overflow-y-auto overscroll-contain">
                       {chatNotifications.length === 0 && notifications.length === 0 && (
                         <p className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Chưa có thông báo.</p>
                       )}
