@@ -19,9 +19,17 @@ import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 const quickActions = [
   {
+    to: '/mobile/inquiries',
+    label: 'Cấp phát vật tư',
+    hint: 'Vật tư tiêu hao',
+    icon: Stars,
+    tone: 'border-orange-200 bg-orange-50/70 text-slate-900 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-slate-100',
+    iconTone: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
+  },
+  {
     to: '/mobile/scan',
-    label: 'Quét QR',
-    hint: 'Mượn hoặc trả thiết bị',
+    label: 'Mượn/Trả',
+    hint: 'Thiết bị qua QR',
     icon: QrCode,
     tone: 'border-orange-200 bg-orange-50/70 text-slate-900 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-slate-100',
     iconTone: 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
@@ -33,14 +41,6 @@ const quickActions = [
     icon: Wrench,
     tone: 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
     iconTone: 'bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300',
-  },
-  {
-    to: '/mobile/chats',
-    label: 'Trao đổi',
-    hint: 'Chat với kỹ thuật viên',
-    icon: MessageCircle,
-    tone: 'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100',
-    iconTone: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
   },
 ]
 
@@ -215,7 +215,7 @@ function Home() {
                 Thao tác nhanh
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Mượn, trả hoặc báo sự cố thiết bị nhanh chóng.
+                Cấp phát vật tư, mượn/trả thiết bị hoặc báo sự cố nhanh chóng.
               </p>
             </div>
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-fptOrange dark:bg-orange-500/10 dark:text-orange-300">

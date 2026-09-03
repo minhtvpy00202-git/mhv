@@ -27,6 +27,8 @@ public class InquiryCreateRequest {
     @Positive(message = "Số lượng yêu cầu phải lớn hơn 0.")
     private Integer quantityRequested;
 
+    private String quantityRequestedUnit;
+
     @NotNull(message = "Vui lòng chọn ngày cần sử dụng.")
     @FutureOrPresent(message = "Ngày cần sử dụng không được ở trong quá khứ.")
     private LocalDate neededFrom;

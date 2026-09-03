@@ -26,6 +26,9 @@ public class ConsumableRequestCreateRequest {
     @Positive(message = "Số lượng yêu cầu phải lớn hơn 0.")
     private Integer quantityRequested;
 
+    @NotBlank(message = "Đơn vị số lượng là bắt buộc.")
+    private String quantityRequestedUnit;
+
     @NotBlank(message = "Lý do cấp phát là bắt buộc.")
     @Size(max = 1000, message = "Lý do cấp phát không được vượt quá 1000 ký tự.")
     private String reason;

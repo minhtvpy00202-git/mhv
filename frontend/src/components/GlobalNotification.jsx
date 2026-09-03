@@ -5,12 +5,26 @@ import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
 import { getTechSupportTicketPath } from '../utils/navigation'
 
+const NOTIFICATION_SESSION_STARTED_AT_KEY = 'mhv_notification_session_started_at'
+
+function toTimestamp(value) {
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 function GlobalNotification() {
   const { token, isAuthenticated, user } = useAuth()
   const { connected, subscribe } = useWebSocket(token)
   const initializedRef = useRef(false)
   const seenNotificationIdsRef = useRef(new Set())
   const audioContextRef = useRef(null)
+
+  const getNotificationSessionStartedAt = useCallback(() => {
+    const rawValue = sessionStorage.getItem(NOTIFICATION_SESSION_STARTED_AT_KEY)
+    const parsedValue = Number(rawValue)
+    return Number.isFinite(parsedValue) ? parsedValue : 0
+  }, [])
 
   const requestNotificationFeedRefresh = () => {
     window.dispatchEvent(new CustomEvent('mhv-notification-feed-refresh'))
@@ -75,17 +89,31 @@ function GlobalNotification() {
     toast(message, toastOptions)
   }, [])
 
+  const shouldToastRealtimeNotification = useCallback((payload) => {
+    const sessionStartedAt = getNotificationSessionStartedAt()
+    if (!sessionStartedAt) return true
+    const notificationTimestamp = toTimestamp(payload?.timestamp || payload?.occurredAt)
+    return notificationTimestamp >= sessionStartedAt
+  }, [getNotificationSessionStartedAt])
+
+  useEffect(() => {
+    initializedRef.current = false
+    seenNotificationIdsRef.current = new Set()
+  }, [isAuthenticated, user?.userId])
+
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
     const unsubscribe = subscribe(`/topic/users/${user.userId}/notifications`, (payload) => {
       if (payload?.notificationId != null) {
         seenNotificationIdsRef.current.add(payload.notificationId)
       }
-      showToastByType(payload)
+      if (shouldToastRealtimeNotification(payload)) {
+        showToastByType(payload)
+      }
       requestNotificationFeedRefresh()
     })
     return () => unsubscribe()
-  }, [connected, isAuthenticated, showToastByType, subscribe, user?.userId])
+  }, [connected, isAuthenticated, shouldToastRealtimeNotification, showToastByType, subscribe, user?.userId])
 
   useEffect(() => {
     if (!isAuthenticated || !connected || !user?.userId) return undefined
@@ -135,11 +163,14 @@ function GlobalNotification() {
         const newItems = items.filter((item) => !seenNotificationIdsRef.current.has(item.id))
         newItems.forEach((item) => {
           seenNotificationIdsRef.current.add(item.id)
-          showToastByType({
-            notificationId: item.id,
-            type: item.eventType || '',
-            message: item.message || 'Có thông báo mới.',
-          })
+          if (shouldToastRealtimeNotification(item)) {
+            showToastByType({
+              notificationId: item.id,
+              type: item.eventType || '',
+              message: item.message || 'Có thông báo mới.',
+              occurredAt: item.occurredAt,
+            })
+          }
         })
         if (newItems.length > 0) {
           requestNotificationFeedRefresh()
@@ -160,7 +191,7 @@ function GlobalNotification() {
       mounted = false
       clearInterval(timer)
     }
-  }, [connected, isAuthenticated, showToastByType])
+  }, [connected, isAuthenticated, shouldToastRealtimeNotification, showToastByType])
 
   return null
 }

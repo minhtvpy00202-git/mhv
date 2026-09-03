@@ -18,7 +18,6 @@ import com.poly.mhv.dto.inquiry.InquiryUserOptionResponse;
 import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
-import com.poly.mhv.entity.AssetBorrowRequest;
 import com.poly.mhv.entity.ConsumableInquiryFulfillment;
 import com.poly.mhv.entity.InquiryMessage;
 import com.poly.mhv.entity.Location;
@@ -59,7 +58,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class InquiryService {
 
     private static final ZoneOffset STORAGE_OFFSET = ZoneOffset.UTC;
-    private static final Set<String> ACTIVE_BORROW_STATUSES = Set.of("PENDING", "APPROVED", "RESERVED", "CHECKED_OUT");
 
     private final ServiceInquiryRepository inquiryRepository;
     private final InquiryMessageRepository messageRepository;
@@ -135,30 +133,41 @@ public class InquiryService {
     public InquiryResponse create(InquiryCreateRequest request) {
         AppUser requester = currentUserProvider.getCurrentUser();
         if (!"NhanVien".equals(requester.getRole())) {
-            throw new AccessDeniedException("Chỉ nhân viên mới được tạo yêu cầu mượn hoặc cấp phát.");
+            throw new AccessDeniedException("Chỉ nhân viên mới được tạo yêu cầu cấp phát.");
         }
         Asset asset = assetRepository.findDetailByQaCode(normalizeAssetQaCode(request.getAssetQaCode()))
                 .orElseThrow(() -> new CustomException("Không tìm thấy thiết bị hoặc vật tư đã chọn."));
         Location destination = locationRepository.findById(request.getDestinationLocationId())
                 .orElseThrow(() -> new CustomException("Không tìm thấy phòng sử dụng hoặc phòng nhận."));
         boolean consumable = isConsumable(asset);
-        int quantity = consumable ? safePositive(request.getQuantityRequested(), 1) : 1;
-        LocalDate neededFrom = request.getNeededFrom();
-        LocalDate expectedReturn = consumable ? null : request.getExpectedReturnDate();
-        if (!consumable && expectedReturn == null) {
-            throw new CustomException("Vui lòng chọn ngày dự kiến trả thiết bị.");
+        if (!consumable) {
+            throw new CustomException("Thiết bị không còn tạo yêu cầu mượn ở màn này. Vui lòng dùng chức năng Mượn/Trả bằng QR.");
         }
+        String quantityRequestedUnit = normalizeInquiryQuantityUnit(request.getQuantityRequestedUnit());
+        int quantityInput = safePositive(request.getQuantityRequested(), 1);
+        int quantity = assetService.convertConsumableQuantityToRetail(asset, quantityInput, quantityRequestedUnit);
+        if (safeQuantity(asset.getQuantityOnHand()) < quantity) {
+            throw new CustomException(
+                    "Số lượng tồn kho hiện không đủ. Hiện còn "
+                            + formatInquiryConsumableQuantity(asset, asset.getQuantityOnHand())
+                            + "."
+            );
+        }
+        LocalDate neededFrom = request.getNeededFrom();
+        LocalDate expectedReturn = null;
         if (expectedReturn != null && expectedReturn.isBefore(neededFrom)) {
             throw new CustomException("Ngày dự kiến trả không được trước ngày cần sử dụng.");
         }
         LocalDateTime now = UtcDateTimes.now();
         InquiryWorkflowSettingService.EffectiveSettings workflowSettings = workflowSettingService.getEffectiveSettings();
         ServiceInquiry inquiry = ServiceInquiry.builder()
-                .inquiryType(consumable ? InquiryStatusSupport.CONSUMABLE_REQUEST : InquiryStatusSupport.ASSET_BORROW)
+                .inquiryType(InquiryStatusSupport.CONSUMABLE_REQUEST)
                 .requester(requester)
-                .targetRole(consumable ? "ConsumableManager" : "Admin")
+                .targetRole("ConsumableManager")
                 .asset(asset)
                 .quantityRequested(quantity)
+                .quantityRequestedInput(quantityInput)
+                .quantityRequestedUnit(quantityRequestedUnit)
                 .destinationLocation(destination)
                 .neededFrom(neededFrom)
                 .expectedReturnDate(expectedReturn)
@@ -167,9 +176,7 @@ public class InquiryService {
                 .alternativeAccepted(false)
                 .createdAt(now)
                 .updatedAt(now)
-                .slaResponseDueAt(now.plusMinutes(consumable
-                        ? workflowSettings.consumableResponseSlaMinutes()
-                        : workflowSettings.assetResponseSlaMinutes()))
+                .slaResponseDueAt(now.plusMinutes(workflowSettings.consumableResponseSlaMinutes()))
                 .overdueReminderCount(0)
                 .build();
         ServiceInquiry saved = inquiryRepository.save(inquiry);
@@ -184,6 +191,7 @@ public class InquiryService {
     public List<InquiryResponse> getMine() {
         AppUser actor = currentUserProvider.getCurrentUser();
         return inquiryRepository.findByRequesterIdOrderByUpdatedAtDesc(actor.getId()).stream()
+                .filter(inquiry -> InquiryStatusSupport.CONSUMABLE_REQUEST.equals(inquiry.getInquiryType()))
                 .map(inquiry -> mapInquiry(inquiry, actor))
                 .toList();
     }
@@ -199,6 +207,7 @@ public class InquiryService {
                 ? inquiryRepository.findAdminInbox(normalizedStatus)
                 : inquiryRepository.findInbox(actor.getRole(), normalizedStatus);
         return inbox.stream()
+                .filter(inquiry -> InquiryStatusSupport.CONSUMABLE_REQUEST.equals(inquiry.getInquiryType()))
                 .map(inquiry -> mapInquiry(inquiry, actor))
                 .toList();
     }
@@ -481,47 +490,6 @@ public class InquiryService {
     }
 
     @Transactional
-    public InquiryResponse createBorrowRequest(Long inquiryId) {
-        ServiceInquiry inquiry = inquiryRepository.findForUpdateById(inquiryId)
-                .orElseThrow(() -> new CustomException("Không tìm thấy yêu cầu."));
-        AppUser actor = currentUserProvider.getCurrentUser();
-        ensureAssignedHandler(inquiry, actor);
-        if (!InquiryStatusSupport.ASSET_BORROW.equals(inquiry.getInquiryType())) {
-            throw new CustomException("Yêu cầu này không phải yêu cầu mượn thiết bị.");
-        }
-        ensureNotConverted(inquiry);
-        recordFirstResponse(inquiry, UtcDateTimes.now());
-        Asset effectiveAsset = effectiveAsset(inquiry);
-        if (!Boolean.TRUE.equals(mapAvailability(effectiveAsset).getAvailable())) {
-            throw new CustomException("Thiết bị hiện không sẵn sàng để tạo phiếu mượn.");
-        }
-        if (borrowRequestRepository.existsByAssetQaCodeAndStatusIn(effectiveAsset.getQaCode(), ACTIVE_BORROW_STATUSES)) {
-            throw new CustomException("Thiết bị đã có một phiếu mượn hoặc giữ chỗ đang hoạt động.");
-        }
-        AssetBorrowRequest borrowRequest = AssetBorrowRequest.builder()
-                .inquiry(inquiry)
-                .asset(effectiveAsset)
-                .requester(inquiry.getRequester())
-                .destinationLocation(inquiry.getDestinationLocation())
-                .neededFrom(inquiry.getNeededFrom())
-                .expectedReturnDate(inquiry.getExpectedReturnDate())
-                .purpose(inquiry.getPurpose())
-                .status("PENDING")
-                .createdAt(UtcDateTimes.now())
-                .build();
-        AssetBorrowRequest savedRequest = borrowRequestRepository.save(borrowRequest);
-        inquiry.setLinkedEntityType("ASSET_BORROW_REQUEST");
-        inquiry.setLinkedEntityId(savedRequest.getId());
-        inquiry.setStatus(InquiryStatusSupport.CONVERTED);
-        inquiry.setUpdatedAt(UtcDateTimes.now());
-        ServiceInquiry saved = inquiryRepository.save(inquiry);
-        notifyRequester(saved, "BORROW_REQUEST_CREATED", "Đã tạo phiếu mượn thiết bị",
-                "Phiếu mượn #" + savedRequest.getId() + " đã được tạo từ cuộc trao đổi.");
-        broadcastInquiryUpdate(saved);
-        return mapInquiry(saved, actor);
-    }
-
-    @Transactional
     public InquiryResponse createConsumableRequest(Long inquiryId, InquiryConsumableConversionRequest request) {
         ServiceInquiry inquiry = inquiryRepository.findForUpdateById(inquiryId)
                 .orElseThrow(() -> new CustomException("Không tìm thấy yêu cầu."));
@@ -534,12 +502,19 @@ public class InquiryService {
         recordFirstResponse(inquiry, UtcDateTimes.now());
         Asset effectiveAsset = effectiveAsset(inquiry);
         int effectiveQuantity = effectiveQuantity(inquiry);
+        int quantityRequestedInput = inquiry.getQuantityRequestedInput() != null
+                ? inquiry.getQuantityRequestedInput()
+                : inquiry.getQuantityRequested();
+        String quantityRequestedUnit = StringUtils.hasText(inquiry.getQuantityRequestedUnit())
+                ? inquiry.getQuantityRequestedUnit()
+                : "RETAIL";
         ConsumableRequestResponse created = assetService.createConsumableRequestForRequester(
                 inquiry.getDestinationLocation().getId(),
                 ConsumableRequestCreateRequest.builder()
                         .assetQaCode(effectiveAsset.getQaCode())
                         .sourceWarehouseLocationId(request.getSourceWarehouseLocationId())
-                        .quantityRequested(effectiveQuantity)
+                        .quantityRequested(quantityRequestedInput)
+                        .quantityRequestedUnit(quantityRequestedUnit)
                         .reason(StringUtils.hasText(request.getNote()) ? request.getNote().trim() : inquiry.getPurpose())
                         .build(),
                 inquiry.getRequester());
@@ -815,12 +790,23 @@ public class InquiryService {
                 .available(available)
                 .availableQuantity(consumable ? quantity : (available ? 1 : 0))
                 .unit(asset.getUnit())
+                .retailUnit(getAssetRetailUnit(asset))
+                .wholesaleUnit(getAssetWholesaleUnit(asset))
+                .wholesaleToRetailFactor(getAssetWholesaleFactor(asset))
+                .formattedAvailableQuantity(consumable ? formatInquiryConsumableQuantity(asset, quantity) : (available ? "1 đơn vị" : "0 đơn vị"))
+                .formattedAvailableQuantityRetailOnly(consumable ? formatInquiryConsumableQuantityRetailOnly(asset, quantity) : (available ? "1 đơn vị" : "0 đơn vị"))
                 .build();
     }
 
     private InquiryResponse mapInquiry(ServiceInquiry inquiry, AppUser viewer) {
         Asset asset = inquiry.getAsset();
         Asset alternative = inquiry.getAlternativeAsset();
+        Integer quantityRequestedInput = inquiry.getQuantityRequestedInput() != null
+                ? inquiry.getQuantityRequestedInput()
+                : inquiry.getQuantityRequested();
+        String quantityRequestedUnit = StringUtils.hasText(inquiry.getQuantityRequestedUnit())
+                ? inquiry.getQuantityRequestedUnit()
+                : "RETAIL";
         return InquiryResponse.builder()
                 .id(inquiry.getId())
                 .inquiryType(inquiry.getInquiryType())
@@ -838,7 +824,19 @@ public class InquiryService {
                 .assetUsageStatus(asset.getUsageStatus())
                 .availableQuantity(isConsumable(asset) ? asset.getQuantityOnHand() : (Boolean.TRUE.equals(mapAvailability(asset).getAvailable()) ? 1 : 0))
                 .unit(asset.getUnit())
+                .retailUnit(getAssetRetailUnit(asset))
+                .wholesaleUnit(getAssetWholesaleUnit(asset))
+                .wholesaleToRetailFactor(getAssetWholesaleFactor(asset))
                 .quantityRequested(inquiry.getQuantityRequested())
+                .quantityRequestedInput(quantityRequestedInput)
+                .quantityRequestedUnit(quantityRequestedUnit)
+                .formattedQuantityRequested(isConsumable(asset) ? formatInquiryConsumableQuantity(asset, inquiry.getQuantityRequested()) : inquiry.getQuantityRequested() + " đơn vị")
+                .formattedRequestedInputQuantity(isConsumable(asset)
+                        ? formatInquiryConsumableRequestedInputQuantity(asset, quantityRequestedInput, quantityRequestedUnit)
+                        : inquiry.getQuantityRequested() + " đơn vị")
+                .formattedQuantityRequestedRetailOnly(isConsumable(asset)
+                        ? formatInquiryConsumableQuantityRetailOnly(asset, inquiry.getQuantityRequested())
+                        : inquiry.getQuantityRequested() + " đơn vị")
                 .destinationLocationId(inquiry.getDestinationLocation().getId())
                 .destinationLocationName(inquiry.getDestinationLocation().getRoomName())
                 .neededFrom(inquiry.getNeededFrom())
@@ -862,6 +860,71 @@ public class InquiryService {
                 .overdueReminderCount(inquiry.getOverdueReminderCount() == null ? 0 : inquiry.getOverdueReminderCount())
                 .unreadCount(viewer == null ? 0L : messageRepository.countUnread(inquiry.getId(), viewer.getId()))
                 .build();
+    }
+
+    private String normalizeInquiryQuantityUnit(String quantityUnit) {
+        if (!StringUtils.hasText(quantityUnit)) {
+            return "RETAIL";
+        }
+        String normalized = quantityUnit.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("RETAIL", "WHOLESALE").contains(normalized)) {
+            throw new CustomException("Đơn vị số lượng yêu cầu không hợp lệ.");
+        }
+        return normalized;
+    }
+
+    private int safeQuantity(Integer value) {
+        return value == null || value < 0 ? 0 : value;
+    }
+
+    private String getAssetRetailUnit(Asset asset) {
+        if (asset == null) return "đơn vị";
+        String retailUnit = StringUtils.hasText(asset.getRetailUnit()) ? asset.getRetailUnit().trim() : null;
+        if (StringUtils.hasText(retailUnit)) return retailUnit;
+        return StringUtils.hasText(asset.getUnit()) ? asset.getUnit().trim() : "đơn vị";
+    }
+
+    private String getAssetWholesaleUnit(Asset asset) {
+        if (asset == null) return "đơn vị";
+        String wholesaleUnit = StringUtils.hasText(asset.getWholesaleUnit()) ? asset.getWholesaleUnit().trim() : null;
+        if (StringUtils.hasText(wholesaleUnit)) return wholesaleUnit;
+        return getAssetRetailUnit(asset);
+    }
+
+    private int getAssetWholesaleFactor(Asset asset) {
+        if (asset == null || asset.getWholesaleToRetailFactor() == null || asset.getWholesaleToRetailFactor() <= 0) {
+            return 1;
+        }
+        return asset.getWholesaleToRetailFactor();
+    }
+
+    private String formatInquiryConsumableQuantity(Asset asset, Integer quantity) {
+        int safeQuantity = safeQuantity(quantity);
+        String retailUnit = getAssetRetailUnit(asset);
+        String wholesaleUnit = getAssetWholesaleUnit(asset);
+        int factor = getAssetWholesaleFactor(asset);
+        if (factor <= 1) {
+            return safeQuantity + " " + retailUnit;
+        }
+        int wholesaleQuantity = safeQuantity / factor;
+        int retailQuantity = safeQuantity % factor;
+        if (wholesaleQuantity > 0 && retailQuantity > 0) {
+            return wholesaleQuantity + " " + wholesaleUnit + " + " + retailQuantity + " " + retailUnit;
+        }
+        if (wholesaleQuantity > 0) {
+            return wholesaleQuantity + " " + wholesaleUnit;
+        }
+        return retailQuantity + " " + retailUnit;
+    }
+
+    private String formatInquiryConsumableQuantityRetailOnly(Asset asset, Integer quantity) {
+        return safeQuantity(quantity) + " " + getAssetRetailUnit(asset);
+    }
+
+    private String formatInquiryConsumableRequestedInputQuantity(Asset asset, Integer quantity, String quantityUnit) {
+        String normalizedUnit = normalizeInquiryQuantityUnit(quantityUnit);
+        String unitLabel = "WHOLESALE".equals(normalizedUnit) ? getAssetWholesaleUnit(asset) : getAssetRetailUnit(asset);
+        return safeQuantity(quantity) + " " + unitLabel;
     }
 
     private InquiryMessageResponse mapMessage(InquiryMessage message) {

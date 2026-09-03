@@ -198,6 +198,30 @@ export function validateLoginForm(form) {
   return errors
 }
 
+export function validateChangePasswordForm(form) {
+  const errors = {}
+  const currentPassword = String(form?.currentPassword || '')
+  const newPassword = String(form?.newPassword || '')
+  const confirmNewPassword = String(form?.confirmNewPassword || '')
+
+  if (currentPassword.length < 6 || currentPassword.length > 100 || isBlank(currentPassword)) {
+    errors.currentPassword = 'Mật khẩu hiện tại phải từ 6 đến 100 ký tự.'
+  }
+  if (newPassword.length < 6 || newPassword.length > 100 || isBlank(newPassword)) {
+    errors.newPassword = 'Mật khẩu mới phải từ 6 đến 100 ký tự.'
+  }
+  if (confirmNewPassword.length < 6 || confirmNewPassword.length > 100 || isBlank(confirmNewPassword)) {
+    errors.confirmNewPassword = 'Xác nhận mật khẩu mới phải từ 6 đến 100 ký tự.'
+  } else if (newPassword !== confirmNewPassword) {
+    errors.confirmNewPassword = 'Xác nhận mật khẩu mới không khớp.'
+  }
+  if (!errors.newPassword && !errors.currentPassword && currentPassword === newPassword) {
+    errors.newPassword = 'Mật khẩu mới phải khác mật khẩu hiện tại.'
+  }
+
+  return errors
+}
+
 export function validateMaintenanceTicketForm(form) {
   const errors = {}
   const assetQaCode = String(form?.assetQaCode || '').trim()

@@ -6,9 +6,9 @@ import {
   IconChevronRight as ChevronRight,
   IconChecklist as ClipboardCheck,
   IconHistory as History,
+  IconKey as Key,
   IconLogout as LogOut,
   IconMapPin as MapPin,
-  IconMessageCircle as MessageCircle,
   IconPhone as Phone,
   IconPackage as PackageSearch,
   IconReceiptTax as ReceiptTax,
@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import ThemeToggle from '../components/ThemeToggle'
 import UserTimeClock from '../components/UserTimeClock'
 import { useAuth } from '../context/AuthContext'
@@ -33,7 +34,6 @@ import { formatVietnamDateTime } from '../utils/datetime'
 
 const menuItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: BarChart3 },
-  { to: '/admin/inquiries', label: 'Yêu cầu & phê duyệt', icon: MessageCircle },
   { to: '/admin/inquiry-reports', label: 'Báo cáo yêu cầu', icon: BarChart3 },
   {
     id: 'assets-root',
@@ -191,6 +191,7 @@ function AdminLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({
     'assets-root': true,
     'fixed-assets': true,
@@ -469,6 +470,14 @@ function AdminLayout() {
             </div>
             <button
               type="button"
+              onClick={() => setShowChangePasswordModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Key size={16} />
+              Đổi mật khẩu
+            </button>
+            <button
+              type="button"
               onClick={logout}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -481,6 +490,7 @@ function AdminLayout() {
           <Outlet />
         </main>
       </div>
+      <ChangePasswordModal open={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} />
     </div>
   )
 }

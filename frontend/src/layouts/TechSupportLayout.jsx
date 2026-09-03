@@ -3,6 +3,7 @@ import {
   IconChecklist as ClipboardCheck,
   IconClipboardList as ClipboardList,
   IconHistory as History,
+  IconKey as Key,
   IconLogout as LogOut,
   IconSearch as Search,
 } from '@tabler/icons-react'
@@ -10,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import ThemeToggle from '../components/ThemeToggle'
 import UserTimeClock from '../components/UserTimeClock'
 import { useAuth } from '../context/AuthContext'
@@ -51,6 +53,7 @@ function TechSupportLayout() {
   const [contactTickets, setContactTickets] = useState([])
   const [chatKeyword, setChatKeyword] = useState('')
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -217,7 +220,7 @@ function TechSupportLayout() {
           })}
         </nav>
         <div className="mt-5 min-h-0 flex-1 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h3 className="mb-3 border-b border-slate-200 px-1 pb-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-100">Danh sách chat</h3>
+          <h3 className="mb-3 border-b border-slate-200 px-1 pb-3 text-sm font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-100">Ticket đang xử lý</h3>
           <div className="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 dark:border-slate-700 dark:bg-slate-800">
             <Search size={14} className="text-slate-500 dark:text-slate-400" />
             <input
@@ -349,6 +352,14 @@ function TechSupportLayout() {
             </div>
             <button
               type="button"
+              onClick={() => setShowChangePasswordModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Key size={16} />
+              Đổi mật khẩu
+            </button>
+            <button
+              type="button"
               onClick={handleLogout}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -361,6 +372,7 @@ function TechSupportLayout() {
           <Outlet />
         </main>
       </div>
+      <ChangePasswordModal open={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} />
     </div>
   )
 }

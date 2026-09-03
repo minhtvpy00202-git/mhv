@@ -56,6 +56,8 @@ import ConsumableDisposalTab from "./consumables/ConsumableDisposalTab";
 import ConsumableRequestsTab from "./consumables/ConsumableRequestsTab";
 import {
   formatConsumableQuantityText,
+  formatConsumableRequestedInputText,
+  getConsumableUnitBreakdownTooltip,
   getConsumableRetailUnit,
 } from "./consumables/consumableDisplayUtils";
 import useLocationOverview, {
@@ -120,7 +122,7 @@ const CONSUMABLE_WORKSPACE_META = {
   ROOMS: {
     title: "Theo dõi theo phòng",
     description:
-      "Theo dõi lượng vật tư đã cấp phát cho từng phòng, đồng thời xử lý yêu cầu sử dụng và điều chỉnh tồn thực tế.",
+      "Theo dõi lượng vật tư đã cấp phát cho từng phòng, cấp phát trực tiếp từ kho và điều chỉnh tồn thực tế.",
     allowInventoryActions: false,
   },
   DISPOSAL: {
@@ -130,9 +132,9 @@ const CONSUMABLE_WORKSPACE_META = {
     allowInventoryActions: false,
   },
   REQUESTS: {
-    title: "Phiếu chờ duyệt",
+    title: "Yêu cầu cấp phát / sử dụng",
     description:
-      "Duyệt hoặc từ chối các yêu cầu cấp phát, sử dụng và tiêu huỷ vật tư đang chờ xử lý.",
+      "Admin rà soát và xử lý các yêu cầu cấp phát, sử dụng và tiêu huỷ vật tư đang chờ quyết định.",
     allowInventoryActions: false,
   },
 };
@@ -704,6 +706,7 @@ function AssetManagement({
     assetQaCode: "",
     sourceWarehouseLocationId: "",
     quantityRequested: "",
+    quantityRequestedUnit: "RETAIL",
     reason: "",
   });
   const [pendingConsumableRequests, setPendingConsumableRequests] = useState(
@@ -2417,6 +2420,8 @@ function AssetManagement({
         detail?.homeLocationId || initialWarehouseOptions[0]?.id || "",
       ),
       quantityRequested: "",
+      quantityRequestedUnit:
+        Number(detail?.wholesaleToRetailFactor ?? 1) > 1 ? "WHOLESALE" : "RETAIL",
       reason: "",
     });
     setShowConsumableRequestModal(true);
@@ -2566,6 +2571,18 @@ function AssetManagement({
     const assetQaCode =
       consumableRequestForm.assetQaCode || selectedRequestAssetQaCode;
     const quantityRequested = Number(consumableRequestForm.quantityRequested);
+    const quantityRequestedUnit = String(
+      consumableRequestForm.quantityRequestedUnit || "RETAIL",
+    )
+      .trim()
+      .toUpperCase();
+    const wholesaleFactor = Number(
+      selectedRequestAssetDetail?.wholesaleToRetailFactor ?? 1,
+    );
+    const quantityRequestedRetail =
+      quantityRequestedUnit === "WHOLESALE" && wholesaleFactor > 1
+        ? quantityRequested * wholesaleFactor
+        : quantityRequested;
     if (!assetQaCode) {
       toast.error("Vui lòng chọn vật tư cần cấp phát.");
       return;
@@ -2574,12 +2591,42 @@ function AssetManagement({
       toast.error("Số lượng yêu cầu phải là số nguyên lớn hơn 0.");
       return;
     }
+    if (
+      !["RETAIL", "WHOLESALE"].includes(quantityRequestedUnit) ||
+      (quantityRequestedUnit === "WHOLESALE" && wholesaleFactor <= 1)
+    ) {
+      toast.error("Đơn vị yêu cầu không hợp lệ.");
+      return;
+    }
     if (!consumableRequestForm.reason.trim()) {
       toast.error("Vui lòng nhập lý do cần cấp phát.");
       return;
     }
     if (!consumableRequestForm.sourceWarehouseLocationId) {
       toast.error("Vui lòng chọn kho xuất cho phiếu yêu cầu.");
+      return;
+    }
+    const selectedWarehouseOption = consumableRequestWarehouseOptions.find(
+      (location) =>
+        String(location.id) ===
+        String(consumableRequestForm.sourceWarehouseLocationId),
+    );
+    const quantityRemaining = Number(
+      selectedWarehouseOption?.quantityRemaining ?? 0,
+    );
+    if (
+      Number.isFinite(quantityRemaining) &&
+      quantityRemaining < quantityRequestedRetail
+    ) {
+      toast.error(
+        `Tồn kho không đủ. Hiện còn ${formatConsumableQuantityText(
+          { ...selectedRequestAssetDetail, quantityRemaining },
+          {
+            quantityField: "quantityRemaining",
+            formattedField: "formattedQuantityRemaining",
+          },
+        )} tại kho đã chọn.`,
+      );
       return;
     }
     setConsumableRequestSubmitting(true);
@@ -2592,6 +2639,7 @@ function AssetManagement({
             consumableRequestForm.sourceWarehouseLocationId,
           ),
           quantityRequested,
+          quantityRequestedUnit,
           reason: consumableRequestForm.reason.trim(),
         },
       );
@@ -3809,6 +3857,7 @@ function AssetManagement({
                                 }
                               >
                                 <span
+                                  title={getConsumableUnitBreakdownTooltip(asset)}
                                   className={`font-semibold tabular-nums ${stockTone === "red" ? "text-red-600 dark:text-red-400" : stockTone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}`}
                                 >
                                   {formattedQty}
@@ -3991,8 +4040,7 @@ function AssetManagement({
               roomOverview={roomOverview}
               roomOverviewLoading={roomOverviewLoading}
               isAdmin={isAdmin}
-              canIssueFromWarehouse={!isConsumableManager}
-              onOpenConsumableRequestModal={handleOpenConsumableRequestModal}
+                canIssueFromWarehouse={isAdmin || isConsumableManager}
               onOpenIssueModalFromRoomStock={handleOpenIssueModalFromRoomStock}
               onOpenStockAdjustModal={handleOpenStockAdjustModal}
               onOpenConsumableDecisionModal={handleOpenConsumableDecisionModal}
@@ -4891,11 +4939,11 @@ function AssetManagement({
                         </div>
                       </div>
                     </div>
-                    <div>
+                      <div className="md:col-span-2">
                       <label className="mb-1 block text-sm font-medium text-slate-700">
                         Số lượng nhập kho ban đầu
                       </label>
-                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_180px]">
                         <input
                           type="number"
                           min="0"
@@ -4911,7 +4959,7 @@ function AssetManagement({
                             }));
                           }}
                           disabled={isEditing}
-                          className={`${getFieldClass(Boolean(formErrors.quantityOnHand))} ${isEditing ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
+                            className={`min-w-[220px] ${getFieldClass(Boolean(formErrors.quantityOnHand))} ${isEditing ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
                           placeholder={`Ví dụ: 10 ${getConsumableQuantityInputUnit(form, form.quantityOnHandUnit)}`}
                         />
                         <select
@@ -4959,11 +5007,11 @@ function AssetManagement({
                         </p>
                       )}
                     </div>
-                    <div>
+                      <div className="md:col-span-2">
                       <label className="mb-1 block text-sm font-medium text-slate-700">
                         Ngưỡng cảnh báo tồn
                       </label>
-                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_180px]">
                         <input
                           type="number"
                           min="0"
@@ -4978,9 +5026,9 @@ function AssetManagement({
                               minimumStock: "",
                             }));
                           }}
-                          className={getFieldClass(
-                            Boolean(formErrors.minimumStock),
-                          )}
+                            className={`min-w-[220px] ${getFieldClass(
+                              Boolean(formErrors.minimumStock),
+                            )}`}
                           placeholder={`Ví dụ: 20 ${getConsumableQuantityInputUnit(form, form.minimumStockUnit)}`}
                         />
                         <select
@@ -5059,11 +5107,7 @@ function AssetManagement({
                             }}
                             className="h-4 w-4 rounded border-slate-300 text-fptOrange focus:ring-fptOrange"
                           />
-                          <span>
-                            {form.expiryTrackingEnabled
-                              ? "Có quản lý hạn dùng"
-                              : "Không quản lý hạn dùng"}
-                          </span>
+                            <span>Có hạn sử dụng</span>
                         </label>
                       </div>
                       {form.expiryTrackingEnabled ? (
@@ -5955,6 +5999,10 @@ function AssetManagement({
                           nextWarehouseOptions[0]?.id ||
                           "",
                       ),
+                        quantityRequestedUnit:
+                          Number(detail?.wholesaleToRetailFactor ?? 1) > 1
+                            ? "WHOLESALE"
+                            : "RETAIL",
                     }));
                   }}
                   options={consumableRequestAssetOptions}
@@ -5997,19 +6045,70 @@ function AssetManagement({
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Số lượng cần cấp phát
                 </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={consumableRequestForm.quantityRequested}
-                  onChange={(e) =>
-                    setConsumableRequestForm((prev) => ({
-                      ...prev,
-                      quantityRequested: e.target.value,
-                    }))
-                  }
-                  className={getFieldClass(false)}
-                  placeholder="Ví dụ: 20"
-                />
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px]">
+                    <input
+                      type="number"
+                      min="1"
+                      value={consumableRequestForm.quantityRequested}
+                      onChange={(e) =>
+                        setConsumableRequestForm((prev) => ({
+                          ...prev,
+                          quantityRequested: e.target.value,
+                        }))
+                      }
+                      className={getFieldClass(false)}
+                      placeholder="Ví dụ: 20"
+                    />
+                    <select
+                      value={consumableRequestForm.quantityRequestedUnit}
+                      onChange={(e) =>
+                        setConsumableRequestForm((prev) => ({
+                          ...prev,
+                          quantityRequestedUnit: e.target.value,
+                        }))
+                      }
+                      className={getFieldClass(false)}
+                    >
+                      <option value="RETAIL">
+                        {selectedRequestAssetDetail?.retailUnit ||
+                          selectedRequestAssetDetail?.unit ||
+                          "đơn vị lẻ"}
+                      </option>
+                      {Number(
+                        selectedRequestAssetDetail?.wholesaleToRetailFactor ?? 1,
+                      ) > 1 && (
+                        <option value="WHOLESALE">
+                          {selectedRequestAssetDetail?.wholesaleUnit ||
+                            selectedRequestAssetDetail?.retailUnit ||
+                            selectedRequestAssetDetail?.unit ||
+                            "đơn vị sỉ"}
+                        </option>
+                      )}
+                    </select>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Tồn kho tại kho đã chọn:{" "}
+                    {(() => {
+                      const selectedWarehouseOption =
+                        consumableRequestWarehouseOptions.find(
+                          (location) =>
+                            String(location.id) ===
+                            String(
+                              consumableRequestForm.sourceWarehouseLocationId,
+                            ),
+                        );
+                      if (!selectedWarehouseOption) {
+                        return "Chưa chọn kho xuất";
+                      }
+                      return formatConsumableQuantityText(
+                        { ...selectedRequestAssetDetail, ...selectedWarehouseOption },
+                        {
+                          quantityField: "quantityRemaining",
+                          formattedField: "formattedQuantityRemaining",
+                        },
+                      );
+                    })()}
+                  </p>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -6294,11 +6393,15 @@ function AssetManagement({
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
                 <p>
                   Số lượng yêu cầu:{" "}
-                  {selectedConsumableRequest.formattedQuantityRequested ||
-                    formatConsumableQuantityText(selectedConsumableRequest, {
-                      quantityField: "quantityRequested",
-                      formattedField: "formattedQuantityRequested",
-                    })}
+                    {formatConsumableRequestedInputText(selectedConsumableRequest)}
+                  </p>
+                  <p>
+                    Quy đổi tồn kho:{" "}
+                    {selectedConsumableRequest.formattedQuantityRequested ||
+                      formatConsumableQuantityText(selectedConsumableRequest, {
+                        quantityField: "quantityRequested",
+                        formattedField: "formattedQuantityRequested",
+                      })}
                 </p>
                 <p>
                   Kho xuất đề nghị:{" "}

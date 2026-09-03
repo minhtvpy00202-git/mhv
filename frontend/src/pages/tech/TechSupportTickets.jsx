@@ -4,6 +4,7 @@ import {
   IconHistory as History,
   IconMessageCircle as MessageCircle,
   IconPlayerPlay as Play,
+  IconStar as Star,
 } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -28,11 +29,12 @@ const techTicketColumnOptions = [
   { key: 'description', label: 'Mô tả' },
   { key: 'priority', label: 'Ưu tiên' },
   { key: 'status', label: 'Trạng thái' },
+  { key: 'review', label: 'Đánh giá' },
   { key: 'image', label: 'Ảnh lỗi' },
   { key: 'dueDate', label: 'Hạn xử lý' },
   { key: 'actions', label: 'Thao tác' },
 ]
-const defaultTechTicketVisibleColumnKeys = ['ticket', 'assetQaCode', 'assetName', 'priority', 'status', 'dueDate', 'actions']
+const defaultTechTicketVisibleColumnKeys = ['ticket', 'assetQaCode', 'assetName', 'priority', 'status', 'review', 'dueDate', 'actions']
 
 function toVietnamesePriority(priority) {
   if (priority === 'HIGH') return 'Cao'
@@ -78,6 +80,15 @@ function TechSupportTickets() {
   const [timelineTicket, setTimelineTicket] = useState(null)
   const [kpis, setKpis] = useState(null)
   const [kpiLoading, setKpiLoading] = useState(false)
+  const [reviewModal, setReviewModal] = useState({
+    open: false,
+    loading: false,
+    ticketId: null,
+    score: null,
+    comment: '',
+    updatedAt: '',
+    reviewerName: '',
+  })
   const {
     visibleColumns,
     activeColumns,
@@ -156,9 +167,47 @@ function TechSupportTickets() {
     { key: 'ticket', label: 'Ticket', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => `#${ticket.id}` },
     { key: 'assetQaCode', label: 'Mã thiết bị', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetQaCode },
     { key: 'assetName', label: 'Tên TB', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.assetName || '-' },
-    { key: 'description', label: 'Mô tả', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => ticket.description },
+    {
+      key: 'description',
+      label: 'Mô tả',
+      headClassName: 'px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (ticket) => {
+        const description = ticket.description || '-'
+        const shortDescription = description.length > 20 ? `${description.slice(0, 20)}...` : description
+        return (
+          <span className="group relative inline-flex max-w-[220px] cursor-help">
+            <span>{shortDescription}</span>
+            {description !== '-' ? (
+              <span className="pointer-events-none absolute -top-9 left-1/2 z-20 w-max max-w-xs -translate-x-1/2 whitespace-normal rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-75 group-hover:opacity-100 dark:bg-slate-100 dark:text-slate-900">
+                {description}
+              </span>
+            ) : null}
+          </span>
+        )
+      },
+    },
     { key: 'priority', label: 'Ưu tiên', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => toVietnamesePriority(ticket.priority) },
     { key: 'status', label: 'Trạng thái', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => { const meta = getTicketStatusMeta(ticket.status); return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.badgeClassName}`}>{meta.label}</span> } },
+    {
+      key: 'review',
+      label: 'Đánh giá',
+      headClassName: 'px-3 py-2 text-left',
+      cellClassName: 'px-3 py-2',
+      render: (ticket) => (
+        ticket.satisfactionScore
+          ? (
+            <button
+              type="button"
+              onClick={() => handleOpenReview(ticket)}
+              className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-100"
+            >
+              Xem đánh giá
+            </button>
+            )
+          : <span className="text-sm text-slate-500">Chưa có đánh giá</span>
+      ),
+    },
     { key: 'image', label: 'Ảnh lỗi', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => <ActionIconButton icon={Detail} label="Xem ảnh lỗi" onClick={() => { if (!ticket.imageUrl) { toast.info('Ticket này chưa có ảnh lỗi.'); return } setPreviewImageUrl(ticket.imageUrl) }} /> },
     { key: 'dueDate', label: 'Hạn xử lý', headClassName: 'px-3 py-2 text-left', cellClassName: 'px-3 py-2', render: (ticket) => formatVietnamDateTime(ticket.dueDate) },
     {
@@ -183,6 +232,36 @@ function TechSupportTickets() {
     () => tableColumns.filter((column) => activeColumns.some((activeColumn) => activeColumn.key === column.key)),
     [activeColumns, tableColumns],
   )
+
+  const handleOpenReview = async (ticket) => {
+    if (!ticket?.id) return
+    setReviewModal({
+      open: true,
+      loading: true,
+      ticketId: ticket.id,
+      score: ticket.satisfactionScore ?? null,
+      comment: ticket.satisfactionComment || '',
+      updatedAt: ticket.resolvedAt || '',
+        reviewerName: ticket.reporterName || '',
+    })
+    try {
+      const response = await axiosClient.get(`/api/tickets/${ticket.id}`)
+      const detail = response.data || {}
+      setReviewModal({
+        open: true,
+        loading: false,
+        ticketId: ticket.id,
+        score: detail.satisfactionScore ?? ticket.satisfactionScore ?? null,
+        comment: detail.satisfactionComment || ticket.satisfactionComment || '',
+        updatedAt: detail.updatedAt || detail.resolvedAt || ticket.resolvedAt || '',
+          reviewerName: detail.reporterName || ticket.reporterName || '',
+      })
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không tải được chi tiết đánh giá.'
+      toast.error(message)
+      setReviewModal((prev) => ({ ...prev, loading: false }))
+    }
+  }
 
   const handleTakeTicket = async (ticketId) => {
     setSubmittingId(ticketId)
@@ -359,6 +438,67 @@ function TechSupportTickets() {
         onClose={() => setResolutionTicketId(null)}
         onSubmit={handleResolve}
       />
+      {reviewModal.open && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Đánh giá người dùng</h3>
+                <p className="mt-1 text-sm text-slate-500">Ticket #{reviewModal.ticketId}</p>
+              </div>
+              <button
+                type="button"
+                  onClick={() => setReviewModal({ open: false, loading: false, ticketId: null, score: null, comment: '', updatedAt: '', reviewerName: '' })}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Đóng
+              </button>
+            </div>
+
+            {reviewModal.loading ? (
+              <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                Đang tải chi tiết đánh giá...
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-slate-500">Điểm đánh giá</p>
+                    {reviewModal.score ? (
+                      <div className="mt-2 flex items-center gap-3">
+                        <p className="text-base font-normal text-slate-700">{reviewModal.score}</p>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <Star
+                              key={value}
+                              size={22}
+                              className={value <= Number(reviewModal.score) ? 'fill-current text-amber-400' : 'text-slate-300'}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-lg font-semibold text-slate-900">Chưa có đánh giá</p>
+                    )}
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-slate-500">Người đánh giá</p>
+                    <p className="mt-1 text-sm text-slate-700">{reviewModal.reviewerName || 'Chưa rõ người đánh giá'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-slate-500">Nhận xét</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {reviewModal.comment || 'Người dùng chưa để lại nhận xét.'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-slate-500">Cập nhật gần nhất</p>
+                  <p className="mt-1 text-sm text-slate-700">{formatVietnamDateTime(reviewModal.updatedAt, 'Chưa rõ')}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

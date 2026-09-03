@@ -138,7 +138,7 @@ function TechSupportInventoryAuditHistory() {
 
   return (
       <div className="space-y-4">
-        <section className="rounded-3xl bg-gradient-to-br from-indigo-700 via-blue-700 to-cyan-600 p-4 text-white shadow-sm md:p-5">
+        <section className="rounded-3xl bg-[#F27025] p-4 text-white shadow-sm md:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-white/80">Lịch sử thực hiện của kỹ thuật viên</p>
@@ -175,7 +175,7 @@ function TechSupportInventoryAuditHistory() {
                   onClick={() => setMobilePanel(panel.id)}
                   className={`min-h-[5.75rem] rounded-2xl border px-3 py-3 text-center shadow-sm transition ${
                     active
-                      ? 'border-blue-600 bg-blue-600 text-white'
+                      ? 'border-[#F27025] bg-[#F27025] text-white'
                       : 'border-slate-200 bg-white text-slate-700'
                   }`}
                 >
@@ -253,7 +253,7 @@ function TechSupportInventoryAuditHistory() {
                         <button
                           type="button"
                           onClick={() => openItemsModal(audit.id, 'scanned')}
-                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+                          className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-[#F27025]"
                         >
                           Xem đã quét
                         </button>
@@ -276,7 +276,7 @@ function TechSupportInventoryAuditHistory() {
         </section>
 
         <section className="hidden gap-3 md:grid md:grid-cols-3">
-          <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+          <div className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-500">Tổng phiên đã tham gia</p>
             <p className="mt-2 text-2xl font-bold text-slate-800">{auditHistory.length}</p>
             <p className="mt-1 text-xs text-slate-500">Bao gồm cả phiên đang mở và đã hoàn tất.</p>
@@ -299,7 +299,7 @@ function TechSupportInventoryAuditHistory() {
               <h3 className="text-lg font-semibold text-slate-800">Danh sách phiên kiểm kê</h3>
               <p className="mt-1 text-sm text-slate-500">Xem nhanh phòng kiểm kê, thời điểm thực hiện và kết quả từng phiên.</p>
             </div>
-            <ClipboardList className="text-blue-600" size={20} />
+            <ClipboardList className="text-[#F27025]" size={20} />
           </div>
 
           <div className="space-y-3">

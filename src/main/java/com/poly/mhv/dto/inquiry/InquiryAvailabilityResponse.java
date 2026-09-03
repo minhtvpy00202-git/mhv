@@ -24,4 +24,9 @@ public class InquiryAvailabilityResponse {
     private Boolean available;
     private Integer availableQuantity;
     private String unit;
+    private String retailUnit;
+    private String wholesaleUnit;
+    private Integer wholesaleToRetailFactor;
+    private String formattedAvailableQuantity;
+    private String formattedAvailableQuantityRetailOnly;
 }

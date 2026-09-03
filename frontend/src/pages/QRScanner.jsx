@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
-import { useNavigate, useSearchParams } from 'react-router-dom'
 import axiosClient from '../api/axiosClient'
 import SearchableSelect from '../components/ui/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
@@ -10,9 +9,6 @@ import { parseSpecsToEntries } from '../utils/assetSpecs'
 const scannerElementId = 'qa-scanner'
 
 function QRScanner() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const inquiryMode = searchParams.get('mode') === 'inquiry'
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
@@ -38,7 +34,7 @@ function QRScanner() {
     } else {
       void stopScanner()
     }
-    fetchLocations()
+    void fetchLocations()
     const handleVisibilityChange = () => {
       if (document.hidden) {
         void stopScanner()
@@ -63,8 +59,8 @@ function QRScanner() {
 
   async function fetchLocations() {
     try {
-      const response = await axiosClient.get('/api/locations')
-      setLocations(response.data || [])
+      const response = await axiosClient.get('/api/inquiries/options')
+      setLocations(response.data?.locations || [])
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách phòng.'
       toast.error(message)
@@ -74,13 +70,14 @@ function QRScanner() {
   const fetchAssetInfo = async (qaCode) => {
     try {
       const response = await axiosClient.get(`/api/assets/${qaCode}`)
-      setScannedAssetName(response.data?.name || '')
-      setScannedLocationId(response.data?.locationId || null)
-      setScannedHomeLocationId(response.data?.homeLocationId || null)
-      setScannedLocationName(response.data?.locationName || '')
-      setScannedHomeLocationName(response.data?.homeLocationName || '')
-      setScannedSpecs(parseSpecsToEntries(response.data?.specs))
-      return true
+      const asset = response.data || {}
+      setScannedAssetName(asset.name || '')
+      setScannedLocationId(asset.locationId || null)
+      setScannedHomeLocationId(asset.homeLocationId || null)
+      setScannedLocationName(asset.locationName || '')
+      setScannedHomeLocationName(asset.homeLocationName || '')
+      setScannedSpecs(parseSpecsToEntries(asset.specs))
+      return asset
     } catch {
       setScannedAssetName('')
       setScannedLocationId(null)
@@ -89,7 +86,7 @@ function QRScanner() {
       setScannedHomeLocationName('')
       setScannedSpecs([])
       toast.error('Mã tài sản không tồn tại')
-      return false
+      return null
     }
   }
 
@@ -136,15 +133,10 @@ function QRScanner() {
     if (!normalizedQaCode) return false
     setScannedQaCode(normalizedQaCode)
     setManualQaCode(normalizedQaCode)
-    const exists = await fetchAssetInfo(normalizedQaCode)
-    if (!exists) {
+    const asset = await fetchAssetInfo(normalizedQaCode)
+    if (!asset) {
       setScannedQaCode('')
       return false
-    }
-    if (inquiryMode) {
-      keepScannerAliveRef.current = false
-      navigate(`/mobile/inquiries?qaCode=${encodeURIComponent(normalizedQaCode)}`, { replace: true })
-      return true
     }
     setShowActionModal(true)
     return true
@@ -252,13 +244,11 @@ function QRScanner() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-slate-800">{inquiryMode ? 'Quét QR để tạo yêu cầu' : 'Quét mã QR thiết bị'}</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Quét QR để mượn hoặc trả thiết bị</h2>
         <div id={scannerElementId} className="overflow-hidden rounded-xl border border-slate-200" />
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-800">Hoặc nhập tay mã QA</p>
-          <p className="mt-1 text-xs text-slate-500">
-            Dùng khi mã QR bị mờ, hỏng hoặc camera trên thiết bị không hoạt động.
-          </p>
+          <p className="mt-1 text-xs text-slate-500">Dùng khi mã QR bị mờ, hỏng hoặc camera trên thiết bị không hoạt động.</p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
@@ -313,11 +303,10 @@ function QRScanner() {
                   placeholder="Gõ để tìm phòng, ví dụ: Hành lang 1"
                   emptyText="Không có phòng phù hợp."
                   getOptionValue={(location) => location.id}
-                  getOptionLabel={(location) => location.roomName || `Phòng #${location.id}`}
-                  getOptionSearchText={(location) => `${location.roomName || ''} ${location.description || ''}`}
+                  getOptionLabel={(location) => location.roomName || location.name || `Phòng #${location.id}`}
+                  getOptionSearchText={(location) => `${location.roomName || location.name || ''} ${location.description || ''}`}
                   dropdownZIndex={1100}
                 />
-                <p className="text-xs text-slate-500">Danh sách sẽ tự nổi lên và đổi hướng hiển thị để không che khuất vùng thao tác.</p>
               </div>
             )}
             </div>
@@ -330,7 +319,7 @@ function QRScanner() {
                   disabled={loadingAction}
                   className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
                 >
-                  Mượn thiết bị
+                  Mượn
                 </button>
               )}
               {canCheckin && (

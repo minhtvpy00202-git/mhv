@@ -2,6 +2,7 @@ import {
   IconBell as Bell,
   IconClipboardText as ClipboardText,
   IconHome as Home,
+  IconKey as Key,
   IconLogout as LogOut,
   IconMenu2 as Menu2,
   IconMessageCircle as MessageCircle,
@@ -13,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import ThemeToggle from '../components/ThemeToggle'
 import UserTimeClock from '../components/UserTimeClock'
 import { useBranding } from '../context/BrandingContext'
@@ -21,8 +23,8 @@ import { formatVietnamDateTime } from '../utils/datetime'
 
 const navItems = [
   { to: '/mobile/home', label: 'Home', icon: Home },
-  { to: '/mobile/scan', label: 'Quét QR', icon: QrCode },
-  { to: '/mobile/inquiries', label: 'Yêu cầu', icon: ClipboardText },
+  { to: '/mobile/scan', label: 'Mượn/Trả', icon: QrCode },
+  { to: '/mobile/inquiries', label: 'Cấp phát vật tư', icon: ClipboardText },
   { to: '/mobile/chats', label: 'Chat', icon: MessageCircle },
   { to: '/mobile/maintenance', label: 'Báo hỏng', icon: Wrench },
 ]
@@ -40,6 +42,7 @@ function MobileLayout() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [showActionMenu, setShowActionMenu] = useState(false)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
   const actionMenuRef = useRef(null)
 
@@ -345,6 +348,18 @@ function MobileLayout() {
                 )}
                 <button
                   type="button"
+                  onClick={() => {
+                    setShowActionMenu(false)
+                    setShowNotificationDropdown(false)
+                    setShowChangePasswordModal(true)
+                  }}
+                  className="mt-2 inline-flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  <Key size={16} />
+                  Đổi mật khẩu
+                </button>
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="mt-2 inline-flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                 >
@@ -372,6 +387,7 @@ function MobileLayout() {
         )}
         <Outlet />
       </main>
+      <ChangePasswordModal open={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} />
 
       <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         {navItems.map(({ to, label, icon: Icon }) => (
@@ -385,7 +401,7 @@ function MobileLayout() {
             }
           >
             <Icon size={18} />
-            <span>{label}</span>
+            <span className="px-1 text-center leading-tight">{label}</span>
           </NavLink>
         ))}
       </nav>

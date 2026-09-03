@@ -23,7 +23,7 @@ const MaintenanceReport = lazy(() => import('./pages/MaintenanceReport'))
 const InventoryAuditScanner = lazy(() => import('./pages/InventoryAuditScanner'))
 const MobileChats = lazy(() => import('./pages/MobileChats'))
 const MobileChatDetail = lazy(() => import('./pages/MobileChatDetail'))
-const MobileInquiries = lazy(() => import('./pages/MobileInquiries'))
+const MobileConsumableRequests = lazy(() => import('./pages/MobileConsumableRequests'))
 const InquiryInbox = lazy(() => import('./pages/InquiryInbox'))
 const InquiryDetail = lazy(() => import('./pages/InquiryDetail'))
 const InquiryReports = lazy(() => import('./pages/InquiryReports'))
@@ -150,7 +150,8 @@ function App() {
           <Route path="/mobile/scan" element={withSuspense(<QRScanner />)} />
           <Route path="/mobile/chats" element={withSuspense(<MobileChats />)} />
           <Route path="/mobile/chats/:ticketId" element={withSuspense(<MobileChatDetail />)} />
-          <Route path="/mobile/inquiries" element={withSuspense(<MobileInquiries />)} />
+          <Route path="/mobile/inquiries" element={<Navigate to="/mobile/inquiries/consumables" replace />} />
+          <Route path="/mobile/inquiries/consumables" element={withSuspense(<MobileConsumableRequests />)} />
           <Route path="/mobile/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
           <Route path="/mobile/maintenance" element={withSuspense(<MaintenanceReport />)} />
           <Route path="/mobile/tickets/:ticketId" element={<TicketDetail />} />
@@ -199,7 +200,7 @@ function App() {
           )}
         >
           <Route path="/admin/dashboard" element={withSuspense(<Dashboard />)} />
-          <Route path="/admin/inquiries" element={withSuspense(<InquiryInbox />)} />
+          <Route path="/admin/inquiries" element={<Navigate to="/admin/assets/consumables/requests" replace />} />
           <Route path="/admin/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
           <Route path="/admin/inquiry-reports" element={withSuspense(<InquiryReports />)} />
           <Route path="/admin/inquiry-settings" element={withSuspense(<InquiryWorkflowSettings />)} />

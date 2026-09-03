@@ -30,6 +30,7 @@ function createDefaultConfirmDialog() {
     tone: 'danger',
     busy: false,
     onConfirm: null,
+    onCancel: null,
   }
 }
 
@@ -553,6 +554,7 @@ function TechSupportTypeManagement() {
         tone={confirmDialog.tone}
         busy={confirmDialog.busy}
         onConfirm={handleConfirmDialogAccept}
+        onCancel={confirmDialog.onCancel}
         onClose={closeConfirmDialog}
       />
     </div>

@@ -2,6 +2,7 @@ package com.poly.mhv.service;
 
 import com.poly.mhv.dto.user.UserAdminRequest;
 import com.poly.mhv.dto.user.UserAdminResponse;
+import com.poly.mhv.dto.user.UserChangePasswordRequest;
 import com.poly.mhv.dto.user.UserOptionResponse;
 import com.poly.mhv.dto.user.UserPageResponse;
 import com.poly.mhv.entity.AppUser;
@@ -206,6 +207,44 @@ public class UserService {
                 )
         );
         return mapToResponse(saved);
+    }
+
+    @Transactional
+    // Cho phép người dùng đã đăng nhập tự đổi mật khẩu sau khi xác thực lại mật khẩu hiện tại.
+    public void changeMyPassword(UserChangePasswordRequest request) {
+        if (request == null) {
+            throw new CustomException("Dữ liệu đổi mật khẩu không được để trống.");
+        }
+        if (!StringUtils.hasText(request.getCurrentPassword())) {
+            throw new CustomException("Mật khẩu hiện tại là bắt buộc.");
+        }
+        if (!StringUtils.hasText(request.getNewPassword())) {
+            throw new CustomException("Mật khẩu mới là bắt buộc.");
+        }
+        if (!StringUtils.hasText(request.getConfirmNewPassword())) {
+            throw new CustomException("Xác nhận mật khẩu mới là bắt buộc.");
+        }
+        String newPassword = request.getNewPassword();
+        if (newPassword.length() < 6 || newPassword.length() > 100) {
+            throw new CustomException("Mật khẩu mới phải từ 6 đến 100 ký tự.");
+        }
+        if (!newPassword.equals(request.getConfirmNewPassword())) {
+            throw new CustomException("Xác nhận mật khẩu mới không khớp.");
+        }
+
+        AppUser actor = currentUserProvider.getCurrentUser();
+        AppUser appUser = appUserRepository.findById(actor.getId())
+                .orElseThrow(() -> new CustomException("Không tìm thấy người dùng đăng nhập."));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), appUser.getPassword())) {
+            throw new CustomException("Mật khẩu hiện tại không đúng.");
+        }
+        if (passwordEncoder.matches(newPassword, appUser.getPassword())) {
+            throw new CustomException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+        }
+
+        appUser.setPassword(passwordEncoder.encode(newPassword));
+        appUserRepository.save(appUser);
     }
 
     @Transactional

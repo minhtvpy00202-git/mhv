@@ -3,6 +3,7 @@ package com.poly.mhv.controller;
 import com.poly.mhv.dto.user.UserOptionResponse;
 import com.poly.mhv.dto.user.UserAdminRequest;
 import com.poly.mhv.dto.user.UserAdminResponse;
+import com.poly.mhv.dto.user.UserChangePasswordRequest;
 import com.poly.mhv.dto.user.UserPageResponse;
 import com.poly.mhv.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
@@ -92,6 +94,18 @@ public class UserController {
     // Tạo tài khoản mới từ dữ liệu quản trị viên nhập trên giao diện.
     public ResponseEntity<UserAdminResponse> createUser(@RequestBody UserAdminRequest request) {
         return ResponseEntity.ok(userService.createUser(request));
+    }
+
+    @PutMapping("/me/password")
+    @Operation(summary = "Tự đổi mật khẩu", description = "Cho phép người dùng đã đăng nhập tự thay đổi mật khẩu của chính mình.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Đổi mật khẩu thành công"),
+            @ApiResponse(responseCode = "400", description = "Mật khẩu hiện tại không đúng hoặc mật khẩu mới không hợp lệ"),
+            @ApiResponse(responseCode = "401", description = "Chưa xác thực")
+    })
+    public ResponseEntity<Map<String, String>> changeMyPassword(@Valid @RequestBody UserChangePasswordRequest request) {
+        userService.changeMyPassword(request);
+        return ResponseEntity.ok(Map.of("message", "Đổi mật khẩu thành công."));
     }
 
     @PutMapping("/{id}")

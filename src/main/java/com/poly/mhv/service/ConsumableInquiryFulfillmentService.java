@@ -215,6 +215,7 @@ public class ConsumableInquiryFulfillmentService {
                                     : inquiry.getAsset().getQaCode())
                             .sourceWarehouseLocationId(fulfillment.getSourceWarehouseLocation().getId())
                             .quantityRequested(remaining)
+                            .quantityRequestedUnit("RETAIL")
                             .reason("Phần còn lại của yêu cầu hội thoại #" + inquiry.getId())
                             .build(),
                     inquiry.getRequester());

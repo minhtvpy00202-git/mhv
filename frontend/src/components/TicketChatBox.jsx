@@ -36,6 +36,56 @@ function resolveMediaUrl(url) {
   return resolveBackendMediaUrl(url)
 }
 
+function useChatMediaSource(src, retrySeed = 0) {
+  const resolvedUrl = useMemo(() => resolveMediaUrl(src), [src])
+  const requiresAuthenticatedFetch = resolvedUrl.includes('/api/media/uploads/')
+  const [state, setState] = useState({ source: '', objectUrl: '', failed: false })
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+
+    if (!resolvedUrl) {
+      setState({ source: '', objectUrl: '', failed: false })
+      return () => {}
+    }
+
+    if (!requiresAuthenticatedFetch) {
+      setState({ source: resolvedUrl, objectUrl: '', failed: false })
+      return () => {}
+    }
+
+    setState((previous) => ({
+      source: resolvedUrl,
+      objectUrl: previous.source === resolvedUrl && retrySeed === 0 ? previous.objectUrl : '',
+      failed: false,
+    }))
+
+    axiosClient.get(resolvedUrl, { responseType: 'blob' })
+      .then((response) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(response.data)
+        setState({ source: resolvedUrl, objectUrl, failed: false })
+      })
+      .catch(() => {
+        if (active) {
+          setState({ source: resolvedUrl, objectUrl: '', failed: true })
+        }
+      })
+
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [requiresAuthenticatedFetch, resolvedUrl, retrySeed])
+
+  return {
+    resolvedSrc: requiresAuthenticatedFetch ? state.objectUrl : resolvedUrl,
+    failed: requiresAuthenticatedFetch ? state.failed : false,
+    loading: requiresAuthenticatedFetch && state.source === resolvedUrl && !state.objectUrl && !state.failed,
+  }
+}
+
 function parseMessage(message) {
   if (message?.mediaType && message?.mediaUrl) {
     return { type: message.mediaType, value: resolveMediaUrl(message.mediaUrl) }
@@ -60,28 +110,41 @@ function appendRetryQuery(url, retryKey) {
 function ResilientChatImage({ src, alt }) {
   const [retryKey, setRetryKey] = useState(0)
   const [attempts, setAttempts] = useState(0)
+  const { resolvedSrc, failed, loading } = useChatMediaSource(src, retryKey)
 
   useEffect(() => {
     setRetryKey(0)
     setAttempts(0)
   }, [src])
 
-  const displaySrc = useMemo(() => appendRetryQuery(src, retryKey), [src, retryKey])
-
   return (
-    <img
-      src={displaySrc}
-      alt={alt}
-      className="max-h-64 w-full rounded-lg object-contain"
-      onError={() => {
-        if (attempts >= 2) return
-        const nextAttempt = attempts + 1
-        setAttempts(nextAttempt)
-        window.setTimeout(() => {
-          setRetryKey(Date.now())
-        }, nextAttempt * 900)
-      }}
-    />
+    <>
+      {loading && (
+        <div className="flex min-h-28 items-center justify-center rounded-lg bg-white/70 p-4 text-center text-sm text-slate-500">
+          Đang tải ảnh...
+        </div>
+      )}
+      {!loading && resolvedSrc && (
+        <img
+          src={resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://') ? appendRetryQuery(resolvedSrc, retryKey) : resolvedSrc}
+          alt={alt}
+          className="max-h-64 w-full rounded-lg object-contain"
+          onError={() => {
+            if (attempts >= 2) return
+            const nextAttempt = attempts + 1
+            setAttempts(nextAttempt)
+            window.setTimeout(() => {
+              setRetryKey(Date.now())
+            }, nextAttempt * 900)
+          }}
+        />
+      )}
+      {!loading && failed && (
+        <div className="flex min-h-28 items-center justify-center rounded-lg bg-white/70 p-4 text-center text-sm text-slate-500">
+          Không thể tải ảnh.
+        </div>
+      )}
+    </>
   )
 }
 
@@ -90,10 +153,13 @@ function VoiceMessagePlayer({ src, isMine }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
+  const { resolvedSrc, failed, loading } = useChatMediaSource(src)
 
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return undefined
+    if (!audio || !resolvedSrc) return undefined
+
+    audio.load()
 
     const handleLoadedMetadata = () => {
       setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
@@ -113,6 +179,7 @@ function VoiceMessagePlayer({ src, isMine }) {
     audio.addEventListener('ended', handleEnded)
     audio.addEventListener('pause', handlePause)
     audio.addEventListener('play', handlePlay)
+    audio.addEventListener('error', handlePause)
 
     return () => {
       audio.pause()
@@ -121,12 +188,13 @@ function VoiceMessagePlayer({ src, isMine }) {
       audio.removeEventListener('ended', handleEnded)
       audio.removeEventListener('pause', handlePause)
       audio.removeEventListener('play', handlePlay)
+      audio.removeEventListener('error', handlePause)
     }
-  }, [src])
+  }, [resolvedSrc])
 
   const togglePlayback = async () => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio || !resolvedSrc || loading || failed) return
     if (isPlaying) {
       audio.pause()
       return
@@ -141,13 +209,37 @@ function VoiceMessagePlayer({ src, isMine }) {
   const shownTime = isPlaying ? currentTime : duration
   const waveformBars = [18, 28, 22, 34]
 
+  if (loading) {
+    return (
+      <div
+        className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2 text-sm ${
+          isMine ? 'bg-orange-100/20 text-white' : 'bg-white/70 text-slate-700'
+        }`}
+      >
+        Đang tải ghi âm...
+      </div>
+    )
+  }
+
+  if (failed || !resolvedSrc) {
+    return (
+      <div
+        className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2 text-sm ${
+          isMine ? 'bg-orange-100/20 text-white' : 'bg-white/70 text-slate-700'
+        }`}
+      >
+        Không thể tải ghi âm.
+      </div>
+    )
+  }
+
   return (
     <div
       className={`flex min-w-[180px] items-center gap-3 rounded-2xl px-3 py-2 ${
         isMine ? 'bg-orange-100/20' : 'bg-white/70'
       }`}
     >
-      <audio ref={audioRef} preload="metadata" src={src} />
+      <audio ref={audioRef} preload="metadata" src={resolvedSrc} />
       <button
         type="button"
         onClick={togglePlayback}
@@ -372,6 +464,15 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
     }
   }
 
+  const handleComposerKeyDown = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent?.isComposing) {
+      return
+    }
+    event.preventDefault()
+    if (!content.trim() || sending) return
+    void handleSendMessage(event)
+  }
+
   const handleSelectImage = async (event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -590,6 +691,7 @@ function TicketChatBox({ ticketId, onClose, embedded = false, readOnly = false }
             ref={inputRef}
             value={content}
             onChange={(event) => setContent(event.target.value)}
+            onKeyDown={handleComposerKeyDown}
             rows={2}
             placeholder="Nhập nội dung trao đổi..."
             className="min-h-[44px] flex-1 resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fptOrange"

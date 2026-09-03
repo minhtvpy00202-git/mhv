@@ -3,7 +3,6 @@ import {
   IconCamera as Camera,
   IconCheck as Check,
   IconMessageCircle as MessageCircle,
-  IconPackage as Package,
   IconRefresh as Refresh,
   IconSend as Send,
   IconUserCheck as UserCheck,
@@ -17,7 +16,6 @@ import { useAuth } from '../context/AuthContext'
 import useWebSocket from '../hooks/useWebSocket'
 import { formatVietnamDateTime } from '../utils/datetime'
 import {
-  BORROW_STATUS,
   CONSUMABLE_FULFILLMENT_STATUS,
   TERMINAL_INQUIRY_STATUSES,
   getInquiryBasePath,
@@ -33,7 +31,6 @@ function InquiryDetail() {
   const [inquiry, setInquiry] = useState(null)
   const [messages, setMessages] = useState([])
   const [options, setOptions] = useState({ locations: [], handlers: [] })
-  const [borrowRequest, setBorrowRequest] = useState(null)
   const [consumableFulfillment, setConsumableFulfillment] = useState(null)
   const [text, setText] = useState('')
   const [note, setNote] = useState('')
@@ -67,14 +64,10 @@ function InquiryDetail() {
   }), [options.locations])
 
   const loadLinkedRecord = useCallback(async (currentInquiry) => {
-    setBorrowRequest(null)
     setConsumableFulfillment(null)
     if (!currentInquiry?.linkedEntityId) return
     try {
-      if (currentInquiry.linkedEntityType === 'ASSET_BORROW_REQUEST') {
-        const response = await axiosClient.get(`/api/borrow-requests/${currentInquiry.linkedEntityId}`)
-        setBorrowRequest(response.data)
-      } else if (currentInquiry.linkedEntityType === 'CONSUMABLE_REQUEST') {
+      if (currentInquiry.linkedEntityType === 'CONSUMABLE_REQUEST') {
         const response = await axiosClient.get(`/api/consumable-fulfillments/inquiry/${currentInquiry.id}`)
         setConsumableFulfillment(response.data)
         if (response.data?.sourceWarehouseLocationId) setWarehouseId(String(response.data.sourceWarehouseLocationId))
@@ -139,16 +132,9 @@ function InquiryDetail() {
     const unsubscribeUpdate = subscribe(`/topic/users/${user.userId}/inquiry-updates`, (payload) => {
       if (Number(payload?.inquiryId) === Number(id)) void loadDetail(true)
     })
-    const unsubscribeBorrow = subscribe(`/topic/users/${user.userId}/borrow-requests`, (payload) => {
-      if (Number(payload?.inquiryId) === Number(id)) {
-        setBorrowRequest(payload)
-        void loadDetail(true)
-      }
-    })
     return () => {
       unsubscribeMessage()
       unsubscribeUpdate()
-      unsubscribeBorrow()
     }
   }, [connected, id, loadDetail, subscribe, user?.userId])
 
@@ -244,22 +230,6 @@ function InquiryDetail() {
   if (loading) return <div className="rounded-2xl bg-white p-6 text-sm text-slate-500">Đang tải yêu cầu...</div>
   if (!inquiry) return <div className="rounded-2xl bg-white p-6 text-sm text-slate-500">Không tìm thấy yêu cầu.</div>
 
-  const renderBorrowActions = () => {
-    if (!borrowRequest) return null
-    const status = borrowRequest.status
-    return (
-      <div className="mt-3 flex flex-wrap gap-2">
-        {user?.role === 'Admin' && status === 'PENDING' && <>
-          <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/approve`, { note }), 'Đã duyệt phiếu mượn.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Duyệt</button>
-          <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/reject`, { note }), 'Đã từ chối phiếu mượn.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Từ chối</button>
-        </>}
-        {user?.role === 'Admin' && status === 'APPROVED' && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/reserve`, { note, reservationMinutes: 1440 }), 'Đã giữ thiết bị trong 24 giờ.')} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white">Giữ chỗ 24 giờ</button>}
-        {user?.role === 'Admin' && ['APPROVED', 'RESERVED'].includes(status) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/handover`), 'Đã xác nhận bàn giao thiết bị.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white">Xác nhận bàn giao</button>}
-        {status === 'CHECKED_OUT' && ['Admin', 'NhanVien'].includes(user?.role) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/borrow-requests/${borrowRequest.id}/return`), 'Đã xác nhận trả thiết bị.')} className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-white">Xác nhận trả</button>}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -278,7 +248,13 @@ function InquiryDetail() {
           <p><span className="block text-xs text-slate-400">Người yêu cầu</span><b>{inquiry.requesterName}</b></p>
           <p><span className="block text-xs text-slate-400">Người phụ trách</span><b>{inquiry.assigneeName || 'Chưa tiếp nhận'}</b></p>
           <p><span className="block text-xs text-slate-400">Phòng nhận/sử dụng</span><b>{inquiry.destinationLocationName}</b></p>
-          <p><span className="block text-xs text-slate-400">Số lượng</span><b>{inquiry.quantityRequested} {inquiry.unit || ''}</b></p>
+          <p>
+            <span className="block text-xs text-slate-400">Số lượng yêu cầu</span>
+            <b>{inquiry.formattedRequestedInputQuantity || `${inquiry.quantityRequestedInput || inquiry.quantityRequested} ${inquiry.quantityRequestedUnit === 'WHOLESALE' ? (inquiry.wholesaleUnit || inquiry.unit || '') : (inquiry.retailUnit || inquiry.unit || '')}`}</b>
+            {inquiry.formattedQuantityRequested && inquiry.formattedQuantityRequested !== inquiry.formattedRequestedInputQuantity && (
+              <span className="mt-1 block text-xs font-normal text-slate-500">Quy đổi: {inquiry.formattedQuantityRequested}</span>
+            )}
+          </p>
           <p><span className="block text-xs text-slate-400">Ngày cần</span><b>{inquiry.neededFrom || '-'}</b></p>
           <p><span className="block text-xs text-slate-400">Ngày trả dự kiến</span><b>{inquiry.expectedReturnDate || '-'}</b></p>
           <p className="sm:col-span-2"><span className="block text-xs text-slate-400">Mục đích</span><b>{inquiry.purpose}</b></p>
@@ -305,7 +281,6 @@ function InquiryDetail() {
           </div>
           <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="Ghi chú xử lý hoặc lý do từ chối..." className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
           <div className="mt-3 flex flex-wrap gap-2">
-            {!inquiry.linkedEntityId && inquiry.inquiryType === 'ASSET_BORROW' && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-borrow-request`), 'Đã tạo phiếu mượn thiết bị.')} className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white"><Package size={16} /> Tạo phiếu mượn</button>}
             {!inquiry.linkedEntityId && inquiry.inquiryType === 'CONSUMABLE_REQUEST' && <><select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs"><option value="">Chọn kho xuất</option>{warehouseOptions.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select><button disabled={busy || !warehouseId} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/create-consumable-request`, { sourceWarehouseLocationId: Number(warehouseId), note: note || null }), 'Đã tạo phiếu cấp phát vật tư.')} className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Tạo phiếu cấp phát</button></>}
             {!inquiry.linkedEntityId && <button disabled={busy || !note.trim()} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/reject`, { note: note.trim() }), 'Đã từ chối yêu cầu.')} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Từ chối yêu cầu</button>}
             {!inquiry.linkedEntityId && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/close`, { note: note || null }), 'Đã hoàn tất yêu cầu.')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">Đóng hoàn tất</button>}
@@ -314,8 +289,6 @@ function InquiryDetail() {
       )}
 
       {isEmployee && !isTerminal && <div className="flex flex-wrap gap-2">{inquiry.alternativeAssetQaCode && !inquiry.alternativeAccepted && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/alternative/accept`), 'Đã chấp nhận phương án thay thế.')} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white"><Check size={16} /> Chấp nhận phương án</button>}{inquiry.linkedEntityId && inquiry.status === 'WAITING_EMPLOYEE' && (inquiry.linkedEntityType !== 'CONSUMABLE_REQUEST' || consumableFulfillment?.status === 'FULFILLED' || consumableFulfillment?.closedPartial) && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/confirm-receipt`), 'Đã xác nhận bạn đã nhận thiết bị/vật tư.')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"><Check size={16} /> Xác nhận đã nhận</button>}{!inquiry.linkedEntityId && <button disabled={busy} onClick={() => runAction(() => axiosClient.post(`/api/inquiries/${id}/cancel`, { note: note || null }), 'Đã hủy yêu cầu.')} className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600">Hủy yêu cầu</button>}</div>}
-
-      {borrowRequest && <section className="rounded-3xl border border-indigo-200 bg-indigo-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">Phiếu mượn #{borrowRequest.id}</p><p className="mt-2 text-sm text-indigo-900">Trạng thái: <b>{BORROW_STATUS[borrowRequest.status] || borrowRequest.status}</b>{borrowRequest.reservationExpiresAt ? ` · Giữ đến ${formatVietnamDateTime(borrowRequest.reservationExpiresAt)}` : ''}</p>{renderBorrowActions()}</section>}
 
       {consumableFulfillment && <section className="rounded-3xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900 dark:bg-indigo-950/40">
         <div className="flex flex-wrap items-start justify-between gap-3">

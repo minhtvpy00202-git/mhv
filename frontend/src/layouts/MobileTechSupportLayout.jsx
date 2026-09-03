@@ -3,6 +3,7 @@ import {
   IconChecklist as ClipboardCheck,
   IconClipboardList as ClipboardList,
   IconHistory as History,
+  IconKey as Key,
   IconLogout as LogOut,
   IconMenu2 as Menu2,
   IconMessageCircle as MessageCircle,
@@ -11,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import ThemeToggle from '../components/ThemeToggle'
 import UserTimeClock from '../components/UserTimeClock'
 import { useAuth } from '../context/AuthContext'
@@ -44,6 +46,7 @@ function MobileTechSupportLayout() {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [showActionMenu, setShowActionMenu] = useState(false)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
   const actionMenuRef = useRef(null)
 
@@ -318,6 +321,18 @@ function MobileTechSupportLayout() {
                 )}
                 <button
                   type="button"
+                  onClick={() => {
+                    setShowActionMenu(false)
+                    setShowNotificationDropdown(false)
+                    setShowChangePasswordModal(true)
+                  }}
+                  className="mt-2 inline-flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                >
+                  <Key size={16} />
+                  Đổi mật khẩu
+                </button>
+                <button
+                  type="button"
                   onClick={handleLogout}
                   className="mt-2 inline-flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
                 >
@@ -346,6 +361,7 @@ function MobileTechSupportLayout() {
         )}
         <Outlet />
       </main>
+      <ChangePasswordModal open={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} />
 
       <nav className="fixed bottom-0 left-0 right-0 mx-auto flex w-full max-w-md border-t border-slate-200 bg-white shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:bg-slate-900">
         {navItems.map(({ to, label, icon: Icon, end }) => (

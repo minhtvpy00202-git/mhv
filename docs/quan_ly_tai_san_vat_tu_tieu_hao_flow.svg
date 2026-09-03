@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1800" viewBox="0 0 1700 1800">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#222" />
+    </marker>
+    <style>
+      .title { font: 700 24px Arial, Helvetica, sans-serif; fill: #222; }
+      .text { font: 15px Arial, Helvetica, sans-serif; fill: #222; }
+      .small { font: 13px Arial, Helvetica, sans-serif; fill: #333; }
+      .box { fill: #fff; stroke: #222; stroke-width: 2; rx: 12; ry: 12; }
+      .diamond { fill: #fff; stroke: #222; stroke-width: 2; }
+      .term-outer { fill: #fff; stroke: #111; stroke-width: 2.5; }
+      .term-inner { fill: #111; stroke: #111; stroke-width: 1; }
+      .line { stroke: #222; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .label-bg { fill: #fff; }
+    </style>
+  </defs>
+
+  <rect x="430" y="20" width="840" height="70" fill="#fff" stroke="#222" stroke-width="2.5" />
+  <text x="850" y="64" text-anchor="middle" class="title">QUẢN LÝ TÀI SẢN VÀ VẬT TƯ TIÊU HAO</text>
+
+  <circle cx="850" cy="140" r="12" class="term-inner" />
+
+  <rect x="650" y="180" width="400" height="60" class="box" />
+  <text x="850" y="217" text-anchor="middle" class="text">Mở chức năng quản lý tài sản</text>
+
+  <polygon points="850,275 940,335 850,395 760,335" class="diamond" />
+  <text x="850" y="327" text-anchor="middle" class="text">Là tài sản</text>
+  <text x="850" y="347" text-anchor="middle" class="text">cố định?</text>
+
+  <rect x="170" y="430" width="330" height="70" class="box" />
+  <text x="335" y="472" text-anchor="middle" class="text">Hiển thị danh sách tài sản cố định</text>
+
+  <rect x="170" y="540" width="330" height="75" class="box" />
+  <text x="335" y="578" text-anchor="middle" class="text">Nhập hoặc cập nhật thông tin tài sản</text>
+
+  <polygon points="340,650 455,720 340,790 225,720" class="diamond" />
+  <text x="340" y="718" text-anchor="middle" class="text">Dữ liệu hợp lệ?</text>
+
+  <rect x="20" y="830" width="190" height="70" class="box" />
+  <text x="115" y="872" text-anchor="middle" class="text">Hiển thị lỗi</text>
+
+  <polygon points="340,830 455,900 340,970 225,900" class="diamond" />
+  <text x="340" y="905" text-anchor="middle" class="text">Tạo mới?</text>
+
+  <rect x="90" y="1015" width="250" height="85" class="box" />
+  <text x="215" y="1054" text-anchor="middle" class="text">Sinh mã tài sản và</text>
+  <text x="215" y="1076" text-anchor="middle" class="text">trạng thái ban đầu</text>
+
+  <rect x="390" y="1022" width="250" height="70" class="box" />
+  <text x="515" y="1064" text-anchor="middle" class="text">Cập nhật thông tin</text>
+
+  <rect x="185" y="1145" width="280" height="70" class="box" />
+  <text x="325" y="1188" text-anchor="middle" class="text">Lưu tài sản vào cơ sở dữ liệu</text>
+
+  <rect x="175" y="1255" width="300" height="85" class="box" />
+  <text x="325" y="1294" text-anchor="middle" class="text">Truy xuất hoặc in mã QR khi</text>
+  <text x="325" y="1316" text-anchor="middle" class="text">được yêu cầu</text>
+
+  <rect x="1080" y="430" width="330" height="70" class="box" />
+  <text x="1245" y="472" text-anchor="middle" class="text">Hiển thị danh sách vật tư tiêu hao</text>
+
+  <rect x="1080" y="540" width="330" height="70" class="box" />
+  <text x="1245" y="582" text-anchor="middle" class="text">Chọn nghiệp vụ vật tư tiêu hao</text>
+
+  <polygon points="1245,650 1355,720 1245,790 1135,720" class="diamond" />
+  <text x="1245" y="725" text-anchor="middle" class="text">Là nhập kho?</text>
+
+  <rect x="900" y="840" width="220" height="70" class="box" />
+  <text x="1010" y="882" text-anchor="middle" class="text">Nhập lô vật tư</text>
+
+  <polygon points="1245,840 1355,910 1245,980 1135,910" class="diamond" />
+  <text x="1245" y="915" text-anchor="middle" class="text">Là cấp phát?</text>
+
+  <rect x="1160" y="1030" width="220" height="70" class="box" />
+  <text x="1270" y="1072" text-anchor="middle" class="text">Cấp phát theo phòng</text>
+
+  <polygon points="1245,1140 1355,1210 1245,1280 1135,1210" class="diamond" />
+  <text x="1245" y="1215" text-anchor="middle" class="text">Là tiêu huỷ?</text>
+
+  <rect x="1410" y="1175" width="240" height="70" class="box" />
+  <text x="1530" y="1217" text-anchor="middle" class="text">Tạo yêu cầu tiêu huỷ</text>
+
+  <rect x="840" y="1360" width="240" height="85" class="box" />
+  <text x="960" y="1399" text-anchor="middle" class="text">Thông báo dữ liệu</text>
+  <text x="960" y="1421" text-anchor="middle" class="text">không hợp lệ</text>
+
+  <polygon points="1260,1360 1360,1430 1260,1500 1160,1430" class="diamond" />
+  <text x="1260" y="1424" text-anchor="middle" class="text">Nghiệp vụ</text>
+  <text x="1260" y="1444" text-anchor="middle" class="text">hợp lệ?</text>
+
+  <rect x="1145" y="1555" width="250" height="85" class="box" />
+  <text x="1270" y="1594" text-anchor="middle" class="text">Cập nhật tồn kho, lô</text>
+  <text x="1270" y="1616" text-anchor="middle" class="text">và lịch sử</text>
+
+  <rect x="660" y="1525" width="380" height="85" class="box" />
+  <text x="850" y="1564" text-anchor="middle" class="text">Cập nhật danh sách và</text>
+  <text x="850" y="1586" text-anchor="middle" class="text">thông báo thành công</text>
+
+  <polygon points="850,1645 950,1710 850,1775 750,1710" class="diamond" />
+  <text x="850" y="1702" text-anchor="middle" class="text">Tiếp tục</text>
+  <text x="850" y="1722" text-anchor="middle" class="text">thao tác?</text>
+
+  <circle cx="850" cy="1788" r="13" class="term-outer" />
+  <circle cx="850" cy="1788" r="7" class="term-inner" />
+
+  <path d="M850 152 L850 180" class="line" />
+  <path d="M850 240 L850 275" class="line" />
+
+  <path d="M760 335 L335 335 L335 430" class="line" />
+  <rect x="530" y="308" width="40" height="24" class="label-bg" />
+  <text x="550" y="325" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M940 335 L1245 335 L1245 430" class="line" />
+  <rect x="1030" y="308" width="58" height="24" class="label-bg" />
+  <text x="1059" y="325" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M335 500 L335 540" class="line" />
+  <path d="M335 615 L335 650" class="line" />
+
+  <path d="M225 720 L115 720 L115 830" class="line" />
+  <rect x="155" y="688" width="58" height="24" class="label-bg" />
+  <text x="184" y="705" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M340 790 L340 830" class="line" />
+  <rect x="355" y="785" width="40" height="24" class="label-bg" />
+  <text x="375" y="802" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M115 830 L60 830 L60 578 L170 578" class="line" />
+
+  <path d="M285 970 L215 1015" class="line" />
+  <rect x="245" y="980" width="40" height="24" class="label-bg" />
+  <text x="265" y="997" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M395 970 L515 1022" class="line" />
+  <rect x="430" y="980" width="58" height="24" class="label-bg" />
+  <text x="459" y="997" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M215 1100 L215 1180 L185 1180" class="line" />
+  <path d="M515 1092 L515 1180 L465 1180" class="line" />
+  <path d="M325 1215 L325 1255" class="line" />
+
+  <path d="M1245 500 L1245 540" class="line" />
+  <path d="M1245 610 L1245 650" class="line" />
+
+  <path d="M1135 720 L1010 720 L1010 840" class="line" />
+  <rect x="1060" y="688" width="40" height="24" class="label-bg" />
+  <text x="1080" y="705" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M1245 790 L1245 840" class="line" />
+  <rect x="1260" y="805" width="58" height="24" class="label-bg" />
+  <text x="1289" y="822" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M1010 910 L1010 1430 L1160 1430" class="line" />
+
+  <path d="M1245 980 L1245 1030" class="line" />
+  <rect x="1260" y="992" width="40" height="24" class="label-bg" />
+  <text x="1280" y="1009" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M1270 1100 L1270 1360" class="line" />
+
+  <path d="M1245 1280 L1245 1360" class="line" />
+  <rect x="1260" y="1292" width="58" height="24" class="label-bg" />
+  <text x="1289" y="1309" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M1355 1210 L1530 1210 L1530 1245" class="line" />
+  <rect x="1395" y="1175" width="40" height="24" class="label-bg" />
+  <text x="1415" y="1192" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M1530 1245 L1530 1430 L1360 1430" class="line" />
+
+  <path d="M1160 1430 L1080 1430" class="line" />
+  <rect x="1110" y="1402" width="58" height="24" class="label-bg" />
+  <text x="1139" y="1419" text-anchor="middle" class="small">[Không]</text>
+
+  <path d="M1260 1500 L1270 1500 L1270 1555" class="line" />
+  <rect x="1285" y="1492" width="40" height="24" class="label-bg" />
+  <text x="1305" y="1509" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M960 1360 L900 1360 L900 575 L1080 575" class="line" />
+
+  <path d="M325 1340 L325 1568 L660 1568" class="line" />
+  <path d="M1270 1640 L1270 1568 L1040 1568" class="line" />
+
+  <path d="M850 1610 L850 1645" class="line" />
+
+  <path d="M750 1710 L70 1710 L70 210 L650 210" class="line" />
+  <rect x="300" y="1680" width="40" height="24" class="label-bg" />
+  <text x="320" y="1697" text-anchor="middle" class="small">[Có]</text>
+
+  <path d="M850 1775 L850 1775" class="line" />
+  <path d="M850 1775 L850 1775" class="line" />
+  <path d="M850 1775 L850 1775" class="line" />
+  <path d="M850 1775 L850 1775" class="line" />
+  <path d="M850 1775 L850 1775" class="line" />
+  <path d="M850 1775 L850 1788" class="line" />
+  <rect x="870" y="1750" width="58" height="24" class="label-bg" />
+  <text x="899" y="1767" text-anchor="middle" class="small">[Không]</text>
+</svg>

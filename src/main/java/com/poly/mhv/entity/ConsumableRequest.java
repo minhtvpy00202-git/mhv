@@ -56,6 +56,12 @@ public class ConsumableRequest {
     @Column(name = "quantity_requested", nullable = false)
     private Integer quantityRequested;
 
+    @Column(name = "quantity_requested_input", nullable = false)
+    private Integer quantityRequestedInput;
+
+    @Column(name = "quantity_requested_unit", nullable = false, length = 20)
+    private String quantityRequestedUnit;
+
     @Column(name = "reason", columnDefinition = "TEXT", nullable = false)
     private String reason;
 

@@ -390,7 +390,7 @@ function InventoryAuditScanner() {
   return (
       <div className="space-y-4">
         {/* HEADER */}
-        <section className="rounded-3xl bg-gradient-to-br from-blue-700 via-blue-600 to-cyan-600 p-4 text-white shadow-sm md:p-5">
+        <section className="rounded-3xl bg-[#F27025] p-4 text-white shadow-sm md:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-white/80">Khu vực kỹ thuật viên hỗ trợ</p>
@@ -427,7 +427,7 @@ function InventoryAuditScanner() {
                   onClick={() => setMobilePanel(panel.id)}
                   className={`min-h-[5.75rem] rounded-2xl border px-3 py-3 text-center shadow-sm transition ${
                     active
-                      ? 'border-blue-600 bg-blue-600 text-white'
+                      ? 'border-[#F27025] bg-[#F27025] text-white'
                       : 'border-slate-200 bg-white text-slate-700'
                   }`}
                 >
@@ -446,7 +446,7 @@ function InventoryAuditScanner() {
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-base font-semibold text-slate-800">Phiên đang mở</h3>
                   {selectedAudit && (
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                    <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-[#F27025]">
                       #{selectedAudit.id}
                     </span>
                   )}
@@ -478,7 +478,7 @@ function InventoryAuditScanner() {
                           }}
                           className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
                             isActive
-                              ? 'border-blue-600 bg-blue-50'
+                              ? 'border-[#F27025] bg-orange-50'
                               : 'border-slate-200 bg-slate-50'
                           }`}
                         >
@@ -488,7 +488,7 @@ function InventoryAuditScanner() {
                               <p className="mt-1 text-sm text-slate-600">{audit.locationName || 'Không rõ phòng kiểm kê'}</p>
                             </div>
                             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                              isActive ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'
+                              isActive ? 'bg-[#F27025] text-white' : 'bg-white text-slate-600'
                             }`}>
                               {String(audit.status || 'OPEN').replace('_', ' ')}
                             </span>
@@ -500,7 +500,7 @@ function InventoryAuditScanner() {
                 )}
 
                 {selectedSummary && (
-                  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+                  <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-3">
                     <p className="text-sm font-semibold text-slate-800">
                       Phiên #{selectedSummary.id} - {selectedSummary.locationName}
                     </p>
@@ -552,7 +552,7 @@ function InventoryAuditScanner() {
                         type="button"
                         disabled={!selectedAuditId || !manualQaCode.trim()}
                         onClick={() => handleScanSubmit(manualQaCode)}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#F27025] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#d85f1d] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <ScanLine size={16} />
                         Ghi nhận mã QA
@@ -705,8 +705,8 @@ function InventoryAuditScanner() {
                   onClick={() => setMobilePanel(panel.id)}
                   className={`min-w-[180px] rounded-2xl border px-4 py-4 text-left shadow-sm transition ${
                     active
-                      ? 'border-blue-600 bg-blue-600 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
+                      ? 'border-[#F27025] bg-[#F27025] text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200'
                   }`}
                 >
                   <p className={`text-sm font-semibold ${active ? 'text-white/80' : 'text-slate-500'}`}>{panel.label}</p>
@@ -723,7 +723,7 @@ function InventoryAuditScanner() {
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-lg font-semibold text-slate-800">Phiên đang mở</h3>
                     {selectedAudit && (
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-[#F27025]">
                         #{selectedAudit.id}
                       </span>
                     )}
@@ -755,7 +755,7 @@ function InventoryAuditScanner() {
                             }}
                             className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
                               isActive
-                                ? 'border-blue-600 bg-blue-50'
+                                ? 'border-[#F27025] bg-orange-50'
                                 : 'border-slate-200 bg-slate-50 hover:border-slate-300'
                             }`}
                           >
@@ -765,7 +765,7 @@ function InventoryAuditScanner() {
                                 <p className="mt-1 text-sm text-slate-600">{audit.locationName || 'Không rõ phòng kiểm kê'}</p>
                               </div>
                               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                                isActive ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'
+                                isActive ? 'bg-[#F27025] text-white' : 'bg-white text-slate-600'
                               }`}>
                                 {String(audit.status || 'OPEN').replace('_', ' ')}
                               </span>
@@ -779,7 +779,7 @@ function InventoryAuditScanner() {
 
                 <div className="space-y-4">
                   {selectedSummary && (
-                    <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                    <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-lg font-semibold text-slate-800">
@@ -787,7 +787,7 @@ function InventoryAuditScanner() {
                           </p>
                           <p className="mt-1 text-sm text-slate-500">Chọn đúng phiên rồi quét QR ngay trong khung bên dưới.</p>
                         </div>
-                        <span className="rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                        <span className="rounded-full bg-[#F27025] px-3 py-1 text-xs font-semibold text-white">
                           {selectedSummary.status || 'OPEN'}
                         </span>
                       </div>
@@ -853,7 +853,7 @@ function InventoryAuditScanner() {
                           type="button"
                           disabled={!selectedAuditId || !manualQaCode.trim()}
                           onClick={() => handleScanSubmit(manualQaCode)}
-                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#F27025] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[#d85f1d] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <ScanLine size={16} />
                           Ghi nhận mã QA

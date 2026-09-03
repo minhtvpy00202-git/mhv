@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   IconCheck as Check,
   IconChevronDown as ChevronDown,
-  IconPackage as Package,
-  IconPlus as Plus,
   IconRefresh as RefreshCw,
   IconSearch as Search,
   IconSend as Send,
@@ -12,9 +10,11 @@ import {
 import ActionIconButton from '../../../components/ui/ActionIconButton'
 import {
   formatConsumableQuantityText,
+  formatConsumableRequestedInputText,
   formatCurrency,
   formatDate,
   formatDateTime,
+  getConsumableUnitBreakdownTooltip,
   getConsumableExpiryState,
   getConsumableRequestStatusMeta,
   getStatusBadgeClass,
@@ -69,7 +69,6 @@ export default function ConsumableRoomsTab({
   roomOverviewLoading,
   isAdmin,
   canIssueFromWarehouse,
-  onOpenConsumableRequestModal,
   onOpenIssueModalFromRoomStock,
   onOpenStockAdjustModal,
   onOpenConsumableDecisionModal,
@@ -267,14 +266,14 @@ export default function ConsumableRoomsTab({
     { key: ROOM_PANELS.ISSUES, label: 'Lịch sử cấp' },
     {
       key: ROOM_PANELS.REQUESTS,
-      label: 'Yêu cầu',
+      label: 'Phiếu cấp phát',
       badge: pendingRequestCount > 0 ? pendingRequestCount : null,
     },
   ]
 
   const panelTableTitle = useMemo(() => {
     if (roomPanel === ROOM_PANELS.ISSUES) return 'Lịch sử cấp phát theo phòng'
-    if (roomPanel === ROOM_PANELS.REQUESTS) return 'Yêu cầu cấp phát theo phòng'
+    if (roomPanel === ROOM_PANELS.REQUESTS) return 'Phiếu cấp phát theo phòng'
     return 'Danh sách tồn vật tư theo phòng'
   }, [roomPanel])
 
@@ -426,17 +425,7 @@ export default function ConsumableRoomsTab({
           </>
         )}
 
-        <button
-          type="button"
-          onClick={() => onOpenConsumableRequestModal()}
-          disabled={!selectedRoomId || isAllRoomsView}
-          title={isAllRoomsView ? 'Chọn một phòng cụ thể để tạo yêu cầu chung' : undefined}
-          className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-fptOrange px-3 py-1.5 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus size={15} />
-          Yêu cầu cấp phát
-        </button>
-        </div>
+          </div>
 
         {!selectedRoomId && (
           <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
@@ -527,7 +516,9 @@ export default function ConsumableRoomsTab({
                         {stock.categoryName || '–'}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-800 dark:text-slate-100">
-                        {formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
+                        <span title={getConsumableUnitBreakdownTooltip(stock)}>
+                          {formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
+                        </span>
                       </td>
                       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
                         {formatConsumableQuantityText(stock, { quantityField: 'quantityIssued', formattedField: 'formattedQuantityIssued' })}
@@ -558,7 +549,6 @@ export default function ConsumableRoomsTab({
                               onClick={() => onOpenIssueModalFromRoomStock(stock)}
                             />
                           )}
-                          <ActionIconButton icon={Package} label="Yêu cầu cấp phát" variant="primary" className="h-7 w-7" onClick={() => onOpenConsumableRequestModal(stock.assetQaCode, stock.locationId)} />
                           <ActionIconButton icon={RefreshCw} label="Cập nhật tồn" variant="warning" className="h-7 w-7" onClick={() => onOpenStockAdjustModal(stock)} />
                         </div>
                       </td>
@@ -667,7 +657,10 @@ export default function ConsumableRoomsTab({
                       </td>
                     )}
                     <td className="whitespace-nowrap px-3 py-1.5 tabular-nums text-slate-700 dark:text-slate-200">
-                      {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                      <div>{formatConsumableRequestedInputText(item)}</div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                        {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-1.5">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${getConsumableRequestStatusMeta(item.status).className}`}>
@@ -690,7 +683,7 @@ export default function ConsumableRoomsTab({
                 {!roomOverviewLoading && requestHistory.length === 0 && (
                   <tr>
                     <td colSpan={isAllRoomsView ? 6 : 5} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-                      {isAllRoomsView ? 'Chưa có yêu cầu cấp phát tại các phòng.' : 'Chưa có yêu cầu cấp phát nào cho phòng này.'}
+                        {isAllRoomsView ? 'Chưa có phiếu cấp phát tại các phòng.' : 'Chưa có phiếu cấp phát nào cho phòng này.'}
                     </td>
                   </tr>
                 )}

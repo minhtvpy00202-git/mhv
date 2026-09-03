@@ -19,8 +19,15 @@ public class ConsumableRequestResponse {
     private Integer sourceWarehouseLocationId;
     private String sourceWarehouseLocationName;
     private Integer quantityRequested;
+    private Integer quantityRequestedInput;
+    private String quantityRequestedUnit;
     private String unit;
+    private String retailUnit;
+    private String wholesaleUnit;
+    private Integer wholesaleToRetailFactor;
     private String formattedQuantityRequested;
+    private String formattedRequestedInputQuantity;
+    private String formattedQuantityRequestedRetailOnly;
     private String reason;
     private String status;
     private String decisionNote;

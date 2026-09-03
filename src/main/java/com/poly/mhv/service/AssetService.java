@@ -1161,16 +1161,39 @@ public class AssetService {
         if (!isConsumableMode(asset.getTrackingMode())) {
             throw new CustomException("Chỉ vật tư tiêu hao mới hỗ trợ yêu cầu cấp phát.");
         }
+        String quantityRequestedUnit = normalizeQuantityUnit(request.getQuantityRequestedUnit());
+        int quantityRequestedRetail = convertToRetailQuantity(
+                asset,
+                request.getQuantityRequested(),
+                quantityRequestedUnit
+        );
         Location sourceWarehouseLocation = getConsumableWarehouseLocationOrThrow(
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
+        int quantityRemainingInWarehouse = safeInteger(
+                consumableReceiptLotRepository.calculateQuantityRemainingForAssetInWarehouse(
+                        asset.getQaCode(),
+                        sourceWarehouseLocation.getId()
+                )
+        );
+        if (quantityRemainingInWarehouse < quantityRequestedRetail) {
+            throw new CustomException(
+                    "Số lượng tồn kho tại "
+                            + sourceWarehouseLocation.getRoomName()
+                            + " không đủ. Hiện còn "
+                            + formatConsumableQuantity(asset, quantityRemainingInWarehouse)
+                            + "."
+            );
+        }
         ConsumableRequest consumableRequest = ConsumableRequest.builder()
                 .asset(asset)
                 .location(location)
                 .sourceWarehouseLocation(sourceWarehouseLocation)
                 .requestedBy(requester)
-                .quantityRequested(request.getQuantityRequested())
+                .quantityRequested(quantityRequestedRetail)
+                .quantityRequestedInput(request.getQuantityRequested())
+                .quantityRequestedUnit(quantityRequestedUnit)
                 .reason(request.getReason().trim())
                 .status("PENDING")
                 .createdAt(UtcDateTimes.now())
@@ -1187,7 +1210,11 @@ public class AssetService {
                         "Vật tư", asset.getQaCode() + " - " + asset.getName(),
                         "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng yêu cầu", location.getRoomName(),
-                        "Số lượng yêu cầu", formatConsumableQuantity(asset, request.getQuantityRequested()),
+                        "Số lượng yêu cầu", formatConsumableRequestedInputQuantity(
+                                asset,
+                                request.getQuantityRequested(),
+                                quantityRequestedUnit
+                        ) + " (" + formatConsumableQuantity(asset, quantityRequestedRetail) + ")",
                         "Lý do", request.getReason().trim(),
                         "Người yêu cầu", getActorDisplayName(requester)
                 ),
@@ -2141,6 +2168,10 @@ public class AssetService {
         return normalized;
     }
 
+    public int convertConsumableQuantityToRetail(Asset asset, int quantity, String quantityUnit) {
+        return convertToRetailQuantity(asset, quantity, quantityUnit);
+    }
+
     private int convertToRetailQuantity(Asset asset, int quantity, String quantityUnit) {
         if (quantity <= 0) {
             throw new CustomException("Số lượng phải lớn hơn 0.");
@@ -2227,6 +2258,20 @@ public class AssetService {
             return wholesaleQuantity + " " + normalizedWholesaleUnit;
         }
         return retailQuantity + " " + normalizedRetailUnit;
+    }
+
+    private String formatConsumableQuantityRetailOnly(Asset asset, Integer quantity) {
+        int safeQuantity = safeInteger(quantity);
+        return safeQuantity + " " + safeUnit(asset);
+    }
+
+    private String formatConsumableRequestedInputQuantity(Asset asset, Integer quantity, String quantityUnit) {
+        int safeQuantity = safeInteger(quantity);
+        String normalizedQuantityUnit = normalizeQuantityUnit(quantityUnit);
+        String unitLabel = QUANTITY_UNIT_WHOLESALE.equals(normalizedQuantityUnit)
+                ? getWholesaleUnit(asset)
+                : getRetailUnit(asset);
+        return safeQuantity + " " + unitLabel;
     }
 
     private BigDecimal updatedUnitPrice(Asset asset) {
@@ -2671,6 +2716,12 @@ public class AssetService {
         AppUser resolvedBy = request.getResolvedBy();
         Location sourceWarehouseLocation = request.getSourceWarehouseLocation();
         Asset asset = request.getAsset();
+        Integer quantityRequestedInput = request.getQuantityRequestedInput() != null
+                ? request.getQuantityRequestedInput()
+                : request.getQuantityRequested();
+        String quantityRequestedUnit = StringUtils.hasText(request.getQuantityRequestedUnit())
+                ? request.getQuantityRequestedUnit()
+                : QUANTITY_UNIT_RETAIL;
         return ConsumableRequestResponse.builder()
                 .id(request.getId())
                 .assetQaCode(asset.getQaCode())
@@ -2680,8 +2731,19 @@ public class AssetService {
                 .sourceWarehouseLocationId(sourceWarehouseLocation != null ? sourceWarehouseLocation.getId() : null)
                 .sourceWarehouseLocationName(sourceWarehouseLocation != null ? sourceWarehouseLocation.getRoomName() : null)
                 .quantityRequested(request.getQuantityRequested())
+                .quantityRequestedInput(quantityRequestedInput)
+                .quantityRequestedUnit(quantityRequestedUnit)
                 .unit(getRetailUnit(asset))
+                .retailUnit(getRetailUnit(asset))
+                .wholesaleUnit(getWholesaleUnit(asset))
+                .wholesaleToRetailFactor(getWholesaleToRetailFactor(asset))
                 .formattedQuantityRequested(formatConsumableQuantity(asset, request.getQuantityRequested()))
+                .formattedRequestedInputQuantity(formatConsumableRequestedInputQuantity(
+                        asset,
+                        quantityRequestedInput,
+                        quantityRequestedUnit
+                ))
+                .formattedQuantityRequestedRetailOnly(formatConsumableQuantityRetailOnly(asset, request.getQuantityRequested()))
                 .reason(request.getReason())
                 .status(request.getStatus())
                 .decisionNote(request.getDecisionNote())

@@ -5,7 +5,7 @@ import {
   IconX as X,
 } from '@tabler/icons-react'
 import ActionIconButton from '../../../components/ui/ActionIconButton'
-import { formatConsumableQuantityText, formatDateTime } from './consumableDisplayUtils'
+import { formatConsumableQuantityText, formatConsumableRequestedInputText, formatDateTime } from './consumableDisplayUtils'
 
 const REQUEST_PANELS = {
   ISSUE: 'ISSUE',
@@ -73,7 +73,7 @@ export default function ConsumableRequestsTab({
 
   const panelTableTitle = useMemo(() => {
     if (requestPanel === REQUEST_PANELS.DISPOSAL) return 'Yêu cầu tiêu huỷ chờ duyệt'
-    return 'Phiếu cấp phát chờ duyệt'
+    return 'Yêu cầu cấp phát / sử dụng chờ duyệt'
   }, [requestPanel])
 
   const panelMeta = useMemo(() => {
@@ -208,7 +208,10 @@ export default function ConsumableRequestsTab({
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-100">
-                      {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                      <div>{formatConsumableRequestedInputText(item)}</div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                        {formatConsumableQuantityText(item, { quantityField: 'quantityRequested', formattedField: 'formattedQuantityRequested' })}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 text-slate-700 dark:text-slate-200">
                       <div className="truncate font-medium">{item.requestedByFullName || item.requestedByUsername}</div>
@@ -240,8 +243,8 @@ export default function ConsumableRequestsTab({
                   <tr>
                     <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
                       {normalizedKeyword
-                        ? 'Không có phiếu cấp phát nào khớp với từ khóa tìm kiếm.'
-                        : 'Hiện không có phiếu yêu cầu cấp phát nào đang chờ duyệt.'}
+                        ? 'Không có yêu cầu cấp phát hoặc sử dụng nào khớp với từ khóa tìm kiếm.'
+                        : 'Hiện không có yêu cầu cấp phát hoặc sử dụng nào đang chờ duyệt.'}
                     </td>
                   </tr>
                 )}

@@ -39,11 +39,13 @@ export function getInquiryStatusMeta(status) {
 }
 
 export function getInquiryTypeLabel(type) {
-  return type === 'CONSUMABLE_REQUEST' ? 'Cấp phát vật tư' : 'Mượn thiết bị'
+  if (type === 'CONSUMABLE_REQUEST') return 'Cấp phát vật tư'
+  if (type === 'ASSET_BORROW') return 'Yêu cầu mượn thiết bị'
+  return type || 'Không xác định'
 }
 
 export function getInquiryBasePath(role) {
-  if (role === 'Admin') return '/admin/inquiries'
+  if (role === 'Admin') return '/admin/assets/consumables/requests'
   if (role === 'ConsumableManager') return '/supply/inquiries'
   return '/mobile/inquiries'
 }

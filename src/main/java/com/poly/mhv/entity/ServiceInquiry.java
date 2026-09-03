@@ -58,6 +58,12 @@ public class ServiceInquiry {
     @Column(name = "quantity_requested", nullable = false)
     private Integer quantityRequested;
 
+    @Column(name = "quantity_requested_input", nullable = false)
+    private Integer quantityRequestedInput;
+
+    @Column(name = "quantity_requested_unit", nullable = false, length = 20)
+    private String quantityRequestedUnit;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "destination_location_id", nullable = false)
     private Location destinationLocation;

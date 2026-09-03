@@ -47,6 +47,13 @@ function toVietnameseResolutionOutcome(outcome) {
   return outcome || 'Chưa ghi nhận'
 }
 
+function toVietnamesePriority(priority) {
+  if (priority === 'HIGH') return 'Cao'
+  if (priority === 'MEDIUM') return 'Trung bình'
+  if (priority === 'LOW') return 'Thấp'
+  return priority || 'Chưa xác định'
+}
+
 function isWithinReopenWindow(ticket) {
   const completedAt = parseServerDateTime(ticket?.closedAt || ticket?.resolvedAt)
   if (!completedAt) return false
@@ -392,224 +399,61 @@ function TicketDetail() {
     }
   }
 
+  const summaryItems = ticket ? [
+    { label: 'Thiết bị', value: ticket.assetName || 'Thiết bị' },
+    { label: 'Mã QA / vị trí', value: `${ticket.assetQaCode || 'Chưa rõ'}${ticket.assetLocationName ? ` • ${ticket.assetLocationName}` : ''}` },
+    { label: 'Ưu tiên', value: toVietnamesePriority(ticket.priority) },
+    { label: 'Tạo lúc', value: formatVietnamDateTime(ticket.createdAt, 'Chưa ghi nhận') },
+    { label: 'Tiếp nhận lúc', value: formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận') },
+    { label: 'SLA xử lý', value: formatVietnamDateTime(minSlaDate, 'Chưa có SLA') },
+    { label: 'SLA trễ phạt', value: formatVietnamDateTime(maxSlaDate, 'Không áp dụng') },
+    { label: 'Người báo', value: `${ticket.reporterName || 'Chưa rõ'}${ticket.reporterPhone ? ` • ${ticket.reporterPhone}` : ''}` },
+    { label: 'Kỹ thuật viên', value: `${ticket.assigneeName || 'Chưa gán'}${ticket.assigneePhone ? ` • ${ticket.assigneePhone}` : ''}` },
+  ] : []
+
   return (
-    <div className={`space-y-5 ${isMobileRoute ? 'pb-4' : 'pb-24'}`}>
-      <section className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.18),transparent_62%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(242,112,36,0.24),transparent_62%)]" />
-        <div className="relative flex flex-wrap items-start justify-between gap-3">
-          <div className="max-w-3xl">
-            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>
-              {statusMeta.label}
-            </span>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-              Ticket #{ticketId}
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
-              Theo dõi tiến độ xử lý, người liên quan và các bước hành động tiếp theo trên cùng một màn chi tiết.
-            </p>
+    <div className={`space-y-5 ${isMobileRoute ? 'pb-4' : 'pb-12'}`}>
+      <div className={!isMobileRoute ? 'mx-auto max-w-5xl space-y-5' : 'space-y-5'}>
+        <section className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-3">
+              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusMeta.badgeClassName}`}>
+                {statusMeta.label}
+              </span>
+              <div>
+                <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                  Ticket #{ticketId}
+                </h2>
+                {!loading && ticket && (
+                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                    {ticket.assetName || 'Thiết bị'}{ticket.assetQaCode ? ` • ${ticket.assetQaCode}` : ''}{ticket.assetLocationName ? ` • ${ticket.assetLocationName}` : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Link
+              to={backPath}
+              className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Quay lại danh sách
+            </Link>
           </div>
-          <Link
-            to={backPath}
-            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            Quay lại danh sách
-          </Link>
-        </div>
-      </section>
-
-      {loading && (
-        <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Đang tải dữ liệu ticket...</p>
         </section>
-      )}
 
-      {!loading && ticket && (
-        <section className="space-y-4">
-          {(canCancelTicket || canReopenTicket || canResolveTicket || canConfirmResolution) && (
-            <div className="flex flex-wrap gap-2 rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              {canResolveTicket && (
-                <button
-                  type="button"
-                  onClick={() => setShowResolutionModal(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
-                >
-                  {ticket.status === 'WAITING_REPLACEMENT' ? 'Cập nhật sau thay thế' : 'Gửi kết quả xử lý'}
-                </button>
-              )}
-              {canConfirmResolution && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmResolution(true)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
-                  >
-                    Xác nhận thiết bị đã ổn
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setReasonAction('rejectResolution')}
-                    className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
-                  >
-                    Yêu cầu xử lý lại
-                  </button>
-                </>
-              )}
-              {canCancelTicket && (
-                <button
-                  type="button"
-                  onClick={() => setReasonAction('cancel')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
-                >
-                  <Trash size={16} />
-                  Hủy ticket
-                </button>
-              )}
-              {canReopenTicket && (
-                <button
-                  type="button"
-                  onClick={() => setReasonAction('reopen')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
-                >
-                  <Refresh size={16} />
-                  Báo tái lỗi / mở lại
-                </button>
-              )}
-            </div>
-          )}
+        {loading && (
+          <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Đang tải dữ liệu ticket...</p>
+          </section>
+        )}
 
-          {/* SLA Extension Approval Card for Admin */}
-          {user?.role === 'Admin' && pendingExtension && (
-            <div className="rounded-[28px] border border-orange-200 bg-orange-50/70 p-5 shadow-sm dark:border-orange-500/30 dark:bg-orange-500/10 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-fptOrange animate-ping" />
-                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Yêu cầu xin gia hạn sửa chữa đang chờ duyệt</h4>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                Kỹ thuật viên <span className="font-semibold">{pendingExtension.event.actorName}</span> xin gia hạn thêm <span className="font-semibold text-fptOrange">{pendingExtension.requestedMinutes} phút</span>.
-              </p>
-              <div className="bg-white/80 p-3 rounded-xl border border-orange-100 text-xs text-slate-700 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-300">
-                <span className="font-semibold">Lý do xin gia hạn:</span> {pendingExtension.reason}
-              </div>
-
-              {showRejectPrompt ? (
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-350">Lý do từ chối gia hạn:</label>
-                  <input
-                    type="text"
-                    value={reviewRejectReason}
-                    onChange={(e) => setReviewRejectReason(e.target.value)}
-                    placeholder="Nhập lý do từ chối..."
-                    className="w-full text-xs rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleReviewExtension('REJECTED')}
-                      className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
-                    >
-                      Xác nhận Từ chối
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowRejectPrompt(false)
-                        setReviewRejectReason('')
-                      }}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                    >
-                      Hủy
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleReviewExtension('APPROVED')}
-                    className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
-                  >
-                    Duyệt yêu cầu
-                  </button>
-                  <button
-                    onClick={() => setShowRejectPrompt(true)}
-                    className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition"
-                  >
-                    Từ chối
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* SLA Extension Cohesive Row Card for TechSupport */}
-          {isTechSupportRoute && Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status) && (
-            (() => {
-              let cardBg = 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
-              let titleText = 'Yêu cầu gia hạn thời gian sửa chữa'
-              let detailText = 'Nếu sự cố phức tạp cần sửa lâu, bạn có thể xin Admin gia hạn thêm thời gian mà không bị trừ điểm KPI.'
-              let btnText = 'Yêu cầu gia hạn'
-              let showBtn = true
-              let isPending = false
-
-              if (pendingExtension) {
-                cardBg = 'bg-amber-50/70 border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/20'
-                titleText = `Đang chờ Admin duyệt gia hạn (+${pendingExtension.requestedMinutes} phút)`
-                detailText = `Lý do gửi: ${pendingExtension.reason}`
-                showBtn = false
-                isPending = true
-              } else if (lastExtensionReview?.eventType === 'EXTENSION_APPROVED') {
-                cardBg = 'bg-emerald-50/60 border-emerald-200 dark:bg-emerald-500/5 dark:border-emerald-500/20'
-                titleText = `Yêu cầu gia hạn thêm (+${lastExtensionReview.requestedMinutes || 15} phút) đã được duyệt!`
-                detailText = 'Hạn xử lý mới đã được cập nhật tự động. Bạn vẫn có thể gửi thêm yêu cầu gia hạn nếu cần thiết.'
-                btnText = 'Yêu cầu gia hạn tiếp'
-              } else if (lastExtensionReview?.eventType === 'EXTENSION_REJECTED') {
-                cardBg = 'bg-red-50/60 border-red-200 dark:bg-red-500/5 dark:border-red-500/20'
-                titleText = 'Yêu cầu gia hạn thêm đã bị Admin từ chối'
-                detailText = `Lý do từ chối: ${lastExtensionReview.rejectReason}`
-                btnText = 'Yêu cầu gia hạn lại'
-              }
-
-              return (
-                <div className={`rounded-[28px] border p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 ${cardBg}`}>
-                  <div className="flex-1 min-w-[280px]">
-                    <p className={`text-xs font-bold ${isPending ? 'text-amber-800 dark:text-amber-300' :
-                        lastExtensionReview?.eventType === 'EXTENSION_APPROVED' ? 'text-emerald-800 dark:text-emerald-300' :
-                          lastExtensionReview?.eventType === 'EXTENSION_REJECTED' ? 'text-red-800 dark:text-red-350' :
-                            'text-slate-800 dark:text-slate-100'
-                      }`}>
-                      {titleText}
-                    </p>
-                    <p className="text-[11px] text-slate-550 dark:text-slate-400 leading-normal mt-0.5">
-                      {detailText}
-                    </p>
-                  </div>
-                  {showBtn && (
-                    <button
-                      type="button"
-                      onClick={() => setShowExtensionModal(true)}
-                      className="rounded-xl bg-fptOrange px-4 py-2 text-xs font-semibold text-white hover:bg-fptOrangeDark transition shadow-sm"
-                    >
-                      {btnText}
-                    </button>
-                  )}
-                  {isPending && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      Đang chờ duyệt
-                    </span>
-                  )}
-                </div>
-              )
-            })()
-          )}
-
-          <div className={`grid gap-4 ${isMobileRoute ? 'grid-cols-1' : 'lg:grid-cols-[1.15fr_0.85fr]'}`}>
+        {!loading && ticket && (
+          <section className="space-y-4">
             <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Thiết bị liên quan</p>
-                  <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                    {ticket.assetName || 'Thiết bị'}
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    {ticket.assetQaCode} · {ticket.assetLocationName || 'Không rõ vị trí'}
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Tóm tắt ticket</p>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Nhìn một lượt để biết tình trạng hiện tại, người liên quan và các mốc thời gian quan trọng.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -622,272 +466,275 @@ function TicketDetail() {
                 </div>
               </div>
 
-              {isMobileRoute ? (
-                <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 dark:border-slate-800">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mức ưu tiên</span>
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                      ticket.priority === 'HIGH' ? 'bg-red-100 text-red-800' :
-                      ticket.priority === 'MEDIUM' ? 'bg-amber-100 text-amber-800' :
-                      'bg-blue-100 text-blue-800'
-                    }`}>{ticket.priority === 'HIGH' ? 'Cao' : ticket.priority === 'MEDIUM' ? 'Trung bình' : 'Thấp'}</span>
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {summaryItems.map((item) => (
+                  <div key={item.label} className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{item.label}</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-900 dark:text-slate-100">{item.value}</p>
                   </div>
-                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-2.5 dark:border-slate-800">
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Tạo lúc</span>
-                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(ticket.createdAt)}</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Hạn xử lý (Min)</span>
-                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{formatVietnamDateTime(minSlaDate)}</span>
-                    </div>
-                    {maxSlaDate && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-red-500">Hạn trễ phạt (Max)</span>
-                        <span className="text-xs font-bold text-red-600 dark:text-red-400">{formatVietnamDateTime(maxSlaDate)}</span>
-                      </div>
-                    )}
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500 pt-0.5 leading-normal">
-                      * Hoàn thành trong khoảng này không bị phạt điểm.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-5 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Mức ưu tiên</p>
-                    <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">{ticket.priority}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mức xử lý của ticket hiện tại.</p>
-                  </div>
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Tạo lúc</p>
-                    <p className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">{formatVietnamDateTime(ticket.createdAt)}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Thời điểm ghi nhận sự cố.</p>
-                  </div>
-                  <div className="rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400 font-semibold text-fptOrange">Hạn SLA</p>
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs text-slate-600 dark:text-slate-350">
-                        Hạn xử lý (Min): <span className="font-semibold text-slate-900 dark:text-slate-50">{formatVietnamDateTime(minSlaDate)}</span>
-                      </p>
-                      {maxSlaDate && (
-                        <p className="text-xs text-slate-600 dark:text-slate-350">
-                          Hạn trễ phạt (Max): <span className="font-semibold text-red-600 dark:text-red-400">{formatVietnamDateTime(maxSlaDate)}</span>
-                        </p>
-                      )}
-                    </div>
-                    <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500 leading-tight">Hoàn thành trong khoảng này không bị phạt điểm.</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Mô tả sự cố</p>
-                <p className="mt-3 text-sm leading-7 text-slate-700 dark:text-slate-300">{ticket.description}</p>
-                {ticket.imageUrl && (
-                  <AuthenticatedImage
-                    src={ticket.imageUrl}
-                    alt="Ảnh sự cố ban đầu"
-                    className="mt-4 max-h-80 w-full rounded-2xl object-contain"
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Thông tin xử lý</p>
-                <div className="mt-4 space-y-3 text-sm text-slate-700 dark:text-slate-300">
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Tiếp nhận lúc</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.acceptedAt, 'Chưa tiếp nhận')}</p>
-                  </div>
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {ticket.status === 'AWAITING_CONFIRMATION' ? 'Gửi kết quả lúc' : 'Hoàn tất lúc'}
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{formatVietnamDateTime(ticket.resolvedAt, 'Chưa hoàn tất')}</p>
-                  </div>
-                  {ticket.status === 'AWAITING_CONFIRMATION' && (
-                    <div className="rounded-[22px] border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-500/30 dark:bg-violet-500/10">
-                      <p className="text-xs text-violet-700 dark:text-violet-300">Chờ người báo xác nhận</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        Hạn xác nhận: {formatVietnamDateTime(ticket.confirmationDueAt)}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                        Quá thời hạn này, hệ thống sẽ tự động đóng ticket nếu không có phản hồi.
-                      </p>
-                    </div>
-                  )}
-                  {ticket.resolutionOutcome && (
-                    <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                      <p className="text-xs text-emerald-700 dark:text-emerald-300">Kết quả xử lý</p>
-                      <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{toVietnameseResolutionOutcome(ticket.resolutionOutcome)}</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{ticket.resolutionNote}</p>
-                      {ticket.resolutionImageUrl && (
-                        <AuthenticatedImage
-                          src={ticket.resolutionImageUrl}
-                          alt="Ảnh sau xử lý"
-                          className="mt-3 max-h-72 w-full rounded-2xl object-contain"
-                        />
-                      )}
-                    </div>
-                  )}
-                  {ticket.closedReason && (
-                    <div className="rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
-                      <p className="text-xs text-red-700 dark:text-red-300">Lý do đóng ticket</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{ticket.closedReason}</p>
-                    </div>
-                  )}
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Người báo</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{ticket.reporterName} | {toVietnameseRole(ticket.reporterRole)}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{ticket.reporterPhone || 'Chưa có số'}</p>
-                  </div>
-                  <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Kỹ thuật viên</p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-slate-100">{ticket.assigneeName || 'Chưa gán'}</p>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{ticket.assigneePhone || 'Chưa có số'}</p>
-                  </div>
-                </div>
+                ))}
               </div>
 
-              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Phản hồi người dùng</p>
-                <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Điểm hiện tại</p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                    {ticket.satisfactionScore ? `${ticket.satisfactionScore}/5` : 'Chưa có'}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{ticket.satisfactionComment || 'Chưa có nhận xét'}</p>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {canRateSatisfaction && !ticket.satisfactionScore && (
-                    <Link
-                      to={reviewPath}
-                      className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
-                    >
-                      <Star size={14} />
-                      Gửi đánh giá
-                      <ArrowRight size={14} />
-                    </Link>
-                  )}
-                  {canRateSatisfaction && ticket.satisfactionScore && (
-                    <Link
-                      to={reviewPath}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      Xem lại đánh giá
-                      <ArrowRight size={14} />
-                    </Link>
-                  )}
-                  {isStandardMobileRoute && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setShowTimelineModal(true)}
-                        className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-                      >
-                        <History size={15} />
-                        Xem timeline
-                      </button>
-                      <Link
-                        to={mobileChatPath}
-                        className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
-                      >
-                        <MessageCircle size={15} />
-                        Mở chat
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {isTechMobileRoute && reporterPhone && (
-            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ người báo hỏng</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <a
-                  href={`tel:${reporterPhone}`}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300"
-                >
-                  <Phone size={16} />
-                  Gọi điện
-                </a>
-                {reporterZaloUrl && (
-                  <a
-                    href={reporterZaloUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
-                  >
-                    <MessageCircle size={16} />
-                    Nhắn Zalo
-                  </a>
-                )}
+              <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      await copyText(reporterPhone)
-                      toast.success(`Đã copy số ${reporterPhone}.`)
-                    } catch {
-                      toast.error('Không copy được số điện thoại.')
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  onClick={() => setShowTimelineModal(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <Copy size={16} />
-                  Copy số
+                  <History size={15} />
+                  Xem timeline
                 </button>
+                {isStandardMobileRoute && (
+                  <Link
+                    to={mobileChatPath}
+                    className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300"
+                  >
+                    <MessageCircle size={15} />
+                    Mở chat
+                  </Link>
+                )}
               </div>
             </div>
-          )}
 
-          {showSupportContactCard && (
-            <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ kỹ thuật viên hỗ trợ</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {assigneePhone && (
+            <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Nội dung người dùng báo</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Đây là mô tả và hình ảnh người dùng gửi kèm để báo lỗi ban đầu, không phải ảnh QR hay ảnh xác nhận kỹ thuật.
+              </p>
+              <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
+                  {ticket.description || 'Người dùng chưa nhập mô tả.'}
+                </p>
+                {ticket.imageUrl && (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ảnh người dùng gửi kèm</p>
+                    <AuthenticatedImage
+                      src={ticket.imageUrl}
+                      alt="Ảnh người dùng gửi kèm"
+                      className="max-h-[420px] w-full rounded-2xl object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {((canCancelTicket || canReopenTicket || canResolveTicket || canConfirmResolution)
+              || (isTechSupportRoute && Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status))
+              || (user?.role === 'Admin' && pendingExtension)) && (
+              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Thao tác</p>
+
+                {isTechSupportRoute && Number(ticket.assigneeId) === Number(user?.userId) && TICKET_TECH_WORK_STATUSES.includes(ticket.status) ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowResolutionModal(true)}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+                    >
+                      {ticket.status === 'WAITING_REPLACEMENT' ? 'Gửi kết quả xử lý' : 'Gửi kết quả xử lý'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowExtensionModal(true)}
+                      disabled={Boolean(pendingExtension)}
+                      className="inline-flex w-full items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Yêu cầu gia hạn
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {canConfirmResolution && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmResolution(true)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          Xác nhận thiết bị đã ổn
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReasonAction('rejectResolution')}
+                          className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                        >
+                          Yêu cầu xử lý lại
+                        </button>
+                      </>
+                    )}
+                    {canCancelTicket && (
+                      <button
+                        type="button"
+                        onClick={() => setReasonAction('cancel')}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100"
+                      >
+                        <Trash size={16} />
+                        Hủy ticket
+                      </button>
+                    )}
+                    {canReopenTicket && (
+                      <button
+                        type="button"
+                        onClick={() => setReasonAction('reopen')}
+                        className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                      >
+                        <Refresh size={16} />
+                        Báo tái lỗi / mở lại
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {pendingExtension && (
+                  <div className="mt-4 rounded-[20px] border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                    Đang chờ duyệt yêu cầu gia hạn thêm {pendingExtension.requestedMinutes} phút.
+                  </div>
+                )}
+
+                {user?.role === 'Admin' && pendingExtension && (
+                  <div className="mt-4 rounded-[24px] border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-500/30 dark:bg-orange-500/10">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-fptOrange animate-ping" />
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Yêu cầu xin gia hạn đang chờ duyệt</p>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                      Kỹ thuật viên <span className="font-semibold">{pendingExtension.event.actorName}</span> xin thêm <span className="font-semibold text-fptOrange">{pendingExtension.requestedMinutes} phút</span>.
+                    </p>
+                    <p className="mt-2 rounded-xl border border-orange-100 bg-white/80 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-300">
+                      Lý do: {pendingExtension.reason}
+                    </p>
+                    {showRejectPrompt ? (
+                      <div className="mt-3 space-y-2">
+                        <input
+                          type="text"
+                          value={reviewRejectReason}
+                          onChange={(e) => setReviewRejectReason(e.target.value)}
+                          placeholder="Nhập lý do từ chối..."
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => handleReviewExtension('REJECTED')} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                            Xác nhận từ chối
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowRejectPrompt(false)
+                              setReviewRejectReason('')
+                            }}
+                            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button onClick={() => handleReviewExtension('APPROVED')} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                          Duyệt yêu cầu
+                        </button>
+                        <button onClick={() => setShowRejectPrompt(true)} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                          Từ chối
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isTechMobileRoute && reporterPhone && (
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ người báo hỏng</p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   <a
-                    href={`tel:${assigneePhone}`}
+                    href={`tel:${reporterPhone}`}
                     className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300"
                   >
                     <Phone size={16} />
-                    Gọi kỹ thuật viên
+                    Gọi điện
                   </a>
-                )}
-                {assigneeZaloUrl && (
-                  <a
-                    href={assigneeZaloUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
+                  {reporterZaloUrl && (
+                    <a
+                      href={reporterZaloUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
+                    >
+                      <MessageCircle size={16} />
+                      Nhắn Zalo
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await copyText(reporterPhone)
+                        toast.success(`Đã copy số ${reporterPhone}.`)
+                      } catch {
+                        toast.error('Không copy được số điện thoại.')
+                      }
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                   >
-                    <MessageCircle size={16} />
-                    Chat Zalo
-                  </a>
-                )}
+                    <Copy size={16} />
+                    Copy số
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </section>
-      )}
+            )}
 
-      {!canOpenChat && isTechRoute && (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-          Bạn chỉ có thể mở chat sau khi bấm “Nhận xử lý” ticket này.
-        </section>
-      )}
+            {showSupportContactCard && (
+              <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Liên hệ kỹ thuật viên hỗ trợ</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {assigneePhone && (
+                    <a
+                      href={`tel:${assigneePhone}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-slate-900 dark:text-emerald-300"
+                    >
+                      <Phone size={16} />
+                      Gọi kỹ thuật viên
+                    </a>
+                  )}
+                  {assigneeZaloUrl && (
+                    <a
+                      href={assigneeZaloUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300"
+                    >
+                      <MessageCircle size={16} />
+                      Chat Zalo
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
 
+            {!canOpenChat && isTechRoute && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                Bạn chỉ có thể mở chat sau khi bấm “Nhận xử lý” ticket này.
+              </section>
+            )}
+
+          </section>
+        )}
+      </div>
       {canOpenChat && (!isStandardMobileRoute ? (
         <>
           {isTechMobileRoute ? (
-            <TicketChatBox ticketId={Number(ticketId)} embedded readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />
-          ) : showChat && <TicketChatBox ticketId={Number(ticketId)} onClose={() => setShowChat(false)} readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)} />}
-          {!showChat && (
+            <TicketChatBox
+              ticketId={Number(ticketId)}
+              embedded
+              readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)}
+            />
+          ) : showChat ? (
+            <TicketChatBox
+              ticketId={Number(ticketId)}
+              onClose={() => setShowChat(false)}
+              readOnly={user?.role === 'Admin' || !TICKET_CHAT_OPEN_STATUSES.includes(ticket?.status)}
+            />
+          ) : (
             <button
               type="button"
               onClick={() => setShowChat(true)}

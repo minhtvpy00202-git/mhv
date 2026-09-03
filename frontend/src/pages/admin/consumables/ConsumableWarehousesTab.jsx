@@ -6,6 +6,7 @@ import {
   formatCurrency,
   formatDate,
   formatDateTime,
+  getConsumableUnitBreakdownTooltip,
   getStatusBadgeClass,
 } from './consumableDisplayUtils'
 
@@ -171,7 +172,7 @@ export default function ConsumableWarehousesTab({
                         <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">{stock.assetQaCode} • {stock.categoryName || 'Chưa phân loại'}</div>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-800 dark:text-slate-100">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${getStatusBadgeClass(tone)}`}>
+                        <span title={getConsumableUnitBreakdownTooltip(stock)} className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${getStatusBadgeClass(tone)}`}>
                           {formatConsumableQuantityText(stock, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
                         </span>
                       </td>

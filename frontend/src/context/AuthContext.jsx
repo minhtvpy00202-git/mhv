@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { resetAuthExpiredNoticeFlag } from '../api/axiosClient'
 
 const AuthContext = createContext(null)
+const NOTIFICATION_SESSION_STARTED_AT_KEY = 'mhv_notification_session_started_at'
 
 // Chuẩn hóa tên vai trò để frontend chỉ xử lý một tập giá trị thống nhất.
 const normalizeRole = (role) => {
@@ -51,6 +52,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('auth_username', username)
     localStorage.setItem('auth_full_name', fullName || '')
     localStorage.setItem('auth_tech_type_ids', JSON.stringify(normalizedTechTypeIds))
+    sessionStorage.setItem(NOTIFICATION_SESSION_STARTED_AT_KEY, String(Date.now()))
     resetAuthExpiredNoticeFlag()
   }
 
@@ -64,6 +66,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('auth_username')
     localStorage.removeItem('auth_full_name')
     localStorage.removeItem('auth_tech_type_ids')
+    sessionStorage.removeItem(NOTIFICATION_SESSION_STARTED_AT_KEY)
     resetAuthExpiredNoticeFlag()
   }, [])
 
@@ -82,6 +85,16 @@ export function AuthProvider({ children }) {
     window.addEventListener('mhv-auth-session-expired', handleSessionExpired)
     return () => window.removeEventListener('mhv-auth-session-expired', handleSessionExpired)
   }, [logout])
+
+  useEffect(() => {
+    if (!token) {
+      sessionStorage.removeItem(NOTIFICATION_SESSION_STARTED_AT_KEY)
+      return
+    }
+    if (!sessionStorage.getItem(NOTIFICATION_SESSION_STARTED_AT_KEY)) {
+      sessionStorage.setItem(NOTIFICATION_SESSION_STARTED_AT_KEY, String(Date.now()))
+    }
+  }, [token])
 
   const value = useMemo(
     () => ({

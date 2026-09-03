@@ -12,6 +12,7 @@ import {
   formatConsumableQuantityText,
   formatDate,
   formatDateTime,
+  getConsumableUnitBreakdownTooltip,
   getConsumableDisposalStatusMeta,
 } from './consumableDisplayUtils'
 
@@ -186,7 +187,9 @@ export default function ConsumableDisposalTab({
                       {lot.lotCode || `Lô #${lot.lotId}`}
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-800 dark:text-slate-100">
-                      {formatConsumableQuantityText(lot, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
+                      <span title={getConsumableUnitBreakdownTooltip(lot)}>
+                        {formatConsumableQuantityText(lot, { quantityField: 'quantityRemaining', formattedField: 'formattedQuantityRemaining' })}
+                      </span>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-slate-600 dark:text-slate-300">
                       {formatDate(lot.expirationDate)}

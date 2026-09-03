@@ -70,6 +70,32 @@ export function formatConsumableQuantityText(item, options = {}) {
   return `${retailQuantity} ${retailUnit}`
 }
 
+export function formatConsumableRequestedInputText(item, fallback = null) {
+  const formattedValue = getFirstText(item?.formattedRequestedInputQuantity)
+  if (formattedValue) return formattedValue
+
+  const quantity = Number(item?.quantityRequestedInput ?? item?.quantityRequested ?? 0)
+  if (Number.isNaN(quantity) || quantity < 0) {
+    return fallback ?? `0 ${getConsumableRetailUnit(item)}`
+  }
+
+  const normalizedUnit = getFirstText(item?.quantityRequestedUnit, 'RETAIL').toUpperCase()
+  if (normalizedUnit === 'WHOLESALE') {
+    return `${quantity} ${getFirstText(item?.wholesaleUnit, getConsumableRetailUnit(item))}`
+  }
+  return `${quantity} ${getConsumableRetailUnit(item)}`
+}
+
+export function getConsumableUnitBreakdownTooltip(item) {
+  const retailUnit = getConsumableRetailUnit(item, '')
+  const wholesaleUnit = getFirstText(item?.wholesaleUnit)
+  const factor = Number(item?.wholesaleToRetailFactor ?? 1)
+  if (!retailUnit || !wholesaleUnit || !Number.isInteger(factor) || factor <= 1) {
+    return ''
+  }
+  return `1 ${wholesaleUnit} = ${factor} ${retailUnit}`
+}
+
 function parseDateOnly(value) {
   const raw = String(value || '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null

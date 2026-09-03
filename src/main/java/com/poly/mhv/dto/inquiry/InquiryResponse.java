@@ -28,7 +28,15 @@ public class InquiryResponse {
     private String assetUsageStatus;
     private Integer availableQuantity;
     private String unit;
+    private String retailUnit;
+    private String wholesaleUnit;
+    private Integer wholesaleToRetailFactor;
     private Integer quantityRequested;
+    private Integer quantityRequestedInput;
+    private String quantityRequestedUnit;
+    private String formattedQuantityRequested;
+    private String formattedRequestedInputQuantity;
+    private String formattedQuantityRequestedRetailOnly;
     private Integer destinationLocationId;
     private String destinationLocationName;
     private LocalDate neededFrom;

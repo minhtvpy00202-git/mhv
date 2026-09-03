@@ -162,12 +162,6 @@ public class InquiryController {
         return ResponseEntity.ok(inquiryService.confirmReceipt(id));
     }
 
-    @PostMapping("/{id}/create-borrow-request")
-    @PreAuthorize("hasRole('Admin')")
-    public ResponseEntity<InquiryResponse> createBorrowRequest(@PathVariable Long id) {
-        return ResponseEntity.ok(inquiryService.createBorrowRequest(id));
-    }
-
     @PostMapping("/{id}/create-consumable-request")
     @PreAuthorize("hasRole('ConsumableManager')")
     public ResponseEntity<InquiryResponse> createConsumableRequest(

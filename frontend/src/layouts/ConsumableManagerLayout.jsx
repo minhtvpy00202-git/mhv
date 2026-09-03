@@ -2,6 +2,7 @@ import {
   IconBell as Bell,
   IconBoxMultiple as Boxes,
   IconChartBar as ChartBar,
+  IconKey as Key,
   IconLogout as LogOut,
   IconMapPin as MapPin,
   IconMessageCircle as MessageCircle,
@@ -12,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ChangePasswordModal from '../components/ChangePasswordModal'
 import ThemeToggle from '../components/ThemeToggle'
 import UserTimeClock from '../components/UserTimeClock'
 import { useAuth } from '../context/AuthContext'
@@ -22,8 +24,8 @@ import { formatVietnamDateTime } from '../utils/datetime'
 const consumableMenuItems = [
   {
     to: '/supply/inquiries',
-    label: 'Yêu cầu cấp phát',
-    description: 'Trao đổi với nhân viên',
+    label: 'Yêu cầu từ nhân viên',
+    description: 'Nhận xử lý và trao đổi',
     icon: MessageCircle,
   },
   {
@@ -66,6 +68,7 @@ function ConsumableManagerLayout() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async (suppressError = false) => {
@@ -226,6 +229,14 @@ function ConsumableManagerLayout() {
             </div>
             <button
               type="button"
+              onClick={() => setShowChangePasswordModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Key size={16} />
+              Đổi mật khẩu
+            </button>
+            <button
+              type="button"
               onClick={logout}
               className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -238,6 +249,7 @@ function ConsumableManagerLayout() {
           <Outlet />
         </main>
       </div>
+      <ChangePasswordModal open={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} />
     </div>
   )
 }
