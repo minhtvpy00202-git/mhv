@@ -94,6 +94,17 @@ const defaultConsumableStatusCounts = {
   healthy: 0,
   restock: 0,
 };
+const defaultWarehouseOverview = {
+  warehouseLocationId: null,
+  warehouseLocationName: "Tất cả kho",
+  warehouseCount: 0,
+  stockRowCount: 0,
+  lowStockCount: 0,
+  outOfStockCount: 0,
+  totalInventoryValue: null,
+  stocks: [],
+  transferHistory: [],
+};
 const defaultWarehouseViewFilters = {
   expiryStatus: "",
   unitMode: "",
@@ -259,6 +270,21 @@ function getCategoryLabel(category) {
 
 function getSupplierLabel(supplier) {
   return supplier?.name || "";
+}
+
+function validateLocationInlineForm(form) {
+  const errors = {};
+  const roomName = String(form?.roomName || "").trim();
+
+  if (roomName.length < 2 || roomName.length > 100) {
+    errors.roomName = "Tên phòng phải từ 2 đến 100 ký tự.";
+  }
+
+  if (form?.floorId && Number.isNaN(Number(form.floorId))) {
+    errors.floorId = "Tầng đã chọn không hợp lệ.";
+  }
+
+  return errors;
 }
 
 function formatCurrency(value) {
@@ -847,6 +873,14 @@ function AssetManagement({
     phoneNumber: "",
   });
   const [supplierFormErrors, setSupplierFormErrors] = useState({});
+  const [showLocationCreateModal, setShowLocationCreateModal] = useState(false);
+  const [creatingLocation, setCreatingLocation] = useState(false);
+  const [locationCreateFloors, setLocationCreateFloors] = useState([]);
+  const [locationForm, setLocationForm] = useState({
+    roomName: "",
+    floorId: "",
+  });
+  const [locationFormErrors, setLocationFormErrors] = useState({});
   const [activeTab, setActiveTab] = useState(initialTrackingMode);
   const [openActionMenuQaCode, setOpenActionMenuQaCode] = useState(null);
   const [actionMenuPos, setActionMenuPos] = useState({
@@ -865,6 +899,9 @@ function AssetManagement({
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showConsumableAdvancedFilters, setShowConsumableAdvancedFilters] =
     useState(false);
+  const [warehouseOverview, setWarehouseOverview] = useState(
+    defaultWarehouseOverview,
+  );
   const [warehouseViewFilters, setWarehouseViewFilters] = useState(
     defaultWarehouseViewFilters,
   );
@@ -1132,6 +1169,135 @@ function AssetManagement({
       ) || null,
     [selectedWarehouseLocationId, warehouseLocations],
   );
+  const warehouseVisibleStocks = useMemo(() => {
+    const keyword = String(filters.name || "")
+      .trim()
+      .toLowerCase();
+    const selectedCategoryId = String(filters.categoryId || "");
+    const requestedStatus = String(filters.status || "").trim();
+
+    const filteredStocks = (warehouseOverview.stocks || []).filter((stock) => {
+      if (keyword) {
+        const haystacks = [stock.assetQaCode, stock.assetName, stock.categoryName];
+        const matchesKeyword = haystacks.some((value) =>
+          String(value || "")
+            .toLowerCase()
+            .includes(keyword),
+        );
+        if (!matchesKeyword) return false;
+      }
+
+      if (
+        selectedCategoryId &&
+        String(stock.categoryId || "") !== selectedCategoryId
+      ) {
+        return false;
+      }
+
+      const quantityRemaining = Number(stock.quantityRemaining ?? 0);
+      const minimumStock = Number(stock.minimumStock ?? 0);
+      if (
+        requestedStatus === "Còn hàng" &&
+        quantityRemaining <= minimumStock
+      ) {
+        return false;
+      }
+      if (
+        requestedStatus === "Cần nhập" &&
+        quantityRemaining > minimumStock
+      ) {
+        return false;
+      }
+
+      const expiryState = getConsumableExpiryState({
+        expiryTrackingEnabled: stock.expiryTrackingEnabled,
+        expirationDate: stock.nearestExpirationDate,
+      });
+      if (
+        warehouseViewFilters.expiryStatus === "EXPIRING" &&
+        expiryState.label !== "Sắp hết hạn"
+      ) {
+        return false;
+      }
+      if (
+        warehouseViewFilters.expiryStatus === "EXPIRED" &&
+        !["Đã hết hạn", "Hết hạn hôm nay"].includes(expiryState.label)
+      ) {
+        return false;
+      }
+      if (
+        warehouseViewFilters.expiryStatus === "NO_TRACKING" &&
+        expiryState.label !== "Không quản lý"
+      ) {
+        return false;
+      }
+      if (
+        warehouseViewFilters.expiryStatus === "MISSING" &&
+        expiryState.label !== "Chưa cập nhật"
+      ) {
+        return false;
+      }
+
+      const assetMeta =
+        assetDetailsByQaCode[stock.assetQaCode] ||
+        assets.find((asset) => asset.qaCode === stock.assetQaCode);
+      if (
+        warehouseViewFilters.unitMode &&
+        assetMeta &&
+        getWarehouseUnitMode(assetMeta) !== warehouseViewFilters.unitMode
+      ) {
+        return false;
+      }
+
+      if (
+        warehouseViewFilters.inventoryValueRange &&
+        getWarehouseInventoryValueRange(stock.inventoryValue) !==
+          warehouseViewFilters.inventoryValueRange
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (warehouseViewFilters.sortBy === "DEFAULT") {
+      return filteredStocks;
+    }
+
+    return [...filteredStocks].sort((left, right) => {
+      if (warehouseViewFilters.sortBy === "NAME_ASC") {
+        return String(left.assetName || "").localeCompare(
+          String(right.assetName || ""),
+          "vi",
+        );
+      }
+      if (warehouseViewFilters.sortBy === "QUANTITY_DESC") {
+        return Number(right.quantityRemaining ?? 0) - Number(left.quantityRemaining ?? 0);
+      }
+      if (warehouseViewFilters.sortBy === "VALUE_DESC") {
+        return compareNullableNumbers(right.inventoryValue, left.inventoryValue);
+      }
+      if (warehouseViewFilters.sortBy === "EXPIRY_ASC") {
+        return compareNullableNumbers(
+          left.nearestExpirationDate
+            ? parseDateOnly(left.nearestExpirationDate)?.getTime()
+            : null,
+          right.nearestExpirationDate
+            ? parseDateOnly(right.nearestExpirationDate)?.getTime()
+            : null,
+        );
+      }
+      return 0;
+    });
+  }, [
+    assetDetailsByQaCode,
+    assets,
+    filters.categoryId,
+    filters.name,
+    filters.status,
+    warehouseOverview,
+    warehouseViewFilters,
+  ]);
 
   useEffect(() => {
     if (!openActionMenuQaCode) return;
@@ -1566,6 +1732,36 @@ function AssetManagement({
     }
   };
 
+  const loadWarehouseOverview = useCallback(async (warehouseLocationId = null) => {
+    setLoading(true);
+    try {
+      const response = await axiosClient.get(
+        "/api/assets/consumables/warehouses-overview",
+        {
+          params: warehouseLocationId
+            ? { warehouseLocationId: Number(warehouseLocationId) }
+            : {},
+        },
+      );
+      setWarehouseOverview({
+        ...defaultWarehouseOverview,
+        ...(response.data || {}),
+        stocks: Array.isArray(response.data?.stocks) ? response.data.stocks : [],
+        transferHistory: Array.isArray(response.data?.transferHistory)
+          ? response.data.transferHistory
+          : [],
+      });
+    } catch (error) {
+      setWarehouseOverview(defaultWarehouseOverview);
+      const message =
+        error?.response?.data?.message ||
+        "Không thể tải tổng hợp tồn kho theo kho.";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const buildConsumableStatusCountFilters = (nextFilters) => ({
     name: nextFilters.name,
     trackingMode: "CONSUMABLE",
@@ -1832,14 +2028,22 @@ function AssetManagement({
     };
     setFilters(nextFilters);
     setConsumableFilterDraft(nextDraft);
-    void loadAssets(0, nextFilters, sortState);
   }, [
     consumableFilterDraft,
     consumableWorkspace,
     filters,
     isConsumableTab,
     selectedWarehouseLocationId,
-    sortState,
+  ]);
+
+  useEffect(() => {
+    if (!isConsumableTab || consumableWorkspace !== "WAREHOUSES") return;
+    void loadWarehouseOverview(selectedWarehouseLocationId || null);
+  }, [
+    consumableWorkspace,
+    isConsumableTab,
+    loadWarehouseOverview,
+    selectedWarehouseLocationId,
   ]);
 
   useEffect(() => {
@@ -1991,6 +2195,36 @@ function AssetManagement({
   const closeSupplierCreateModal = () => {
     setShowSupplierCreateModal(false);
     resetSupplierForm();
+  };
+
+  const resetLocationForm = () => {
+    setLocationForm({
+      roomName: "",
+      floorId: "",
+    });
+    setLocationFormErrors({});
+  };
+
+  const closeLocationCreateModal = () => {
+    setShowLocationCreateModal(false);
+    resetLocationForm();
+  };
+
+  const loadLocationCreateFloors = async () => {
+    const response = await axiosClient.get("/api/asset-map/floors");
+    setLocationCreateFloors(response.data || []);
+  };
+
+  const handleOpenLocationCreateModal = async () => {
+    resetLocationForm();
+    setShowLocationCreateModal(true);
+    try {
+      await loadLocationCreateFloors();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message || "Không thể tải danh sách tầng.";
+      toast.error(message);
+    }
   };
 
   const closeFormModal = () => {
@@ -2614,11 +2848,84 @@ function AssetManagement({
     }
   };
 
+  const handleCreateLocationInline = async () => {
+    const nextErrors = validateLocationInlineForm(locationForm);
+    setLocationFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0]);
+      return;
+    }
+
+    setCreatingLocation(true);
+    try {
+      const response = await axiosClient.post("/api/locations", {
+        roomName: locationForm.roomName.trim(),
+        floorId: locationForm.floorId ? Number(locationForm.floorId) : null,
+        areaTypeKey: null,
+        areaTypeLabel: null,
+      });
+      const createdLocation = response.data;
+      setLocations((prev) =>
+        [...prev, createdLocation].sort((a, b) =>
+          String(a?.roomName || "").localeCompare(
+            String(b?.roomName || ""),
+            "vi",
+          ),
+        ),
+      );
+      setForm((prev) => ({
+        ...prev,
+        locationId: String(createdLocation.id),
+      }));
+      setFormErrors((prev) => ({ ...prev, locationId: "" }));
+      toast.success("Đã thêm phòng gốc mới.");
+      closeLocationCreateModal();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message || "Không thể thêm phòng mới.";
+      toast.error(message);
+    } finally {
+      setCreatingLocation(false);
+    }
+  };
+
+  const applyItemizedDropdownFilters = async (nextDraft) => {
+    const resolvedDraft = {
+      ...nextDraft,
+      trackingMode: "ITEMIZED",
+    };
+    setItemizedFilterDraft(resolvedDraft);
+    setFilters(resolvedDraft);
+    await loadAssets(0, resolvedDraft);
+  };
+
+  const applyConsumableDropdownFilters = async (
+    nextDraft,
+    nextWarehouseViewDraft = warehouseViewFilterDraft,
+  ) => {
+    const resolvedDraft = {
+      ...nextDraft,
+      trackingMode: "CONSUMABLE",
+    };
+    setConsumableFilterDraft(resolvedDraft);
+    setFilters(resolvedDraft);
+    if (consumableWorkspace === "WAREHOUSES") {
+      setWarehouseViewFilterDraft(nextWarehouseViewDraft);
+      setWarehouseViewFilters(nextWarehouseViewDraft);
+      return;
+    }
+    await loadAssets(0, resolvedDraft);
+  };
+
   const handleSearch = async () => {
     const draft = isConsumableTab ? consumableFilterDraft : itemizedFilterDraft;
     const nextFilters = { ...draft, trackingMode: activeTrackingMode };
     if (isConsumableTab && consumableWorkspace === "WAREHOUSES") {
       setWarehouseViewFilters(warehouseViewFilterDraft);
+      setFilters(nextFilters);
+      setConsumableFilterDraft(nextFilters);
+      await loadWarehouseOverview(selectedWarehouseLocationId || null);
+      return;
     }
     setFilters(nextFilters);
     if (isConsumableTab) setConsumableFilterDraft(nextFilters);
@@ -2644,6 +2951,11 @@ function AssetManagement({
     if (isConsumableTab && consumableWorkspace === "WAREHOUSES") {
       setWarehouseViewFilters(defaultWarehouseViewFilters);
       setWarehouseViewFilterDraft(defaultWarehouseViewFilters);
+      setFilters(reset);
+      setItemizedFilterDraft(reset);
+      setConsumableFilterDraft(reset);
+      await loadWarehouseOverview(selectedWarehouseLocationId || null);
+      return;
     }
     setFilters(reset);
     setItemizedFilterDraft(reset);
@@ -2653,7 +2965,7 @@ function AssetManagement({
 
   const handleOpenIssueModal = async (
     assetOrQaCode,
-    { locationId = "" } = {},
+    { locationId = "", sourceWarehouseLocationId = "" } = {},
   ) => {
     const qaCode =
       typeof assetOrQaCode === "string" ? assetOrQaCode : assetOrQaCode?.qaCode;
@@ -2675,7 +2987,10 @@ function AssetManagement({
       setIssueForm({
         issuedToLocationId: locationId ? String(locationId) : "",
         sourceWarehouseLocationId: String(
-          detail?.homeLocationId || initialWarehouseOptions[0]?.id || "",
+          sourceWarehouseLocationId ||
+            detail?.homeLocationId ||
+            initialWarehouseOptions[0]?.id ||
+            "",
         ),
         quantity: "",
         quantityUnit:
@@ -2706,7 +3021,10 @@ function AssetManagement({
     });
   };
 
-  const handleOpenReceiveModal = async (asset) => {
+  const handleOpenReceiveModal = async (
+    asset,
+    { warehouseLocationId = "" } = {},
+  ) => {
     try {
       const detail = await fetchAssetDetail(asset.qaCode);
       setSelectedReceiveAsset(detail);
@@ -2719,7 +3037,8 @@ function AssetManagement({
         unitPrice: detail?.purchasePrice ? String(detail.purchasePrice) : "",
         supplierId: detail?.supplierId ? String(detail.supplierId) : "",
         warehouseLocationId: String(
-          detail?.homeLocationId ||
+          warehouseLocationId ||
+            detail?.homeLocationId ||
             defaultConsumableWarehouseLocation?.id ||
             "",
         ),
@@ -3247,6 +3566,9 @@ function AssetManagement({
           : "Cấp phát vật phẩm thành công.",
       );
       await loadAssets(pageInfo.page);
+      if (isConsumableTab && consumableWorkspace === "WAREHOUSES") {
+        await loadWarehouseOverview(selectedWarehouseLocationId || null);
+      }
       if (selectedRoomId) {
         await refreshRoomOverview(selectedRoomId);
       }
@@ -3949,18 +4271,6 @@ function AssetManagement({
                       />
                       Bộ lọc nâng cao
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleSearch}
-                      disabled={loading}
-                      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
-                        hasPendingEffectiveConsumableFilterChanges
-                          ? "bg-fptOrangeDark shadow-sm ring-2 ring-orange-200 hover:bg-fptOrange"
-                          : "bg-fptOrange hover:bg-fptOrangeDark"
-                      }`}
-                    >
-                      Lọc
-                    </button>
                     {hasEffectiveConsumableFilters && (
                       <button
                         type="button"
@@ -3976,8 +4286,8 @@ function AssetManagement({
 
                 {hasPendingEffectiveConsumableFilterChanges && (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                    Có thay đổi bộ lọc chưa áp dụng. Bấm Lọc để cập nhật danh
-                    sách.
+                    Nhập từ khóa rồi nhấn Enter để cập nhật danh sách. Các
+                    dropdown trong bộ lọc nâng cao sẽ tự áp dụng ngay khi chọn.
                   </p>
                 )}
 
@@ -3989,20 +4299,21 @@ function AssetManagement({
                         </label>
                         <SearchableSelect
                           value={consumableFilterDraft.categoryId}
-                          onChange={(nextValue) =>
-                            setConsumableFilterDraft((prev) => ({
-                              ...prev,
-                              categoryId: String(nextValue || ""),
+                          onChange={(nextValue) => {
+                            const categoryId = String(nextValue || "");
+                            const nextDraft = {
+                              ...consumableFilterDraft,
+                              categoryId,
                               categoryKeyword:
                                 getCategoryLabel(
                                   categories.find(
                                     (category) =>
-                                      String(category.id) ===
-                                      String(nextValue || ""),
+                                      String(category.id) === categoryId,
                                   ),
                                 ) || "",
-                            }))
-                          }
+                            };
+                            void applyConsumableDropdownFilters(nextDraft);
+                          }}
                           options={filteredCategoryOptions}
                           getOptionValue={(category) => category.id}
                           getOptionLabel={(category) =>
@@ -4019,12 +4330,13 @@ function AssetManagement({
                         </label>
                         <select
                           value={consumableFilterDraft.status}
-                          onChange={(e) =>
-                            setConsumableFilterDraft((prev) => ({
-                              ...prev,
+                          onChange={(e) => {
+                            const nextDraft = {
+                              ...consumableFilterDraft,
                               status: e.target.value,
-                            }))
-                          }
+                            };
+                            void applyConsumableDropdownFilters(nextDraft);
+                          }}
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                         >
                           <option value="">Tất cả trạng thái</option>
@@ -4042,12 +4354,13 @@ function AssetManagement({
                           </label>
                           <SearchableSelect
                             value={consumableFilterDraft.locationId}
-                            onChange={(nextValue) =>
-                              setConsumableFilterDraft((prev) => ({
-                                ...prev,
+                            onChange={(nextValue) => {
+                              const nextDraft = {
+                                ...consumableFilterDraft,
                                 locationId: String(nextValue || ""),
-                              }))
-                            }
+                              };
+                              void applyConsumableDropdownFilters(nextDraft);
+                            }}
                             options={locations}
                             getOptionValue={(location) => location.id}
                             getOptionLabel={(location) => location.roomName}
@@ -4064,12 +4377,16 @@ function AssetManagement({
                             </label>
                             <select
                               value={warehouseViewFilterDraft.expiryStatus}
-                              onChange={(e) =>
-                                setWarehouseViewFilterDraft((prev) => ({
-                                  ...prev,
+                              onChange={(e) => {
+                                const nextWarehouseViewDraft = {
+                                  ...warehouseViewFilterDraft,
                                   expiryStatus: e.target.value,
-                                }))
-                              }
+                                };
+                                void applyConsumableDropdownFilters(
+                                  consumableFilterDraft,
+                                  nextWarehouseViewDraft,
+                                );
+                              }}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             >
                               <option value="">Tất cả HSD</option>
@@ -4085,12 +4402,16 @@ function AssetManagement({
                             </label>
                             <select
                               value={warehouseViewFilterDraft.unitMode}
-                              onChange={(e) =>
-                                setWarehouseViewFilterDraft((prev) => ({
-                                  ...prev,
+                              onChange={(e) => {
+                                const nextWarehouseViewDraft = {
+                                  ...warehouseViewFilterDraft,
                                   unitMode: e.target.value,
-                                }))
-                              }
+                                };
+                                void applyConsumableDropdownFilters(
+                                  consumableFilterDraft,
+                                  nextWarehouseViewDraft,
+                                );
+                              }}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             >
                               <option value="">Tất cả quy cách</option>
@@ -4104,12 +4425,16 @@ function AssetManagement({
                             </label>
                             <select
                               value={warehouseViewFilterDraft.inventoryValueRange}
-                              onChange={(e) =>
-                                setWarehouseViewFilterDraft((prev) => ({
-                                  ...prev,
+                              onChange={(e) => {
+                                const nextWarehouseViewDraft = {
+                                  ...warehouseViewFilterDraft,
                                   inventoryValueRange: e.target.value,
-                                }))
-                              }
+                                };
+                                void applyConsumableDropdownFilters(
+                                  consumableFilterDraft,
+                                  nextWarehouseViewDraft,
+                                );
+                              }}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             >
                               <option value="">Tất cả giá trị tồn</option>
@@ -4125,12 +4450,16 @@ function AssetManagement({
                             </label>
                             <select
                               value={warehouseViewFilterDraft.sortBy}
-                              onChange={(e) =>
-                                setWarehouseViewFilterDraft((prev) => ({
-                                  ...prev,
+                              onChange={(e) => {
+                                const nextWarehouseViewDraft = {
+                                  ...warehouseViewFilterDraft,
                                   sortBy: e.target.value,
-                                }))
-                              }
+                                };
+                                void applyConsumableDropdownFilters(
+                                  consumableFilterDraft,
+                                  nextWarehouseViewDraft,
+                                );
+                              }}
                               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                             >
                               <option value="DEFAULT">Theo mặc định hệ thống</option>
@@ -4157,7 +4486,7 @@ function AssetManagement({
                   </h2>
                   <p className="text-xs font-medium text-slate-400 dark:text-slate-500">
                     {consumableWorkspace === "WAREHOUSES"
-                      ? `Hiển thị ${visibleConsumableAssets.length} / ${pageInfo.totalItems}`
+                      ? `Hiển thị ${warehouseVisibleStocks.length} / ${warehouseOverview.stockRowCount || 0}`
                       : `Tổng: ${pageInfo.totalItems}`}
                   </p>
                 </div>
@@ -4248,6 +4577,195 @@ function AssetManagement({
                           </tr>
                         ))}
                       {!loading &&
+                        consumableWorkspace === "WAREHOUSES" &&
+                        warehouseVisibleStocks.map((stock) => {
+                          const nearestExpiryState = getConsumableExpiryState({
+                            expiryTrackingEnabled: stock.expiryTrackingEnabled,
+                            expirationDate: stock.nearestExpirationDate,
+                          });
+                          const specsCount = parseSpecsToEntries(
+                            assetDetailsByQaCode[stock.assetQaCode]?.specs,
+                          ).length;
+                          const qty = Number(stock.quantityRemaining ?? 0);
+                          const min = Number(stock.minimumStock ?? 0);
+                          const stockTone =
+                            qty <= 0
+                              ? "red"
+                              : min > 0 && qty <= min
+                                ? "amber"
+                                : "emerald";
+                          const warehouseName = stock.warehouseLocationName || "–";
+                          return (
+                            <tr
+                              key={`${stock.warehouseLocationId}-${stock.assetQaCode}`}
+                              className="bg-white hover:bg-orange-50/30 dark:bg-slate-950 dark:hover:bg-slate-900/60"
+                            >
+                              <td
+                                className="truncate px-3 py-2 font-semibold text-slate-600 dark:text-slate-300"
+                                title={stock.assetQaCode}
+                              >
+                                {stock.assetQaCode}
+                              </td>
+                              <td
+                                className="truncate px-3 py-2 font-medium text-slate-800 dark:text-slate-100"
+                                title={stock.assetName}
+                              >
+                                {stock.assetName}
+                              </td>
+                              <td
+                                className="truncate px-3 py-2 text-slate-600 dark:text-slate-300"
+                                title={stock.categoryName}
+                              >
+                                {stock.categoryName || "–"}
+                              </td>
+                              <td
+                                className="truncate px-3 py-2 text-slate-600 dark:text-slate-300"
+                                title={warehouseName}
+                              >
+                                {warehouseName}
+                              </td>
+                              <td
+                                className="truncate px-3 py-2"
+                                title={
+                                  stockTone === "red"
+                                    ? "Hết hàng"
+                                    : stockTone === "amber"
+                                      ? "Cần nhập"
+                                      : "Đủ dùng"
+                                }
+                              >
+                                <span
+                                  className={`font-semibold tabular-nums ${stockTone === "red" ? "text-red-600 dark:text-red-400" : stockTone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-emerald-700 dark:text-emerald-400"}`}
+                                >
+                                  {stock.formattedQuantityRemaining || "0"}
+                                </span>
+                                {min > 0 && (
+                                  <span className="text-slate-400 dark:text-slate-500">
+                                    {" "}
+                                    / {stock.formattedMinimumStock || min}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOpenSpecsModal({
+                                      qaCode: stock.assetQaCode,
+                                      trackingMode: "CONSUMABLE",
+                                    })
+                                  }
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+                                >
+                                  <Detail size={13} />
+                                  <span>
+                                    {specsCount > 0
+                                      ? `${specsCount} mục`
+                                      : "Xem"}
+                                  </span>
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                {stock.expiryTrackingEnabled ? (
+                                  nearestExpiryState.dateLabel ===
+                                  "Chưa cập nhật" ? (
+                                    <span
+                                      title={nearestExpiryState.label}
+                                      className={`inline-flex max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusBadgeClass(nearestExpiryState.tone)}`}
+                                    >
+                                      Chưa HSD
+                                    </span>
+                                  ) : (
+                                    <span
+                                      title={nearestExpiryState.label}
+                                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${getStatusBadgeClass(nearestExpiryState.tone)}`}
+                                    >
+                                      {nearestExpiryState.dateLabel}
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-slate-400 dark:text-slate-500">
+                                    –
+                                  </span>
+                                )}
+                              </td>
+                              <td
+                                className="truncate px-3 py-2 text-right"
+                                title={
+                                  stock.inventoryValue != null
+                                    ? formatRoundedCurrency(stock.inventoryValue)
+                                    : undefined
+                                }
+                              >
+                                {stock.inventoryValue != null ? (
+                                  <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                                    {formatRoundedCurrencyCompact(stock.inventoryValue)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 dark:text-slate-500">
+                                    –
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-2 py-2">
+                                <div className="flex justify-end gap-0.5">
+                                  <ActionIconButton
+                                    icon={PackagePlus}
+                                    label="Nhập hàng"
+                                    variant="success"
+                                    className="h-7 w-7"
+                                    onClick={() =>
+                                      handleOpenReceiveModal(
+                                        { qaCode: stock.assetQaCode },
+                                        {
+                                          warehouseLocationId:
+                                            stock.warehouseLocationId,
+                                        },
+                                      )
+                                    }
+                                  />
+                                  {!isConsumableManager && (
+                                    <ActionIconButton
+                                      icon={Send}
+                                      label="Cấp phát"
+                                      variant="info"
+                                      className="h-7 w-7"
+                                      onClick={() =>
+                                        handleOpenIssueModal(stock.assetQaCode, {
+                                          sourceWarehouseLocationId:
+                                            stock.warehouseLocationId,
+                                        })
+                                      }
+                                    />
+                                  )}
+                                  <ActionIconButton
+                                    icon={Wrench}
+                                    label="Sửa vật tư"
+                                    variant="primary"
+                                    className="h-7 w-7"
+                                    onClick={() =>
+                                      handleSelectAsset({
+                                        qaCode: stock.assetQaCode,
+                                        categoryId: stock.categoryId,
+                                      })
+                                    }
+                                  />
+                                  <ActionIconButton
+                                    icon={Trash2}
+                                    label="Xóa vật tư"
+                                    variant="danger"
+                                    className="h-7 w-7"
+                                    onClick={() =>
+                                      handleDeleteAsset(stock.assetQaCode)
+                                    }
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      {!loading &&
+                        consumableWorkspace !== "WAREHOUSES" &&
                         visibleConsumableAssets.map((asset) => {
                           const expiryGroups =
                             consumableExpiryGroupsByQaCode[asset.qaCode] ||
@@ -4431,7 +4949,11 @@ function AssetManagement({
                             </tr>
                           );
                         })}
-                      {!loading && visibleConsumableAssets.length === 0 && (
+                      {!loading &&
+                        ((consumableWorkspace === "WAREHOUSES" &&
+                          warehouseVisibleStocks.length === 0) ||
+                          (consumableWorkspace !== "WAREHOUSES" &&
+                            visibleConsumableAssets.length === 0)) && (
                         <tr>
                           <td
                             colSpan={9}
@@ -4445,7 +4967,9 @@ function AssetManagement({
                   </table>
                 </div>
 
-                {!loading && pageInfo.totalItems > 0 && (
+                {!loading &&
+                  consumableWorkspace !== "WAREHOUSES" &&
+                  pageInfo.totalItems > 0 && (
                   <div className="mt-4 flex flex-col gap-3 text-sm text-slate-600 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Hiển thị {visibleConsumableAssets.length} / {pageInfo.totalItems} vật tư
@@ -4588,18 +5112,6 @@ function AssetManagement({
                   />
                   Bộ lọc nâng cao
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSearch}
-                  disabled={loading}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
-                    hasPendingItemizedFilterChanges
-                      ? "bg-fptOrangeDark shadow-sm ring-2 ring-orange-200 hover:bg-fptOrange"
-                      : "bg-fptOrange hover:bg-fptOrangeDark"
-                  }`}
-                >
-                  Lọc
-                </button>
                 {hasActiveItemizedFilters && (
                   <button
                     type="button"
@@ -4615,7 +5127,8 @@ function AssetManagement({
 
             {hasPendingItemizedFilterChanges && (
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                Có thay đổi bộ lọc chưa áp dụng. Bấm Lọc để cập nhật danh sách.
+                Nhập từ khóa rồi nhấn Enter để cập nhật danh sách. Các
+                dropdown trong bộ lọc nâng cao sẽ tự áp dụng ngay khi chọn.
               </p>
             )}
 
@@ -4629,8 +5142,8 @@ function AssetManagement({
                     value={itemizedFilterDraft.categoryId}
                     onChange={(nextValue) => {
                       const categoryId = String(nextValue || "");
-                      setItemizedFilterDraft((prev) => ({
-                        ...prev,
+                      const nextDraft = {
+                        ...itemizedFilterDraft,
                         categoryId,
                         categoryKeyword:
                           getCategoryLabel(
@@ -4638,7 +5151,8 @@ function AssetManagement({
                               (category) => String(category.id) === categoryId,
                             ),
                           ) || "",
-                      }));
+                      };
+                      void applyItemizedDropdownFilters(nextDraft);
                     }}
                     options={filteredCategoryOptions}
                     getOptionValue={(category) => category.id}
@@ -4654,13 +5168,14 @@ function AssetManagement({
                   </label>
                   <select
                     value={itemizedFilterDraft.technicalStatus}
-                    onChange={(e) =>
-                      setItemizedFilterDraft((prev) => ({
-                        ...prev,
+                    onChange={(e) => {
+                      const nextDraft = {
+                        ...itemizedFilterDraft,
                         status: "",
                         technicalStatus: e.target.value,
-                      }))
-                    }
+                      };
+                      void applyItemizedDropdownFilters(nextDraft);
+                    }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   >
                     <option value="">Tất cả kỹ thuật</option>
@@ -4677,13 +5192,14 @@ function AssetManagement({
                   </label>
                   <select
                     value={itemizedFilterDraft.usageStatus}
-                    onChange={(e) =>
-                      setItemizedFilterDraft((prev) => ({
-                        ...prev,
+                    onChange={(e) => {
+                      const nextDraft = {
+                        ...itemizedFilterDraft,
                         status: "",
                         usageStatus: e.target.value,
-                      }))
-                    }
+                      };
+                      void applyItemizedDropdownFilters(nextDraft);
+                    }}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   >
                     <option value="">Tất cả sử dụng</option>
@@ -4705,11 +5221,12 @@ function AssetManagement({
                       const location = sortedLocations.find(
                         (item) => String(item.id) === locationId,
                       );
-                      setItemizedFilterDraft((prev) => ({
-                        ...prev,
+                      const nextDraft = {
+                        ...itemizedFilterDraft,
                         locationId,
                         locationKeyword: location?.roomName || "",
-                      }));
+                      };
+                      void applyItemizedDropdownFilters(nextDraft);
                     }}
                     options={sortedLocations}
                     getOptionValue={(location) => location.id}
@@ -5236,9 +5753,24 @@ function AssetManagement({
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    {isConsumableForm ? "Kho lưu trữ" : "Phòng gốc"}
-                  </label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      {isConsumableForm ? "Kho lưu trữ" : "Phòng gốc"}
+                    </label>
+                    {!isConsumableForm && isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleOpenLocationCreateModal();
+                        }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                        title="Thêm phòng gốc mới"
+                        aria-label="Thêm phòng gốc mới"
+                      >
+                        +
+                      </button>
+                    )}
+                  </div>
                   <SearchableSelect
                     value={form.locationId}
                     onChange={(nextValue) => {
@@ -7804,6 +8336,101 @@ function AssetManagement({
                   : categoryForm.categoryKind === "CONSUMABLE"
                     ? "Lưu loại vật tư"
                     : "Lưu loại thiết bị"}
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      {showLocationCreateModal && (
+        <ModalOverlay zIndex={110} className="bg-slate-900/50">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-base font-semibold text-slate-800">
+                Thêm mới phòng gốc
+              </h4>
+              <button
+                type="button"
+                onClick={closeLocationCreateModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Tên phòng
+                </label>
+                <input
+                  value={locationForm.roomName}
+                  onChange={(e) => {
+                    setLocationForm((prev) => ({
+                      ...prev,
+                      roomName: e.target.value,
+                    }));
+                    setLocationFormErrors((prev) => ({
+                      ...prev,
+                      roomName: "",
+                    }));
+                  }}
+                  placeholder="Ví dụ: Phòng A101"
+                  className={getFieldClass(Boolean(locationFormErrors.roomName))}
+                />
+                {locationFormErrors.roomName && (
+                  <p className="mt-1 text-xs text-red-600">
+                    {locationFormErrors.roomName}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Tầng
+                </label>
+                <SearchableSelect
+                  value={locationForm.floorId}
+                  onChange={(nextValue) => {
+                    setLocationForm((prev) => ({
+                      ...prev,
+                      floorId: String(nextValue || ""),
+                    }));
+                    setLocationFormErrors((prev) => ({
+                      ...prev,
+                      floorId: "",
+                    }));
+                  }}
+                  options={locationCreateFloors}
+                  getOptionValue={(floor) => floor.id}
+                  getOptionLabel={(floor) => floor.name}
+                  placeholder="Gõ để tìm tầng"
+                  emptyOptionLabel="Chưa gán tầng"
+                  inputClassName={getFieldClass(
+                    Boolean(locationFormErrors.floorId),
+                  )}
+                />
+                {locationFormErrors.floorId && (
+                  <p className="mt-1 text-xs text-red-600">
+                    {locationFormErrors.floorId}
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                Phòng mới tạo sẽ được chọn ngay vào trường Phòng gốc của tài
+                sản đang thêm hoặc chỉnh sửa.
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateLocationInline}
+                disabled={creatingLocation}
+                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                {creatingLocation ? "Đang lưu..." : "Lưu phòng"}
               </button>
             </div>
           </div>
