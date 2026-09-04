@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ModalOverlay from '../../components/ui/ModalOverlay'
-import { formatVietnamDateTime } from '../../utils/datetime'
+import { formatVietnamDate, formatVietnamDateTime } from '../../utils/datetime'
 import { BORROW_STATUS } from '../../utils/inquiry'
 
 const statusFilters = [
@@ -22,6 +22,15 @@ function getStatusChipClass(status) {
   if (status === 'RETURNED') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   if (status === 'REJECTED') return 'border-red-200 bg-red-50 text-red-700'
   return 'border-slate-200 bg-slate-50 text-slate-700'
+}
+
+function formatBorrowRangeDate(value, fallback = '—') {
+  const formatted = formatVietnamDate(value, fallback)
+  if (formatted === fallback || typeof formatted !== 'string') return formatted
+  const parts = formatted.split('/')
+  if (parts.length !== 3) return formatted
+  const [day, month, year] = parts
+  return `${day}/${month}/${String(year).slice(-2)}`
 }
 
 const detailRows = [
@@ -85,8 +94,8 @@ export default function BorrowRequestManagement() {
     asset: selectedItem ? `${selectedItem.assetQaCode} - ${selectedItem.assetName}` : '—',
     requester: selectedItem?.requesterName || '—',
     destination: selectedItem?.destinationLocationName || '—',
-    neededFrom: selectedItem?.neededFrom || '—',
-    expectedReturnDate: selectedItem?.expectedReturnDate || '—',
+    neededFrom: formatBorrowRangeDate(selectedItem?.neededFrom, '—'),
+    expectedReturnDate: formatBorrowRangeDate(selectedItem?.expectedReturnDate, '—'),
     createdAt: formatVietnamDateTime(selectedItem?.createdAt, '—'),
     approvedBy: selectedItem?.approvedByName || '—',
     approvedAt: formatVietnamDateTime(selectedItem?.approvedAt, '—'),
@@ -223,8 +232,8 @@ export default function BorrowRequestManagement() {
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.requesterName}</td>
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.destinationLocationName}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                      <p>{item.neededFrom || '—'}</p>
-                      <p className="mt-1 text-xs text-slate-500">đến {item.expectedReturnDate || '—'}</p>
+                      <p>{formatBorrowRangeDate(item.neededFrom, '—')}</p>
+                      <p className="mt-1 text-xs text-slate-500">đến {formatBorrowRangeDate(item.expectedReturnDate, '—')}</p>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusChipClass(item.status)}`}>

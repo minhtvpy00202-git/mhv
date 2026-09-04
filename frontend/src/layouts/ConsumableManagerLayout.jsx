@@ -80,6 +80,7 @@ function ConsumableManagerLayout() {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
+  const notificationDropdownRef = useRef(null)
 
   const loadFeed = useCallback(async (suppressError = false) => {
     try {
@@ -124,6 +125,17 @@ function ConsumableManagerLayout() {
       window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
     }
   }, [loadFeed, loadMenuBadgeCounts])
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!notificationDropdownRef.current?.contains(event.target)) {
+        setShowNotificationDropdown(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [])
 
   const handleOpenNotification = async (notification) => {
     await markNotificationAsRead(notification)
@@ -214,7 +226,7 @@ function ConsumableManagerLayout() {
           <div className="flex items-center gap-2">
             <UserTimeClock compact className="hidden xl:block" />
             <ThemeToggle compact />
-            <div className="relative z-[120]">
+            <div ref={notificationDropdownRef} className="relative z-[120]">
               <button
                 type="button"
                 onClick={() => {

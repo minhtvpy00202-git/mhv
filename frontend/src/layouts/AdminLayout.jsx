@@ -214,6 +214,7 @@ function AdminLayout() {
     'consumable-assets': true,
   })
   const readingNotificationIdsRef = useRef(new Set())
+  const notificationDropdownRef = useRef(null)
 
   const loadFeed = useCallback(async (suppressError = false) => {
     try {
@@ -272,6 +273,17 @@ function AdminLayout() {
       window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
     }
   }, [loadFeed, loadMenuBadgeCounts])
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!notificationDropdownRef.current?.contains(event.target)) {
+        setShowNotificationDropdown(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [])
 
   const handleOpenNotification = async (notification) => {
     await markNotificationAsRead(notification)
@@ -452,7 +464,7 @@ function AdminLayout() {
           <div className="flex items-center gap-2">
             <UserTimeClock compact className="hidden lg:block" />
             <ThemeToggle compact />
-            <div className="relative z-[120]">
+            <div ref={notificationDropdownRef} className="relative z-[120]">
               <button
                 type="button"
                 onClick={() => {

@@ -55,6 +55,7 @@ function TechSupportLayout() {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
+  const notificationDropdownRef = useRef(null)
 
   const loadFeed = useCallback(async (suppressError = false) => {
     try {
@@ -97,6 +98,17 @@ function TechSupportLayout() {
       window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
     }
   }, [loadFeed])
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!notificationDropdownRef.current?.contains(event.target)) {
+        setShowNotificationDropdown(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => window.removeEventListener('mousedown', handlePointerDown)
+  }, [])
 
   useEffect(() => {
     const loadContactTickets = async () => {
@@ -270,7 +282,7 @@ function TechSupportLayout() {
           <div className="flex items-center gap-2">
             <UserTimeClock compact className="hidden xl:block" />
             <ThemeToggle compact />
-            <div className="relative z-[120]">
+            <div ref={notificationDropdownRef} className="relative z-[120]">
               <button
                 type="button"
                 onClick={() => {

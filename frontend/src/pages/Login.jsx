@@ -1,3 +1,7 @@
+import {
+  IconEye as Eye,
+  IconEyeOff as EyeOff,
+} from '@tabler/icons-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -17,6 +21,7 @@ function getFieldClass(hasError) {
 function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
   const navigate = useNavigate()
@@ -96,17 +101,28 @@ function Login() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value)
-                setErrors((prev) => ({ ...prev, password: '' }))
-              }}
-              className={getFieldClass(Boolean(errors.password))}
-              autoComplete="current-password"
-              placeholder="Nhập password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  setErrors((prev) => ({ ...prev, password: '' }))
+                }}
+                className={`${getFieldClass(Boolean(errors.password))} pr-11`}
+                autoComplete="current-password"
+                placeholder="Nhập password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 inline-flex items-center justify-center px-3 text-slate-500 transition hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password}</p>}
           </div>
         </div>

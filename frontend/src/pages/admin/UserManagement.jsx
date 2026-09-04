@@ -67,6 +67,7 @@ function normalizeUserForm(form) {
   return {
     username: String(form?.username || '').trim(),
     password: String(form?.password || ''),
+    confirmPassword: String(form?.confirmPassword || ''),
     fullName: String(form?.fullName || '').trim(),
     email: String(form?.email || '').trim(),
     birthday: String(form?.birthday || '').trim(),
@@ -104,6 +105,7 @@ function UserManagement() {
   const [form, setForm] = useState({
     username: '',
     password: '',
+    confirmPassword: '',
     fullName: '',
     email: '',
     birthday: '',
@@ -115,6 +117,7 @@ function UserManagement() {
   const [initialForm, setInitialForm] = useState({
     username: '',
     password: '',
+    confirmPassword: '',
     fullName: '',
     email: '',
     birthday: '',
@@ -212,6 +215,7 @@ function UserManagement() {
     const emptyForm = {
       username: '',
       password: '',
+      confirmPassword: '',
       fullName: '',
       email: '',
       birthday: '',
@@ -269,6 +273,7 @@ function UserManagement() {
     const nextForm = {
       username: item.username || '',
       password: '',
+      confirmPassword: '',
       fullName: item.fullName || '',
       email: item.email || '',
       birthday: item.birthday || '',
@@ -285,8 +290,12 @@ function UserManagement() {
 
   // Kiểm tra dữ liệu và gửi yêu cầu tạo tài khoản mới.
   const handleCreate = async () => {
-    if (!form.username || !form.password || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
+    if (!form.username || !form.password || !form.confirmPassword || !form.fullName || !form.birthday || !form.phone || !form.role || !form.status) {
       toast.error('Vui lòng nhập đầy đủ tất cả các trường.')
+      return false
+    }
+    if (form.password !== form.confirmPassword) {
+      toast.error('Mật khẩu nhập lại không khớp.')
       return false
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
@@ -747,6 +756,18 @@ function UserManagement() {
                     placeholder="Nhập mật khẩu"
                   />
                 </div>
+                {!isEditing && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Nhập lại mật khẩu *</label>
+                    <input
+                      type="password"
+                      value={form.confirmPassword}
+                      onChange={(e) => setForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                      placeholder="Nhập lại mật khẩu"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Họ và tên *</label>
                   <input

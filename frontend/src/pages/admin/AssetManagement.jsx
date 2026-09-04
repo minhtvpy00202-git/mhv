@@ -24,6 +24,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import axiosClient from "../../api/axiosClient";
+import { fetchTechSupportTypeOptions } from "../../api/techSupportTypeApi";
 import AssetRepairTimelineModal from "../../components/AssetRepairTimelineModal";
 import ActionIconButton from "../../components/ui/ActionIconButton";
 import ModalOverlay from "../../components/ui/ModalOverlay";
@@ -49,6 +50,7 @@ import {
 import { formatVietnamDate, formatVietnamDateTime } from "../../utils/datetime";
 import {
   validateAssetForm,
+  validateCategoryForm,
   validateSupplierForm,
 } from "../../utils/validation";
 import ConsumableRoomsTab from "./consumables/ConsumableRoomsTab";
@@ -271,6 +273,20 @@ function formatCurrencyCompact(value) {
   const numericValue = Number(value);
   if (Number.isNaN(numericValue)) return null;
   return `${numericValue.toLocaleString("vi-VN")}₫`;
+}
+
+function formatRoundedCurrency(value) {
+  if (value == null || value === "") return null;
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return null;
+  return `${Math.round(numericValue).toLocaleString("vi-VN")} VND`;
+}
+
+function formatRoundedCurrencyCompact(value) {
+  if (value == null || value === "") return null;
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return null;
+  return `${Math.round(numericValue).toLocaleString("vi-VN")}₫`;
 }
 
 function normalizePurchasePriceInput(value) {
@@ -814,6 +830,15 @@ function AssetManagement({
   });
   const [formMode, setFormMode] = useState("create");
   const [selectedQaCode, setSelectedQaCode] = useState(null);
+  const [showCategoryCreateModal, setShowCategoryCreateModal] = useState(false);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [techSupportTypeOptions, setTechSupportTypeOptions] = useState([]);
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    categoryKind: "ITEMIZED",
+    techTypeId: "",
+  });
+  const [categoryFormErrors, setCategoryFormErrors] = useState({});
   const [showSupplierCreateModal, setShowSupplierCreateModal] = useState(false);
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [supplierForm, setSupplierForm] = useState({
@@ -1927,6 +1952,42 @@ function AssetManagement({
     setSupplierFormErrors({});
   };
 
+  const resetCategoryForm = (categoryKind = "ITEMIZED") => {
+    setCategoryForm({
+      name: "",
+      categoryKind,
+      techTypeId: "",
+    });
+    setCategoryFormErrors({});
+  };
+
+  const closeCategoryCreateModal = () => {
+    setShowCategoryCreateModal(false);
+    resetCategoryForm(form.trackingMode);
+  };
+
+  const handleOpenCategoryCreateModal = async () => {
+    const categoryKind = String(form.trackingMode || "ITEMIZED")
+      .trim()
+      .toUpperCase();
+    resetCategoryForm(categoryKind);
+    setShowCategoryCreateModal(true);
+    if (
+      categoryKind === "ITEMIZED" &&
+      techSupportTypeOptions.length === 0
+    ) {
+      try {
+        const options = await fetchTechSupportTypeOptions();
+        setTechSupportTypeOptions(options);
+      } catch (error) {
+        const message =
+          error?.response?.data?.message ||
+          "Không thể tải danh sách nhóm kỹ thuật.";
+        toast.error(message);
+      }
+    }
+  };
+
   const closeSupplierCreateModal = () => {
     setShowSupplierCreateModal(false);
     resetSupplierForm();
@@ -2490,6 +2551,66 @@ function AssetManagement({
       toast.error(message);
     } finally {
       setCreatingSupplier(false);
+    }
+  };
+
+  const handleCreateCategoryInline = async () => {
+    const categoryKind = String(categoryForm.categoryKind || "ITEMIZED")
+      .trim()
+      .toUpperCase();
+    const nextErrors = validateCategoryForm(
+      {
+        ...categoryForm,
+        specTemplates: [],
+      },
+      {
+        itemLabel:
+          categoryKind === "CONSUMABLE" ? "loại vật tư" : "loại thiết bị",
+      },
+    );
+    setCategoryFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error(Object.values(nextErrors)[0]);
+      return;
+    }
+
+    setCreatingCategory(true);
+    try {
+      const response = await axiosClient.post("/api/categories", {
+        name: categoryForm.name.trim(),
+        categoryKind,
+        techTypeId:
+          categoryKind === "CONSUMABLE"
+            ? null
+            : Number(categoryForm.techTypeId),
+        specTemplates: [],
+      });
+      const createdCategory = response.data;
+      setCategories((prev) =>
+        [...prev, createdCategory].sort((a, b) =>
+          getCategoryLabel(a).localeCompare(getCategoryLabel(b), "vi"),
+        ),
+      );
+      setForm((prev) => ({
+        ...prev,
+        categoryId: String(createdCategory.id),
+      }));
+      setFormErrors((prev) => ({ ...prev, categoryId: "" }));
+      toast.success(
+        categoryKind === "CONSUMABLE"
+          ? "Đã thêm loại vật tư mới."
+          : "Đã thêm loại thiết bị mới.",
+      );
+      closeCategoryCreateModal();
+    } catch (error) {
+      const message =
+        error?.response?.data?.message ||
+        (categoryKind === "CONSUMABLE"
+          ? "Không thể thêm loại vật tư mới."
+          : "Không thể thêm loại thiết bị mới.");
+      toast.error(message);
+    } finally {
+      setCreatingCategory(false);
     }
   };
 
@@ -4253,13 +4374,13 @@ function AssetManagement({
                                 className="truncate px-3 py-2 text-right"
                                 title={
                                   inventoryValue != null
-                                    ? formatCurrency(inventoryValue)
+                                    ? formatRoundedCurrency(inventoryValue)
                                     : undefined
                                 }
                               >
                                 {inventoryValue != null ? (
                                   <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                                    {formatCurrencyCompact(inventoryValue)}
+                                    {formatRoundedCurrencyCompact(inventoryValue)}
                                   </span>
                                 ) : (
                                   <span className="text-slate-400 dark:text-slate-500">
@@ -5065,9 +5186,32 @@ function AssetManagement({
                   )}
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    {isConsumableForm ? "Loại vật tư" : "Loại thiết bị"}
-                  </label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">
+                      {isConsumableForm ? "Loại vật tư" : "Loại thiết bị"}
+                    </label>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleOpenCategoryCreateModal();
+                        }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                        title={
+                          isConsumableForm
+                            ? "Thêm loại vật tư mới"
+                            : "Thêm loại thiết bị mới"
+                        }
+                        aria-label={
+                          isConsumableForm
+                            ? "Thêm loại vật tư mới"
+                            : "Thêm loại thiết bị mới"
+                        }
+                      >
+                        +
+                      </button>
+                    )}
+                  </div>
                   <SearchableSelect
                     value={form.categoryId}
                     onChange={(nextValue) =>
@@ -7553,6 +7697,113 @@ function AssetManagement({
                 className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
               >
                 Lưu nhà cung cấp
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
+      {showCategoryCreateModal && (
+        <ModalOverlay zIndex={110} className="bg-slate-900/50">
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="text-base font-semibold text-slate-800">
+                {categoryForm.categoryKind === "CONSUMABLE"
+                  ? "Thêm mới loại vật tư"
+                  : "Thêm mới loại thiết bị"}
+              </h4>
+              <button
+                type="button"
+                onClick={closeCategoryCreateModal}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Đóng
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  {categoryForm.categoryKind === "CONSUMABLE"
+                    ? "Tên loại vật tư"
+                    : "Tên loại thiết bị"}
+                </label>
+                <input
+                  value={categoryForm.name}
+                  onChange={(e) => {
+                    setCategoryForm((prev) => ({
+                      ...prev,
+                      name: e.target.value,
+                    }));
+                    setCategoryFormErrors((prev) => ({ ...prev, name: "" }));
+                  }}
+                  placeholder={
+                    categoryForm.categoryKind === "CONSUMABLE"
+                      ? "Ví dụ: Giấy A4, Bút bi, Mực in"
+                      : "Ví dụ: Máy chiếu, Laptop, Camera"
+                  }
+                  className={getFieldClass(Boolean(categoryFormErrors.name))}
+                />
+                {categoryFormErrors.name && (
+                  <p className="mt-1 text-xs text-red-600">
+                    {categoryFormErrors.name}
+                  </p>
+                )}
+              </div>
+
+              {categoryForm.categoryKind !== "CONSUMABLE" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Nhóm kỹ thuật phụ trách
+                  </label>
+                  <SearchableSelect
+                    value={categoryForm.techTypeId}
+                    onChange={(nextValue) => {
+                      setCategoryForm((prev) => ({
+                        ...prev,
+                        techTypeId: String(nextValue || ""),
+                      }));
+                      setCategoryFormErrors((prev) => ({
+                        ...prev,
+                        techTypeId: "",
+                      }));
+                    }}
+                    options={techSupportTypeOptions}
+                    getOptionValue={(item) => item.techTypeId}
+                    getOptionLabel={(item) => item.label}
+                    placeholder="Gõ để tìm nhóm kỹ thuật"
+                    emptyOptionLabel="Chọn nhóm kỹ thuật"
+                    inputClassName={getFieldClass(
+                      Boolean(categoryFormErrors.techTypeId),
+                    )}
+                  />
+                  {categoryFormErrors.techTypeId && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {categoryFormErrors.techTypeId}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                Loại mới tạo sẽ được chọn ngay vào form hiện tại. Nếu cần thêm
+                mẫu thông số kỹ thuật chi tiết, bạn vẫn có thể chỉnh sau trong
+                màn quản lý loại.
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateCategoryInline}
+                disabled={creatingCategory}
+                className="rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+              >
+                {creatingCategory
+                  ? "Đang lưu..."
+                  : categoryForm.categoryKind === "CONSUMABLE"
+                    ? "Lưu loại vật tư"
+                    : "Lưu loại thiết bị"}
               </button>
             </div>
           </div>
