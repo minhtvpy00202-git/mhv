@@ -134,7 +134,7 @@ export function toServerDateTimeValue(value) {
 }
 
 export function getFutureDateTimeLocalValue(hoursAhead = 24) {
-  return toDateTimeLocalValue(new Date(Date.now() + Math.max(1, hoursAhead) * 60 * 60 * 1000))
+  return toDateTimeLocalValue(new Date(Date.now() + Math.max(0, hoursAhead) * 60 * 60 * 1000))
 }
 
 export function formatCurrentDateTime(value = new Date()) {

@@ -52,8 +52,8 @@ function QRScanner() {
   const [loadingAction, setLoadingAction] = useState(false)
   const [manualQaCode, setManualQaCode] = useState('')
   const [manualLookupLoading, setManualLookupLoading] = useState(false)
-  const [startAt, setStartAt] = useState(() => getFutureDateTimeLocalValue(1))
-  const [endAt, setEndAt] = useState(() => getFutureDateTimeLocalValue(25))
+  const [startAt, setStartAt] = useState(() => getFutureDateTimeLocalValue(0))
+  const [endAt, setEndAt] = useState(() => getFutureDateTimeLocalValue(24))
   const [purpose, setPurpose] = useState('')
   const [actionMode, setActionMode] = useState('AUTO')
   const [showAssetPickerModal, setShowAssetPickerModal] = useState(false)
@@ -226,8 +226,8 @@ function QRScanner() {
     setScannedHomeLocationName('')
     setScannedSpecs([])
     setToLocationId('')
-    setStartAt(getFutureDateTimeLocalValue(1))
-    setEndAt(getFutureDateTimeLocalValue(25))
+    setStartAt(getFutureDateTimeLocalValue(0))
+    setEndAt(getFutureDateTimeLocalValue(24))
     setPurpose('')
     setManualQaCode('')
     setActionMode('AUTO')
@@ -785,7 +785,7 @@ function QRScanner() {
                     <input
                       type="datetime-local"
                       value={endAt}
-                      min={startAt || getFutureDateTimeLocalValue(1)}
+                      min={startAt || getFutureDateTimeLocalValue(0)}
                       onChange={(event) => setEndAt(event.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                     />
