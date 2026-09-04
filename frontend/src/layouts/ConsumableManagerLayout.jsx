@@ -1,6 +1,5 @@
 import {
   IconBell as Bell,
-  IconBoxMultiple as Boxes,
   IconChartBar as ChartBar,
   IconHistory as History,
   IconKey as Key,
@@ -34,12 +33,6 @@ const consumableMenuItems = [
     label: 'Báo cáo yêu cầu',
     description: 'SLA và nhu cầu vật tư',
     icon: ChartBar,
-  },
-  {
-    to: '/supply/consumables',
-    label: 'Danh sách vật tư',
-    description: 'Tồn kho tổng hợp',
-    icon: Boxes,
   },
   {
     to: '/supply/consumables/warehouses',
@@ -185,7 +178,6 @@ function ConsumableManagerLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/supply/consumables'}
                   className="flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition hover:bg-orange-50 hover:text-fptOrangeDark dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
                   style={({ isActive }) => ({
                     backgroundColor: isActive ? toRgba(primaryColor, 0.1) : 'transparent',

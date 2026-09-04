@@ -8,7 +8,7 @@ function Unauthorized() {
   const homePath = user?.role === 'Admin'
     ? '/admin/dashboard'
     : user?.role === 'ConsumableManager'
-      ? '/supply/consumables'
+      ? '/supply/consumables/warehouses'
     : user?.role === 'TechSupport'
       ? getTechSupportHomePath()
       : '/mobile/home'

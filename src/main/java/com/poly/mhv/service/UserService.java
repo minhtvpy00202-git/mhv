@@ -184,15 +184,19 @@ public class UserService {
         appUser.setBirthday(request.getBirthday());
         appUser.setPhone(StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null);
         String validatedRole = validateRole(request.getRole());
+        String validatedStatus = validateStatus(request.getStatus());
+        AppUser actor = currentUserProvider.getCurrentUser();
+        if (actor != null && actor.getId() != null && actor.getId().equals(appUser.getId()) && "Khóa".equals(validatedStatus)) {
+            throw new CustomException("Quản trị viên không thể tự khóa tài khoản của chính mình.");
+        }
         List<TechSupportType> techSupportTypes = resolveTechSupportTypes(validatedRole, request);
         appUser.setRole(validatedRole);
         appUser.setTechSupportTypes(new ArrayList<>(techSupportTypes));
-        appUser.setStatus(validateStatus(request.getStatus()));
+        appUser.setStatus(validatedStatus);
         if (StringUtils.hasText(request.getPassword())) {
             appUser.setPassword(passwordEncoder.encode(request.getPassword()));
         }
         AppUser saved = appUserRepository.save(appUser);
-        AppUser actor = currentUserProvider.getCurrentUser();
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "USER_UPDATE",

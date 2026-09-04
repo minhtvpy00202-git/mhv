@@ -6,6 +6,7 @@ import { fetchTechSupportTypeOptions } from '../../api/techSupportTypeApi'
 import ActionIconButton from '../../components/ui/ActionIconButton'
 import ColumnVisibilityDropdown from '../../components/ui/ColumnVisibilityDropdown'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
+import { useAuth } from '../../context/AuthContext'
 import useColumnVisibility from '../../hooks/useColumnVisibility'
 import useDebouncedEffect from '../../hooks/useDebouncedEffect'
 import { useTableSort } from '../../hooks/useTableSort'
@@ -81,6 +82,7 @@ function normalizeUserForm(form) {
 
 // Quản lý danh sách tài khoản, bộ lọc, phân trang và form CRUD cho quản trị viên.
 function UserManagement() {
+  const { user } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -142,6 +144,10 @@ function UserManagement() {
 
   const isEditing = useMemo(() => Boolean(selectedUserId), [selectedUserId])
   const isTechSupportRole = form.role === 'TechSupport'
+  const isEditingOwnAccount = useMemo(
+    () => isEditing && Number(selectedUserId) === Number(user?.userId),
+    [isEditing, selectedUserId, user?.userId],
+  )
   const normalizedForm = useMemo(() => normalizeUserForm(form), [form])
   const normalizedInitialForm = useMemo(() => normalizeUserForm(initialForm), [initialForm])
   const hasFormChanges = useMemo(
@@ -350,6 +356,10 @@ function UserManagement() {
     }
     if (isTechSupportRole && form.techTypeIds.length === 0) {
       toast.error('Vui lòng chọn ít nhất một chuyên môn cho tài khoản kỹ thuật viên.')
+      return false
+    }
+    if (isEditingOwnAccount && form.status === 'Khóa') {
+      toast.error('Quản trị viên không thể tự khóa tài khoản của chính mình.')
       return false
     }
     setSubmitting(true)
@@ -831,49 +841,42 @@ function UserManagement() {
                     onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                   >
-                    {statusOptions.map((status) => (
+                    {statusOptions
+                      .filter((status) => !(isEditingOwnAccount && status === 'Khóa'))
+                      .map((status) => (
                       <option key={status} value={status}>
                         {status}
                       </option>
-                    ))}
+                      ))}
                   </select>
+                  {isEditingOwnAccount && (
+                    <p className="mt-1 text-xs text-slate-500">Bạn không thể tự khóa tài khoản quản trị đang đăng nhập.</p>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="border-t border-slate-200 px-4 py-4 md:px-5">
-              <div className="grid gap-2 sm:grid-cols-4">
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={submitting || isEditing}
-                className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
-              >
-                Thêm mới
-              </button>
-              <button
-                type="button"
-                onClick={handleUpdate}
-                disabled={submitting || !isEditing || !hasFormChanges}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-              >
-                Cập nhật
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(selectedUserId)}
-                disabled={submitting || !isEditing}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-              >
-                Xóa
-              </button>
-              <button
-                type="button"
-                onClick={requestCloseFormModal}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
+              <div className="flex justify-end">
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={handleUpdate}
+                    disabled={submitting || !hasFormChanges}
+                    className="min-w-[180px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    Cập nhật
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCreate}
+                    disabled={submitting}
+                    className="min-w-[180px] rounded-lg bg-fptOrange px-4 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                  >
+                    Thêm mới
+                  </button>
+                )}
               </div>
             </div>
           </div>

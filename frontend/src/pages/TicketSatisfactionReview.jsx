@@ -176,7 +176,7 @@ function TicketSatisfactionReview() {
                 <div>
                   <p className="text-base font-semibold text-slate-800">Mức độ hài lòng của bạn</p>
                   <p className="mt-1 text-sm text-slate-500">Chọn số sao phù hợp với trải nghiệm xử lý ticket này.</p>
-                  <div className="mt-4 flex flex-wrap gap-3">
+                  <div className="mt-4 grid grid-cols-5 gap-3">
                     {[1, 2, 3, 4, 5].map((value) => {
                       const active = score >= value
                       return (
@@ -184,14 +184,15 @@ function TicketSatisfactionReview() {
                           key={value}
                           type="button"
                           onClick={() => setScore(value)}
-                          className={`inline-flex min-w-16 items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                          aria-label={`${value} sao`}
+                          title={`${value} sao`}
+                          className={`inline-flex aspect-square w-full items-center justify-center rounded-2xl border text-sm font-semibold transition ${
                             active
                               ? 'border-amber-300 bg-amber-50 text-amber-700'
                               : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
                           }`}
                         >
-                          <Star size={16} className={active ? 'fill-current' : ''} />
-                          {value}
+                          <Star size={20} className={active ? 'fill-current' : ''} />
                         </button>
                       )
                     })}

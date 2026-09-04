@@ -79,7 +79,7 @@ function RootRedirect() {
     return <Navigate to={getTechSupportHomePath()} replace />
   }
   if (user?.role === 'ConsumableManager') {
-    return <Navigate to="/supply/consumables" replace />
+    return <Navigate to="/supply/consumables/warehouses" replace />
   }
   return <Navigate to="/mobile/home" replace />
 }
@@ -247,7 +247,7 @@ function App() {
             </ProtectedRoute>
           )}
         >
-          <Route path="/supply/consumables" element={withSuspense(<AssetManagement restrictToConsumable />)} />
+          <Route path="/supply/consumables" element={<Navigate to="/supply/consumables/warehouses" replace />} />
           <Route path="/supply/inquiries" element={withSuspense(<InquiryInbox />)} />
           <Route path="/supply/inquiries/:id" element={withSuspense(<InquiryDetail />)} />
           <Route path="/supply/inquiry-reports" element={withSuspense(<InquiryReports />)} />

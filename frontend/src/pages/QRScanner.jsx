@@ -1,11 +1,36 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ModalOverlay from '../components/ui/ModalOverlay'
 import SearchableSelect from '../components/ui/SearchableSelect'
+import { getTechnicalStatusLabel, getUsageStatusMeta } from '../utils/assetStatus'
 import { parseSpecsToEntries } from '../utils/assetSpecs'
 
 const scannerElementId = 'qa-scanner'
+const ASSET_PICKER_PAGE_SIZE = 8
+const defaultAssetPickerFilters = {
+  keyword: '',
+  categoryId: '',
+  locationId: '',
+  usageStatus: '',
+  technicalStatus: '',
+}
+
+function getBadgeClassName(tone) {
+  switch (tone) {
+    case 'emerald':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    case 'blue':
+      return 'bg-blue-50 text-blue-700 border-blue-200'
+    case 'amber':
+      return 'bg-amber-50 text-amber-700 border-amber-200'
+    case 'red':
+      return 'bg-rose-50 text-rose-700 border-rose-200'
+    default:
+      return 'bg-slate-100 text-slate-600 border-slate-200'
+  }
+}
 
 function QRScanner() {
   const scannerRef = useRef(null)
@@ -27,8 +52,25 @@ function QRScanner() {
   const [neededFrom, setNeededFrom] = useState(() => new Date().toISOString().slice(0, 10))
   const [expectedReturnDate, setExpectedReturnDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [purpose, setPurpose] = useState('')
+  const [actionMode, setActionMode] = useState('AUTO')
+  const [showAssetPickerModal, setShowAssetPickerModal] = useState(false)
+  const [showAssetPickerAdvancedFilters, setShowAssetPickerAdvancedFilters] = useState(false)
+  const [assetPickerLoading, setAssetPickerLoading] = useState(false)
+  const [assetPickerItems, setAssetPickerItems] = useState([])
+  const [assetPickerPageInfo, setAssetPickerPageInfo] = useState({
+    page: 0,
+    size: ASSET_PICKER_PAGE_SIZE,
+    totalPages: 1,
+    totalItems: 0,
+  })
+  const [assetPickerCategories, setAssetPickerCategories] = useState([])
+  const [assetPickerLocations, setAssetPickerLocations] = useState([])
+  const [assetPickerFilters, setAssetPickerFilters] = useState(defaultAssetPickerFilters)
+  const [assetPickerDraftFilters, setAssetPickerDraftFilters] = useState(defaultAssetPickerFilters)
+  const isAnyModalOpen = showActionModal || showAssetPickerModal
+
   useEffect(() => {
-    if (!showActionModal && keepScannerAliveRef.current) {
+    if (!isAnyModalOpen && keepScannerAliveRef.current) {
       void startScanner()
     } else {
       void stopScanner()
@@ -39,7 +81,7 @@ function QRScanner() {
         void stopScanner()
         return
       }
-      if (!showActionModal && keepScannerAliveRef.current) {
+      if (!isAnyModalOpen && keepScannerAliveRef.current) {
         void startScanner()
       }
     }
@@ -54,7 +96,7 @@ function QRScanner() {
       window.removeEventListener('pagehide', handlePageHide)
       void stopScanner()
     }
-  }, [showActionModal])
+  }, [isAnyModalOpen])
 
   async function fetchLocations() {
     try {
@@ -127,7 +169,7 @@ function QRScanner() {
     }
   }
 
-  const openActionModalByQaCode = async (qaCode) => {
+  const openActionModalByQaCode = async (qaCode, options = {}) => {
     const normalizedQaCode = String(qaCode || '').trim()
     if (!normalizedQaCode) return false
     setScannedQaCode(normalizedQaCode)
@@ -137,6 +179,7 @@ function QRScanner() {
       setScannedQaCode('')
       return false
     }
+    setActionMode(options.actionMode === 'BORROW' ? 'BORROW' : 'AUTO')
     setShowActionModal(true)
     return true
   }
@@ -158,6 +201,7 @@ function QRScanner() {
   }
 
   const closeModal = () => {
+    keepScannerAliveRef.current = true
     setShowActionModal(false)
     setScannedQaCode('')
     setScannedAssetName('')
@@ -171,7 +215,104 @@ function QRScanner() {
     setExpectedReturnDate(new Date().toISOString().slice(0, 10))
     setPurpose('')
     setManualQaCode('')
-    startScanner()
+    setActionMode('AUTO')
+  }
+
+  const buildAssetPickerParams = (page = 0, nextFilters = assetPickerFilters) => ({
+    page,
+    size: ASSET_PICKER_PAGE_SIZE,
+    trackingMode: 'ITEMIZED',
+    name: String(nextFilters.keyword || '').trim() || undefined,
+    categoryId: nextFilters.categoryId ? Number(nextFilters.categoryId) : undefined,
+    locationId: nextFilters.locationId ? Number(nextFilters.locationId) : undefined,
+    usageStatus: nextFilters.usageStatus || undefined,
+    technicalStatus: nextFilters.technicalStatus || undefined,
+    sortKey: 'createdAt',
+    sortDirection: 'desc',
+  })
+
+  const loadAssetPickerAssets = async (page = 0, nextFilters = assetPickerFilters) => {
+    setAssetPickerLoading(true)
+    try {
+      const response = await axiosClient.get('/api/assets', {
+        params: buildAssetPickerParams(page, nextFilters),
+      })
+      const data = response.data || {}
+      setAssetPickerItems(data.items || [])
+      setAssetPickerPageInfo({
+        page: data.page ?? page,
+        size: data.size ?? ASSET_PICKER_PAGE_SIZE,
+        totalPages: data.totalPages || 1,
+        totalItems: data.totalItems || 0,
+      })
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không tải được danh sách tài sản.'
+      toast.error(message)
+    } finally {
+      setAssetPickerLoading(false)
+    }
+  }
+
+  const loadAssetPickerBootstrap = async (nextFilters = assetPickerFilters) => {
+    setAssetPickerLoading(true)
+    try {
+      const response = await axiosClient.get('/api/assets/bootstrap', {
+        params: buildAssetPickerParams(0, nextFilters),
+      })
+      const data = response.data || {}
+      const assetPage = data.assets || {}
+      setAssetPickerItems(assetPage.items || [])
+      setAssetPickerPageInfo({
+        page: assetPage.page ?? 0,
+        size: assetPage.size ?? ASSET_PICKER_PAGE_SIZE,
+        totalPages: assetPage.totalPages || 1,
+        totalItems: assetPage.totalItems || 0,
+      })
+      setAssetPickerCategories(data.categories || [])
+      setAssetPickerLocations(data.locations || [])
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Không tải được danh sách tài sản.'
+      toast.error(message)
+    } finally {
+      setAssetPickerLoading(false)
+    }
+  }
+
+  const handleOpenAssetPicker = async () => {
+    keepScannerAliveRef.current = false
+    await stopScanner()
+    setShowAssetPickerModal(true)
+    if (assetPickerCategories.length === 0 && assetPickerLocations.length === 0 && assetPickerItems.length === 0) {
+      await loadAssetPickerBootstrap(assetPickerFilters)
+      return
+    }
+    await loadAssetPickerAssets(0, assetPickerFilters)
+  }
+
+  const handleCloseAssetPicker = () => {
+    keepScannerAliveRef.current = true
+    setShowAssetPickerModal(false)
+  }
+
+  const handleApplyAssetPickerFilters = async () => {
+    setAssetPickerFilters(assetPickerDraftFilters)
+    await loadAssetPickerAssets(0, assetPickerDraftFilters)
+  }
+
+  const handleResetAssetPickerFilters = async () => {
+    setAssetPickerFilters(defaultAssetPickerFilters)
+    setAssetPickerDraftFilters(defaultAssetPickerFilters)
+    await loadAssetPickerAssets(0, defaultAssetPickerFilters)
+  }
+
+  const handleSelectAssetFromPicker = async (asset) => {
+    keepScannerAliveRef.current = false
+    setShowAssetPickerModal(false)
+    const exists = await openActionModalByQaCode(asset?.qaCode, { actionMode: 'BORROW' })
+    if (!exists) {
+      keepScannerAliveRef.current = true
+      startScanner()
+    }
   }
 
   const handleManualLookup = async () => {
@@ -185,6 +326,7 @@ function QRScanner() {
     await stopScanner()
     const exists = await openActionModalByQaCode(normalizedQaCode)
     if (!exists) {
+      keepScannerAliveRef.current = true
       startScanner()
     }
     setManualLookupLoading(false)
@@ -256,6 +398,19 @@ function QRScanner() {
   const canCheckin = scannedLocationId !== null && scannedHomeLocationId !== null
     ? Number(scannedLocationId) !== Number(scannedHomeLocationId)
     : true
+  const shouldForceBorrowMode = actionMode === 'BORROW'
+  const showBorrowSection = shouldForceBorrowMode || canCheckout
+  const showReturnSection = shouldForceBorrowMode ? false : canCheckin
+  const hasActiveAssetPickerFilters = useMemo(
+    () => Boolean(
+      assetPickerFilters.keyword ||
+      assetPickerFilters.categoryId ||
+      assetPickerFilters.locationId ||
+      assetPickerFilters.usageStatus ||
+      assetPickerFilters.technicalStatus,
+    ),
+    [assetPickerFilters],
+  )
 
   return (
     <div className="space-y-4">
@@ -285,13 +440,246 @@ function QRScanner() {
             </button>
           </div>
         </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-semibold text-slate-800">Hoặc chọn từ danh sách tài sản cố định</p>
+          <p className="mt-1 text-xs text-slate-500">Phù hợp khi bạn muốn tìm thiết bị theo tên, loại, vị trí hoặc trạng thái mượn.</p>
+          <button
+            type="button"
+            onClick={() => {
+              void handleOpenAssetPicker()
+            }}
+            className="mt-3 w-full rounded-lg border border-fptOrange px-4 py-2 text-sm font-semibold text-fptOrange hover:bg-orange-50"
+          >
+            Mở danh sách tài sản
+          </button>
+        </div>
       </div>
+
+      {showAssetPickerModal && (
+        <ModalOverlay className="bg-black/60 backdrop-blur-sm" zIndex={130}>
+          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-3xl bg-white">
+            <div className="border-b border-slate-200 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800">Danh sách tài sản cố định</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Chạm vào tài sản để mở nhanh phiếu mượn. Danh sách có hiển thị vị trí và trạng thái mượn hiện tại.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseAssetPicker}
+                  className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    Tìm nhanh
+                  </label>
+                  <input
+                    type="text"
+                    value={assetPickerDraftFilters.keyword}
+                    onChange={(event) => setAssetPickerDraftFilters((prev) => ({ ...prev, keyword: event.target.value }))}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void handleApplyAssetPickerFilters()
+                      }
+                    }}
+                    placeholder="Tên tài sản, mã QA..."
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAssetPickerAdvancedFilters((value) => !value)}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium ${showAssetPickerAdvancedFilters ? 'border-fptOrange bg-orange-50 text-fptOrangeDark' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    {showAssetPickerAdvancedFilters ? 'Ẩn bộ lọc nâng cao' : 'Bộ lọc nâng cao'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleApplyAssetPickerFilters()
+                    }}
+                    disabled={assetPickerLoading}
+                    className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
+                  >
+                    Lọc danh sách
+                  </button>
+                  {hasActiveAssetPickerFilters && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleResetAssetPickerFilters()
+                      }}
+                      disabled={assetPickerLoading}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                    >
+                      Xóa bộ lọc
+                    </button>
+                  )}
+                </div>
+
+                {showAssetPickerAdvancedFilters && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Loại thiết bị
+                      </label>
+                      <SearchableSelect
+                        value={assetPickerDraftFilters.categoryId}
+                        onChange={(nextValue) => setAssetPickerDraftFilters((prev) => ({ ...prev, categoryId: String(nextValue || '') }))}
+                        options={assetPickerCategories}
+                        getOptionValue={(category) => category.id}
+                        getOptionLabel={(category) => category.name}
+                        placeholder="Gõ để tìm loại"
+                        emptyOptionLabel="Tất cả loại"
+                        dropdownZIndex={150}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Vị trí hiện tại
+                      </label>
+                      <SearchableSelect
+                        value={assetPickerDraftFilters.locationId}
+                        onChange={(nextValue) => setAssetPickerDraftFilters((prev) => ({ ...prev, locationId: String(nextValue || '') }))}
+                        options={assetPickerLocations}
+                        getOptionValue={(location) => location.id}
+                        getOptionLabel={(location) => location.roomName || location.name || `Phòng #${location.id}`}
+                        placeholder="Gõ để tìm vị trí"
+                        emptyOptionLabel="Tất cả vị trí"
+                        dropdownZIndex={150}
+                      />
+                    </div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Trạng thái sử dụng
+                      <select
+                        value={assetPickerDraftFilters.usageStatus}
+                        onChange={(event) => setAssetPickerDraftFilters((prev) => ({ ...prev, usageStatus: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                      >
+                        <option value="">Tất cả trạng thái mượn</option>
+                        <option value="Tại vị trí gốc">Tại vị trí gốc</option>
+                        <option value="Đang cho mượn">Đang cho mượn</option>
+                      </select>
+                    </label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Tình trạng kỹ thuật
+                      <select
+                        value={assetPickerDraftFilters.technicalStatus}
+                        onChange={(event) => setAssetPickerDraftFilters((prev) => ({ ...prev, technicalStatus: event.target.value }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                      >
+                        <option value="">Tất cả tình trạng</option>
+                        <option value="Hoạt động tốt">Hoạt động tốt</option>
+                        <option value="Hỏng">Hỏng</option>
+                        <option value="Thất lạc">Thất lạc</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>Hiển thị {assetPickerItems.length} / {assetPickerPageInfo.totalItems} tài sản</span>
+                <span>Trang {assetPickerPageInfo.page + 1} / {Math.max(assetPickerPageInfo.totalPages, 1)}</span>
+              </div>
+
+              <div className="space-y-3">
+                {assetPickerLoading && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                    Đang tải danh sách tài sản...
+                  </div>
+                )}
+
+                {!assetPickerLoading && assetPickerItems.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                    Không có tài sản phù hợp với bộ lọc hiện tại.
+                  </div>
+                )}
+
+                {!assetPickerLoading && assetPickerItems.map((asset) => {
+                  const usageMeta = getUsageStatusMeta(asset.usageStatus)
+                  const currentLocation = asset.locationName || 'Không xác định'
+                  const homeLocation = asset.homeLocationName || 'Không xác định'
+
+                  return (
+                    <button
+                      key={asset.qaCode}
+                      type="button"
+                      onClick={() => {
+                        void handleSelectAssetFromPicker(asset)
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-fptOrange hover:bg-orange-50/30"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{asset.name || asset.qaCode}</p>
+                          <p className="mt-1 text-xs font-medium text-slate-500">QA: {asset.qaCode}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getBadgeClassName(usageMeta.tone)}`}>
+                          {usageMeta.label}
+                        </span>
+                      </div>
+                      <div className="mt-3 space-y-1.5 text-sm text-slate-600">
+                        <p>
+                          <span className="font-medium text-slate-700">Vị trí hiện tại:</span> {currentLocation}
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-700">Vị trí gốc:</span> {homeLocation}
+                        </p>
+                        <p>
+                          <span className="font-medium text-slate-700">Tình trạng:</span> {getTechnicalStatusLabel(asset.technicalStatus || asset.status)}
+                        </p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void loadAssetPickerAssets(Math.max(assetPickerPageInfo.page - 1, 0))
+                }}
+                disabled={assetPickerLoading || assetPickerPageInfo.page <= 0}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Trang trước
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadAssetPickerAssets(Math.min(assetPickerPageInfo.page + 1, Math.max(assetPickerPageInfo.totalPages - 1, 0)))
+                }}
+                disabled={assetPickerLoading || assetPickerPageInfo.page >= assetPickerPageInfo.totalPages - 1}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Trang sau
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
 
       {showActionModal && (
         <div className="fixed inset-0 z-[1000] flex items-end justify-center overflow-y-auto bg-black/50 p-4 sm:items-center sm:p-6">
           <div className="flex max-h-[92vh] w-full max-w-md flex-col rounded-2xl bg-white p-4">
             <div className="overflow-y-auto pr-1">
-            <h3 className="text-base font-semibold text-slate-800">Xác nhận thao tác thiết bị</h3>
+            <h3 className="text-base font-semibold text-slate-800">{shouldForceBorrowMode ? 'Gửi yêu cầu mượn thiết bị' : 'Xác nhận thao tác thiết bị'}</h3>
             <p className="mt-1 text-sm text-slate-600">Mã QA: {scannedQaCode}</p>
             <p className="text-sm text-slate-600">Tên thiết bị: {scannedAssetName || 'Đang tải...'}</p>
             <p className="text-sm text-slate-600">Phòng hiện tại: {scannedLocationName || 'Không xác định'}</p>
@@ -309,8 +697,13 @@ function QRScanner() {
               </div>
             )}
 
-            {canCheckout && (
+            {showBorrowSection && (
               <div className="mt-3 space-y-3">
+                {shouldForceBorrowMode && !canCheckout && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Tài sản này hiện không ở vị trí gốc nên chưa thể gửi yêu cầu mượn mới.
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium text-slate-700">Phòng sử dụng</label>
                   <SearchableSelect
@@ -361,18 +754,18 @@ function QRScanner() {
             )}
             </div>
 
-            <div className={`mt-4 grid gap-2 ${canCheckout && canCheckin ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {canCheckout && (
+            <div className={`mt-4 grid gap-2 ${showBorrowSection && showReturnSection ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {showBorrowSection && (
                 <button
                   type="button"
                   onClick={handleCheckout}
-                  disabled={loadingAction}
+                  disabled={loadingAction || (shouldForceBorrowMode && !canCheckout)}
                   className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
                 >
                   Gửi yêu cầu mượn
                 </button>
               )}
-              {canCheckin && (
+              {showReturnSection && (
                 <button
                   type="button"
                   onClick={handleCheckin}

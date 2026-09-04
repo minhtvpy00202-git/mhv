@@ -49,7 +49,7 @@ function Login() {
       if (normalizedRole === 'admin') {
         navigate('/admin/dashboard', { replace: true })
       } else if (normalizedRole === 'consumablemanager' || normalizedRole === 'quanlycapphat') {
-        navigate('/supply/consumables', { replace: true })
+        navigate('/supply/consumables/warehouses', { replace: true })
       } else if (normalizedRole === 'techsupport' || normalizedRole === 'techsup') {
         navigate(getTechSupportHomePath(), { replace: true })
       } else {
