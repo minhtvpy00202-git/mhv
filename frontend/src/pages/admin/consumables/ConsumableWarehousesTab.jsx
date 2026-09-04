@@ -16,6 +16,19 @@ function getWarehouseStockTone(stock) {
   return 'emerald'
 }
 
+function getExpiryStatus(stock) {
+  const rawDate = String(stock?.nearestExpirationDate || '').trim()
+  if (!rawDate) return 'NO_EXPIRY'
+  const parsedDate = new Date(`${rawDate}T00:00:00`)
+  if (Number.isNaN(parsedDate.getTime())) return 'UNKNOWN'
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((parsedDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDays < 0) return 'EXPIRED'
+  if (diffDays <= 30) return 'EXPIRING'
+  return 'SAFE'
+}
+
 export default function ConsumableWarehousesTab({
   warehouseOptions,
   selectedWarehouseId,
@@ -28,11 +41,20 @@ export default function ConsumableWarehousesTab({
 }) {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [expiryFilter, setExpiryFilter] = useState('ALL')
 
   const stocks = warehouseOverview?.stocks || []
   const transferHistory = warehouseOverview?.transferHistory || []
   const alerts = warehouseAlerts || []
   const normalizedKeyword = searchKeyword.trim().toLowerCase()
+  const categoryOptions = useMemo(() => (
+    Array.from(new Set(
+      stocks
+        .map((stock) => String(stock?.categoryName || '').trim())
+        .filter(Boolean),
+    )).sort((left, right) => left.localeCompare(right, 'vi'))
+  ), [stocks])
 
   const filteredStocks = useMemo(() => (
     stocks.filter((stock) => {
@@ -43,11 +65,16 @@ export default function ConsumableWarehousesTab({
         stock.warehouseLocationName,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedKeyword))
       if (!matchesKeyword) return false
+      if (categoryFilter !== 'ALL' && String(stock.categoryName || '').trim() !== categoryFilter) return false
       if (statusFilter === 'LOW') return Boolean(stock.lowStock)
       if (statusFilter === 'OUT') return Boolean(stock.outOfStock)
+      const expiryStatus = getExpiryStatus(stock)
+      if (expiryFilter === 'EXPIRING' && expiryStatus !== 'EXPIRING') return false
+      if (expiryFilter === 'EXPIRED' && expiryStatus !== 'EXPIRED') return false
+      if (expiryFilter === 'NO_EXPIRY' && expiryStatus !== 'NO_EXPIRY') return false
       return true
     })
-  ), [normalizedKeyword, statusFilter, stocks])
+  ), [categoryFilter, expiryFilter, normalizedKeyword, statusFilter, stocks])
 
   return (
     <div className="space-y-4">
@@ -74,6 +101,28 @@ export default function ConsumableWarehousesTab({
               placeholder="Tìm theo mã, tên vật tư, loại hoặc kho"
             />
           </div>
+          <select
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            className="min-w-[190px] rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          >
+            <option value="ALL">Tất cả loại vật tư</option>
+            {categoryOptions.map((categoryName) => (
+              <option key={categoryName} value={categoryName}>
+                {categoryName}
+              </option>
+            ))}
+          </select>
+          <select
+            value={expiryFilter}
+            onChange={(event) => setExpiryFilter(event.target.value)}
+            className="min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          >
+            <option value="ALL">Tất cả hạn dùng</option>
+            <option value="EXPIRING">Sắp hết hạn</option>
+            <option value="EXPIRED">Đã hết hạn</option>
+            <option value="NO_EXPIRY">Không có HSD</option>
+          </select>
           <div className="inline-flex rounded-lg border border-slate-300 p-0.5 dark:border-slate-700">
             {[
               { key: 'ALL', label: 'Tất cả' },

@@ -1,6 +1,7 @@
 import {
   IconArrowLeft as ArrowLeft,
   IconArrowRight as ArrowRight,
+  IconX as X,
   IconPackage as Package,
   IconSearch as Search,
 } from '@tabler/icons-react'
@@ -8,9 +9,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
+import ModalOverlay from '../components/ui/ModalOverlay'
 
 const today = new Date().toISOString().slice(0, 10)
 const DEFAULT_LIMIT = 20
+
+function getUnitBreakdownText(item) {
+  const retailUnit = String(item?.retailUnit || item?.unit || '').trim()
+  const wholesaleUnit = String(item?.wholesaleUnit || '').trim()
+  const factor = Number(item?.wholesaleToRetailFactor ?? 1)
+  if (!retailUnit || !wholesaleUnit || !Number.isInteger(factor) || factor <= 1) return ''
+  return `Quy đổi: 1 ${wholesaleUnit} = ${factor} ${retailUnit}`
+}
 
 function MobileConsumableRequests() {
   const [searchParams] = useSearchParams()
@@ -77,10 +87,25 @@ function MobileConsumableRequests() {
     [form, selected],
   )
 
+  const destinationOptions = useMemo(() => (
+    locations.filter((location) => String(location.id) !== String(selected?.locationId ?? ''))
+  ), [locations, selected])
+
+  useEffect(() => {
+    if (!selected || !form.destinationLocationId) return
+    if (String(form.destinationLocationId) === String(selected.locationId ?? '')) {
+      setForm((prev) => ({ ...prev, destinationLocationId: '' }))
+    }
+  }, [form.destinationLocationId, selected])
+
   const handleCreate = async (event) => {
     event.preventDefault()
     if (!canSubmit) {
       toast.error('Vui lòng nhập đầy đủ thông tin cấp phát vật tư.')
+      return
+    }
+    if (String(form.destinationLocationId) === String(selected?.locationId ?? '')) {
+      toast.error('Phòng nhận không được trùng với kho hiện đang chứa vật tư.')
       return
     }
     setSubmitting(true)
@@ -184,89 +209,111 @@ function MobileConsumableRequests() {
       </section>
 
       {selected && (
-        <form onSubmit={handleCreate} className="rounded-2xl bg-white p-4 shadow-sm dark:bg-slate-900">
-          <h3 className="font-semibold text-slate-800 dark:text-slate-100">Yêu cầu cấp phát vật tư</h3>
-          <p className="mt-1 text-xs text-slate-500">Vật tư: {selected.assetName}. Hệ thống sẽ chuyển yêu cầu đến quản lý vật tư.</p>
-          <div className="mt-4 grid gap-3">
-            <label className="text-sm font-medium text-slate-700">Phòng nhận
-              <select
-                required
-                value={form.destinationLocationId}
-                onChange={(event) => setForm((prev) => ({ ...prev, destinationLocationId: event.target.value }))}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+        <ModalOverlay className="bg-slate-950/70 backdrop-blur-sm" zIndex={120}>
+          <form onSubmit={handleCreate} className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-2xl dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Yêu cầu cấp phát vật tư</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Vật tư: {selected.assetName}. Hệ thống sẽ chuyển yêu cầu đến quản lý vật tư.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Đóng form yêu cầu cấp phát"
               >
-                <option value="">Chọn phòng</option>
-                {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
-              </select>
-            </label>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]">
-              <label className="text-sm font-medium text-slate-700">Số lượng
-                <input
-                  type="number"
-                  min="1"
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="text-sm font-medium text-slate-700">Phòng nhận
+                <select
                   required
-                  value={form.quantityRequested}
-                  onChange={(event) => setForm((prev) => ({ ...prev, quantityRequested: event.target.value }))}
+                  value={form.destinationLocationId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, destinationLocationId: event.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                >
+                  <option value="">Chọn phòng</option>
+                  {destinationOptions.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]">
+                <label className="text-sm font-medium text-slate-700">Số lượng
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={form.quantityRequested}
+                    onChange={(event) => setForm((prev) => ({ ...prev, quantityRequested: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                  />
+                </label>
+                <label className="text-sm font-medium text-slate-700">Đơn vị
+                  <select
+                    value={form.quantityRequestedUnit}
+                    onChange={(event) => setForm((prev) => ({ ...prev, quantityRequestedUnit: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                  >
+                    <option value="RETAIL">{selected.retailUnit || selected.unit || 'đơn vị lẻ'}</option>
+                    {Number(selected.wholesaleToRetailFactor ?? 1) > 1 && (
+                      <option value="WHOLESALE">{selected.wholesaleUnit || selected.retailUnit || selected.unit || 'đơn vị sỉ'}</option>
+                    )}
+                  </select>
+                </label>
+                <p className="sm:col-span-2 -mt-1 text-xs text-slate-500">
+                  Tồn hiện có: {selected.formattedAvailableQuantity || `${selected.availableQuantity} ${selected.retailUnit || selected.unit || ''}`}
+                  {selected.formattedAvailableQuantityRetailOnly && selected.formattedAvailableQuantityRetailOnly !== selected.formattedAvailableQuantity
+                    ? ` (${selected.formattedAvailableQuantityRetailOnly})`
+                    : ''}
+                </p>
+                {getUnitBreakdownText(selected) && (
+                  <p className="sm:col-span-2 -mt-1 text-xs font-medium text-orange-700">
+                    {getUnitBreakdownText(selected)}
+                  </p>
+                )}
+              </div>
+              <label className="text-sm font-medium text-slate-700">Ngày cần
+                <input
+                  type="date"
+                  min={today}
+                  required
+                  value={form.neededFrom}
+                  onChange={(event) => setForm((prev) => ({ ...prev, neededFrom: event.target.value }))}
                   className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
                 />
               </label>
-              <label className="text-sm font-medium text-slate-700">Đơn vị
-                <select
-                  value={form.quantityRequestedUnit}
-                  onChange={(event) => setForm((prev) => ({ ...prev, quantityRequestedUnit: event.target.value }))}
+              <label className="text-sm font-medium text-slate-700">Mục đích sử dụng
+                <textarea
+                  required
+                  maxLength={1000}
+                  value={form.purpose}
+                  onChange={(event) => setForm((prev) => ({ ...prev, purpose: event.target.value }))}
+                  rows={3}
                   className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
-                >
-                  <option value="RETAIL">{selected.retailUnit || selected.unit || 'đơn vị lẻ'}</option>
-                  {Number(selected.wholesaleToRetailFactor ?? 1) > 1 && (
-                    <option value="WHOLESALE">{selected.wholesaleUnit || selected.retailUnit || selected.unit || 'đơn vị sỉ'}</option>
-                  )}
-                </select>
+                />
               </label>
-              <p className="sm:col-span-2 -mt-1 text-xs text-slate-500">
-                Tồn hiện có: {selected.formattedAvailableQuantity || `${selected.availableQuantity} ${selected.retailUnit || selected.unit || ''}`}
-                {selected.formattedAvailableQuantityRetailOnly && selected.formattedAvailableQuantityRetailOnly !== selected.formattedAvailableQuantity
-                  ? ` (${selected.formattedAvailableQuantityRetailOnly})`
-                  : ''}
-              </p>
+              <label className="text-sm font-medium text-slate-700">Ghi chú thêm
+                <textarea
+                  maxLength={4000}
+                  value={form.message}
+                  onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
+                  rows={2}
+                  placeholder="Ví dụ: Cần cấp cho phòng họp trước 9 giờ sáng."
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+                />
+              </label>
             </div>
-            <label className="text-sm font-medium text-slate-700">Ngày cần
-              <input
-                type="date"
-                min={today}
-                required
-                value={form.neededFrom}
-                onChange={(event) => setForm((prev) => ({ ...prev, neededFrom: event.target.value }))}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">Mục đích sử dụng
-              <textarea
-                required
-                maxLength={1000}
-                value={form.purpose}
-                onChange={(event) => setForm((prev) => ({ ...prev, purpose: event.target.value }))}
-                rows={3}
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
-              />
-            </label>
-            <label className="text-sm font-medium text-slate-700">Ghi chú thêm
-              <textarea
-                maxLength={4000}
-                value={form.message}
-                onChange={(event) => setForm((prev) => ({ ...prev, message: event.target.value }))}
-                rows={2}
-                placeholder="Ví dụ: Cần cấp cho phòng họp trước 9 giờ sáng."
-                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
-              />
-            </label>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button type="button" onClick={() => setSelected(null)} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600">Bỏ chọn</button>
-            <button type="submit" disabled={!canSubmit || submitting} className="flex-1 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-slate-300">
-              {submitting ? 'Đang gửi...' : 'Gửi yêu cầu cấp phát'}
-            </button>
-          </div>
-        </form>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setSelected(null)} className="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-600">Đóng</button>
+              <button type="submit" disabled={!canSubmit || submitting} className="flex-1 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-slate-300">
+                {submitting ? 'Đang gửi...' : 'Gửi yêu cầu cấp phát'}
+              </button>
+            </div>
+          </form>
+        </ModalOverlay>
       )}
     </div>
   )

@@ -169,4 +169,12 @@ public class InquiryController {
             @Valid @RequestBody InquiryConsumableConversionRequest request) {
         return ResponseEntity.ok(inquiryService.createConsumableRequest(id, request));
     }
+
+    @PostMapping("/{id}/fulfill-consumable")
+    @PreAuthorize("hasRole('ConsumableManager')")
+    public ResponseEntity<InquiryResponse> fulfillConsumableRequest(
+            @PathVariable Long id,
+            @Valid @RequestBody InquiryConsumableConversionRequest request) {
+        return ResponseEntity.ok(inquiryService.fulfillConsumableRequest(id, request));
+    }
 }

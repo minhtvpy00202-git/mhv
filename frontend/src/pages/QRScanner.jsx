@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Html5Qrcode } from 'html5-qrcode'
 import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import SearchableSelect from '../components/ui/SearchableSelect'
-import { useAuth } from '../context/AuthContext'
 import { parseSpecsToEntries } from '../utils/assetSpecs'
 
 const scannerElementId = 'qa-scanner'
@@ -25,9 +24,9 @@ function QRScanner() {
   const [loadingAction, setLoadingAction] = useState(false)
   const [manualQaCode, setManualQaCode] = useState('')
   const [manualLookupLoading, setManualLookupLoading] = useState(false)
-  const { user } = useAuth()
-
-  const userId = useMemo(() => user?.userId ?? null, [user])
+  const [neededFrom, setNeededFrom] = useState(() => new Date().toISOString().slice(0, 10))
+  const [expectedReturnDate, setExpectedReturnDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [purpose, setPurpose] = useState('')
   useEffect(() => {
     if (!showActionModal && keepScannerAliveRef.current) {
       void startScanner()
@@ -168,6 +167,9 @@ function QRScanner() {
     setScannedHomeLocationName('')
     setScannedSpecs([])
     setToLocationId('')
+    setNeededFrom(new Date().toISOString().slice(0, 10))
+    setExpectedReturnDate(new Date().toISOString().slice(0, 10))
+    setPurpose('')
     setManualQaCode('')
     startScanner()
   }
@@ -189,12 +191,24 @@ function QRScanner() {
   }
 
   const handleCheckout = async () => {
-    if (!userId) {
-      toast.error('Không tìm thấy thông tin người dùng đăng nhập.')
-      return
-    }
     if (!toLocationId) {
       toast.error('Vui lòng chọn phòng đích.')
+      return
+    }
+    if (!neededFrom) {
+      toast.error('Vui lòng chọn ngày bắt đầu mượn.')
+      return
+    }
+    if (!expectedReturnDate) {
+      toast.error('Vui lòng chọn ngày hẹn trả.')
+      return
+    }
+    if (expectedReturnDate < neededFrom) {
+      toast.error('Ngày hẹn trả không được trước ngày bắt đầu mượn.')
+      return
+    }
+    if (!purpose.trim()) {
+      toast.error('Vui lòng nhập mục đích sử dụng thiết bị.')
       return
     }
     if (scannedLocationId !== null && Number(toLocationId) === Number(scannedLocationId)) {
@@ -203,15 +217,17 @@ function QRScanner() {
     }
     setLoadingAction(true)
     try {
-      await axiosClient.post('/api/usage/checkout', {
+      await axiosClient.post('/api/borrow-requests', {
         assetQaCode: scannedQaCode,
-        userId,
-        toLocationId: Number(toLocationId),
+        destinationLocationId: Number(toLocationId),
+        neededFrom,
+        expectedReturnDate,
+        purpose: purpose.trim(),
       })
-      toast.success(`Mượn thiết bị thành công${scannedAssetName ? `: ${scannedAssetName}` : ''}.`)
+      toast.success(`Đã gửi phiếu mượn${scannedAssetName ? ` cho ${scannedAssetName}` : ''}. Vui lòng chờ Admin duyệt.`)
       closeModal()
     } catch (error) {
-      const message = error?.response?.data?.message || 'Mượn thiết bị thất bại.'
+      const message = error?.response?.data?.message || 'Gửi phiếu mượn thiết bị thất bại.'
       toast.error(message)
     } finally {
       setLoadingAction(false)
@@ -221,13 +237,13 @@ function QRScanner() {
   const handleCheckin = async () => {
     setLoadingAction(true)
     try {
-      await axiosClient.post('/api/usage/checkin', {
+      await axiosClient.post('/api/borrow-requests/request-return', {
         assetQaCode: scannedQaCode,
       })
-      toast.success(`Trả thiết bị thành công${scannedAssetName ? `: ${scannedAssetName}` : ''}.`)
+      toast.success(`Đã gửi yêu cầu trả${scannedAssetName ? ` cho ${scannedAssetName}` : ''}. Vui lòng chờ Admin xác nhận.`)
       closeModal()
     } catch (error) {
-      const message = error?.response?.data?.message || 'Trả thiết bị thất bại.'
+      const message = error?.response?.data?.message || 'Gửi yêu cầu trả thiết bị thất bại.'
       toast.error(message)
     } finally {
       setLoadingAction(false)
@@ -244,7 +260,7 @@ function QRScanner() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold text-slate-800">Quét QR để mượn hoặc trả thiết bị</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Quét QR để gửi yêu cầu mượn hoặc trả thiết bị</h2>
         <div id={scannerElementId} className="overflow-hidden rounded-xl border border-slate-200" />
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-sm font-semibold text-slate-800">Hoặc nhập tay mã QA</p>
@@ -294,19 +310,53 @@ function QRScanner() {
             )}
 
             {canCheckout && (
-              <div className="mt-3 space-y-2">
-                <label className="text-sm font-medium text-slate-700">Phòng đích</label>
-                <SearchableSelect
-                  value={toLocationId}
-                  onChange={(nextValue) => setToLocationId(String(nextValue || ''))}
-                  options={locations}
-                  placeholder="Gõ để tìm phòng, ví dụ: Hành lang 1"
-                  emptyText="Không có phòng phù hợp."
-                  getOptionValue={(location) => location.id}
-                  getOptionLabel={(location) => location.roomName || location.name || `Phòng #${location.id}`}
-                  getOptionSearchText={(location) => `${location.roomName || location.name || ''} ${location.description || ''}`}
-                  dropdownZIndex={1100}
-                />
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Phòng sử dụng</label>
+                  <SearchableSelect
+                    value={toLocationId}
+                    onChange={(nextValue) => setToLocationId(String(nextValue || ''))}
+                    options={locations}
+                    placeholder="Gõ để tìm phòng, ví dụ: Hành lang 1"
+                    emptyText="Không có phòng phù hợp."
+                    getOptionValue={(location) => location.id}
+                    getOptionLabel={(location) => location.roomName || location.name || `Phòng #${location.id}`}
+                    getOptionSearchText={(location) => `${location.roomName || location.name || ''} ${location.description || ''}`}
+                    dropdownZIndex={1100}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Ngày bắt đầu mượn
+                    <input
+                      type="date"
+                      value={neededFrom}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setNeededFrom(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    />
+                  </label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Ngày hẹn trả
+                    <input
+                      type="date"
+                      value={expectedReturnDate}
+                      min={neededFrom || new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setExpectedReturnDate(event.target.value)}
+                      className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                    />
+                  </label>
+                </div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Mục đích sử dụng
+                  <textarea
+                    rows={3}
+                    value={purpose}
+                    onChange={(event) => setPurpose(event.target.value)}
+                    placeholder="Ví dụ: Mượn máy chiếu cho buổi họp phòng kinh doanh."
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
+                  />
+                </label>
               </div>
             )}
             </div>
@@ -319,7 +369,7 @@ function QRScanner() {
                   disabled={loadingAction}
                   className="rounded-lg bg-fptOrange px-3 py-2 text-sm font-semibold text-white hover:bg-fptOrangeDark disabled:opacity-60"
                 >
-                  Mượn
+                  Gửi yêu cầu mượn
                 </button>
               )}
               {canCheckin && (
@@ -329,7 +379,7 @@ function QRScanner() {
                   disabled={loadingAction}
                   className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  Trả thiết bị
+                  Gửi yêu cầu trả
                 </button>
               )}
             </div>

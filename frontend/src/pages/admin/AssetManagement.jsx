@@ -53,6 +53,7 @@ import {
 } from "../../utils/validation";
 import ConsumableRoomsTab from "./consumables/ConsumableRoomsTab";
 import ConsumableDisposalTab from "./consumables/ConsumableDisposalTab";
+import ConsumableIssueHistoryTab from "./consumables/ConsumableIssueHistoryTab";
 import ConsumableRequestsTab from "./consumables/ConsumableRequestsTab";
 import {
   formatConsumableQuantityText,
@@ -103,6 +104,7 @@ const CONSUMABLE_WORKSPACES = new Set([
   "OVERVIEW",
   "WAREHOUSES",
   "ROOMS",
+  "ISSUES",
   "DISPOSAL",
   "REQUESTS",
 ]);
@@ -123,6 +125,12 @@ const CONSUMABLE_WORKSPACE_META = {
     title: "Theo dõi theo phòng",
     description:
       "Theo dõi lượng vật tư đã cấp phát cho từng phòng, cấp phát trực tiếp từ kho và điều chỉnh tồn thực tế.",
+    allowInventoryActions: false,
+  },
+  ISSUES: {
+    title: "Lịch sử cấp phát",
+    description:
+      "Tra cứu toàn bộ các lần cấp phát vật tư theo phòng nhận, kho xuất, người thực hiện và thời gian.",
     allowInventoryActions: false,
   },
   DISPOSAL: {
@@ -692,6 +700,7 @@ function AssetManagement({
     issuedToLocationId: "",
     sourceWarehouseLocationId: "",
     quantity: "",
+    quantityUnit: "RETAIL",
     note: "",
   });
   const [showConsumableRequestModal, setShowConsumableRequestModal] =
@@ -1094,6 +1103,38 @@ function AssetManagement({
       ),
     [selectedIssueAsset, warehouseLocations],
   );
+  const issueDestinationOptions = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          String(location.id) !== String(issueForm.sourceWarehouseLocationId || ""),
+      ),
+    [issueForm.sourceWarehouseLocationId, locations],
+  );
+  const selectedIssueDestination = useMemo(
+    () =>
+      locations.find(
+        (location) =>
+          String(location.id) === String(issueForm.issuedToLocationId || ""),
+      ) || null,
+    [issueForm.issuedToLocationId, locations],
+  );
+  const issueDestinationIsWarehouse = Boolean(
+    selectedIssueDestination?.isStorageWarehouse ??
+      selectedIssueDestination?.storageWarehouse,
+  );
+
+  useEffect(() => {
+    if (!issueForm.issuedToLocationId || !issueForm.sourceWarehouseLocationId) {
+      return;
+    }
+    if (
+      String(issueForm.issuedToLocationId) ===
+      String(issueForm.sourceWarehouseLocationId)
+    ) {
+      setIssueForm((prev) => ({ ...prev, issuedToLocationId: "" }));
+    }
+  }, [issueForm.issuedToLocationId, issueForm.sourceWarehouseLocationId]);
   const selectedRequestAssetDetail = useMemo(
     () => assetDetailsByQaCode[selectedRequestAssetQaCode] || null,
     [assetDetailsByQaCode, selectedRequestAssetQaCode],
@@ -1548,7 +1589,11 @@ function AssetManagement({
   }, [initialSection, loadConsumableStatusCounts, restrictToConsumable]);
 
   useEffect(() => {
-    if (!isConsumableTab || consumableWorkspace !== "ROOMS") return;
+    if (
+      !isConsumableTab ||
+      !["ROOMS", "ISSUES"].includes(consumableWorkspace)
+    )
+      return;
     void ensureRoomLoaded();
   }, [consumableWorkspace, ensureRoomLoaded, isConsumableTab]);
 
@@ -1737,6 +1782,7 @@ function AssetManagement({
       issuedToLocationId: "",
       sourceWarehouseLocationId: "",
       quantity: "",
+      quantityUnit: "RETAIL",
       note: "",
     });
   };
@@ -2337,6 +2383,10 @@ function AssetManagement({
           detail?.homeLocationId || initialWarehouseOptions[0]?.id || "",
         ),
         quantity: "",
+        quantityUnit:
+          Number(detail?.wholesaleToRetailFactor ?? 1) > 1
+            ? "WHOLESALE"
+            : "RETAIL",
         note: "",
       });
       setShowIssueModal(true);
@@ -2833,26 +2883,45 @@ function AssetManagement({
       return;
     }
     if (!issueForm.issuedToLocationId) {
-      toast.error("Vui lòng chọn phòng nhận.");
+      toast.error("Vui lòng chọn nơi nhận.");
       return;
     }
     if (!issueForm.sourceWarehouseLocationId) {
       toast.error("Vui lòng chọn kho xuất.");
       return;
     }
+    if (
+      String(issueForm.issuedToLocationId) ===
+      String(issueForm.sourceWarehouseLocationId)
+    ) {
+      toast.error("Không thể cấp phát hoặc chuyển kho về chính kho đang chọn.");
+      return;
+    }
     setIssueSubmitting(true);
     try {
-      await axiosClient.post(
-        `/api/assets/${selectedIssueAsset.qaCode}/issues`,
-        {
-          issuedToLocationId: Number(issueForm.issuedToLocationId),
-          sourceWarehouseLocationId: Number(
-            issueForm.sourceWarehouseLocationId,
-          ),
-          quantity,
-          note: issueForm.note.trim(),
-        },
-      );
+      const endpoint = issueDestinationIsWarehouse
+        ? `/api/assets/${selectedIssueAsset.qaCode}/warehouse-transfers`
+        : `/api/assets/${selectedIssueAsset.qaCode}/issues`;
+      const payload = issueDestinationIsWarehouse
+        ? {
+            sourceWarehouseLocationId: Number(
+              issueForm.sourceWarehouseLocationId,
+            ),
+            targetWarehouseLocationId: Number(issueForm.issuedToLocationId),
+            quantity,
+            quantityUnit: issueForm.quantityUnit,
+            note: issueForm.note.trim(),
+          }
+        : {
+            issuedToLocationId: Number(issueForm.issuedToLocationId),
+            sourceWarehouseLocationId: Number(
+              issueForm.sourceWarehouseLocationId,
+            ),
+            quantity,
+            quantityUnit: issueForm.quantityUnit,
+            note: issueForm.note.trim(),
+          };
+      await axiosClient.post(endpoint, payload);
       const [detailResponse, historyResponse, locationStocks] =
         await Promise.all([
           axiosClient.get(`/api/assets/${selectedIssueAsset.qaCode}`),
@@ -2871,16 +2940,27 @@ function AssetManagement({
         issuedToLocationId: "",
         sourceWarehouseLocationId: "",
         quantity: "",
+        quantityUnit:
+          Number(updatedDetail?.wholesaleToRetailFactor ?? 1) > 1
+            ? "WHOLESALE"
+            : "RETAIL",
         note: "",
       });
-      toast.success("Cấp phát vật phẩm thành công.");
+      toast.success(
+        issueDestinationIsWarehouse
+          ? "Chuyển kho vật phẩm thành công."
+          : "Cấp phát vật phẩm thành công.",
+      );
       await loadAssets(pageInfo.page);
       if (selectedRoomId) {
         await refreshRoomOverview(selectedRoomId);
       }
     } catch (error) {
       const message =
-        error?.response?.data?.message || "Cấp phát vật phẩm thất bại.";
+        error?.response?.data?.message ||
+        (issueDestinationIsWarehouse
+          ? "Chuyển kho vật phẩm thất bại."
+          : "Cấp phát vật phẩm thất bại.");
       toast.error(message);
     } finally {
       setIssueSubmitting(false);
@@ -4044,6 +4124,15 @@ function AssetManagement({
               onOpenIssueModalFromRoomStock={handleOpenIssueModalFromRoomStock}
               onOpenStockAdjustModal={handleOpenStockAdjustModal}
               onOpenConsumableDecisionModal={handleOpenConsumableDecisionModal}
+            />
+          ) : consumableWorkspace === "ISSUES" ? (
+            <ConsumableIssueHistoryTab
+              roomOptions={roomOptions}
+              selectedRoomId={selectedRoomId}
+              onRoomChange={handleRoomChange}
+              roomOverview={roomOverview}
+              roomOverviewLoading={roomOverviewLoading}
+              onRefresh={refreshRoomOverview}
             />
           ) : consumableWorkspace === "DISPOSAL" ? (
             <ConsumableDisposalTab
@@ -5437,7 +5526,7 @@ function AssetManagement({
               <div className="space-y-3 rounded-xl border border-slate-200 p-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Phòng nhận
+                    Nơi nhận
                   </label>
                   <SearchableSelect
                     value={issueForm.issuedToLocationId}
@@ -5447,11 +5536,19 @@ function AssetManagement({
                         issuedToLocationId: String(nextValue || ""),
                       }))
                     }
-                    options={locations}
+                    options={issueDestinationOptions}
                     getOptionValue={(location) => location.id}
                     getOptionLabel={(location) => location.roomName}
-                    placeholder="Gõ để tìm phòng nhận"
-                    emptyOptionLabel="Chọn phòng nhận"
+                    getOptionDescription={(location) =>
+                      Boolean(
+                        location?.isStorageWarehouse ??
+                          location?.storageWarehouse,
+                      )
+                        ? "Kho lưu trữ"
+                        : "Phòng sử dụng"
+                    }
+                    placeholder="Gõ để tìm nơi nhận"
+                    emptyOptionLabel="Chọn nơi nhận"
                     inputClassName={getFieldClass(false)}
                   />
                 </div>
@@ -5480,7 +5577,7 @@ function AssetManagement({
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Số lượng cấp phát
+                    Số lượng
                   </label>
                   <input
                     type="number"
@@ -5493,8 +5590,33 @@ function AssetManagement({
                       }))
                     }
                     className={getFieldClass(false)}
-                    placeholder={`Ví dụ: 10 ${getConsumableRetailUnit(selectedIssueAsset)}`}
+                    placeholder={`Ví dụ: 10 ${getConsumableQuantityInputUnit(selectedIssueAsset, issueForm.quantityUnit)}`}
                   />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Đơn vị tính
+                  </label>
+                  <select
+                    value={issueForm.quantityUnit}
+                    onChange={(e) =>
+                      setIssueForm((prev) => ({
+                        ...prev,
+                        quantityUnit: e.target.value,
+                      }))
+                    }
+                    className={getFieldClass(false)}
+                  >
+                    <option value="RETAIL">
+                      {getConsumableRetailUnit(selectedIssueAsset)}
+                    </option>
+                    {Number(selectedIssueAsset?.wholesaleToRetailFactor ?? 1) >
+                      1 && (
+                      <option value="WHOLESALE">
+                        {getConsumableWholesaleUnit(selectedIssueAsset)}
+                      </option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -5519,7 +5641,9 @@ function AssetManagement({
                   disabled={issueSubmitting}
                   className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  Xác nhận cấp phát
+                  {issueDestinationIsWarehouse
+                    ? "Xác nhận chuyển kho"
+                    : "Xác nhận cấp phát"}
                 </button>
               </div>
 

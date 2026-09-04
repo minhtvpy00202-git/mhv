@@ -1,8 +1,6 @@
 package com.poly.mhv.service;
 
-import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
-import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.inquiry.ConsumableFulfillmentQuantityRequest;
 import com.poly.mhv.dto.inquiry.ConsumableFulfillmentWarehouseRequest;
 import com.poly.mhv.dto.inquiry.ConsumableInquiryFulfillmentResponse;
@@ -178,10 +176,19 @@ public class ConsumableInquiryFulfillmentService {
     public ConsumableInquiryFulfillmentResponse fulfill(Long fulfillmentId, InquiryActionRequest request) {
         ConsumableInquiryFulfillment fulfillment = getForUpdate(fulfillmentId);
         AppUser actor = requireAssignedManager(fulfillment.getInquiry());
-        ensureStatus(fulfillment, ConsumableFulfillmentStatusSupport.READY_FOR_PICKUP);
-        int quantity = fulfillment.getPreparedQuantity() == null ? 0 : fulfillment.getPreparedQuantity();
+        ensureOpen(fulfillment);
+        ensureApproval(fulfillment);
+        if (!List.of(
+                ConsumableFulfillmentStatusSupport.PENDING,
+                ConsumableFulfillmentStatusSupport.PREPARING,
+                ConsumableFulfillmentStatusSupport.READY_FOR_PICKUP,
+                ConsumableFulfillmentStatusSupport.PARTIALLY_FULFILLED
+        ).contains(fulfillment.getStatus())) {
+            throw new CustomException("Yêu cầu không ở trạng thái có thể xác nhận đã cấp.");
+        }
+        int quantity = remaining(fulfillment);
         if (quantity <= 0 || quantity > remaining(fulfillment)) {
-            throw new CustomException("Số lượng đã chuẩn bị không hợp lệ.");
+            throw new CustomException("Số lượng cấp phát không hợp lệ.");
         }
         String decisionNote = preferNote(request, fulfillment.getDecisionNote());
         assetService.fulfillConsumableRequest(
@@ -199,39 +206,14 @@ public class ConsumableInquiryFulfillmentService {
         fulfillment.setDecisionNote(decisionNote);
         fulfillment.setUpdatedAt(now);
         ServiceInquiry inquiry = fulfillment.getInquiry();
-        int remaining = Math.max(0, fulfillment.getRequestedQuantity() - fulfilledQuantity);
-        if (remaining == 0) {
-            fulfillment.setStatus(ConsumableFulfillmentStatusSupport.FULFILLED);
-            fulfillment.setFulfilledAt(now);
-            inquiry.setStatus(InquiryStatusSupport.WAITING_EMPLOYEE);
-            inquiry.setDecisionNote("Đã cấp đủ vật tư, chờ nhân viên xác nhận đã nhận.");
-        } else {
-            ConsumableRequestResponse nextRequest = assetService.createConsumableRequestForRequester(
-                    inquiry.getDestinationLocation().getId(),
-                    ConsumableRequestCreateRequest.builder()
-                            .assetQaCode(inquiry.getAlternativeAsset() != null
-                                    && Boolean.TRUE.equals(inquiry.getAlternativeAccepted())
-                                    ? inquiry.getAlternativeAsset().getQaCode()
-                                    : inquiry.getAsset().getQaCode())
-                            .sourceWarehouseLocationId(fulfillment.getSourceWarehouseLocation().getId())
-                            .quantityRequested(remaining)
-                            .quantityRequestedUnit("RETAIL")
-                            .reason("Phần còn lại của yêu cầu hội thoại #" + inquiry.getId())
-                            .build(),
-                    inquiry.getRequester());
-            fulfillment.setActiveConsumableRequestId(nextRequest.getId());
-            fulfillment.setStatus(ConsumableFulfillmentStatusSupport.PARTIALLY_FULFILLED);
-            inquiry.setStatus(InquiryStatusSupport.CONVERTED);
-            inquiry.setDecisionNote("Đã cấp " + fulfilledQuantity + "/" + fulfillment.getRequestedQuantity()
-                    + ", còn " + remaining + ".");
-        }
+        fulfillment.setStatus(ConsumableFulfillmentStatusSupport.FULFILLED);
+        fulfillment.setFulfilledAt(now);
+        inquiry.setStatus(InquiryStatusSupport.WAITING_EMPLOYEE);
+        inquiry.setDecisionNote("Đã cấp đủ vật tư, chờ nhân viên xác nhận đã nhận.");
         inquiry.setUpdatedAt(now);
         inquiryRepository.save(inquiry);
         ConsumableInquiryFulfillment saved = fulfillmentRepository.save(fulfillment);
-        String message = remaining == 0
-                ? "Đã cấp đủ " + fulfilledQuantity + " đơn vị cho yêu cầu #" + inquiry.getId() + "."
-                : "Đã cấp " + fulfilledQuantity + "/" + fulfillment.getRequestedQuantity()
-                        + " đơn vị; phần còn lại tiếp tục được xử lý.";
+        String message = "Đã cấp đủ " + fulfilledQuantity + " đơn vị cho yêu cầu #" + inquiry.getId() + ".";
         notifyRequester(inquiry, actor, "CONSUMABLE_FULFILLED", "Đã ghi nhận cấp vật tư", message);
         broadcast(inquiry);
         return mapResponse(saved);
@@ -344,7 +326,13 @@ public class ConsumableInquiryFulfillmentService {
     private AppUser requireAssignedManager(ServiceInquiry inquiry) {
         AppUser actor = currentUserProvider.getCurrentUser();
         requireRole(actor, "ConsumableManager", "Chỉ quản lý vật tư được thực hiện thao tác này.");
-        if (inquiry.getAssignee() == null || !actor.getId().equals(inquiry.getAssignee().getId())) {
+        if (inquiry.getAssignee() == null) {
+            inquiry.setAssignee(actor);
+            inquiry.setClaimedAt(inquiry.getClaimedAt() == null ? UtcDateTimes.now() : inquiry.getClaimedAt());
+            inquiry.setUpdatedAt(UtcDateTimes.now());
+            inquiryRepository.save(inquiry);
+        }
+        if (!actor.getId().equals(inquiry.getAssignee().getId())) {
             throw new AccessDeniedException("Bạn phải là người đang nhận xử lý yêu cầu này.");
         }
         return actor;

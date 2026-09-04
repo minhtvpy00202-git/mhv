@@ -203,15 +203,20 @@ export function validateChangePasswordForm(form) {
   const currentPassword = String(form?.currentPassword || '')
   const newPassword = String(form?.newPassword || '')
   const confirmNewPassword = String(form?.confirmNewPassword || '')
+  const hasUppercase = /[A-Z]/.test(newPassword)
+  const hasLowercase = /[a-z]/.test(newPassword)
+  const hasSpecialCharacter = /[^A-Za-z0-9\s]/.test(newPassword)
 
   if (currentPassword.length < 6 || currentPassword.length > 100 || isBlank(currentPassword)) {
     errors.currentPassword = 'Mật khẩu hiện tại phải từ 6 đến 100 ký tự.'
   }
-  if (newPassword.length < 6 || newPassword.length > 100 || isBlank(newPassword)) {
-    errors.newPassword = 'Mật khẩu mới phải từ 6 đến 100 ký tự.'
+  if (newPassword.length < 8 || newPassword.length > 100 || isBlank(newPassword)) {
+    errors.newPassword = 'Mật khẩu mới phải từ 8 đến 100 ký tự.'
+  } else if (!hasUppercase || !hasLowercase || !hasSpecialCharacter) {
+    errors.newPassword = 'Mật khẩu mới phải có chữ hoa, chữ thường và ký tự đặc biệt.'
   }
-  if (confirmNewPassword.length < 6 || confirmNewPassword.length > 100 || isBlank(confirmNewPassword)) {
-    errors.confirmNewPassword = 'Xác nhận mật khẩu mới phải từ 6 đến 100 ký tự.'
+  if (confirmNewPassword.length < 8 || confirmNewPassword.length > 100 || isBlank(confirmNewPassword)) {
+    errors.confirmNewPassword = 'Xác nhận mật khẩu mới phải từ 8 đến 100 ký tự.'
   } else if (newPassword !== confirmNewPassword) {
     errors.confirmNewPassword = 'Xác nhận mật khẩu mới không khớp.'
   }

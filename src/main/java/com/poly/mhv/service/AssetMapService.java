@@ -150,16 +150,10 @@ public class AssetMapService {
     @Transactional
     public void deleteFloor(Integer floorId) {
         MapFloor floor = getFloorOrThrow(floorId);
-        List<RoomShape> roomShapes = roomShapeRepository.findByFloorIdOrderByIdAsc(floorId);
-        if (!roomShapes.isEmpty()) {
-            roomShapeRepository.deleteAll(roomShapes);
-        }
-        List<Location> locations = locationRepository.findByFloorIdOrderByRoomNameAsc(floorId);
-        for (Location location : locations) {
-            location.setFloor(null);
-        }
-        if (!locations.isEmpty()) {
-            locationRepository.saveAll(locations);
+        long roomCount = locationRepository.countByFloorId(floorId);
+        long shapeCount = roomShapeRepository.countByFloorId(floorId);
+        if (roomCount > 0 || shapeCount > 0) {
+            throw new CustomException("Không thể xóa tầng khi trên tầng vẫn còn phòng.");
         }
         mapFloorRepository.delete(floor);
     }

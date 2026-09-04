@@ -1,4 +1,4 @@
-import { IconInbox as Inbox, IconMessageCircle as MessageCircle, IconRefresh as Refresh } from '@tabler/icons-react'
+import { IconInbox as Inbox, IconRefresh as Refresh } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-toastify'
@@ -10,7 +10,7 @@ import { getInquiryBasePath, getInquirySlaMeta, getInquiryStatusMeta, getInquiry
 const filters = [
   ['', 'Tất cả'],
   ['NEW', 'Mới'],
-  ['CLAIMED', 'Đã nhận'],
+  ['CLAIMED', 'Đã phân công'],
   ['IN_PROGRESS', 'Đang xử lý'],
   ['WAITING_APPROVAL', 'Chờ phê duyệt'],
   ['WAITING_EMPLOYEE', 'Chờ nhân viên'],
@@ -82,7 +82,7 @@ function InquiryInbox() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Hộp thư nghiệp vụ</p>
             <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{user?.role === 'ConsumableManager' ? 'Yêu cầu cấp phát từ nhân viên' : 'Yêu cầu cấp phát cần Admin xử lý'}</h2>
-            <p className="mt-2 text-sm text-slate-500">Nhận xử lý, trao đổi và tạo phiếu cấp phát vật tư khi cần.</p>
+            <p className="mt-2 text-sm text-slate-500">Mở chi tiết để duyệt, từ chối hoặc tạo phiếu cấp phát vật tư khi cần.</p>
           </div>
           <button type="button" onClick={loadInbox} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600"><Refresh size={16} /> Làm mới</button>
         </div>
@@ -105,7 +105,7 @@ function InquiryInbox() {
         {!loading && visibleItems.length === 0 && <div className="p-8 text-center text-slate-500"><Inbox className="mx-auto" /><p className="mt-3 text-sm">Không có yêu cầu phù hợp.</p></div>}
         {visibleItems.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full text-sm">
+            <table className="min-w-[1020px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:bg-slate-950 dark:text-slate-400">
                 <tr>
                   <th className="px-4 py-3">Mã / Loại</th>
@@ -114,7 +114,6 @@ function InquiryInbox() {
                   <th className="px-4 py-3">Người yêu cầu</th>
                   <th className="px-4 py-3">Phụ trách</th>
                   <th className="px-4 py-3">Phòng</th>
-                  <th className="px-4 py-3 text-center">Chưa đọc</th>
                   <th className="px-4 py-3">SLA</th>
                   <th className="px-4 py-3">Cập nhật</th>
                   <th className="px-4 py-3">Trạng thái</th>
@@ -144,14 +143,8 @@ function InquiryInbox() {
                         <p className="line-clamp-2">{item.purpose}</p>
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.requesterName}</td>
-                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.assigneeName || 'Chưa nhận'}</td>
+                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.assigneeName || 'Chưa phân công'}</td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.destinationLocationName || '—'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center justify-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                          <MessageCircle size={14} />
-                          {unreadCount}
-                        </span>
-                      </td>
                       <td className="px-4 py-3">
                         {!sla.completed ? (
                           <span className={`text-xs font-semibold ${sla.breached ? 'text-red-600' : 'text-emerald-600'}`}>{sla.label}</span>
@@ -165,7 +158,7 @@ function InquiryInbox() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link to={`${basePath}/${item.id}`} className="inline-flex items-center rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50">
-                          Mở xử lý
+                          Xem chi tiết
                         </Link>
                       </td>
                     </tr>

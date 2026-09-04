@@ -12,6 +12,7 @@ import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.UsageHistory;
 import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.repository.AppUserRepository;
+import com.poly.mhv.repository.AssetBorrowRequestRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.LocationRepository;
 import com.poly.mhv.repository.UsageHistoryRepository;
@@ -38,6 +39,7 @@ public class UsageHistoryService {
     private final UsageHistoryRepository usageHistoryRepository;
     private final AssetRepository assetRepository;
     private final AppUserRepository appUserRepository;
+    private final AssetBorrowRequestRepository assetBorrowRequestRepository;
     private final LocationRepository locationRepository;
     private final NotificationService notificationService;
     private final AssetService assetService;
@@ -46,6 +48,7 @@ public class UsageHistoryService {
             UsageHistoryRepository usageHistoryRepository,
             AssetRepository assetRepository,
             AppUserRepository appUserRepository,
+            AssetBorrowRequestRepository assetBorrowRequestRepository,
             LocationRepository locationRepository,
             NotificationService notificationService,
             AssetService assetService
@@ -53,6 +56,7 @@ public class UsageHistoryService {
         this.usageHistoryRepository = usageHistoryRepository;
         this.assetRepository = assetRepository;
         this.appUserRepository = appUserRepository;
+        this.assetBorrowRequestRepository = assetBorrowRequestRepository;
         this.locationRepository = locationRepository;
         this.notificationService = notificationService;
         this.assetService = assetService;
@@ -171,6 +175,16 @@ public class UsageHistoryService {
         assetRepository.save(asset);
         assetService.evictAssetCaches(asset.getQaCode());
         UsageHistory saved = usageHistoryRepository.save(usageHistory);
+        assetBorrowRequestRepository.findFirstByAssetQaCodeAndRequesterIdAndStatusInOrderByCreatedAtDesc(
+                        asset.getQaCode(),
+                        usageHistory.getUser().getId(),
+                        List.of("CHECKED_OUT", "RETURN_PENDING"))
+                .ifPresent(borrowRequest -> {
+                    borrowRequest.setStatus("RETURNED");
+                    borrowRequest.setReturnedAt(saved.getEndTime());
+                    borrowRequest.setLastOverdueReminderAt(null);
+                    assetBorrowRequestRepository.save(borrowRequest);
+                });
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "CHECKIN",

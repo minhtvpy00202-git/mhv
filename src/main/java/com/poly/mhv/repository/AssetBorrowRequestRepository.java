@@ -2,6 +2,8 @@ package com.poly.mhv.repository;
 
 import com.poly.mhv.entity.AssetBorrowRequest;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -29,4 +31,37 @@ public interface AssetBorrowRequestRepository extends JpaRepository<AssetBorrowR
     Optional<AssetBorrowRequest> findForUpdateById(@Param("id") Long id);
 
     boolean existsByAssetQaCodeAndStatusIn(String assetQaCode, Collection<String> statuses);
+
+    boolean existsByAssetQaCodeAndRequesterIdAndStatusIn(
+            String assetQaCode,
+            Integer requesterId,
+            Collection<String> statuses
+    );
+
+    @EntityGraph(attributePaths = {"inquiry", "asset", "requester", "approvedBy", "destinationLocation"})
+    Optional<AssetBorrowRequest> findFirstByAssetQaCodeAndRequesterIdAndStatusOrderByCreatedAtDesc(
+            String assetQaCode,
+            Integer requesterId,
+            String status
+    );
+
+    @EntityGraph(attributePaths = {"inquiry", "asset", "requester", "approvedBy", "destinationLocation"})
+    Optional<AssetBorrowRequest> findFirstByAssetQaCodeAndRequesterIdAndStatusInOrderByCreatedAtDesc(
+            String assetQaCode,
+            Integer requesterId,
+            Collection<String> statuses
+    );
+
+    @EntityGraph(attributePaths = {"inquiry", "asset", "requester", "approvedBy", "destinationLocation"})
+    @Query("""
+            select b from AssetBorrowRequest b
+            where b.status = 'CHECKED_OUT'
+              and b.expectedReturnDate < :today
+              and (b.lastOverdueReminderAt is null or b.lastOverdueReminderAt < :threshold)
+            order by b.expectedReturnDate asc, b.createdAt asc
+            """)
+    List<AssetBorrowRequest> findCheckedOutOverdueForReminder(
+            @Param("today") LocalDate today,
+            @Param("threshold") LocalDateTime threshold
+    );
 }

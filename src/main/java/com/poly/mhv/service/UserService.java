@@ -26,6 +26,9 @@ import org.springframework.util.StringUtils;
 @Service
 public class UserService {
 
+    private static final String CHANGE_PASSWORD_COMPLEXITY_MESSAGE =
+            "Mật khẩu mới phải từ 8 đến 100 ký tự, gồm chữ hoa, chữ thường và ký tự đặc biệt.";
+
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
@@ -225,8 +228,8 @@ public class UserService {
             throw new CustomException("Xác nhận mật khẩu mới là bắt buộc.");
         }
         String newPassword = request.getNewPassword();
-        if (newPassword.length() < 6 || newPassword.length() > 100) {
-            throw new CustomException("Mật khẩu mới phải từ 6 đến 100 ký tự.");
+        if (!isStrongPassword(newPassword)) {
+            throw new CustomException(CHANGE_PASSWORD_COMPLEXITY_MESSAGE);
         }
         if (!newPassword.equals(request.getConfirmNewPassword())) {
             throw new CustomException("Xác nhận mật khẩu mới không khớp.");
@@ -245,6 +248,31 @@ public class UserService {
 
         appUser.setPassword(passwordEncoder.encode(newPassword));
         appUserRepository.save(appUser);
+    }
+
+    private boolean isStrongPassword(String password) {
+        if (!StringUtils.hasText(password)) {
+            return false;
+        }
+        if (password.length() < 8 || password.length() > 100) {
+            return false;
+        }
+
+        boolean hasUppercase = false;
+        boolean hasLowercase = false;
+        boolean hasSpecialCharacter = false;
+
+        for (char ch : password.toCharArray()) {
+            if (Character.isUpperCase(ch)) {
+                hasUppercase = true;
+            } else if (Character.isLowerCase(ch)) {
+                hasLowercase = true;
+            } else if (!Character.isDigit(ch) && !Character.isWhitespace(ch)) {
+                hasSpecialCharacter = true;
+            }
+        }
+
+        return hasUppercase && hasLowercase && hasSpecialCharacter;
     }
 
     @Transactional

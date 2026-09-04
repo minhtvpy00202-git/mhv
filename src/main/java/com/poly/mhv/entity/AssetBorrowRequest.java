@@ -90,6 +90,9 @@ public class AssetBorrowRequest {
     @Column(name = "returned_at")
     private LocalDateTime returnedAt;
 
+    @Column(name = "last_overdue_reminder_at")
+    private LocalDateTime lastOverdueReminderAt;
+
     @Version
     private Long version;
 }

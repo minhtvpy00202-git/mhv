@@ -4,6 +4,18 @@ import axiosClient from '../../../api/axiosClient'
 
 export const ALL_ROOMS_ID = '__ALL__'
 
+function isStorageWarehouse(location) {
+  const typeKey = String(location?.areaTypeKey || '').trim().toLowerCase()
+  const typeLabel = String(location?.areaTypeLabel || '').trim().toLowerCase()
+  const roomName = String(location?.roomName || '').trim().toLowerCase()
+  return (
+    typeKey.includes('warehouse')
+    || typeLabel.includes('warehouse')
+    || typeLabel.includes('kho')
+    || roomName === 'kho'
+  )
+}
+
 function normalizeOverview(locationId, data) {
   if (!data) return null
   return {
@@ -28,7 +40,7 @@ export default function useLocationOverview({ locations }) {
 
   const roomOptions = useMemo(() => (
     [...locations]
-      .filter((location) => String(location?.roomName || '').trim().toLowerCase() !== 'kho')
+      .filter((location) => !isStorageWarehouse(location))
       .sort((a, b) => a.roomName.localeCompare(b.roomName, 'vi'))
   ), [locations])
 

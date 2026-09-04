@@ -26,6 +26,8 @@ public class ConsumableWarehouseTransferRequest {
     @Positive(message = "Số lượng chuyển phải lớn hơn 0.")
     private Integer quantity;
 
+    private String quantityUnit;
+
     @Size(max = 1000, message = "Ghi chú chuyển kho không được vượt quá 1000 ký tự.")
     private String note;
 }

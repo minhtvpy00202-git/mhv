@@ -2614,6 +2614,10 @@ function AssetMapManagement() {
   }
 
   const handleDeleteFloor = async (floor) => {
+    if ((floor?.roomShapes || []).length > 0) {
+      toast.error('Không thể xóa tầng khi trên tầng vẫn còn phòng.')
+      return
+    }
     openConfirmDialog({
       title: 'Xóa tầng',
       message: `Bạn có chắc muốn xóa tầng "${floor.name}" không?`,

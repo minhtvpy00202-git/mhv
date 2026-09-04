@@ -41,6 +41,8 @@ const LocationManagement = lazy(() => import('./pages/admin/LocationManagement')
 const TechSupportTypeManagement = lazy(() => import('./pages/admin/TechSupportTypeManagement'))
 const AssetStatisticsManagement = lazy(() => import('./pages/admin/AssetStatisticsManagement'))
 const UsageHistoryManagement = lazy(() => import('./pages/admin/UsageHistoryManagement'))
+const BorrowRequestManagement = lazy(() => import('./pages/admin/BorrowRequestManagement'))
+const BorrowRequestDetail = lazy(() => import('./pages/admin/BorrowRequestDetail'))
 const InventoryAuditManagement = lazy(() => import('./pages/admin/InventoryAuditManagement'))
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'))
 const NotificationDetail = lazy(() => import('./pages/admin/NotificationDetail'))
@@ -209,6 +211,7 @@ function App() {
           <Route path="/admin/assets/consumables" element={withSuspense(<AssetManagement key="assets-consumables-overview" initialSection="consumables" initialConsumableWorkspace="OVERVIEW" />)} />
           <Route path="/admin/assets/consumables/warehouses" element={withSuspense(<AssetManagement key="assets-consumables-warehouses" initialSection="consumables" initialConsumableWorkspace="WAREHOUSES" />)} />
           <Route path="/admin/assets/consumables/rooms" element={withSuspense(<AssetManagement key="assets-consumables-rooms" initialSection="consumables" initialConsumableWorkspace="ROOMS" />)} />
+          <Route path="/admin/assets/consumables/issues" element={withSuspense(<AssetManagement key="assets-consumables-issues" initialSection="consumables" initialConsumableWorkspace="ISSUES" />)} />
           <Route path="/admin/assets/consumables/requests" element={withSuspense(<AssetManagement key="assets-consumables-requests" initialSection="consumables" initialConsumableWorkspace="REQUESTS" />)} />
           <Route path="/admin/assets/consumables/disposal" element={withSuspense(<AssetManagement key="assets-consumables-disposal" initialSection="consumables" initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/admin/asset-map" element={withSuspense(<AssetMapManagement />)} />
@@ -221,6 +224,8 @@ function App() {
           <Route path="/admin/tech-support-types" element={withSuspense(<TechSupportTypeManagement />)} />
           <Route path="/admin/asset-statistics" element={withSuspense(<AssetStatisticsManagement />)} />
           <Route path="/admin/usage-history" element={withSuspense(<UsageHistoryManagement />)} />
+          <Route path="/admin/borrow-requests" element={withSuspense(<BorrowRequestManagement />)} />
+          <Route path="/admin/borrow-requests/:id" element={withSuspense(<BorrowRequestDetail />)} />
           <Route path="/admin/maintenance-history" element={<Navigate to="/admin/tickets" replace />} />
           <Route path="/admin/inventory-audits" element={withSuspense(<InventoryAuditManagement />)} />
           <Route path="/admin/users" element={withSuspense(<UserManagement />)} />
@@ -248,6 +253,7 @@ function App() {
           <Route path="/supply/inquiry-reports" element={withSuspense(<InquiryReports />)} />
           <Route path="/supply/consumables/warehouses" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="WAREHOUSES" />)} />
           <Route path="/supply/consumables/rooms" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="ROOMS" />)} />
+          <Route path="/supply/consumables/issues" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="ISSUES" />)} />
           <Route path="/supply/consumables/disposal" element={withSuspense(<AssetManagement restrictToConsumable initialConsumableWorkspace="DISPOSAL" />)} />
           <Route path="/supply/notifications/:id" element={withSuspense(<NotificationDetail />)} />
         </Route>

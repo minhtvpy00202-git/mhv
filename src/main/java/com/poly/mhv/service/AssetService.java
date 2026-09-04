@@ -574,22 +574,27 @@ public class AssetService {
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new CustomException("quantity phải lớn hơn 0.");
         }
+        String quantityUnit = normalizeQuantityUnit(request.getQuantityUnit());
+        int issueQuantity = convertToRetailQuantity(asset, request.getQuantity(), quantityUnit);
         int currentQuantity = safeInteger(asset.getQuantityOnHand());
-        if (currentQuantity < request.getQuantity()) {
+        if (currentQuantity < issueQuantity) {
             throw new CustomException("Số lượng tồn không đủ để cấp phát.");
         }
-        Location issuedToLocation = getAssetStorageLocationOrThrow(
+        Location issuedToLocation = getLocationOrThrow(
                 request.getIssuedToLocationId(),
-                "Không tìm thấy phòng nhận với id: " + request.getIssuedToLocationId()
+                "Không tìm thấy nơi nhận với id: " + request.getIssuedToLocationId()
         );
+        if (isStorageWarehouse(issuedToLocation)) {
+            throw new CustomException("Kho đích phải dùng chức năng chuyển kho nội bộ, không dùng cấp phát cho phòng.");
+        }
         Location sourceWarehouseLocation = getConsumableWarehouseLocationOrThrow(
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
         AppUser actor = getCurrentUser();
         LocalDateTime now = UtcDateTimes.now();
-        List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, request.getQuantity());
-        BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, request.getQuantity());
+        List<LotAllocation> allocations = allocateConsumableLots(asset, sourceWarehouseLocation, issueQuantity);
+        BigDecimal unitPrice = calculateAllocatedUnitPrice(allocations, issueQuantity);
         String issueNote = appendLotAllocationNote(request.getNote(), allocations);
 
         recalculateConsumableQuantityOnHand(asset);
@@ -603,20 +608,20 @@ public class AssetService {
                 .issuedToLocation(issuedToLocation)
                 .sourceWarehouseLocation(sourceWarehouseLocation)
                 .issuedBy(actor)
-                .quantity(request.getQuantity())
+                .quantity(issueQuantity)
                 .unitPrice(unitPrice)
                 .note(issueNote)
                 .issuedAt(now)
                 .build();
         ConsumableIssue savedIssue = consumableIssueRepository.save(issue);
-        upsertConsumableLocationStock(updated, issuedToLocation, request.getQuantity(), unitPrice, now, actor, issueNote);
+        upsertConsumableLocationStock(updated, issuedToLocation, issueQuantity, unitPrice, now, actor, issueNote);
         invalidateAssetCaches(updated.getQaCode());
 
         String actorDisplayName = getActorDisplayName(actor);
         notificationService.createNotification(
                 "CONSUMABLE_ISSUED",
                 "Cấp phát vật tư",
-                actorDisplayName + " đã cấp phát " + formatConsumableQuantity(updated, request.getQuantity())
+                actorDisplayName + " đã cấp phát " + formatConsumableQuantity(updated, issueQuantity)
                         + " " + updated.getName() + " từ kho " + sourceWarehouseLocation.getRoomName()
                         + " cho phòng " + issuedToLocation.getRoomName() + ".",
                 actor.getUsername(),
@@ -624,7 +629,7 @@ public class AssetService {
                 updated.getName(),
                 Map.of(
                         "Vật tư", updated.getQaCode() + " - " + updated.getName(),
-                        "Số lượng cấp phát", formatConsumableQuantity(updated, request.getQuantity()),
+                        "Số lượng cấp phát", formatConsumableQuantity(updated, issueQuantity),
                         "Đơn vị tính", safeUnit(updated),
                         "Kho xuất", sourceWarehouseLocation.getRoomName(),
                         "Phòng nhận", issuedToLocation.getRoomName(),
@@ -724,7 +729,12 @@ public class AssetService {
         if (request == null) {
             throw new CustomException("Dữ liệu chuyển kho không được để trống.");
         }
-        int quantityTransferred = safePositiveInteger(request.getQuantity(), "Số lượng chuyển kho phải lớn hơn 0.");
+        String quantityUnit = normalizeQuantityUnit(request.getQuantityUnit());
+        int quantityTransferred = convertToRetailQuantity(
+                asset,
+                safePositiveInteger(request.getQuantity(), "Số lượng chuyển kho phải lớn hơn 0."),
+                quantityUnit
+        );
         Location sourceWarehouse = getConsumableWarehouseLocationOrThrow(
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho nguồn với id: " + request.getSourceWarehouseLocationId()
@@ -1171,6 +1181,9 @@ public class AssetService {
                 request.getSourceWarehouseLocationId(),
                 "Không tìm thấy kho xuất với id: " + request.getSourceWarehouseLocationId()
         );
+        if (location.getId().equals(sourceWarehouseLocation.getId())) {
+            throw new CustomException("Phòng nhận không được trùng với kho xuất hiện đang chứa vật tư.");
+        }
         int quantityRemainingInWarehouse = safeInteger(
                 consumableReceiptLotRepository.calculateQuantityRemainingForAssetInWarehouse(
                         asset.getQaCode(),
@@ -2680,7 +2693,7 @@ public class AssetService {
 
     private List<NotificationTarget> consumableNotificationTargets(Integer requesterUserId, String requesterPath) {
         List<NotificationTarget> targets = new ArrayList<>();
-        targets.add(NotificationTarget.forRole("Admin", "/admin/assets"));
+        targets.add(NotificationTarget.forRole("Admin", "/admin/assets/consumables"));
         targets.add(NotificationTarget.forRole("ConsumableManager", "/supply/consumables"));
         if (requesterUserId != null) {
             targets.add(NotificationTarget.forUser(requesterUserId, requesterPath));

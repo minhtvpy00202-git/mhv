@@ -2,6 +2,7 @@ import {
   IconBell as Bell,
   IconBoxMultiple as Boxes,
   IconChartBar as ChartBar,
+  IconHistory as History,
   IconKey as Key,
   IconLogout as LogOut,
   IconMapPin as MapPin,
@@ -25,7 +26,7 @@ const consumableMenuItems = [
   {
     to: '/supply/inquiries',
     label: 'Yêu cầu từ nhân viên',
-    description: 'Nhận xử lý và trao đổi',
+    description: 'Duyệt và theo dõi yêu cầu',
     icon: MessageCircle,
   },
   {
@@ -53,12 +54,27 @@ const consumableMenuItems = [
     icon: MapPin,
   },
   {
+    to: '/supply/consumables/issues',
+    label: 'Lịch sử cấp phát',
+    description: 'Tra cứu các lần xuất vật tư',
+    icon: History,
+  },
+  {
     to: '/supply/consumables/disposal',
     label: 'Thanh lý / hủy vật tư',
     description: 'Lô hết hạn và lịch sử',
     icon: Wrench,
   },
 ]
+
+function getConsumableInquiryBadgeCount(items) {
+  return (items || []).filter((item) => {
+    if (item?.inquiryType !== 'CONSUMABLE_REQUEST') return false
+    const unreadCount = Number(item?.unreadCount || 0)
+    const actionable = !item?.linkedEntityId && !['COMPLETED', 'REJECTED', 'CANCELLED'].includes(item?.status)
+    return unreadCount > 0 || actionable
+  }).length
+}
 
 function ConsumableManagerLayout() {
   const { user, logout } = useAuth()
@@ -67,6 +83,7 @@ function ConsumableManagerLayout() {
   const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [menuBadgeCounts, setMenuBadgeCounts] = useState({})
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const readingNotificationIdsRef = useRef(new Set())
@@ -83,17 +100,37 @@ function ConsumableManagerLayout() {
     }
   }, [])
 
+  const loadMenuBadgeCounts = useCallback(async (suppressError = false) => {
+    try {
+      const inquiryResponse = await axiosClient.get('/api/inquiries/inbox')
+      setMenuBadgeCounts({
+        '/supply/inquiries': getConsumableInquiryBadgeCount(inquiryResponse.data || []),
+      })
+    } catch (error) {
+      if (suppressError) return
+      toast.error(error?.response?.data?.message || 'Không tải được số lượng yêu cầu mới.')
+    }
+  }, [])
+
   useEffect(() => {
     const bootstrapTimer = window.setTimeout(() => {
       void loadFeed(true)
+      void loadMenuBadgeCounts(true)
     }, 0)
-    const handleRefresh = () => loadFeed(true)
+    const interval = window.setInterval(() => {
+      void loadMenuBadgeCounts(true)
+    }, 15000)
+    const handleRefresh = () => {
+      void loadFeed(true)
+      void loadMenuBadgeCounts(true)
+    }
     window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
     return () => {
       window.clearTimeout(bootstrapTimer)
+      window.clearInterval(interval)
       window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
     }
-  }, [loadFeed])
+  }, [loadFeed, loadMenuBadgeCounts])
 
   const handleOpenNotification = async (notification) => {
     await markNotificationAsRead(notification)
@@ -148,6 +185,7 @@ function ConsumableManagerLayout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  end={item.to === '/supply/consumables'}
                   className="flex items-start gap-3 rounded-xl px-3 py-3 text-sm transition hover:bg-orange-50 hover:text-fptOrangeDark dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
                   style={({ isActive }) => ({
                     backgroundColor: isActive ? toRgba(primaryColor, 0.1) : 'transparent',
@@ -158,7 +196,14 @@ function ConsumableManagerLayout() {
                     <Icon size={18} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block font-semibold">{item.label}</span>
+                    <span className="flex items-center gap-2 font-semibold">
+                      <span>{item.label}</span>
+                      {Number(menuBadgeCounts[item.to] || 0) > 0 && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+                          {menuBadgeCounts[item.to] > 99 ? '99+' : menuBadgeCounts[item.to]}
+                        </span>
+                      )}
+                    </span>
                     <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{item.description}</span>
                   </span>
                 </NavLink>

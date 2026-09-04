@@ -88,7 +88,7 @@ export default function ChangePasswordModal({ open, onClose }) {
                 Đổi mật khẩu
               </h3>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Nhập mật khẩu hiện tại và đặt mật khẩu mới cho tài khoản của bạn.
+                Nhập mật khẩu hiện tại và đặt mật khẩu mới từ 8 ký tự trở lên, có chữ hoa, chữ thường và ký tự đặc biệt.
               </p>
             </div>
             <button

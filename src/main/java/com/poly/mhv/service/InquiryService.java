@@ -1,6 +1,7 @@
 package com.poly.mhv.service;
 
 import com.poly.mhv.dto.asset.ConsumableRequestCreateRequest;
+import com.poly.mhv.dto.asset.ConsumableRequestDecisionRequest;
 import com.poly.mhv.dto.asset.ConsumableRequestResponse;
 import com.poly.mhv.dto.inquiry.InquiryActionRequest;
 import com.poly.mhv.dto.inquiry.InquiryAlternativeRequest;
@@ -142,6 +143,11 @@ public class InquiryService {
         boolean consumable = isConsumable(asset);
         if (!consumable) {
             throw new CustomException("Thiết bị không còn tạo yêu cầu mượn ở màn này. Vui lòng dùng chức năng Mượn/Trả bằng QR.");
+        }
+        if (asset.getLocation() != null
+                && asset.getLocation().getId() != null
+                && asset.getLocation().getId().equals(destination.getId())) {
+            throw new CustomException("Phòng nhận không được trùng với kho hiện đang chứa vật tư.");
         }
         String quantityRequestedUnit = normalizeInquiryQuantityUnit(request.getQuantityRequestedUnit());
         int quantityInput = safePositive(request.getQuantityRequested(), 1);
@@ -572,6 +578,72 @@ public class InquiryService {
     }
 
     @Transactional
+    public InquiryResponse fulfillConsumableRequest(Long inquiryId, InquiryConsumableConversionRequest request) {
+        ServiceInquiry inquiry = inquiryRepository.findForUpdateById(inquiryId)
+                .orElseThrow(() -> new CustomException("Không tìm thấy yêu cầu."));
+        AppUser actor = currentUserProvider.getCurrentUser();
+        ensureAssignedHandler(inquiry, actor);
+        if (!InquiryStatusSupport.CONSUMABLE_REQUEST.equals(inquiry.getInquiryType())) {
+            throw new CustomException("Yêu cầu này không phải yêu cầu cấp phát vật tư.");
+        }
+        ensureNotConverted(inquiry);
+        recordFirstResponse(inquiry, UtcDateTimes.now());
+        Asset effectiveAsset = effectiveAsset(inquiry);
+        int effectiveQuantity = effectiveQuantity(inquiry);
+        int quantityRequestedInput = inquiry.getQuantityRequestedInput() != null
+                ? inquiry.getQuantityRequestedInput()
+                : inquiry.getQuantityRequested();
+        String quantityRequestedUnit = StringUtils.hasText(inquiry.getQuantityRequestedUnit())
+                ? inquiry.getQuantityRequestedUnit()
+                : "RETAIL";
+        String decisionNote = StringUtils.hasText(request.getNote()) ? request.getNote().trim() : inquiry.getPurpose();
+        ConsumableRequestResponse created = assetService.createConsumableRequestForRequester(
+                inquiry.getDestinationLocation().getId(),
+                ConsumableRequestCreateRequest.builder()
+                        .assetQaCode(effectiveAsset.getQaCode())
+                        .sourceWarehouseLocationId(request.getSourceWarehouseLocationId())
+                        .quantityRequested(quantityRequestedInput)
+                        .quantityRequestedUnit(quantityRequestedUnit)
+                        .reason(decisionNote)
+                        .build(),
+                inquiry.getRequester());
+        assetService.fulfillConsumableRequest(
+                created.getId(),
+                effectiveQuantity,
+                ConsumableRequestDecisionRequest.builder()
+                        .sourceWarehouseLocationId(request.getSourceWarehouseLocationId())
+                        .note(decisionNote)
+                        .build());
+        Location sourceWarehouse = locationRepository.findById(created.getSourceWarehouseLocationId())
+                .orElseThrow(() -> new CustomException("Không tìm thấy kho xuất của phiếu cấp phát."));
+        LocalDateTime now = UtcDateTimes.now();
+        inquiry.setLinkedEntityType("CONSUMABLE_REQUEST");
+        inquiry.setLinkedEntityId(created.getId());
+        inquiry.setStatus(InquiryStatusSupport.WAITING_EMPLOYEE);
+        inquiry.setDecisionNote("Đã cấp đủ vật tư, chờ nhân viên xác nhận đã nhận.");
+        inquiry.setUpdatedAt(now);
+        ServiceInquiry saved = inquiryRepository.save(inquiry);
+        consumableFulfillmentRepository.save(ConsumableInquiryFulfillment.builder()
+                .inquiry(saved)
+                .originalConsumableRequestId(created.getId())
+                .activeConsumableRequestId(created.getId())
+                .sourceWarehouseLocation(sourceWarehouse)
+                .requestedQuantity(effectiveQuantity)
+                .fulfilledQuantity(effectiveQuantity)
+                .status("FULFILLED")
+                .requiresAdminApproval(false)
+                .adminApproved(true)
+                .closedPartial(false)
+                .decisionNote(decisionNote)
+                .createdAt(now)
+                .fulfilledAt(now)
+                .updatedAt(now)
+                .build());
+        broadcastInquiryUpdate(saved);
+        return mapInquiry(saved, actor);
+    }
+
+    @Transactional
     public void syncConsumableRequestStatus(Long requestId, String requestStatus, String decisionNote) {
         var managedFulfillment = consumableFulfillmentRepository
                 .findForUpdateByActiveConsumableRequestId(requestId);
@@ -696,7 +768,10 @@ public class InquiryService {
     private void ensureAssignedHandler(ServiceInquiry inquiry, AppUser actor) {
         ensureTargetRole(inquiry, actor);
         if (inquiry.getAssignee() == null) {
-            throw new CustomException("Vui lòng nhận xử lý yêu cầu trước.");
+            LocalDateTime now = UtcDateTimes.now();
+            inquiry.setAssignee(actor);
+            inquiry.setClaimedAt(inquiry.getClaimedAt() == null ? now : inquiry.getClaimedAt());
+            inquiry.setUpdatedAt(now);
         }
         if (!actor.getId().equals(inquiry.getAssignee().getId())) {
             throw new AccessDeniedException("Yêu cầu đang được một người khác xử lý.");

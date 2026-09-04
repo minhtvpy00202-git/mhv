@@ -47,6 +47,7 @@ const menuItems = [
         children: [
           { to: '/admin/assets/fixed', label: 'Danh sách tài sản', icon: PackageSearch },
           { to: '/admin/categories/fixed', label: 'Loại thiết bị', icon: Tags },
+          { to: '/admin/borrow-requests', label: 'Duyệt phiếu mượn', icon: Clock },
           { to: '/admin/usage-history', label: 'Lịch sử mượn thiết bị', icon: History },
         ],
       },
@@ -55,10 +56,10 @@ const menuItems = [
         label: 'Vật tư tiêu hao',
         icon: Boxes,
         children: [
-          { to: '/admin/assets/consumables', label: 'Danh sách vật tư', icon: Boxes },
-          { to: '/admin/categories/consumables', label: 'Loại vật tư', icon: Tags },
           { to: '/admin/assets/consumables/warehouses', label: 'Kho vật tư', icon: PackageSearch },
+          { to: '/admin/categories/consumables', label: 'Loại vật tư', icon: Tags },
           { to: '/admin/assets/consumables/rooms', label: 'Theo dõi theo phòng', icon: MapPin },
+          { to: '/admin/assets/consumables/issues', label: 'Lịch sử cấp phát', icon: History },
           { to: '/admin/assets/consumables/requests', label: 'Yêu cầu cấp phát / sử dụng', icon: Clock },
           { to: '/admin/assets/consumables/disposal', label: 'Thanh lý / hủy vật tư', icon: Wrench },
         ],
@@ -141,6 +142,20 @@ function collectMenuPaths(items, bucket = []) {
 
 const menuPaths = collectMenuPaths(menuItems)
 
+function getAdminInquiryBadgeCount(items) {
+  return (items || []).filter((item) => {
+    if (item?.inquiryType !== 'CONSUMABLE_REQUEST') return false
+    const unreadCount = Number(item?.unreadCount || 0)
+    const awaitingApproval = item?.status === 'WAITING_APPROVAL'
+    const isNewRequest = item?.status === 'NEW'
+    return unreadCount > 0 || awaitingApproval || isNewRequest
+  }).length
+}
+
+function getBorrowRequestBadgeCount(items) {
+  return (items || []).filter((item) => ['PENDING', 'RETURN_PENDING'].includes(item?.status)).length
+}
+
 function isMenuActiveForPath(item, pathname) {
   if (item.children?.length) return item.children.some((child) => isMenuActiveForPath(child, pathname))
   const itemPath = getMenuPath(item)
@@ -190,6 +205,7 @@ function AdminLayout() {
   const location = useLocation()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [menuBadgeCounts, setMenuBadgeCounts] = useState({})
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false)
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState({
@@ -211,6 +227,22 @@ function AdminLayout() {
     }
   }, [])
 
+  const loadMenuBadgeCounts = useCallback(async (suppressError = false) => {
+    try {
+      const [inquiryResponse, borrowResponse] = await Promise.all([
+        axiosClient.get('/api/inquiries/inbox'),
+        axiosClient.get('/api/borrow-requests/inbox'),
+      ])
+      setMenuBadgeCounts({
+        '/admin/assets/consumables/requests': getAdminInquiryBadgeCount(inquiryResponse.data || []),
+        '/admin/borrow-requests': getBorrowRequestBadgeCount(borrowResponse.data || []),
+      })
+    } catch (error) {
+      if (suppressError) return
+      toast.error(error?.response?.data?.message || 'Không tải được số lượng yêu cầu chờ xử lý.')
+    }
+  }, [])
+
   useEffect(() => {
     const syncMenuTimer = window.setTimeout(() => {
       setExpandedMenus((prev) => ({
@@ -224,16 +256,22 @@ function AdminLayout() {
   useEffect(() => {
     const bootstrapTimer = window.setTimeout(() => {
       void loadFeed()
+      void loadMenuBadgeCounts(true)
     }, 0)
+    const interval = window.setInterval(() => {
+      void loadMenuBadgeCounts(true)
+    }, 15000)
     const handleRefresh = () => {
       void loadFeed(true)
+      void loadMenuBadgeCounts(true)
     }
     window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
     return () => {
       window.clearTimeout(bootstrapTimer)
+      window.clearInterval(interval)
       window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
     }
-  }, [loadFeed])
+  }, [loadFeed, loadMenuBadgeCounts])
 
   const handleOpenNotification = async (notification) => {
     await markNotificationAsRead(notification)
@@ -287,12 +325,20 @@ function AdminLayout() {
     const Icon = item.icon || Boxes
     const active = isMenuItemActive(item)
     const key = item.id || item.to
+    const badgeCount = Number(menuBadgeCounts[item.to] || 0)
 
     if (!item.children?.length) {
       return (
         <Link key={key} to={item.to} className={getMenuItemClass(active, depth)}>
           <Icon size={depth >= 2 ? 15 : depth === 1 ? 16 : 18} />
-          <span>{item.label}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span>{item.label}</span>
+            {badgeCount > 0 && (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+                {badgeCount > 99 ? '99+' : badgeCount}
+              </span>
+            )}
+          </span>
         </Link>
       )
     }
