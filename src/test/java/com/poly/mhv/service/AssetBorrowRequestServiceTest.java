@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.poly.mhv.dto.inquiry.BorrowRequestDecisionRequest;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
 import com.poly.mhv.entity.AssetBorrowRequest;
@@ -29,11 +30,13 @@ class AssetBorrowRequestServiceTest {
     @Mock private UsageHistoryService usageHistoryService;
     @Mock private NotificationService notificationService;
     @Mock private AsyncRealtimePushService realtimePushService;
+    @Mock private com.poly.mhv.repository.AssetRepository assetRepository;
+    @Mock private com.poly.mhv.repository.LocationRepository locationRepository;
 
     @InjectMocks private AssetBorrowRequestService service;
 
     @Test
-    void handoverCreatesActualCheckoutAndWaitsForEmployeeReceiptConfirmation() {
+    void approveCreatesActualCheckoutAndMovesInquiryToWaitingEmployee() {
         AppUser admin = AppUser.builder().id(1).username("admin").role("Admin").fullName("Admin").build();
         AppUser employee = AppUser.builder().id(2).username("employee").role("NhanVien").fullName("Nhân viên").build();
         Location home = Location.builder().id(10).roomName("Kho").build();
@@ -69,13 +72,14 @@ class AssetBorrowRequestServiceTest {
         when(repository.findForUpdateById(40L)).thenReturn(Optional.of(request));
         when(repository.save(any(AssetBorrowRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.handover(40L);
+        service.approve(40L, BorrowRequestDecisionRequest.builder().note("Duyệt mượn").build());
 
         verify(usageHistoryService).checkout(any());
         assertThat(request.getStatus()).isEqualTo("CHECKED_OUT");
         assertThat(request.getCheckedOutAt()).isNotNull();
         assertThat(inquiry.getStatus()).isEqualTo("WAITING_EMPLOYEE");
         assertThat(inquiry.getCompletedAt()).isNull();
-        assertThat(inquiry.getDecisionNote()).contains("chờ nhân viên xác nhận");
+        assertThat(inquiry.getDecisionNote()).isEqualTo("Phiếu mượn đã được duyệt.");
+        assertThat(request.getDecisionNote()).isEqualTo("Duyệt mượn");
     }
 }
