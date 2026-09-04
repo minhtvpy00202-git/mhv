@@ -26,6 +26,10 @@ public class AssetResponse {
     private String locationName;
     private Integer homeLocationId;
     private String homeLocationName;
+    private Long activeBorrowRequestId;
+    private Integer activeBorrowRequesterId;
+    private String activeBorrowRequesterName;
+    private String activeBorrowRequestStatus;
     private String specs;
     private BigDecimal purchasePrice;
     private LocalDate purchaseDate;

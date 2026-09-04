@@ -81,17 +81,25 @@ public class InquiryService {
             String trackingMode,
             Integer categoryId,
             Integer locationId,
+            LocalDateTime startAt,
+            LocalDateTime endAt,
             Integer limit) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         String normalizedMode = normalizeTrackingMode(trackingMode);
         int boundedLimit = Math.max(1, Math.min(limit == null ? 30 : limit, 100));
+        if ((startAt == null) != (endAt == null)) {
+            throw new CustomException("Vui lòng truyền đầy đủ cả thời gian bắt đầu và kết thúc để kiểm tra giữ chỗ.");
+        }
+        if (startAt != null && endAt != null && !endAt.isAfter(startAt)) {
+            throw new CustomException("Khoảng thời gian kiểm tra không hợp lệ.");
+        }
         return assetRepository.searchForInquiry(
                         normalizedKeyword,
                         normalizedMode,
                         categoryId,
                         locationId,
                         PageRequest.of(0, boundedLimit)).stream()
-                .map(this::mapAvailability)
+                .map(asset -> mapAvailability(asset, startAt, endAt))
                 .toList();
     }
 
@@ -823,7 +831,7 @@ public class InquiryService {
         return inquiry.getQuantityRequested();
     }
 
-    private InquiryAvailabilityResponse mapAvailability(Asset asset) {
+    private InquiryAvailabilityResponse mapAvailability(Asset asset, LocalDateTime requestedStartAt, LocalDateTime requestedEndAt) {
         boolean consumable = isConsumable(asset);
         String code;
         String label;
@@ -841,10 +849,16 @@ public class InquiryService {
             available = false;
             code = "BORROWED";
             label = "Đang được mượn";
-        } else if (borrowRequestRepository.existsByAssetQaCodeAndStatusIn(asset.getQaCode(), Set.of("APPROVED", "RESERVED"))) {
+        } else if (requestedStartAt != null
+                && requestedEndAt != null
+                && borrowRequestRepository.existsOverlappingReservation(
+                        asset.getQaCode(),
+                        Set.of("RESERVED"),
+                        requestedStartAt,
+                        requestedEndAt)) {
             available = false;
             code = "RESERVED";
-            label = "Đã được giữ chỗ";
+            label = "Đã được giữ chỗ trong khoảng thời gian đã chọn";
         } else {
             available = true;
             code = "AVAILABLE";
@@ -897,7 +911,7 @@ public class InquiryService {
                 .assetStatus(asset.getStatus())
                 .assetTechnicalStatus(asset.getTechnicalStatus())
                 .assetUsageStatus(asset.getUsageStatus())
-                .availableQuantity(isConsumable(asset) ? asset.getQuantityOnHand() : (Boolean.TRUE.equals(mapAvailability(asset).getAvailable()) ? 1 : 0))
+                .availableQuantity(isConsumable(asset) ? asset.getQuantityOnHand() : (Boolean.TRUE.equals(mapAvailability(asset, null, null).getAvailable()) ? 1 : 0))
                 .unit(asset.getUnit())
                 .retailUnit(getAssetRetailUnit(asset))
                 .wholesaleUnit(getAssetWholesaleUnit(asset))

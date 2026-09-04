@@ -1,6 +1,5 @@
 package com.poly.mhv.dto.inquiry;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,8 +21,10 @@ public class AssetBorrowRequestResponse {
     private String approvedByName;
     private Integer destinationLocationId;
     private String destinationLocationName;
-    private LocalDate neededFrom;
-    private LocalDate expectedReturnDate;
+    private Integer homeLocationId;
+    private String homeLocationName;
+    private OffsetDateTime startAt;
+    private OffsetDateTime endAt;
     private String purpose;
     private String status;
     private String decisionNote;

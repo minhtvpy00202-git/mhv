@@ -1,9 +1,12 @@
-const DEFAULT_TIME_ZONE = 'UTC'
+const APP_TIME_ZONE = 'Asia/Ho_Chi_Minh'
+const DEFAULT_TIME_ZONE = APP_TIME_ZONE
 const SERVER_LOCAL_DATETIME_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?$/
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const LOCAL_DATETIME_VALUE_REGEX = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+const VIETNAM_UTC_OFFSET_MINUTES = 7 * 60
 
 export function getUserTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIME_ZONE
+  return DEFAULT_TIME_ZONE
 }
 
 function normalizeServerDateTimeInput(value) {
@@ -46,9 +49,30 @@ function formatDateWithUserTimeZone(value, formatter, fallback) {
 function buildFormatter(options = {}) {
   return new Intl.DateTimeFormat('vi-VN', {
     hour12: false,
-    timeZone: getUserTimeZone(),
+    timeZone: APP_TIME_ZONE,
     ...options,
   })
+}
+
+function formatPartsInVietnamTimeZone(value) {
+  const parsed = parseServerDateTime(value)
+  if (!parsed) return null
+  const formatter = buildFormatter({
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  const parts = formatter.formatToParts(parsed)
+  const values = Object.create(null)
+  parts.forEach((part) => {
+    if (part.type !== 'literal') {
+      values[part.type] = part.value
+    }
+  })
+  return values
 }
 
 export function formatVietnamDateTime(value, fallback = '-') {
@@ -88,14 +112,25 @@ export function formatVietnamDate(value, fallback = '-') {
 }
 
 export function toDateTimeLocalValue(value) {
-  const parsed = parseServerDateTime(value)
-  if (!parsed) return ''
-  const year = parsed.getFullYear()
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const hours = String(parsed.getHours()).padStart(2, '0')
-  const minutes = String(parsed.getMinutes()).padStart(2, '0')
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  const values = formatPartsInVietnamTimeZone(value)
+  if (!values) return ''
+  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`
+}
+
+export function toServerDateTimeValue(value) {
+  if (!value) return ''
+  const match = String(value).trim().match(LOCAL_DATETIME_VALUE_REGEX)
+  if (!match) return ''
+  const [, year, month, day, hour, minute, second = '00'] = match
+  const utcTimestamp = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  ) - VIETNAM_UTC_OFFSET_MINUTES * 60 * 1000
+  return new Date(utcTimestamp).toISOString().slice(0, 19)
 }
 
 export function getFutureDateTimeLocalValue(hoursAhead = 24) {
@@ -107,13 +142,6 @@ export function formatCurrentDateTime(value = new Date()) {
 }
 
 export function getCurrentTimeZoneLabel(value = new Date()) {
-  const offsetMinutes = -value.getTimezoneOffset()
-  const sign = offsetMinutes >= 0 ? '+' : '-'
-  const absoluteOffset = Math.abs(offsetMinutes)
-  const hours = String(Math.floor(absoluteOffset / 60)).padStart(2, '0')
-  const minutes = absoluteOffset % 60
-  if (minutes === 0) {
-    return `UTC${sign}${Number.parseInt(hours, 10)}`
-  }
-  return `UTC${sign}${hours}:${String(minutes).padStart(2, '0')}`
+  void value
+  return 'UTC+7'
 }

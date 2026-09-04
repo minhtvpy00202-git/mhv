@@ -7,10 +7,12 @@ import { formatVietnamDateTime } from '../../utils/datetime'
 import { BORROW_STATUS } from '../../utils/inquiry'
 
 function statusChipClass(status) {
-  if (status === 'PENDING') return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (status === 'PENDING') return 'border-orange-200 bg-orange-50 text-orange-700'
+  if (status === 'RESERVED') return 'border-amber-200 bg-amber-50 text-amber-700'
   if (status === 'CHECKED_OUT') return 'border-blue-200 bg-blue-50 text-blue-700'
   if (status === 'RETURN_PENDING') return 'border-violet-200 bg-violet-50 text-violet-700'
   if (status === 'RETURNED') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (status === 'EXPIRED') return 'border-slate-300 bg-slate-100 text-slate-700'
   if (status === 'REJECTED') return 'border-red-200 bg-red-50 text-red-700'
   return 'border-slate-200 bg-slate-50 text-slate-700'
 }
@@ -19,11 +21,12 @@ const detailRows = [
   ['Thiết bị', 'asset'],
   ['Người yêu cầu', 'requester'],
   ['Phòng sử dụng', 'destination'],
-  ['Ngày bắt đầu', 'neededFrom'],
-  ['Ngày hẹn trả', 'expectedReturnDate'],
+  ['Bắt đầu mượn', 'startAt'],
+  ['Hẹn trả', 'endAt'],
   ['Ngày tạo phiếu', 'createdAt'],
   ['Người duyệt', 'approvedBy'],
   ['Thời điểm duyệt', 'approvedAt'],
+  ['Thời điểm giữ chỗ', 'reservedAt'],
   ['Thời điểm ghi nhận mượn', 'checkedOutAt'],
   ['Thời điểm trả', 'returnedAt'],
 ]
@@ -57,11 +60,12 @@ export default function BorrowRequestDetail() {
     asset: item ? `${item.assetQaCode} - ${item.assetName}` : '—',
     requester: item?.requesterName || '—',
     destination: item?.destinationLocationName || '—',
-    neededFrom: item?.neededFrom || '—',
-    expectedReturnDate: item?.expectedReturnDate || '—',
+    startAt: formatVietnamDateTime(item?.startAt, '—'),
+    endAt: formatVietnamDateTime(item?.endAt, '—'),
     createdAt: formatVietnamDateTime(item?.createdAt, '—'),
     approvedBy: item?.approvedByName || '—',
     approvedAt: formatVietnamDateTime(item?.approvedAt, '—'),
+    reservedAt: formatVietnamDateTime(item?.reservedAt, '—'),
     checkedOutAt: formatVietnamDateTime(item?.checkedOutAt, '—'),
     returnedAt: formatVietnamDateTime(item?.returnedAt, 'Chưa trả'),
   }), [item])
@@ -78,10 +82,13 @@ export default function BorrowRequestDetail() {
       const response = await axiosClient.post(endpoint, {
         note: decisionNote.trim(),
       })
-      setItem(response.data)
-      setDecisionNote(response.data?.decisionNote || '')
-      if (action === 'approve') {
-        toast.success('Đã duyệt phiếu mượn.')
+      const nextItem = response.data
+      setItem(nextItem)
+      setDecisionNote(nextItem?.decisionNote || '')
+      if (nextItem?.status === 'EXPIRED') {
+        toast.info('Phiếu mượn đã quá giờ trả nên bị khóa tự động.')
+      } else if (action === 'approve') {
+        toast.success(nextItem?.status === 'CHECKED_OUT' ? 'Đã duyệt và bắt đầu phiếu mượn.' : 'Đã duyệt và giữ chỗ phiếu mượn.')
       } else if (action === 'confirm-return') {
         toast.success('Đã xác nhận trả thiết bị.')
       } else {
@@ -152,7 +159,7 @@ export default function BorrowRequestDetail() {
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Duyệt phiếu mượn</h3>
           <p className="mt-2 text-sm text-slate-500">
-            Admin nhập ghi chú nếu cần. Khi bấm duyệt, hệ thống sẽ bắt đầu ghi nhận lượt mượn vào lịch sử thiết bị.
+            Admin nhập ghi chú nếu cần. Khi bấm duyệt, hệ thống sẽ giữ chỗ trước và tự chuyển sang đang mượn khi đến giờ bắt đầu.
           </p>
           <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Ghi chú
@@ -184,6 +191,10 @@ export default function BorrowRequestDetail() {
                 {submitting ? 'Đang xử lý...' : 'Từ chối phiếu mượn'}
               </button>
             </div>
+          ) : item.status === 'RESERVED' ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              Phiếu này đã được Admin duyệt và đang giữ chỗ theo lịch đặt. Hệ thống sẽ tự chuyển sang trạng thái đang mượn khi đến giờ bắt đầu.
+            </div>
           ) : item.status === 'RETURN_PENDING' ? (
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
@@ -197,6 +208,10 @@ export default function BorrowRequestDetail() {
               >
                 {submitting ? 'Đang xử lý...' : 'Xác nhận đã trả'}
               </button>
+            </div>
+          ) : item.status === 'EXPIRED' ? (
+            <div className="mt-4 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700">
+              Phiếu này đã quá giờ trả nhưng chưa được Admin duyệt nên đã bị khóa tự động. Không thể duyệt hoặc từ chối nữa.
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">

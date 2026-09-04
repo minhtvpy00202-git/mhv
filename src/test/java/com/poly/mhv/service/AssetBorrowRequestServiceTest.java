@@ -2,6 +2,7 @@ package com.poly.mhv.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,7 +14,7 @@ import com.poly.mhv.entity.Location;
 import com.poly.mhv.entity.ServiceInquiry;
 import com.poly.mhv.repository.AssetBorrowRequestRepository;
 import com.poly.mhv.repository.ServiceInquiryRepository;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,7 +37,7 @@ class AssetBorrowRequestServiceTest {
     @InjectMocks private AssetBorrowRequestService service;
 
     @Test
-    void approveCreatesActualCheckoutAndMovesInquiryToWaitingEmployee() {
+    void approveMarksRequestReservedWithoutCreatingCheckoutImmediately() {
         AppUser admin = AppUser.builder().id(1).username("admin").role("Admin").fullName("Admin").build();
         AppUser employee = AppUser.builder().id(2).username("employee").role("NhanVien").fullName("Nhân viên").build();
         Location home = Location.builder().id(10).roomName("Kho").build();
@@ -63,10 +64,10 @@ class AssetBorrowRequestServiceTest {
                 .requester(employee)
                 .approvedBy(admin)
                 .destinationLocation(destination)
-                .neededFrom(LocalDate.now())
-                .expectedReturnDate(LocalDate.now().plusDays(1))
+                .startAt(LocalDateTime.now().plusDays(1))
+                .endAt(LocalDateTime.now().plusDays(2))
                 .purpose("Họp")
-                .status("APPROVED")
+                .status("PENDING")
                 .build();
         when(currentUserProvider.getCurrentUser()).thenReturn(admin);
         when(repository.findForUpdateById(40L)).thenReturn(Optional.of(request));
@@ -74,12 +75,11 @@ class AssetBorrowRequestServiceTest {
 
         service.approve(40L, BorrowRequestDecisionRequest.builder().note("Duyệt mượn").build());
 
-        verify(usageHistoryService).checkout(any());
-        assertThat(request.getStatus()).isEqualTo("CHECKED_OUT");
-        assertThat(request.getCheckedOutAt()).isNotNull();
-        assertThat(inquiry.getStatus()).isEqualTo("WAITING_EMPLOYEE");
-        assertThat(inquiry.getCompletedAt()).isNull();
-        assertThat(inquiry.getDecisionNote()).isEqualTo("Phiếu mượn đã được duyệt.");
+        verify(usageHistoryService, never()).checkout(any());
+        assertThat(request.getStatus()).isEqualTo("RESERVED");
+        assertThat(request.getReservedAt()).isNotNull();
+        assertThat(request.getCheckedOutAt()).isNull();
+        assertThat(inquiry.getStatus()).isEqualTo("CONVERTED");
         assertThat(request.getDecisionNote()).isEqualTo("Duyệt mượn");
     }
 }

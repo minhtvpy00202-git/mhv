@@ -4,8 +4,10 @@ import { toast } from 'react-toastify'
 import axiosClient from '../api/axiosClient'
 import ModalOverlay from '../components/ui/ModalOverlay'
 import SearchableSelect from '../components/ui/SearchableSelect'
+import { useAuth } from '../context/AuthContext'
 import { getTechnicalStatusLabel, getUsageStatusMeta } from '../utils/assetStatus'
 import { parseSpecsToEntries } from '../utils/assetSpecs'
+import { getFutureDateTimeLocalValue, toServerDateTimeValue } from '../utils/datetime'
 
 const scannerElementId = 'qa-scanner'
 const ASSET_PICKER_PAGE_SIZE = 8
@@ -33,6 +35,7 @@ function getBadgeClassName(tone) {
 }
 
 function QRScanner() {
+  const { user } = useAuth()
   const scannerRef = useRef(null)
   const isScanningRef = useRef(false)
   const keepScannerAliveRef = useRef(true)
@@ -49,8 +52,8 @@ function QRScanner() {
   const [loadingAction, setLoadingAction] = useState(false)
   const [manualQaCode, setManualQaCode] = useState('')
   const [manualLookupLoading, setManualLookupLoading] = useState(false)
-  const [neededFrom, setNeededFrom] = useState(() => new Date().toISOString().slice(0, 10))
-  const [expectedReturnDate, setExpectedReturnDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [startAt, setStartAt] = useState(() => getFutureDateTimeLocalValue(1))
+  const [endAt, setEndAt] = useState(() => getFutureDateTimeLocalValue(25))
   const [purpose, setPurpose] = useState('')
   const [actionMode, setActionMode] = useState('AUTO')
   const [showAssetPickerModal, setShowAssetPickerModal] = useState(false)
@@ -129,6 +132,18 @@ function QRScanner() {
       toast.error('Mã tài sản không tồn tại')
       return null
     }
+  }
+
+  const isAssetBorrowed = (asset) => {
+    const usageStatus = String(asset?.usageStatus || '').trim()
+    const activeBorrowStatus = String(asset?.activeBorrowRequestStatus || '').trim()
+    return usageStatus === 'Đang cho mượn' || activeBorrowStatus === 'CHECKED_OUT' || activeBorrowStatus === 'RETURN_PENDING'
+  }
+
+  const isBorrowedByCurrentUser = (asset) => {
+    if (!isAssetBorrowed(asset)) return false
+    return Number(asset?.activeBorrowRequesterId) > 0
+      && Number(asset.activeBorrowRequesterId) === Number(user?.userId)
   }
 
   const extractQaCode = (decodedText) => {
@@ -211,8 +226,8 @@ function QRScanner() {
     setScannedHomeLocationName('')
     setScannedSpecs([])
     setToLocationId('')
-    setNeededFrom(new Date().toISOString().slice(0, 10))
-    setExpectedReturnDate(new Date().toISOString().slice(0, 10))
+    setStartAt(getFutureDateTimeLocalValue(1))
+    setEndAt(getFutureDateTimeLocalValue(25))
     setPurpose('')
     setManualQaCode('')
     setActionMode('AUTO')
@@ -306,6 +321,30 @@ function QRScanner() {
   }
 
   const handleSelectAssetFromPicker = async (asset) => {
+    if (isAssetBorrowed(asset)) {
+      let latestAsset = asset
+      try {
+        const response = await axiosClient.get(`/api/assets/${asset?.qaCode}`)
+        latestAsset = response.data || asset
+      } catch (error) {
+        const message = error?.response?.data?.message || 'Không kiểm tra được trạng thái mượn hiện tại của tài sản.'
+        toast.error(message)
+        return
+      }
+
+      if (!isBorrowedByCurrentUser(latestAsset)) {
+        toast.info('Tài sản này hiện đang được cho mượn nên chưa thể gửi yêu cầu mượn mới.')
+        return
+      }
+      keepScannerAliveRef.current = false
+      setShowAssetPickerModal(false)
+      const exists = await openActionModalByQaCode(latestAsset?.qaCode, { actionMode: 'AUTO' })
+      if (!exists) {
+        keepScannerAliveRef.current = true
+        startScanner()
+      }
+      return
+    }
     keepScannerAliveRef.current = false
     setShowAssetPickerModal(false)
     const exists = await openActionModalByQaCode(asset?.qaCode, { actionMode: 'BORROW' })
@@ -337,16 +376,16 @@ function QRScanner() {
       toast.error('Vui lòng chọn phòng đích.')
       return
     }
-    if (!neededFrom) {
-      toast.error('Vui lòng chọn ngày bắt đầu mượn.')
+    if (!startAt) {
+      toast.error('Vui lòng chọn thời điểm bắt đầu mượn.')
       return
     }
-    if (!expectedReturnDate) {
-      toast.error('Vui lòng chọn ngày hẹn trả.')
+    if (!endAt) {
+      toast.error('Vui lòng chọn thời điểm hẹn trả.')
       return
     }
-    if (expectedReturnDate < neededFrom) {
-      toast.error('Ngày hẹn trả không được trước ngày bắt đầu mượn.')
+    if (endAt <= startAt) {
+      toast.error('Thời điểm hẹn trả phải sau thời điểm bắt đầu mượn.')
       return
     }
     if (!purpose.trim()) {
@@ -362,11 +401,11 @@ function QRScanner() {
       await axiosClient.post('/api/borrow-requests', {
         assetQaCode: scannedQaCode,
         destinationLocationId: Number(toLocationId),
-        neededFrom,
-        expectedReturnDate,
+        startAt: toServerDateTimeValue(startAt),
+        endAt: toServerDateTimeValue(endAt),
         purpose: purpose.trim(),
       })
-      toast.success(`Đã gửi phiếu mượn${scannedAssetName ? ` cho ${scannedAssetName}` : ''}. Vui lòng chờ Admin duyệt.`)
+      toast.success(`Đã gửi phiếu mượn${scannedAssetName ? ` cho ${scannedAssetName}` : ''}. Vui lòng chờ Admin duyệt giữ chỗ.`)
       closeModal()
     } catch (error) {
       const message = error?.response?.data?.message || 'Gửi phiếu mượn thiết bị thất bại.'
@@ -464,7 +503,7 @@ function QRScanner() {
                 <div>
                   <h3 className="text-base font-semibold text-slate-800">Danh sách tài sản cố định</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Chạm vào tài sản để mở nhanh phiếu mượn. Danh sách có hiển thị vị trí và trạng thái mượn hiện tại.
+                    Chạm vào tài sản để mở nhanh phiếu mượn hoặc phiếu trả. Danh sách có hiển thị vị trí và trạng thái mượn hiện tại.
                   </p>
                 </div>
                 <button
@@ -613,6 +652,8 @@ function QRScanner() {
                   const usageMeta = getUsageStatusMeta(asset.usageStatus)
                   const currentLocation = asset.locationName || 'Không xác định'
                   const homeLocation = asset.homeLocationName || 'Không xác định'
+                  const borrowedByCurrentUser = isBorrowedByCurrentUser(asset)
+                  const borrowedByAnotherUser = isAssetBorrowed(asset) && !borrowedByCurrentUser
 
                   return (
                     <button
@@ -642,6 +683,16 @@ function QRScanner() {
                         <p>
                           <span className="font-medium text-slate-700">Tình trạng:</span> {getTechnicalStatusLabel(asset.technicalStatus || asset.status)}
                         </p>
+                        {borrowedByCurrentUser && (
+                          <p className="text-emerald-700">
+                            Bạn đang là người mượn tài sản này. Chạm để mở yêu cầu trả.
+                          </p>
+                        )}
+                        {borrowedByAnotherUser && (
+                          <p className="text-amber-700">
+                            Tài sản này đang được người khác mượn nên chưa thể gửi yêu cầu mượn mới.
+                          </p>
+                        )}
                       </div>
                     </button>
                   )
@@ -720,22 +771,22 @@ function QRScanner() {
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-sm font-medium text-slate-700">
-                    Ngày bắt đầu mượn
+                    Bắt đầu mượn
                     <input
-                      type="date"
-                      value={neededFrom}
-                      min={new Date().toISOString().slice(0, 10)}
-                      onChange={(event) => setNeededFrom(event.target.value)}
+                      type="datetime-local"
+                      value={startAt}
+                      min={getFutureDateTimeLocalValue(0)}
+                      onChange={(event) => setStartAt(event.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                     />
                   </label>
                   <label className="text-sm font-medium text-slate-700">
-                    Ngày hẹn trả
+                    Hẹn trả
                     <input
-                      type="date"
-                      value={expectedReturnDate}
-                      min={neededFrom || new Date().toISOString().slice(0, 10)}
-                      onChange={(event) => setExpectedReturnDate(event.target.value)}
+                      type="datetime-local"
+                      value={endAt}
+                      min={startAt || getFutureDateTimeLocalValue(1)}
+                      onChange={(event) => setEndAt(event.target.value)}
                       className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-fptOrange focus:ring-2"
                     />
                   </label>

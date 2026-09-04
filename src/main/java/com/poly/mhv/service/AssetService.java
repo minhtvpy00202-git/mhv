@@ -32,6 +32,7 @@ import com.poly.mhv.dto.notification.NotificationTarget;
 import com.poly.mhv.entity.Category;
 import com.poly.mhv.entity.AppUser;
 import com.poly.mhv.entity.Asset;
+import com.poly.mhv.entity.AssetBorrowRequest;
 import com.poly.mhv.entity.ConsumableDisposalRequest;
 import com.poly.mhv.entity.ConsumableDisposalRequestItem;
 import com.poly.mhv.entity.ConsumableIssue;
@@ -45,6 +46,7 @@ import com.poly.mhv.exception.CustomException;
 import com.poly.mhv.exception.ResourceNotFoundException;
 import com.poly.mhv.repository.AppUserRepository;
 import com.poly.mhv.repository.AreaTypeCatalogRepository;
+import com.poly.mhv.repository.AssetBorrowRequestRepository;
 import com.poly.mhv.repository.AssetRepository;
 import com.poly.mhv.repository.CategoryRepository;
 import com.poly.mhv.repository.ConsumableDisposalRequestItemRepository;
@@ -106,6 +108,7 @@ public class AssetService {
             "case when " + ASSET_CREATED_AT_SORT_EXPRESSION + " is null then 1 else 0 end";
 
     private final AssetRepository assetRepository;
+    private final AssetBorrowRequestRepository assetBorrowRequestRepository;
     private final AppUserRepository appUserRepository;
     private final AreaTypeCatalogRepository areaTypeCatalogRepository;
     private final CategoryRepository categoryRepository;
@@ -128,6 +131,7 @@ public class AssetService {
 
     public AssetService(
             AssetRepository assetRepository,
+            AssetBorrowRequestRepository assetBorrowRequestRepository,
             AppUserRepository appUserRepository,
             AreaTypeCatalogRepository areaTypeCatalogRepository,
             CategoryRepository categoryRepository,
@@ -147,6 +151,7 @@ public class AssetService {
             ObjectMapper objectMapper
     ) {
         this.assetRepository = assetRepository;
+        this.assetBorrowRequestRepository = assetBorrowRequestRepository;
         this.appUserRepository = appUserRepository;
         this.areaTypeCatalogRepository = areaTypeCatalogRepository;
         this.categoryRepository = categoryRepository;
@@ -1485,6 +1490,9 @@ public class AssetService {
         String displayStatus = isConsumableMode(normalizedTrackingMode)
                 ? computeConsumableStatus(asset.getQuantityOnHand(), asset.getMinimumStock())
                 : getItemizedDisplayStatus(asset);
+        AssetBorrowRequest activeBorrowRequest = isConsumableMode(normalizedTrackingMode)
+                ? null
+                : getActiveBorrowRequest(asset.getQaCode());
         return AssetResponse.builder()
                 .qaCode(asset.getQaCode())
                 .trackingMode(normalizedTrackingMode)
@@ -1498,6 +1506,14 @@ public class AssetService {
                 .locationName(asset.getLocation().getRoomName())
                 .homeLocationId(effectiveHomeLocation != null ? effectiveHomeLocation.getId() : null)
                 .homeLocationName(effectiveHomeLocation != null ? effectiveHomeLocation.getRoomName() : null)
+                .activeBorrowRequestId(activeBorrowRequest != null ? activeBorrowRequest.getId() : null)
+                .activeBorrowRequesterId(activeBorrowRequest != null && activeBorrowRequest.getRequester() != null
+                        ? activeBorrowRequest.getRequester().getId()
+                        : null)
+                .activeBorrowRequesterName(activeBorrowRequest != null && activeBorrowRequest.getRequester() != null
+                        ? getFullNameOrUsername(activeBorrowRequest.getRequester())
+                        : null)
+                .activeBorrowRequestStatus(activeBorrowRequest != null ? activeBorrowRequest.getStatus() : null)
                 .specs(includeSpecs ? asset.getSpecs() : null)
                 .purchasePrice(asset.getPurchasePrice())
                 .purchaseDate(asset.getPurchaseDate())
@@ -1519,6 +1535,16 @@ public class AssetService {
                 .receiptLots(isConsumableMode(normalizedTrackingMode) ? mapToConsumableReceiptLotResponses(asset.getQaCode()) : null)
                 .qrCodeBase64(qrCodeBase64)
                 .build();
+    }
+
+    private AssetBorrowRequest getActiveBorrowRequest(String assetQaCode) {
+        if (!StringUtils.hasText(assetQaCode)) {
+            return null;
+        }
+        return assetBorrowRequestRepository.findFirstByAssetQaCodeAndStatusInOrderByCreatedAtDesc(
+                assetQaCode.trim(),
+                List.of("RESERVED", "CHECKED_OUT", "RETURN_PENDING")
+        ).orElse(null);
     }
 
     public void evictAssetCaches(String qaCode) {
@@ -1575,6 +1601,9 @@ public class AssetService {
                         usageStatus,
                         AssetStatusSupport.isRepairInProgress(item.getStatus())
                 );
+        AssetBorrowRequest activeBorrowRequest = isConsumableMode(normalizedTrackingMode)
+                ? null
+                : getActiveBorrowRequest(item.getQaCode());
         return AssetResponse.builder()
                 .qaCode(item.getQaCode())
                 .trackingMode(normalizedTrackingMode)
@@ -1588,6 +1617,14 @@ public class AssetService {
                 .locationName(item.getLocationName())
                 .homeLocationId(item.getHomeLocationId())
                 .homeLocationName(item.getHomeLocationName())
+                .activeBorrowRequestId(activeBorrowRequest != null ? activeBorrowRequest.getId() : null)
+                .activeBorrowRequesterId(activeBorrowRequest != null && activeBorrowRequest.getRequester() != null
+                        ? activeBorrowRequest.getRequester().getId()
+                        : null)
+                .activeBorrowRequesterName(activeBorrowRequest != null && activeBorrowRequest.getRequester() != null
+                        ? getFullNameOrUsername(activeBorrowRequest.getRequester())
+                        : null)
+                .activeBorrowRequestStatus(activeBorrowRequest != null ? activeBorrowRequest.getStatus() : null)
                 .purchasePrice(item.getPurchasePrice())
                 .expiryTrackingEnabled(isConsumableMode(normalizedTrackingMode) ? isExpiryTrackingEnabled(item.getExpiryTrackingEnabled()) : null)
                 .expirationDate(isConsumableMode(normalizedTrackingMode) ? item.getExpirationDate() : null)

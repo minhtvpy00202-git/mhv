@@ -64,13 +64,24 @@ public class UsageHistoryService {
 
     @Transactional
     public UsageHistoryResponse checkout(CheckoutRequest request) {
+        return checkoutInternal(request, false);
+    }
+
+    @Transactional
+    public UsageHistoryResponse checkoutForSystem(CheckoutRequest request) {
+        return checkoutInternal(request, true);
+    }
+
+    private UsageHistoryResponse checkoutInternal(CheckoutRequest request, boolean systemTriggered) {
         validateCheckoutRequest(request);
-        AppUser actor = getCurrentUser();
-        if (!List.of("Admin", "NhanVien").contains(actor.getRole())) {
-            throw new AccessDeniedException("Bạn không có quyền thực hiện mượn thiết bị.");
-        }
-        if ("NhanVien".equals(actor.getRole()) && !actor.getId().equals(request.getUserId())) {
-            throw new AccessDeniedException("Nhân viên chỉ được tạo phiên mượn cho chính mình.");
+        if (!systemTriggered) {
+            AppUser actor = getCurrentUser();
+            if (!List.of("Admin", "NhanVien").contains(actor.getRole())) {
+                throw new AccessDeniedException("Bạn không có quyền thực hiện mượn thiết bị.");
+            }
+            if ("NhanVien".equals(actor.getRole()) && !actor.getId().equals(request.getUserId())) {
+                throw new AccessDeniedException("Nhân viên chỉ được tạo phiên mượn cho chính mình.");
+            }
         }
 
         Asset asset = assetRepository.findById(request.getAssetQaCode())

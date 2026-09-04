@@ -19,26 +19,27 @@ import com.poly.mhv.repository.ServiceInquiryRepository;
 import com.poly.mhv.util.AssetStatusSupport;
 import com.poly.mhv.util.InquiryStatusSupport;
 import com.poly.mhv.util.UtcDateTimes;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AssetBorrowRequestService {
 
     private static final ZoneOffset STORAGE_OFFSET = ZoneOffset.UTC;
-    private static final Set<String> ACTIVE_REQUEST_STATUSES = Set.of("PENDING", "CHECKED_OUT", "RETURN_PENDING");
+    private static final Set<String> ACTIVE_REQUEST_STATUSES = Set.of("PENDING", "RESERVED", "CHECKED_OUT", "RETURN_PENDING");
+    private static final Set<String> OVERLAP_BLOCKING_STATUSES = Set.of("RESERVED", "CHECKED_OUT", "RETURN_PENDING");
 
     private final AssetBorrowRequestRepository repository;
     private final AssetRepository assetRepository;
@@ -70,10 +71,13 @@ public class AssetBorrowRequestService {
             throw new CustomException("Phòng sử dụng không được trùng với vị trí hiện tại của thiết bị.");
         }
 
-        LocalDate neededFrom = request.getNeededFrom();
-        LocalDate expectedReturnDate = request.getExpectedReturnDate();
-        if (expectedReturnDate.isBefore(neededFrom)) {
-            throw new CustomException("Ngày hẹn trả không được trước ngày bắt đầu mượn.");
+        LocalDateTime startAt = request.getStartAt();
+        LocalDateTime endAt = request.getEndAt();
+        if (startAt == null || endAt == null) {
+            throw new CustomException("Thời gian mượn và trả là bắt buộc.");
+        }
+        if (!endAt.isAfter(startAt)) {
+            throw new CustomException("Thời điểm hẹn trả phải sau thời điểm bắt đầu mượn.");
         }
         if (repository.existsByAssetQaCodeAndRequesterIdAndStatusIn(
                 asset.getQaCode(),
@@ -81,14 +85,23 @@ public class AssetBorrowRequestService {
                 ACTIVE_REQUEST_STATUSES)) {
             throw new CustomException("Bạn đang có phiếu mượn đang chờ duyệt hoặc chưa trả cho thiết bị này.");
         }
+        if (repository.existsOverlappingReservation(
+                asset.getQaCode(),
+                OVERLAP_BLOCKING_STATUSES,
+                startAt,
+                endAt)) {
+            throw new CustomException("Thiết bị đã có lịch mượn trùng khoảng thời gian này.");
+        }
 
         LocalDateTime now = UtcDateTimes.now();
         AssetBorrowRequest borrowRequest = AssetBorrowRequest.builder()
                 .asset(asset)
                 .requester(requester)
                 .destinationLocation(destination)
-                .neededFrom(neededFrom)
-                .expectedReturnDate(expectedReturnDate)
+                .startAt(startAt)
+                .endAt(endAt)
+                .neededFrom(startAt.toLocalDate())
+                .expectedReturnDate(endAt.toLocalDate())
                 .purpose(request.getPurpose().trim())
                 .status("PENDING")
                 .createdAt(now)
@@ -106,8 +119,8 @@ public class AssetBorrowRequestService {
                         "Phiếu mượn", "#" + saved.getId(),
                         "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName(),
                         "Phòng sử dụng", saved.getDestinationLocation().getRoomName(),
-                        "Ngày bắt đầu", saved.getNeededFrom(),
-                        "Ngày hẹn trả", saved.getExpectedReturnDate(),
+                        "Bắt đầu mượn", saved.getStartAt(),
+                        "Hẹn trả", saved.getEndAt(),
                         "Người yêu cầu", displayName(requester)
                 ),
                 List.of(NotificationTarget.forRole("Admin", "/admin/borrow-requests"))
@@ -116,25 +129,31 @@ public class AssetBorrowRequestService {
         return mapResponse(saved);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AssetBorrowRequestResponse> getMine() {
+        expirePendingRequestsPastEndTime();
+        reconcileDueReservations();
         AppUser actor = currentUserProvider.getCurrentUser();
         return repository.findByRequesterIdOrderByCreatedAtDesc(actor.getId()).stream()
                 .map(this::mapResponse)
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<AssetBorrowRequestResponse> getInbox(String status) {
         requireAdmin();
+        expirePendingRequestsPastEndTime();
+        reconcileDueReservations();
         return repository.findAllByOrderByCreatedAtDesc().stream()
                 .filter(request -> !StringUtils.hasText(status) || request.getStatus().equalsIgnoreCase(status.trim()))
                 .map(this::mapResponse)
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AssetBorrowRequestResponse getById(Long id) {
+        expirePendingRequestsPastEndTime();
+        reconcileDueReservations();
         AssetBorrowRequest request = getDetail(id);
         AppUser actor = currentUserProvider.getCurrentUser();
         if (!"Admin".equals(actor.getRole()) && !actor.getId().equals(request.getRequester().getId())) {
@@ -148,11 +167,41 @@ public class AssetBorrowRequestService {
         AppUser admin = requireAdmin();
         AssetBorrowRequest request = getForUpdate(id);
         requireStatus(request, "PENDING");
-        if (request.getNeededFrom() != null && request.getNeededFrom().isAfter(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")))) {
-            throw new CustomException("Phiếu đặt mượn chỉ có thể duyệt từ ngày bắt đầu mượn trở đi.");
+        LocalDateTime now = UtcDateTimes.now();
+        if (!request.getEndAt().isAfter(now)) {
+            return mapResponse(expirePendingRequest(request, "Phiếu mượn đã quá giờ trả nên không thể duyệt."));
+        }
+        request.setStatus("RESERVED");
+        request.setApprovedBy(admin);
+        request.setApprovedAt(now);
+        request.setReservedAt(now);
+        request.setDecisionNote(note(decision));
+        AssetBorrowRequest saved = repository.save(request);
+
+        if (!now.isBefore(saved.getStartAt())) {
+            return checkoutReserved(saved.getId());
         }
 
-        usageHistoryService.checkout(CheckoutRequest.builder()
+        notifyRequester(
+                saved,
+                "BORROW_REQUEST_APPROVED",
+                "Phiếu mượn đã được duyệt",
+                "Phiếu mượn #" + saved.getId() + " đã được " + displayName(admin)
+                        + " duyệt. Hệ thống sẽ tự bắt đầu lượt mượn khi tới thời gian đã đặt."
+        );
+        broadcast(saved);
+        return mapResponse(saved);
+    }
+
+    @Transactional
+    public AssetBorrowRequestResponse checkoutReserved(Long id) {
+        AssetBorrowRequest request = getForUpdate(id);
+        requireStatus(request, "RESERVED");
+        if (request.getStartAt() != null && request.getStartAt().isAfter(UtcDateTimes.now())) {
+            throw new CustomException("Chưa đến thời điểm bắt đầu mượn để ghi nhận xuất tài sản.");
+        }
+
+        usageHistoryService.checkoutForSystem(CheckoutRequest.builder()
                 .assetQaCode(request.getAsset().getQaCode())
                 .userId(request.getRequester().getId())
                 .toLocationId(request.getDestinationLocation().getId())
@@ -160,20 +209,20 @@ public class AssetBorrowRequestService {
 
         LocalDateTime now = UtcDateTimes.now();
         request.setStatus("CHECKED_OUT");
-        request.setApprovedBy(admin);
-        request.setApprovedAt(now);
+        if (request.getApprovedAt() == null) {
+            request.setApprovedAt(now);
+        }
         request.setCheckedOutAt(now);
-        request.setDecisionNote(note(decision));
         request.setLastOverdueReminderAt(null);
         AssetBorrowRequest saved = repository.save(request);
 
         updateInquiry(saved, InquiryStatusSupport.WAITING_EMPLOYEE,
-                "Phiếu mượn đã được duyệt.", false);
+                "Phiếu mượn đã bắt đầu.", false);
         notifyRequester(
                 saved,
-                "BORROW_REQUEST_APPROVED",
-                "Phiếu mượn đã được duyệt",
-                "Phiếu mượn #" + saved.getId() + " đã được " + displayName(admin) + " duyệt và bắt đầu tính thời gian mượn."
+                "BORROW_REQUEST_CHECKED_OUT",
+                "Phiếu mượn đã bắt đầu",
+                "Phiếu mượn #" + saved.getId() + " đã tới thời điểm bắt đầu và đang được ghi nhận là đang mượn."
         );
         broadcast(saved);
         return mapResponse(saved);
@@ -256,6 +305,9 @@ public class AssetBorrowRequestService {
         if (!List.of("PENDING").contains(request.getStatus())) {
             throw new CustomException("Phiếu mượn không còn ở trạng thái có thể từ chối.");
         }
+        if (!request.getEndAt().isAfter(UtcDateTimes.now())) {
+            return mapResponse(expirePendingRequest(request, "Phiếu mượn đã quá giờ trả nên được khóa tự động."));
+        }
         String reason = note(decision);
         if (!StringUtils.hasText(reason)) {
             throw new CustomException("Vui lòng nhập lý do từ chối phiếu mượn.");
@@ -268,6 +320,50 @@ public class AssetBorrowRequestService {
 
         updateInquiry(saved, InquiryStatusSupport.REJECTED, reason, true);
         notifyRequester(saved, "BORROW_REQUEST_REJECTED", "Phiếu mượn đã bị từ chối", reason);
+        broadcast(saved);
+        return mapResponse(saved);
+    }
+
+    @Transactional
+    public AssetBorrowRequestResponse cancelMine(Long id, BorrowRequestDecisionRequest decision) {
+        AppUser requester = currentUserProvider.getCurrentUser();
+        if (!"NhanVien".equals(requester.getRole())) {
+            throw new AccessDeniedException("Chỉ nhân viên mới được hủy phiếu mượn của mình.");
+        }
+        AssetBorrowRequest request = getForUpdate(id);
+        if (!requester.getId().equals(request.getRequester().getId())) {
+            throw new AccessDeniedException("Bạn không có quyền hủy phiếu mượn này.");
+        }
+        if (!List.of("PENDING", "RESERVED").contains(request.getStatus())) {
+            throw new CustomException("Chỉ có thể hủy phiếu đang chờ duyệt hoặc đang giữ chỗ.");
+        }
+        request.setStatus("CANCELLED");
+        String cancelNote = StringUtils.hasText(note(decision))
+                ? note(decision)
+                : "Nhân viên đã hủy phiếu mượn.";
+        request.setDecisionNote(cancelNote);
+        request.setLastOverdueReminderAt(null);
+        AssetBorrowRequest saved = repository.save(request);
+
+        updateInquiry(saved, InquiryStatusSupport.CANCELLED, cancelNote, true);
+        notificationService.createNotification(
+                "BORROW_REQUEST_CANCELLED",
+                "Phiếu mượn đã được nhân viên hủy",
+                displayName(requester) + " đã hủy phiếu mượn #" + saved.getId()
+                        + " cho thiết bị " + saved.getAsset().getQaCode() + ".",
+                requester.getUsername(),
+                saved.getAsset().getQaCode(),
+                saved.getAsset().getName(),
+                Map.of(
+                        "Phiếu mượn", "#" + saved.getId(),
+                        "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName(),
+                        "Người hủy", displayName(requester),
+                        "Bắt đầu mượn", saved.getStartAt(),
+                        "Hẹn trả", saved.getEndAt()
+                ),
+                List.of(NotificationTarget.forRole("Admin", "/admin/borrow-requests"))
+        );
+        notifyRequester(saved, "BORROW_REQUEST_CANCELLED", "Đã hủy phiếu mượn", cancelNote);
         broadcast(saved);
         return mapResponse(saved);
     }
@@ -290,6 +386,30 @@ public class AssetBorrowRequestService {
                             "Thiết bị " + saved.getAsset().getQaCode() + " đã được ghi nhận trả về.");
                     broadcast(saved);
                 });
+    }
+
+    @Transactional
+    public void expirePendingRequestsPastEndTime() {
+        LocalDateTime now = UtcDateTimes.now();
+        List<AssetBorrowRequest> expiredRequests = repository.findPendingExpiredByEndAt(now);
+        for (AssetBorrowRequest request : expiredRequests) {
+            expirePendingRequest(request, "Phiếu mượn đã quá giờ trả nhưng chưa được Admin duyệt.");
+        }
+    }
+
+    public void reconcileDueReservations() {
+        LocalDateTime now = UtcDateTimes.now();
+        List<AssetBorrowRequest> readyRequests = repository.findReservedReadyToCheckout(now);
+        for (AssetBorrowRequest request : readyRequests) {
+            try {
+                checkoutReserved(request.getId());
+            } catch (RuntimeException exception) {
+                log.warn("Cannot reconcile reserved borrow request #{} for asset {}: {}",
+                        request.getId(),
+                        request.getAsset() != null ? request.getAsset().getQaCode() : "unknown",
+                        exception.getMessage());
+            }
+        }
     }
 
     private void validateAssetForBorrowRequest(Asset asset) {
@@ -335,6 +455,39 @@ public class AssetBorrowRequestService {
         }
     }
 
+    private AssetBorrowRequest expirePendingRequest(AssetBorrowRequest request, String reason) {
+        if (request == null || !"PENDING".equals(request.getStatus())) {
+            return request;
+        }
+        request.setStatus("EXPIRED");
+        request.setDecisionNote(reason);
+        request.setLastOverdueReminderAt(null);
+        AssetBorrowRequest saved = repository.save(request);
+        updateInquiry(saved, InquiryStatusSupport.CANCELLED, reason, true);
+        notificationService.createNotification(
+                "BORROW_REQUEST_EXPIRED",
+                "Phiếu mượn đã quá hạn duyệt",
+                "Phiếu mượn #" + saved.getId() + " cho thiết bị " + saved.getAsset().getQaCode()
+                        + " đã quá giờ trả nhưng chưa được Admin duyệt.",
+                "system",
+                saved.getAsset().getQaCode(),
+                saved.getAsset().getName(),
+                Map.of(
+                        "Phiếu mượn", "#" + saved.getId(),
+                        "Thiết bị", saved.getAsset().getQaCode() + " - " + saved.getAsset().getName(),
+                        "Người yêu cầu", displayName(saved.getRequester()),
+                        "Bắt đầu mượn", saved.getStartAt(),
+                        "Hẹn trả", saved.getEndAt()
+                ),
+                List.of(
+                        NotificationTarget.forRole("Admin", "/admin/borrow-requests"),
+                        NotificationTarget.forUser(saved.getRequester().getId(), "/mobile/home")
+                )
+        );
+        broadcast(saved);
+        return saved;
+    }
+
     private void updateInquiry(
             AssetBorrowRequest borrowRequest,
             String status,
@@ -367,8 +520,8 @@ public class AssetBorrowRequestService {
                 Map.of(
                         "Phiếu mượn", "#" + request.getId(),
                         "Trạng thái", request.getStatus(),
-                        "Ngày bắt đầu", request.getNeededFrom(),
-                        "Ngày hẹn trả", request.getExpectedReturnDate()
+                        "Bắt đầu mượn", request.getStartAt(),
+                        "Hẹn trả", request.getEndAt()
                 ),
                 List.of(NotificationTarget.forUser(request.getRequester().getId(), path)));
     }
@@ -392,8 +545,10 @@ public class AssetBorrowRequestService {
                 .approvedByName(request.getApprovedBy() != null ? displayName(request.getApprovedBy()) : null)
                 .destinationLocationId(request.getDestinationLocation().getId())
                 .destinationLocationName(request.getDestinationLocation().getRoomName())
-                .neededFrom(request.getNeededFrom())
-                .expectedReturnDate(request.getExpectedReturnDate())
+                .homeLocationId(request.getAsset().getHomeLocation() != null ? request.getAsset().getHomeLocation().getId() : null)
+                .homeLocationName(request.getAsset().getHomeLocation() != null ? request.getAsset().getHomeLocation().getRoomName() : null)
+                .startAt(toOffset(request.getStartAt()))
+                .endAt(toOffset(request.getEndAt()))
                 .purpose(request.getPurpose())
                 .status(request.getStatus())
                 .decisionNote(request.getDecisionNote())

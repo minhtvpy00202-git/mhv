@@ -57,10 +57,17 @@ public class AssetBorrowRequest {
     @JoinColumn(name = "destination_location_id", nullable = false)
     private Location destinationLocation;
 
-    @Column(name = "needed_from", nullable = false)
+    @Column(name = "start_at", nullable = false)
+    private LocalDateTime startAt;
+
+    @Column(name = "end_at", nullable = false)
+    private LocalDateTime endAt;
+
+    // Legacy columns kept for schema compatibility while the database is migrated to start_at/end_at.
+    @Column(name = "needed_from")
     private LocalDate neededFrom;
 
-    @Column(name = "expected_return_date", nullable = false)
+    @Column(name = "expected_return_date")
     private LocalDate expectedReturnDate;
 
     @Column(name = "purpose", nullable = false, columnDefinition = "TEXT")

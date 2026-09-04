@@ -15,6 +15,7 @@ import axiosClient from '../api/axiosClient'
 import AuthenticatedImage from '../components/AuthenticatedImage'
 import ModalOverlay from '../components/ui/ModalOverlay'
 import { formatVietnamDateTime } from '../utils/datetime'
+import { BORROW_STATUS } from '../utils/inquiry'
 import { getTicketStatusMeta } from '../utils/ticketStatus'
 
 const quickActions = [
@@ -82,6 +83,7 @@ function IconActionButton({
   label,
   onClick,
   tone = 'default',
+  disabled = false,
 }) {
   const toneClassName = tone === 'accent'
     ? 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300 dark:hover:bg-orange-500/20'
@@ -93,7 +95,8 @@ function IconActionButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${toneClassName}`}
+      disabled={disabled}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClassName}`}
     >
       <Icon size={17} />
     </button>
@@ -159,20 +162,59 @@ function DataModal({
 function Home() {
   const navigate = useNavigate()
   const [usageHistory, setUsageHistory] = useState([])
+  const [borrowRequests, setBorrowRequests] = useState([])
   const [maintenanceHistory, setMaintenanceHistory] = useState([])
   const [pendingRatings, setPendingRatings] = useState([])
   const [activeModal, setActiveModal] = useState(null)
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [usageSearch, setUsageSearch] = useState('')
   const [maintenanceSearch, setMaintenanceSearch] = useState('')
+  const [cancelingBorrowRequestId, setCancelingBorrowRequestId] = useState(null)
+  const [pendingCancelBorrowRequest, setPendingCancelBorrowRequest] = useState(null)
 
   const normalizedUsageSearch = usageSearch.trim().toLowerCase()
   const normalizedMaintenanceSearch = maintenanceSearch.trim().toLowerCase()
 
+  const usageModalItems = useMemo(() => {
+    const activeBorrowItems = (borrowRequests || [])
+      .filter((item) => ['PENDING', 'RESERVED'].includes(String(item?.status || '').trim()))
+      .map((item) => ({
+        itemType: 'borrow-request',
+        key: `borrow-${item.id}`,
+        id: item.id,
+        assetName: item.assetName,
+        assetQaCode: item.assetQaCode,
+        homeLocationName: item.homeLocationName,
+        borrowedLocationName: item.destinationLocationName,
+        startTime: item.startAt,
+        endTime: item.endAt,
+        status: item.status,
+      }))
+
+    const historyItems = (usageHistory || []).map((item) => ({
+      itemType: 'usage-history',
+      key: `usage-${item.id}`,
+      id: item.id,
+      assetName: item.assetName,
+      assetQaCode: item.assetQaCode,
+      homeLocationName: item.homeLocationName,
+      borrowedLocationName: item.borrowedLocationName,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      status: item.endTime ? 'RETURNED' : 'CHECKED_OUT',
+    }))
+
+    return [...activeBorrowItems, ...historyItems].sort((firstItem, secondItem) => {
+      const firstTime = new Date(firstItem.startTime || 0).getTime()
+      const secondTime = new Date(secondItem.startTime || 0).getTime()
+      return secondTime - firstTime
+    })
+  }, [borrowRequests, usageHistory])
+
   const filteredUsageHistory = useMemo(() => {
-    if (!normalizedUsageSearch) return usageHistory
-    return usageHistory.filter((item) => (item.assetName || '').toLowerCase().includes(normalizedUsageSearch))
-  }, [usageHistory, normalizedUsageSearch])
+    if (!normalizedUsageSearch) return usageModalItems
+    return usageModalItems.filter((item) => (item.assetName || '').toLowerCase().includes(normalizedUsageSearch))
+  }, [usageModalItems, normalizedUsageSearch])
 
   const filteredMaintenanceHistory = useMemo(() => {
     if (!normalizedMaintenanceSearch) return maintenanceHistory
@@ -182,12 +224,14 @@ function Home() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [usageRes, maintenanceRes, pendingRatingsRes] = await Promise.all([
+        const [usageRes, borrowRequestsRes, maintenanceRes, pendingRatingsRes] = await Promise.all([
           axiosClient.get('/api/usage/history/me'),
+          axiosClient.get('/api/borrow-requests/mine'),
           axiosClient.get('/api/maintenance/history/me'),
           axiosClient.get('/api/tickets/pending-satisfaction/me'),
         ])
         setUsageHistory(usageRes.data || [])
+        setBorrowRequests(borrowRequestsRes.data || [])
         setMaintenanceHistory(maintenanceRes.data || [])
         setPendingRatings(pendingRatingsRes.data || [])
       } catch (error) {
@@ -202,6 +246,30 @@ function Home() {
     window.addEventListener('mhv-notification-feed-refresh', handleRefresh)
     return () => window.removeEventListener('mhv-notification-feed-refresh', handleRefresh)
   }, [])
+
+  const handleRequestCancelBorrow = (borrowRequest) => {
+    if (!borrowRequest?.id) return
+    setPendingCancelBorrowRequest(borrowRequest)
+  }
+
+  const handleCancelBorrowRequest = async () => {
+    const borrowRequestId = pendingCancelBorrowRequest?.id
+    if (!borrowRequestId) return
+    setCancelingBorrowRequestId(borrowRequestId)
+    try {
+      const response = await axiosClient.post(`/api/borrow-requests/${borrowRequestId}/cancel`, {
+        note: 'Nhân viên hủy phiếu mượn do thay đổi kế hoạch.',
+      })
+      const nextItem = response.data
+      setBorrowRequests((prev) => prev.map((item) => (item.id === nextItem.id ? nextItem : item)))
+      setPendingCancelBorrowRequest(null)
+      toast.success('Đã hủy phiếu mượn.')
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không hủy được phiếu mượn.')
+    } finally {
+      setCancelingBorrowRequestId(null)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -255,7 +323,7 @@ function Home() {
         <div className="grid grid-cols-3 gap-2">
           <SummaryStatButton
             label="Mượn/trả"
-            value={usageHistory.length}
+            value={usageModalItems.length}
             onClick={() => setActiveModal('usage')}
           />
           <SummaryStatButton
@@ -349,12 +417,12 @@ function Home() {
               </thead>
               <tbody>
                 {filteredUsageHistory.map((item) => (
-                  <tr key={item.id} className="border-b border-slate-100 align-top dark:border-slate-800">
+                  <tr key={item.key} className="border-b border-slate-100 align-top dark:border-slate-800">
                     <td className="px-3 py-3">
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{item.assetName || 'Thiết bị không xác định'}</p>
                       <p className="mt-1 break-words text-[11px] text-slate-500 dark:text-slate-400">{item.assetQaCode || '-'}</p>
                       <p className="mt-1 inline-flex rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                        {item.endTime ? 'Đã trả' : 'Đang mượn'}
+                        {BORROW_STATUS[item.status] || item.status || (item.endTime ? 'Đã trả' : 'Đang mượn')}
                       </p>
                     </td>
                     <td className="px-3 py-3">
@@ -362,16 +430,34 @@ function Home() {
                       <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Đích: {item.borrowedLocationName || '-'}</p>
                     </td>
                     <td className="px-3 py-3">
-                      <p className="font-medium text-slate-700 dark:text-slate-200">Mượn: {formatVietnamDateTime(item.startTime, 'Gần đây')}</p>
-                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Trả: {formatVietnamDateTime(item.endTime, 'Chưa trả')}</p>
+                      <p className="font-medium text-slate-700 dark:text-slate-200">
+                        {item.itemType === 'borrow-request' ? 'Bắt đầu: ' : 'Mượn: '}
+                        {formatVietnamDateTime(item.startTime, 'Gần đây')}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        {item.itemType === 'borrow-request' ? 'Hẹn trả: ' : 'Trả: '}
+                        {formatVietnamDateTime(item.endTime, 'Chưa trả')}
+                      </p>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex justify-end">
-                        <IconActionButton
-                          icon={ArrowUpRight}
-                          label={`Mở quét QR cho ${item.assetName || 'thiết bị'}`}
-                          onClick={() => navigate('/mobile/scan')}
-                        />
+                        {item.itemType === 'borrow-request' ? (
+                          <IconActionButton
+                            icon={X}
+                            label={`Hủy phiếu mượn #${item.id}`}
+                            tone="accent"
+                            onClick={() => {
+                              handleRequestCancelBorrow(item)
+                            }}
+                            disabled={cancelingBorrowRequestId === item.id}
+                          />
+                        ) : (
+                          <IconActionButton
+                            icon={ArrowUpRight}
+                            label={`Mở quét QR cho ${item.assetName || 'thiết bị'}`}
+                            onClick={() => navigate('/mobile/scan')}
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -381,6 +467,45 @@ function Home() {
           </div>
         )}
       </DataModal>
+
+      {pendingCancelBorrowRequest && (
+        <ModalOverlay className="bg-slate-950/70 backdrop-blur-sm" zIndex={130}>
+          <div className="w-full max-w-sm rounded-[28px] bg-white p-5 shadow-2xl dark:bg-slate-950">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Xác nhận hủy phiếu mượn</h3>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+              Bạn có chắc chắn muốn huỷ phiếu mượn này không?
+            </p>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">
+                {pendingCancelBorrowRequest.assetName || 'Thiết bị không xác định'}
+              </p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {pendingCancelBorrowRequest.assetQaCode || `Phiếu #${pendingCancelBorrowRequest.id}`}
+              </p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingCancelBorrowRequest(null)}
+                disabled={cancelingBorrowRequestId === pendingCancelBorrowRequest.id}
+                className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
+              >
+                Không
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleCancelBorrowRequest()
+                }}
+                disabled={cancelingBorrowRequestId === pendingCancelBorrowRequest.id}
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {cancelingBorrowRequestId === pendingCancelBorrowRequest.id ? 'Đang hủy...' : 'Có, hủy phiếu'}
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
 
       <DataModal
         open={activeModal === 'maintenance'}

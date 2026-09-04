@@ -3,45 +3,41 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-toastify'
 import axiosClient from '../../api/axiosClient'
 import ModalOverlay from '../../components/ui/ModalOverlay'
-import { formatVietnamDate, formatVietnamDateTime } from '../../utils/datetime'
+import { formatVietnamDateTime } from '../../utils/datetime'
 import { BORROW_STATUS } from '../../utils/inquiry'
 
 const statusFilters = [
   ['', 'Tất cả'],
   ['PENDING', 'Chờ duyệt'],
+  ['RESERVED', 'Đã giữ chỗ'],
   ['CHECKED_OUT', 'Đang mượn'],
   ['RETURN_PENDING', 'Chờ xác nhận trả'],
   ['RETURNED', 'Đã trả'],
+  ['EXPIRED', 'Quá hạn duyệt'],
   ['REJECTED', 'Từ chối'],
 ]
 
 function getStatusChipClass(status) {
-  if (status === 'PENDING') return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (status === 'PENDING') return 'border-orange-200 bg-orange-50 text-orange-700'
+  if (status === 'RESERVED') return 'border-amber-200 bg-amber-50 text-amber-700'
   if (status === 'CHECKED_OUT') return 'border-blue-200 bg-blue-50 text-blue-700'
   if (status === 'RETURN_PENDING') return 'border-violet-200 bg-violet-50 text-violet-700'
   if (status === 'RETURNED') return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (status === 'EXPIRED') return 'border-slate-300 bg-slate-100 text-slate-700'
   if (status === 'REJECTED') return 'border-red-200 bg-red-50 text-red-700'
   return 'border-slate-200 bg-slate-50 text-slate-700'
-}
-
-function formatBorrowRangeDate(value, fallback = '—') {
-  const formatted = formatVietnamDate(value, fallback)
-  if (formatted === fallback || typeof formatted !== 'string') return formatted
-  const parts = formatted.split('/')
-  if (parts.length !== 3) return formatted
-  const [day, month, year] = parts
-  return `${day}/${month}/${String(year).slice(-2)}`
 }
 
 const detailRows = [
   ['Thiết bị', 'asset'],
   ['Người yêu cầu', 'requester'],
   ['Phòng sử dụng', 'destination'],
-  ['Ngày bắt đầu', 'neededFrom'],
-  ['Ngày hẹn trả', 'expectedReturnDate'],
+  ['Bắt đầu mượn', 'startAt'],
+  ['Hẹn trả', 'endAt'],
   ['Ngày tạo phiếu', 'createdAt'],
   ['Người duyệt', 'approvedBy'],
   ['Thời điểm duyệt', 'approvedAt'],
+  ['Thời điểm giữ chỗ', 'reservedAt'],
   ['Thời điểm ghi nhận mượn', 'checkedOutAt'],
   ['Thời điểm trả', 'returnedAt'],
 ]
@@ -94,11 +90,12 @@ export default function BorrowRequestManagement() {
     asset: selectedItem ? `${selectedItem.assetQaCode} - ${selectedItem.assetName}` : '—',
     requester: selectedItem?.requesterName || '—',
     destination: selectedItem?.destinationLocationName || '—',
-    neededFrom: formatBorrowRangeDate(selectedItem?.neededFrom, '—'),
-    expectedReturnDate: formatBorrowRangeDate(selectedItem?.expectedReturnDate, '—'),
+    startAt: formatVietnamDateTime(selectedItem?.startAt, '—'),
+    endAt: formatVietnamDateTime(selectedItem?.endAt, '—'),
     createdAt: formatVietnamDateTime(selectedItem?.createdAt, '—'),
     approvedBy: selectedItem?.approvedByName || '—',
     approvedAt: formatVietnamDateTime(selectedItem?.approvedAt, '—'),
+    reservedAt: formatVietnamDateTime(selectedItem?.reservedAt, '—'),
     checkedOutAt: formatVietnamDateTime(selectedItem?.checkedOutAt, '—'),
     returnedAt: formatVietnamDateTime(selectedItem?.returnedAt, 'Chưa trả'),
   }), [selectedItem])
@@ -145,8 +142,10 @@ export default function BorrowRequestManagement() {
       setSelectedItem(nextItem)
       setDecisionNote(nextItem?.decisionNote || '')
       setItems((prev) => prev.map((item) => (item.id === nextItem.id ? nextItem : item)))
-      if (action === 'approve') {
-        toast.success('Đã duyệt phiếu mượn.')
+      if (nextItem?.status === 'EXPIRED') {
+        toast.info('Phiếu mượn đã quá giờ trả nên bị khóa tự động.')
+      } else if (action === 'approve') {
+        toast.success(nextItem?.status === 'CHECKED_OUT' ? 'Đã duyệt và bắt đầu phiếu mượn.' : 'Đã duyệt và giữ chỗ phiếu mượn.')
       } else if (action === 'confirm-return') {
         toast.success('Đã xác nhận trả thiết bị.')
       } else {
@@ -167,7 +166,7 @@ export default function BorrowRequestManagement() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-600">Mượn thiết bị</p>
             <h2 className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">Duyệt phiếu mượn thiết bị</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Chỉ khi Admin duyệt thì phiếu mượn mới bắt đầu được ghi nhận vào lịch sử mượn thiết bị.
+              Admin duyệt để giữ chỗ trước. Đến đúng thời điểm bắt đầu, hệ thống sẽ tự chuyển sang trạng thái đang mượn.
             </p>
           </div>
           <button
@@ -232,8 +231,8 @@ export default function BorrowRequestManagement() {
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.requesterName}</td>
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.destinationLocationName}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                      <p>{formatBorrowRangeDate(item.neededFrom, '—')}</p>
-                      <p className="mt-1 text-xs text-slate-500">đến {formatBorrowRangeDate(item.expectedReturnDate, '—')}</p>
+                      <p>{formatVietnamDateTime(item.startAt, '—')}</p>
+                      <p className="mt-1 text-xs text-slate-500">đến {formatVietnamDateTime(item.endAt, '—')}</p>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusChipClass(item.status)}`}>
@@ -315,7 +314,7 @@ export default function BorrowRequestManagement() {
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Xử lý phiếu mượn</h4>
                   <p className="mt-2 text-sm text-slate-500">
-                    Khi bấm duyệt, hệ thống sẽ bắt đầu ghi nhận lượt mượn vào lịch sử thiết bị. Nếu nhân viên đã quét trả, modal này sẽ hiện nút xác nhận đã trả.
+                    Khi bấm duyệt, hệ thống sẽ giữ chỗ theo đúng khoảng thời gian đã đặt. Đến giờ bắt đầu, phiếu đã duyệt sẽ tự chuyển sang trạng thái đang mượn.
                   </p>
                   <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-200">
                     Ghi chú
@@ -347,6 +346,10 @@ export default function BorrowRequestManagement() {
                         {submitting ? 'Đang xử lý...' : 'Từ chối phiếu mượn'}
                       </button>
                     </div>
+                  ) : selectedItem.status === 'RESERVED' ? (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                      Phiếu này đã được Admin duyệt và đang giữ chỗ theo lịch đặt. Khi tới thời điểm bắt đầu mượn, hệ thống sẽ tự chuyển sang trạng thái đang mượn.
+                    </div>
                   ) : selectedItem.status === 'RETURN_PENDING' ? (
                     <div className="mt-4 space-y-3">
                       <div className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
@@ -360,6 +363,10 @@ export default function BorrowRequestManagement() {
                       >
                         {submitting ? 'Đang xử lý...' : 'Xác nhận đã trả'}
                       </button>
+                    </div>
+                  ) : selectedItem.status === 'EXPIRED' ? (
+                    <div className="mt-4 rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-700">
+                      Phiếu này đã quá giờ trả nhưng chưa được Admin duyệt nên đã bị khóa tự động. Không thể duyệt hoặc từ chối nữa.
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">

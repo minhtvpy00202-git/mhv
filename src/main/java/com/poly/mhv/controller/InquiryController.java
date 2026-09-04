@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,8 +43,10 @@ public class InquiryController {
             @RequestParam(required = false) String trackingMode,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) Integer locationId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime startAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) java.time.LocalDateTime endAt,
             @RequestParam(required = false) Integer limit) {
-        return ResponseEntity.ok(inquiryService.searchAvailability(keyword, trackingMode, categoryId, locationId, limit));
+        return ResponseEntity.ok(inquiryService.searchAvailability(keyword, trackingMode, categoryId, locationId, startAt, endAt, limit));
     }
 
     @GetMapping("/options")

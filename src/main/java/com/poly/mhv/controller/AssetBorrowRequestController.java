@@ -60,6 +60,16 @@ public class AssetBorrowRequestController {
         return ResponseEntity.ok(assetBorrowRequestService.requestReturn(request));
     }
 
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasRole('NhanVien')")
+    @Operation(summary = "Hủy phiếu mượn của tôi", description = "Nhân viên hủy phiếu mượn đang chờ duyệt hoặc đang giữ chỗ khi không còn nhu cầu.")
+    public ResponseEntity<AssetBorrowRequestResponse> cancelMine(
+            @PathVariable Long id,
+            @Valid @RequestBody(required = false) BorrowRequestDecisionRequest request
+    ) {
+        return ResponseEntity.ok(assetBorrowRequestService.cancelMine(id, request));
+    }
+
     @GetMapping("/inbox")
     @PreAuthorize("hasRole('Admin')")
     @Operation(summary = "Lấy danh sách phiếu mượn chờ Admin", description = "Admin lấy danh sách phiếu mượn theo trạng thái để duyệt.")
