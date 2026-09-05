@@ -2431,7 +2431,7 @@ function AssetManagement({
           : form.technicalStatus,
         usageStatus: isConsumableMode(form.trackingMode)
           ? null
-          : form.usageStatus,
+          : "Tại vị trí gốc",
         specs: stringifySpecs(form.specEntries),
         purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : null,
         purchaseDate: form.purchaseDate || null,
@@ -4031,6 +4031,21 @@ function AssetManagement({
   const currentConsumableWorkspaceMeta =
     CONSUMABLE_WORKSPACE_META[consumableWorkspace] ||
     CONSUMABLE_WORKSPACE_META.OVERVIEW;
+  const renderFieldHeader = (label, actionButton = null) => (
+    <div className="relative mb-2 min-h-9 pr-10">
+      <label className="block text-sm font-medium text-slate-700">
+        {label}
+      </label>
+      {actionButton || (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 inline-flex h-7 w-7 select-none items-center justify-center rounded-md border border-transparent bg-transparent text-transparent opacity-0"
+        >
+          +
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -5669,9 +5684,7 @@ function AssetManagement({
               <div className="grid gap-3 md:grid-cols-2">
                 {isEditing && (
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Mã QA
-                    </label>
+                    {renderFieldHeader("Mã QA")}
                     <input
                       value={selectedQaCode || ""}
                       disabled
@@ -5680,9 +5693,9 @@ function AssetManagement({
                   </div>
                 )}
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    {isConsumableForm ? "Tên vật tư" : "Tên thiết bị"}
-                  </label>
+                  {renderFieldHeader(
+                    isConsumableForm ? "Tên vật tư" : "Tên thiết bị",
+                  )}
                   <input
                     value={form.name}
                     onChange={(e) => {
@@ -5703,17 +5716,15 @@ function AssetManagement({
                   )}
                 </div>
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      {isConsumableForm ? "Loại vật tư" : "Loại thiết bị"}
-                    </label>
-                    {isAdmin && (
+                  {renderFieldHeader(
+                    isConsumableForm ? "Loại vật tư" : "Loại thiết bị",
+                    isAdmin ? (
                       <button
                         type="button"
                         onClick={() => {
                           void handleOpenCategoryCreateModal();
                         }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                        className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
                         title={
                           isConsumableForm
                             ? "Thêm loại vật tư mới"
@@ -5727,8 +5738,8 @@ function AssetManagement({
                       >
                         +
                       </button>
-                    )}
-                  </div>
+                    ) : null,
+                  )}
                   <SearchableSelect
                     value={form.categoryId}
                     onChange={(nextValue) =>
@@ -5753,24 +5764,22 @@ function AssetManagement({
                   </p>
                 </div>
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      {isConsumableForm ? "Kho lưu trữ" : "Phòng gốc"}
-                    </label>
-                    {!isConsumableForm && isAdmin && (
+                  {renderFieldHeader(
+                    isConsumableForm ? "Kho lưu trữ" : "Phòng gốc",
+                    !isConsumableForm && isAdmin ? (
                       <button
                         type="button"
                         onClick={() => {
                           void handleOpenLocationCreateModal();
                         }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                        className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
                         title="Thêm phòng gốc mới"
                         aria-label="Thêm phòng gốc mới"
                       >
                         +
                       </button>
-                    )}
-                  </div>
+                    ) : null,
+                  )}
                   <SearchableSelect
                     value={form.locationId}
                     onChange={(nextValue) => {
@@ -5808,9 +5817,7 @@ function AssetManagement({
                 {!isConsumableForm && (
                   <>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Tình trạng kỹ thuật
-                      </label>
+                      {renderFieldHeader("Tình trạng kỹ thuật")}
                       <select
                         value={form.technicalStatus}
                         onChange={(e) => {
@@ -5839,42 +5846,42 @@ function AssetManagement({
                         </p>
                       )}
                     </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Trạng thái sử dụng
-                      </label>
-                      <select
-                        value={form.usageStatus}
-                        onChange={(e) => {
-                          setForm((prev) => ({
-                            ...prev,
-                            usageStatus: e.target.value,
-                          }));
-                          setFormErrors((prev) => ({
-                            ...prev,
-                            usageStatus: "",
-                          }));
-                        }}
-                        className={getFieldClass(
-                          Boolean(formErrors.usageStatus),
+                    {formMode === "edit" && (
+                      <div>
+                        {renderFieldHeader("Trạng thái sử dụng")}
+                        <select
+                          value={form.usageStatus}
+                          onChange={(e) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              usageStatus: e.target.value,
+                            }));
+                            setFormErrors((prev) => ({
+                              ...prev,
+                              usageStatus: "",
+                            }));
+                          }}
+                          className={getFieldClass(
+                            Boolean(formErrors.usageStatus),
+                          )}
+                        >
+                          {usageStatusOptions.map((status) => (
+                            <option key={status.value} value={status.value}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors.usageStatus && (
+                          <p className="mt-1 text-xs text-red-600">
+                            {formErrors.usageStatus}
+                          </p>
                         )}
-                      >
-                        {usageStatusOptions.map((status) => (
-                          <option key={status.value} value={status.value}>
-                            {status.label}
-                          </option>
-                        ))}
-                      </select>
-                      {formErrors.usageStatus && (
-                        <p className="mt-1 text-xs text-red-600">
-                          {formErrors.usageStatus}
+                        <p className="mt-1 text-xs text-slate-500">
+                          `Tình trạng kỹ thuật` và `Trạng thái sử dụng` được lưu
+                          riêng để tránh chồng nghĩa giữa hỏng và đang sửa chữa.
                         </p>
-                      )}
-                      <p className="mt-1 text-xs text-slate-500">
-                        `Tình trạng kỹ thuật` và `Trạng thái sử dụng` được lưu
-                        riêng để tránh chồng nghĩa giữa hỏng và đang sửa chữa.
-                      </p>
-                    </div>
+                      </div>
+                    )}
                   </>
                 )}
                 {isConsumableForm && (
@@ -6185,23 +6192,21 @@ function AssetManagement({
                   </>
                 )}
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      Nhà cung cấp
-                    </label>
+                  {renderFieldHeader(
+                    "Nhà cung cấp",
                     <button
                       type="button"
                       onClick={() => {
                         resetSupplierForm();
                         setShowSupplierCreateModal(true);
                       }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
+                      className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-emerald-300 text-sm font-bold text-emerald-700 hover:bg-emerald-50"
                       title="Thêm nhà cung cấp mới"
                       aria-label="Thêm nhà cung cấp mới"
                     >
                       +
-                    </button>
-                  </div>
+                    </button>,
+                  )}
                   <SearchableSelect
                     value={form.supplierId}
                     onChange={(nextValue) => {
@@ -6236,9 +6241,9 @@ function AssetManagement({
                   )}
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    {isConsumableForm ? "Đơn giá" : "Giá mua"}
-                  </label>
+                  {renderFieldHeader(
+                    isConsumableForm ? "Đơn giá" : "Giá mua",
+                  )}
                   <input
                     type="text"
                     inputMode="numeric"
@@ -6274,9 +6279,9 @@ function AssetManagement({
                   )}
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
-                    {isConsumableForm ? "Ngày nhập kho ban đầu" : "Ngày mua"}
-                  </label>
+                  {renderFieldHeader(
+                    isConsumableForm ? "Ngày nhập kho ban đầu" : "Ngày mua",
+                  )}
                   <input
                     type="date"
                     value={form.purchaseDate}
@@ -6302,9 +6307,7 @@ function AssetManagement({
                 </div>
                 {!isConsumableForm && (
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">
-                      Hạn bảo hành
-                    </label>
+                    {renderFieldHeader("Hạn bảo hành")}
                     <input
                       type="date"
                       value={form.warrantyExpirationDate}

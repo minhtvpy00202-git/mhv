@@ -19,6 +19,10 @@ const defaultAssetPickerFilters = {
   technicalStatus: '',
 }
 
+function isItemizedCategory(category) {
+  return String(category?.categoryKind || 'ITEMIZED').trim().toUpperCase() === 'ITEMIZED'
+}
+
 function getBadgeClassName(tone) {
   switch (tone) {
     case 'emerald':
@@ -283,7 +287,7 @@ function QRScanner() {
         totalPages: assetPage.totalPages || 1,
         totalItems: assetPage.totalItems || 0,
       })
-      setAssetPickerCategories(data.categories || [])
+      setAssetPickerCategories((data.categories || []).filter(isItemizedCategory))
       setAssetPickerLocations(data.locations || [])
     } catch (error) {
       const message = error?.response?.data?.message || 'Không tải được danh sách tài sản.'
